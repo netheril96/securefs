@@ -1,4 +1,4 @@
-CXXFLAGS = -DNDEBUG -g -O2
+CXXFLAGS = -DNDEBUG -g -O2 -std=c++0x -march=native -mtune=native
 # -O3 fails to link on Cygwin GCC version 4.5.3
 # -fPIC is supported. Please report any breakage of -fPIC as a bug.
 # CXXFLAGS += -fPIC
@@ -19,7 +19,7 @@ CLANG_COMPILER = $(shell $(CXX) --version 2>&1 | $(EGREP) -i -c "clang version")
 
 # Default prefix for make install
 ifeq ($(PREFIX),)
-PREFIX = /usr
+PREFIX = .
 endif
 
 ifeq ($(CXX),gcc)	# for some reason CXX is gcc on cygwin 1.1.4
