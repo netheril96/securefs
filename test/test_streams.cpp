@@ -69,12 +69,55 @@ static void test(securefs::StreamBase& stream, unsigned times)
     }
 }
 
+namespace securefs
+{
+namespace dummy
+{
+    // The "encryption" scheme of this class is horribly insecure
+    // Only for testing the algorithms in CryptStream
+    class DummpyCryptStream : public CryptStream
+    {
+    protected:
+        void encrypt(offset_type block_number,
+                     const void* input,
+                     void* output,
+                     length_type length) override
+        {
+            auto a = static_cast<byte>(block_number);
+            for (length_type i = 0; i < length; ++i)
+            {
+                static_cast<byte*>(output)[i] = (static_cast<const byte*>(input)[i]) ^ a;
+            }
+        }
+
+        void decrypt(offset_type block_number,
+                     const void* input,
+                     void* output,
+                     length_type length) override
+        {
+            return encrypt(block_number, input, output, length);
+        }
+
+    public:
+        explicit DummpyCryptStream(std::shared_ptr<StreamBase> stream, length_type block_size)
+            : CryptStream(std::move(stream), block_size)
+        {
+        }
+    };
+}
+}
+
 TEST_CASE("Test streams")
 {
     char temp_template[] = "/tmp/C6AD402F-B5FD-430A-BB2E-90006B22A1B8.XXXXXX";
-    auto hmac_stream = securefs::make_stream_hmac(
-        std::make_shared<securefs::SecureParam>(),
-        std::make_shared<securefs::POSIXFileStream>(mkstemp(temp_template)),
-        true);
-    test(*hmac_stream, 5000);
+    auto posix_stream = std::make_shared<securefs::POSIXFileStream>(mkstemp(temp_template));
+    {
+        auto hmac_stream = securefs::make_stream_hmac(
+            std::make_shared<securefs::SecureParam>(), posix_stream, true);
+        test(*hmac_stream, 5000);
+    }
+    {
+        securefs::dummy::DummpyCryptStream ds(posix_stream, 19);
+        test(ds, 5000);
+    }
 }

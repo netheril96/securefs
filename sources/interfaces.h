@@ -33,6 +33,7 @@ class StreamBase : public AbstractBase
 public:
     /**
      * Returns the number of bytes actually read into the buffer `output`.
+     * Always read in full unless beyond the end, i.e., offset + length > size.
      **/
     virtual length_type read(void* output, offset_type offset, length_type length) = 0;
 

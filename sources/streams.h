@@ -3,6 +3,7 @@
 #include "exceptions.h"
 
 #include <memory>
+#include <utility>
 
 #include <unistd.h>
 #include <sys/stat.h>
@@ -64,4 +65,48 @@ public:
 std::shared_ptr<StreamBase> make_stream_hmac(std::shared_ptr<const SecureParam> param,
                                              std::shared_ptr<StreamBase> stream,
                                              bool check);
+
+class CryptStream : public StreamBase
+{
+protected:
+    std::shared_ptr<StreamBase> m_stream;
+    const length_type m_block_size;
+
+    // Both encrypt/decrypt should not change the length of the block.
+    // input/output may alias.
+    virtual void
+    encrypt(offset_type block_number, const void* input, void* output, length_type length) = 0;
+
+    virtual void
+    decrypt(offset_type block_number, const void* input, void* output, length_type length) = 0;
+
+private:
+    length_type read_block(offset_type block_number, void* output);
+    length_type
+    read_block(offset_type block_number, void* output, offset_type begin, offset_type end);
+
+    void write_block(offset_type block_number, const void* input, length_type length);
+    void read_then_write_block(offset_type block_number,
+                               const void* input,
+                               offset_type begin,
+                               offset_type end);
+
+    void unchecked_write(const void* input, offset_type offset, length_type length);
+
+public:
+    explicit CryptStream(std::shared_ptr<StreamBase> stream, length_type block_size)
+        : m_stream(std::move(stream)), m_block_size(block_size)
+    {
+        if (!m_stream)
+            NULL_EXCEPT();
+        if (m_block_size < 1)
+            throw InvalidArgumentException("Too small block size");
+    }
+
+    length_type read(void* output, offset_type offset, length_type length) override;
+    void write(const void* input, offset_type offset, length_type length) override;
+    void flush() override { m_stream->flush(); }
+    length_type size() const override { return m_stream->size(); }
+    void resize(length_type new_length) override;
+};
 }
