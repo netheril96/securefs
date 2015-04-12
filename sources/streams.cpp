@@ -5,6 +5,7 @@
 #include <array>
 #include <cstring>
 #include <cassert>
+#include <memory>
 
 #include <cryptopp/hmac.h>
 #include <cryptopp/sha.h>
@@ -174,9 +175,10 @@ CryptStream::read_block(offset_type block_number, void* output, offset_type begi
 void CryptStream::write_block(offset_type block_number, const void* input, length_type length)
 {
     assert(length <= m_block_size);
-    std::vector<byte> buffer(length);    // Ciphertext needs not be cleared after use
-    encrypt(block_number, input, buffer.data(), length);
-    m_stream->write(buffer.data(), block_number * m_block_size, length);
+    std::unique_ptr<byte[]> buffer(
+        new byte[length]);    // Ciphertext needs not be cleared after use
+    encrypt(block_number, input, buffer.get(), length);
+    m_stream->write(buffer.get(), block_number * m_block_size, length);
 }
 
 void CryptStream::read_then_write_block(offset_type block_number,
@@ -264,8 +266,10 @@ void CryptStream::resize(length_type new_size)
     }
     else
     {
-        std::vector<byte> zeros(new_size - current_size, 0);
-        unchecked_write(zeros.data(), current_size, new_size - current_size);
+        auto len = new_size - current_size;
+        std::unique_ptr<byte[]> zeros(new byte[len]);
+        std::memset(zeros.get(), 0, len);
+        unchecked_write(zeros.get(), current_size, len);
     }
 }
 }
