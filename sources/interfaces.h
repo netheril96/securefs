@@ -8,29 +8,24 @@
 #include <cerrno>
 #include <string>
 
+#define DISABLE_COPY_MOVE(cls)                                                                     \
+    cls(const cls&) = delete;                                                                      \
+    cls(cls&&) = delete;                                                                           \
+    cls& operator=(const cls&) = delete;                                                           \
+    cls& operator=(cls&&) = delete;
+
 namespace securefs
 {
 /**
- * Base classes for most abstract classes and interfaces.
- * The utility it provides is deleted copy and move ctors.
- **/
-class AbstractBase
-{
-public:
-    explicit AbstractBase() {}
-    virtual ~AbstractBase() {}
-    AbstractBase(const AbstractBase&) = delete;
-    AbstractBase(AbstractBase&&) = delete;
-    AbstractBase& operator=(const AbstractBase&) = delete;
-    AbstractBase& operator=(AbstractBase&&) = delete;
-};
-
-/**
  * Base classes for byte streams.
  **/
-class StreamBase : public AbstractBase
+class StreamBase
 {
 public:
+    StreamBase() {}
+    virtual ~StreamBase() {}
+    DISABLE_COPY_MOVE(StreamBase);
+
     /**
      * Returns the number of bytes actually read into the buffer `output`.
      * Always read in full unless beyond the end, i.e., offset + length > size.
@@ -58,8 +53,11 @@ public:
  * Base classes for files, directories and symbolic links.
  * It is empty, only a marker for types.
  **/
-class FileBase : public AbstractBase
+class FileBase
 {
+    FileBase() {}
+    virtual ~FileBase() {}
+    DISABLE_COPY_MOVE(FileBase);
 };
 
 class ExceptionBase : public std::exception
