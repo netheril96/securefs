@@ -29,7 +29,7 @@ public:
 /**
  * Base classes for byte streams.
  **/
-class AbstractStream : public AbstractBase
+class StreamBase : public AbstractBase
 {
 public:
     /**
@@ -43,7 +43,7 @@ public:
      **/
     virtual void write(const void* input, offset_type offset, length_type length) = 0;
 
-    virtual length_type size() = 0;
+    virtual length_type size() const = 0;
 
     virtual void flush() = 0;
 
@@ -58,7 +58,7 @@ public:
  * Base classes for files, directories and symbolic links.
  * It is empty, only a marker for types.
  **/
-class AbstractFile : public AbstractBase
+class FileBase : public AbstractBase
 {
 };
 
