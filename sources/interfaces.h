@@ -1,5 +1,7 @@
 #pragma once
 
+#include "def.h"
+
 #include <exception>
 #include <cstddef>
 #include <cstdint>
@@ -8,9 +10,6 @@
 
 namespace securefs
 {
-typedef std::uint64_t length_type;
-typedef std::uint64_t offset_type;
-
 /**
  * Base classes for most abstract classes and interfaces.
  * The utility it provides is deleted copy and move ctors.

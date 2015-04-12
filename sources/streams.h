@@ -2,6 +2,8 @@
 #include "interfaces.h"
 #include "exceptions.h"
 
+#include <memory>
+
 #include <unistd.h>
 #include <sys/stat.h>
 
@@ -58,4 +60,8 @@ public:
 
     length_type size() const override { return m_size; }
 };
+
+std::shared_ptr<StreamBase> make_stream_hmac(std::shared_ptr<const SecureParam> param,
+                                             std::shared_ptr<StreamBase> stream,
+                                             bool check);
 }
