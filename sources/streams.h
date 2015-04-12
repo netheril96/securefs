@@ -60,12 +60,24 @@ public:
     }
 
     length_type size() const override { return m_size; }
+
+    bool is_sparse() const noexcept override { return true; }
 };
 
 std::shared_ptr<StreamBase> make_stream_hmac(std::shared_ptr<const SecureParam> param,
                                              std::shared_ptr<StreamBase> stream,
                                              bool check);
 
+/**
+ * Base classes for streams that encrypt and decrypt data transparently
+ * The transformation is done in blocks,
+ * and must always output data of the same length as input.
+ *
+ * Subclasses should use additional storage, such as another stream, to store IVs and MACs.
+ *
+ * The CryptStream supports sparse streams if the subclass can tell whether all zero block
+ * are ciphertext or sparse parts of the underlying stream.
+ */
 class CryptStream : public StreamBase
 {
 protected:
@@ -92,6 +104,7 @@ private:
                                offset_type end);
 
     void unchecked_write(const void* input, offset_type offset, length_type length);
+    void zero_fill(offset_type offset, length_type length);
 
 public:
     explicit CryptStream(std::shared_ptr<StreamBase> stream, length_type block_size)

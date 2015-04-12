@@ -47,6 +47,12 @@ public:
      * Discard extra data when shrinking, zero-fill when extending.
      **/
     virtual void resize(length_type) = 0;
+
+    /**
+     * Sparse streams can be extended with zeros in constant time.
+     * Some algorithms may be specialized on sparse streams.
+     */
+    virtual bool is_sparse() const noexcept { return false; }
 };
 
 /**

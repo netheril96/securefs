@@ -133,6 +133,8 @@ namespace internal
             m_stream->resize(len + hmac_length);
             is_dirty = true;
         }
+
+        bool is_sparse() const noexcept override { return m_stream->is_sparse(); }
     };
 }
 
@@ -246,6 +248,23 @@ void CryptStream::unchecked_write(const void* input, offset_type offset, length_
     }
 }
 
+void CryptStream::zero_fill(offset_type offset, offset_type finish)
+{
+    std::unique_ptr<byte[]> zeros(new byte[m_block_size]);
+    std::memset(zeros.get(), 0, m_block_size);
+    while (offset < finish)
+    {
+        auto block_num = offset / m_block_size;
+        auto start_of_block = block_num * m_block_size;
+        auto begin = offset - start_of_block;
+        auto end = std::min<offset_type>(m_block_size, finish - start_of_block);
+        read_then_write_block(block_num, zeros.get(), begin, end);
+        auto rc = end - begin;
+        offset += rc;
+        finish -= rc;
+    }
+}
+
 void CryptStream::resize(length_type new_size)
 {
     auto current_size = this->size();
@@ -262,23 +281,20 @@ void CryptStream::resize(length_type new_size)
             (void)read_block(block_num, buffer.data());
             write_block(block_num, buffer.data(), residue);
         }
-        m_stream->resize(new_size);
     }
     else
     {
-        auto len = new_size - current_size;
-        std::unique_ptr<byte[]> zeros(new byte[m_block_size]);
-        std::memset(zeros.get(), 0, m_block_size);
-        while (len > 0)
+        auto old_block_num = current_size / m_block_size;
+        auto new_block_num = new_size / m_block_size;
+        if (!is_sparse() || old_block_num == new_block_num)
+            zero_fill(current_size, new_size);
+        else
         {
-            auto block_num = current_size / m_block_size;
-            auto start_of_block = block_num * m_block_size;
-            auto begin = current_size - start_of_block;
-            auto end = std::min<offset_type>(m_block_size, new_size - start_of_block);
-            read_then_write_block(block_num, zeros.get(), begin, end);
-            current_size += end - begin;
-            len -= end - begin;
+            zero_fill(current_size, old_block_num * m_block_size + m_block_size);
+            // No need to encrypt zeros in the middle
+            zero_fill(new_block_num * m_block_size, new_size);
         }
     }
+    m_stream->resize(new_size);
 }
 }

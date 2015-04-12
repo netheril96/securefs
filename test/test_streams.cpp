@@ -69,6 +69,17 @@ static void test(securefs::StreamBase& stream, unsigned times)
     }
 }
 
+static bool is_all_zeros(const void* data, size_t len)
+{
+    auto bytes = static_cast<const byte*>(data);
+    for (size_t i = 0; i < len; ++i)
+    {
+        if (bytes[i] != 0)
+            return false;
+    }
+    return true;
+}
+
 namespace securefs
 {
 namespace dummy
@@ -83,6 +94,13 @@ namespace dummy
                      void* output,
                      length_type length) override
         {
+            // This is an unreliable way to detect sparse blocks
+            // Only for testing purposes
+            if (is_sparse() && is_all_zeros(input, length))
+            {
+                std::memset(output, 0, length);
+                return;
+            }
             auto a = static_cast<byte>(block_number);
             for (length_type i = 0; i < length; ++i)
             {
@@ -103,6 +121,8 @@ namespace dummy
             : CryptStream(std::move(stream), block_size)
         {
         }
+
+        bool is_sparse() const noexcept override { return m_stream->is_sparse(); }
     };
 }
 }
