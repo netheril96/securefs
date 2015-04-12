@@ -267,9 +267,18 @@ void CryptStream::resize(length_type new_size)
     else
     {
         auto len = new_size - current_size;
-        std::unique_ptr<byte[]> zeros(new byte[len]);
-        std::memset(zeros.get(), 0, len);
-        unchecked_write(zeros.get(), current_size, len);
+        std::unique_ptr<byte[]> zeros(new byte[m_block_size]);
+        std::memset(zeros.get(), 0, m_block_size);
+        while (len > 0)
+        {
+            auto block_num = current_size / m_block_size;
+            auto start_of_block = block_num * m_block_size;
+            auto begin = current_size - start_of_block;
+            auto end = std::min<offset_type>(m_block_size, new_size - start_of_block);
+            read_then_write_block(block_num, zeros.get(), begin, end);
+            current_size += end - begin;
+            len -= end - begin;
+        }
     }
 }
 }
