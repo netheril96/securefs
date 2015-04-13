@@ -1,15 +1,35 @@
 #pragma once
-#include "interfaces.h"
 
 #include "format.h"
+#include "utils.h"
 
 #include <string>
 #include <exception>
 #include <utility>
 #include <string.h>
+#include <errno.h>
 
 namespace securefs
 {
+class ExceptionBase : public std::exception
+{
+private:
+    mutable std::string m_cached_msg;
+    // Mutable fields are not thread safe in `const` functions.
+    // But who accesses exception objects concurrently anyway?
+
+public:
+    virtual const char* type_name() const noexcept = 0;
+    virtual std::string message() const = 0;
+    virtual int error_number() const noexcept { return EPERM; }
+    const char* what() const noexcept final override
+    {
+        if (m_cached_msg.empty())
+            message().swap(m_cached_msg);
+        return m_cached_msg.c_str();
+    }
+};
+
 class CommonException : public ExceptionBase
 {
 };

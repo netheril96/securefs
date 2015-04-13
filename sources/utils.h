@@ -4,6 +4,12 @@
 #include <string>
 #include <array>
 
+#define DISABLE_COPY_MOVE(cls)                                                                     \
+    cls(const cls&) = delete;                                                                      \
+    cls(cls&&) = delete;                                                                           \
+    cls& operator=(const cls&) = delete;                                                           \
+    cls& operator=(cls&&) = delete;
+
 typedef unsigned char byte;
 
 namespace securefs

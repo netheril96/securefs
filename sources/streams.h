@@ -1,6 +1,6 @@
 #pragma once
-#include "interfaces.h"
 #include "exceptions.h"
+#include "utils.h"
 
 #include <memory>
 #include <utility>
@@ -10,6 +10,62 @@
 
 namespace securefs
 {
+
+/**
+ * Base classes for byte streams.
+ **/
+class StreamBase
+{
+public:
+    StreamBase() {}
+    virtual ~StreamBase() {}
+    DISABLE_COPY_MOVE(StreamBase);
+
+    /**
+     * Returns the number of bytes actually read into the buffer `output`.
+     * Always read in full unless beyond the end, i.e., offset + length > size.
+     **/
+    virtual length_type read(void* output, offset_type offset, length_type length) = 0;
+
+    /**
+     * Write must always succeed as a whole or throw an exception otherwise.
+     * If the offset is beyond the end of the stream, the gap should be filled with zeros.
+     **/
+    virtual void write(const void* input, offset_type offset, length_type length) = 0;
+
+    virtual length_type size() const = 0;
+
+    virtual void flush() = 0;
+
+    /**
+     * Similar to ftruncate().
+     * Discard extra data when shrinking, zero-fill when extending.
+     **/
+    virtual void resize(length_type) = 0;
+
+    /**
+     * Sparse streams can be extended with zeros in constant time.
+     * Some algorithms may be specialized on sparse streams.
+     */
+    virtual bool is_sparse() const noexcept { return false; }
+};
+
+/**
+ * Interface that supports a fixed size buffer to store headers for files
+ */
+class HeaderBase
+{
+public:
+    HeaderBase() {}
+    virtual ~HeaderBase() {}
+    DISABLE_COPY_MOVE(HeaderBase);
+
+    virtual length_type header_length() const noexcept = 0;
+    virtual void read_header(void* output, length_type length) = 0;
+    virtual void write_header(const void* input, length_type length) = 0;
+    virtual void flush_header() = 0;
+};
+
 class POSIXFileStream : public StreamBase
 {
 private:
