@@ -5,6 +5,7 @@
 #include <vector>
 #include <random>
 #include <algorithm>
+#include <string.h>
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -119,8 +120,8 @@ TEST_CASE("Test streams")
     char temp_template[] = "/tmp/C6AD402F-B5FD-430A-BB2E-90006B22A1B8.XXXXXX";
 
     auto param = std::make_shared<securefs::SecureParam>();
-    std::memset(param->key.data(), 0xFF, param->key.size());
-    std::memset(param->id.data(), 0xFF, param->id.size());
+    memset(param->key.data(), 0xFF, param->key.size());
+    memset(param->id.data(), 0xFF, param->id.size());
 
     auto posix_stream = std::make_shared<securefs::POSIXFileStream>(mkstemp(temp_template));
     {

@@ -1,6 +1,6 @@
 #pragma once
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 #include <string>
 #include <array>
 
@@ -8,10 +8,10 @@ typedef unsigned char byte;
 
 namespace securefs
 {
-typedef std::uint64_t length_type;
-typedef std::uint64_t offset_type;
+typedef uint64_t length_type;
+typedef uint64_t offset_type;
 
-constexpr std::uint32_t KEY_LENGTH = 32, ID_LENGTH = 32, BLOCK_SIZE = 4096;
+constexpr uint32_t KEY_LENGTH = 32, ID_LENGTH = 32, BLOCK_SIZE = 4096;
 
 typedef std::array<byte, KEY_LENGTH> key_type;
 typedef std::array<byte, ID_LENGTH> id_type;

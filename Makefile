@@ -1,5 +1,5 @@
 CPPFLAGS := -I/usr/include -I/usr/local/include -I./sources -I./cryptopp/include -DNDEBUG
-CXXFLAGS := -g -O2 -march=native -mtune=native -std=c++0x
+CXXFLAGS := -g -O2 -march=native -mtune=native -std=c++0x -pipe
 LDFLAGS := -L/usr/local/lib -L./cryptopp/lib -lcryptopp
 ifeq ($(shell uname), Darwin)
 	LDFLAGS += -losxfuse
@@ -15,8 +15,8 @@ TEST_OBJECTS := $(TEST_SOURCES:.cpp=.o)
 
 .PHONY: all clean cryptopp test deepclean
 
-cryptopp: ./cryptopp/lib/libcryptopp.a
-	$(MAKE) -C cryptopp static -j4
+cryptopp:
+	$(MAKE) -C cryptopp static
 	$(MAKE) -C cryptopp install
 
 securefs: $(OBJECTS)
@@ -29,7 +29,7 @@ test: securefs_test
 	./securefs_test
 
 clean:
-	$(RM) $(OBJECTS) securefs securefs_test
+	$(RM) $(OBJECTS) $(TEST_OBJECTS) securefs securefs_test
 
 deepclean: clean
-	$(MAKE) -c cryptopp clean
+	$(MAKE) -C cryptopp clean

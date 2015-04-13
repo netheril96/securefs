@@ -6,6 +6,7 @@
 #include <string>
 #include <exception>
 #include <utility>
+#include <string.h>
 
 namespace securefs
 {
@@ -125,7 +126,7 @@ private:
 public:
     explicit CorruptedMetaDataException(const id_type& id, const char* reason) : m_reason(reason)
     {
-        std::memcpy(m_id.data(), id.data(), id.size());
+        memcpy(m_id.data(), id.data(), id.size());
     }
 
     const char* type_name() const noexcept override { return "CorruptedMetaDataException"; }

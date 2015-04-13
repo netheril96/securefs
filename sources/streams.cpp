@@ -3,8 +3,8 @@
 #include <utility>
 #include <algorithm>
 #include <array>
-#include <cstring>
-#include <cassert>
+#include <string.h>
+#include <assert.h>
 #include <memory>
 
 #include <cryptopp/hmac.h>
@@ -27,7 +27,7 @@ namespace internal
     public:
         explicit InvalidHMACStreamException(const id_type& id, std::string msg)
         {
-            std::memcpy(m_id.data(), id.data(), id.size());
+            memcpy(m_id.data(), id.data(), id.size());
             m_msg.swap(msg);
         }
 
@@ -173,7 +173,7 @@ CryptStream::read_block(offset_type block_number, void* output, offset_type begi
     if (rc <= begin)
         return 0;
     end = std::min<offset_type>(end, rc);
-    std::memcpy(output, buffer.data() + begin, end - begin);
+    memcpy(output, buffer.data() + begin, end - begin);
     return end - begin;
 }
 
@@ -200,7 +200,7 @@ void CryptStream::read_then_write_block(offset_type block_number,
 
     CryptoPP::AlignedSecByteBlock buffer(m_block_size);
     auto rc = read_block(block_number, buffer.data());
-    std::memcpy(buffer.data() + begin, input, end - begin);
+    memcpy(buffer.data() + begin, input, end - begin);
     write_block(block_number, buffer.data(), std::max<length_type>(rc, end));
 }
 
@@ -254,7 +254,7 @@ void CryptStream::unchecked_write(const void* input, offset_type offset, length_
 void CryptStream::zero_fill(offset_type offset, offset_type finish)
 {
     std::unique_ptr<byte[]> zeros(new byte[m_block_size]);
-    std::memset(zeros.get(), 0, m_block_size);
+    memset(zeros.get(), 0, m_block_size);
     while (offset < finish)
     {
         auto block_num = offset / m_block_size;
@@ -279,7 +279,7 @@ void CryptStream::resize(length_type new_size)
         if (residue > 0)
         {
             CryptoPP::AlignedSecByteBlock buffer(m_block_size);
-            std::memset(buffer.data(), 0, buffer.size());
+            memset(buffer.data(), 0, buffer.size());
             (void)read_block(block_num, buffer.data());
             write_block(block_num, buffer.data(), residue);
         }
@@ -334,7 +334,7 @@ namespace internal
             , m_check(check)
         {
             byte null_iv[IV_SIZE];
-            std::memset(null_iv, 0, sizeof(null_iv));
+            memset(null_iv, 0, sizeof(null_iv));
             m_encryptor.SetKeyWithIV(
                 m_param->key.data(), m_param->key.size(), null_iv, sizeof(null_iv));
             m_decryptor.SetKeyWithIV(
@@ -390,7 +390,7 @@ namespace internal
                 throw CorruptedMetaDataException(m_param->id, "No MAC found");
             if (is_all_zeros(iv, sizeof(iv)))
             {
-                std::memset(output, 0, length);
+                memset(output, 0, length);
                 return;
             }
             bool success = m_decryptor.DecryptAndVerify(static_cast<byte*>(output),

@@ -3,10 +3,11 @@
 #include "utils.h"
 
 #include <exception>
-#include <cstddef>
-#include <cstdint>
-#include <cerrno>
+#include <stddef.h>
+#include <stdint.h>
+#include <errno.h>
 #include <string>
+#include <string.h>
 
 #define DISABLE_COPY_MOVE(cls)                                                                     \
     cls(const cls&) = delete;                                                                      \
