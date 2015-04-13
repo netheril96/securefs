@@ -115,4 +115,43 @@ public:
 
     int error_number() const noexcept override { return EINVAL; }
 };
+
+class CorruptedMetaDataException : public InvalidFormatException
+{
+private:
+    id_type m_id;
+    const char* m_reason;
+
+public:
+    explicit CorruptedMetaDataException(const id_type& id, const char* reason) : m_reason(reason)
+    {
+        std::memcpy(m_id.data(), id.data(), id.size());
+    }
+
+    const char* type_name() const noexcept override { return "CorruptedMetaDataException"; }
+
+    std::string message() const override
+    {
+        return fmt::format(
+            "Metadata for ID {} is corrupted ({})", hexify(m_id.data(), m_id.size()), m_reason);
+    }
+};
+
+class MessageVerificationException : public VerificationException
+{
+private:
+    id_type m_id;
+    offset_type m_off;
+
+public:
+    explicit MessageVerificationException(const id_type& id, offset_type off) : m_off(off) {}
+    const char* type_name() const noexcept override { return "MessageVerificationException"; }
+
+    std::string message() const override
+    {
+        return fmt::format("Message for ID {} at offset {} does not match the checksum",
+                           hexify(m_id.data(), m_id.size()),
+                           m_off);
+    }
+};
 }

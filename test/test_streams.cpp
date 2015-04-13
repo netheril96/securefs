@@ -69,17 +69,6 @@ static void test(securefs::StreamBase& stream, unsigned times)
     }
 }
 
-static bool is_all_zeros(const void* data, size_t len)
-{
-    auto bytes = static_cast<const byte*>(data);
-    for (size_t i = 0; i < len; ++i)
-    {
-        if (bytes[i] != 0)
-            return false;
-    }
-    return true;
-}
-
 namespace securefs
 {
 namespace dummy
@@ -139,5 +128,14 @@ TEST_CASE("Test streams")
     {
         securefs::dummy::DummpyCryptStream ds(posix_stream, 19);
         test(ds, 5000);
+    }
+    {
+        char temp_template[] = "/tmp/42127B9D-4F88-4489-956C-05BE32340B77.XXXXXX";
+        auto meta_posix_stream
+            = std::make_shared<securefs::POSIXFileStream>(mkstemp(temp_template));
+        auto param = std::make_shared<securefs::SecureParam>();
+        auto aes_gcm_stream
+            = securefs::make_cryptstream_aes_gcm(posix_stream, meta_posix_stream, param, true);
+        test(*aes_gcm_stream, 5000);
     }
 }

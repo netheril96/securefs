@@ -10,6 +10,9 @@
 #include <cryptopp/hmac.h>
 #include <cryptopp/sha.h>
 #include <cryptopp/secblock.h>
+#include <cryptopp/aes.h>
+#include <cryptopp/gcm.h>
+#include <cryptopp/osrng.h>
 
 namespace securefs
 {
@@ -296,5 +299,141 @@ void CryptStream::resize(length_type new_size)
         }
     }
     m_stream->resize(new_size);
+}
+
+namespace internal
+{
+
+    class AESGCMCryptStream final : public CryptStream
+    {
+    public:
+        typedef CryptoPP::GCM<CryptoPP::AES> AES_GCM;
+
+        static const size_t IV_SIZE = 32, MAC_SIZE = 16, HEADER_SIZE = 32;
+
+    private:
+        AES_GCM::Encryption m_encryptor;
+        AES_GCM::Decryption m_decryptor;
+        HMACStream m_metastream;
+        std::shared_ptr<const SecureParam> m_param;
+        bool m_check;
+
+    private:
+        length_type meta_position_for_iv(offset_type block_num) const noexcept
+        {
+            return HEADER_SIZE + (IV_SIZE + MAC_SIZE) * block_num;
+        }
+
+    public:
+        explicit AESGCMCryptStream(std::shared_ptr<StreamBase> data_stream,
+                                   std::shared_ptr<StreamBase> meta_stream,
+                                   std::shared_ptr<const SecureParam> param,
+                                   bool check)
+            : CryptStream(data_stream, BLOCK_SIZE)
+            , m_metastream(param, meta_stream, check)
+            , m_param(param)
+            , m_check(check)
+        {
+            byte null_iv[IV_SIZE];
+            std::memset(null_iv, 0, sizeof(null_iv));
+            m_encryptor.SetKeyWithIV(
+                m_param->key.data(), m_param->key.size(), null_iv, sizeof(null_iv));
+            m_decryptor.SetKeyWithIV(
+                m_param->key.data(), m_param->key.size(), null_iv, sizeof(null_iv));
+        }
+
+    protected:
+        void encrypt(offset_type block_number,
+                     const void* input,
+                     void* output,
+                     length_type length) override
+        {
+            if (length == 0)
+                return;
+
+            thread_local CryptoPP::AutoSeededRandomPool random_pool;
+            byte iv[IV_SIZE];
+            byte mac[MAC_SIZE];
+            do
+            {
+                random_pool.GenerateBlock(iv, sizeof(iv));
+            } while (is_all_zeros(iv, sizeof(iv)));    // Null IVs are markers for sparse blocks
+            m_encryptor.EncryptAndAuthenticate(static_cast<byte*>(output),
+                                               mac,
+                                               sizeof(mac),
+                                               iv,
+                                               sizeof(iv),
+                                               m_param->id.data(),
+                                               m_param->id.size(),
+                                               static_cast<const byte*>(input),
+                                               length);
+            auto iv_pos = meta_position_for_iv(block_number);
+            auto mac_pos = iv_pos + IV_SIZE;
+            m_metastream.write(iv, iv_pos, sizeof(iv));
+            m_metastream.write(mac, mac_pos, sizeof(mac));
+        }
+
+        void decrypt(offset_type block_number,
+                     const void* input,
+                     void* output,
+                     length_type length) override
+        {
+            if (length == 0)
+                return;
+
+            byte iv[IV_SIZE];
+            byte mac[MAC_SIZE];
+            auto iv_pos = meta_position_for_iv(block_number);
+            auto mac_pos = iv_pos + IV_SIZE;
+            if (m_metastream.read(iv, iv_pos, sizeof(iv)) != sizeof(iv))
+                throw CorruptedMetaDataException(m_param->id, "No IV found");
+            if (m_metastream.read(mac, mac_pos, sizeof(mac)) != sizeof(mac))
+                throw CorruptedMetaDataException(m_param->id, "No MAC found");
+            if (is_all_zeros(iv, sizeof(iv)))
+            {
+                std::memset(output, 0, length);
+                return;
+            }
+            bool success = m_decryptor.DecryptAndVerify(static_cast<byte*>(output),
+                                                        mac,
+                                                        sizeof(mac),
+                                                        iv,
+                                                        sizeof(iv),
+                                                        m_param->id.data(),
+                                                        m_param->id.size(),
+                                                        static_cast<const byte*>(input),
+                                                        length);
+            if (m_check && !success)
+                throw MessageVerificationException(m_param->id, block_number * m_block_size);
+        }
+
+    public:
+        bool is_sparse() const noexcept override
+        {
+            return m_stream->is_sparse() && m_metastream.is_sparse();
+        }
+
+        void resize(length_type new_size) override
+        {
+            CryptStream::resize(new_size);
+            auto num_blocks = (new_size + m_block_size - 1) / m_block_size;
+            m_metastream.resize(HEADER_SIZE + num_blocks * (IV_SIZE + MAC_SIZE));
+        }
+
+        void flush() override
+        {
+            CryptStream::flush();
+            m_metastream.flush();
+        }
+    };
+}
+
+std::shared_ptr<CryptStream> make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
+                                                      std::shared_ptr<StreamBase> meta_stream,
+                                                      std::shared_ptr<const SecureParam> param,
+                                                      bool check)
+{
+    return std::make_shared<internal::AESGCMCryptStream>(
+        std::move(data_stream), std::move(meta_stream), std::move(param), check);
 }
 }

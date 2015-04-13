@@ -1,6 +1,6 @@
 #pragma once
 
-#include "def.h"
+#include "utils.h"
 
 #include <exception>
 #include <cstddef>
@@ -53,6 +53,21 @@ public:
      * Some algorithms may be specialized on sparse streams.
      */
     virtual bool is_sparse() const noexcept { return false; }
+};
+
+/**
+ * Interfaces for any class that supports a fixed size buffer for storing headers for files
+ */
+class HeaderBase
+{
+public:
+    HeaderBase() {}
+    virtual ~HeaderBase() {}
+    DISABLE_COPY_MOVE(HeaderBase);
+
+    virtual length_type max_length() const noexcept = 0;
+    virtual void read_header(void* output, length_type length) = 0;
+    virtual void write_header(const void* input, length_type length) = 0;
 };
 
 /**
