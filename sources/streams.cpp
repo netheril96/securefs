@@ -425,13 +425,14 @@ namespace internal
             m_metastream.flush();
         }
 
-    public:
-        void read_header(void* output, length_type length) override
+    private:
+        length_type unchecked_read_header(void* output)
         {
-            if (length != HEADER_SIZE)
-                throw InvalidArgumentException("Length mismatch");
             byte buffer[ENCRYPTED_HEADER_SIZE];
-            if (m_metastream.read(buffer, 0, sizeof(buffer)) != sizeof(buffer))
+            auto rc = m_metastream.read(buffer, 0, sizeof(buffer));
+            if (rc == 0)
+                return 0;
+            if (rc != sizeof(buffer))
                 throw CorruptedMetaDataException(m_param->id, "Not enough header field");
             m_decryptor.DecryptAndVerify(static_cast<byte*>(output),
                                          buffer + IV_SIZE,
@@ -442,15 +443,11 @@ namespace internal
                                          m_param->id.size(),
                                          buffer + IV_SIZE + MAC_SIZE,
                                          HEADER_SIZE);
+            return sizeof(buffer);
         }
 
-        length_type header_length() const noexcept override { return HEADER_SIZE; }
-
-        void write_header(const void* input, length_type length) override
+        void unchecked_write_header(const void* input)
         {
-            if (length != HEADER_SIZE)
-                throw InvalidArgumentException("Length mismatch");
-
             byte buffer[ENCRYPTED_HEADER_SIZE];
             thread_local CryptoPP::AutoSeededRandomPool random_pool;
             random_pool.GenerateBlock(buffer, IV_SIZE);
@@ -462,8 +459,38 @@ namespace internal
                                                m_param->id.data(),
                                                m_param->id.size(),
                                                static_cast<const byte*>(input),
-                                               length);
+                                               HEADER_SIZE);
             m_metastream.write(buffer, 0, sizeof(buffer));
+        }
+
+    public:
+        length_type read_header(void* output, length_type length) override
+        {
+            if (length > HEADER_SIZE)
+                throw InvalidArgumentException("Header too long");
+            if (length == HEADER_SIZE)
+                return unchecked_read_header(output);
+
+            CryptoPP::AlignedSecByteBlock buffer(HEADER_SIZE);
+            auto rc = unchecked_read_header(buffer.data());
+            memcpy(output, buffer.data(), std::min(length, rc));
+            return std::min(length, rc);
+        }
+
+        length_type max_header_length() const noexcept override { return HEADER_SIZE; }
+
+        void write_header(const void* input, length_type length) override
+        {
+            if (length > HEADER_SIZE)
+                throw InvalidArgumentException("Header too long");
+
+            if (length == HEADER_SIZE)
+                return unchecked_write_header(input);
+
+            CryptoPP::AlignedSecByteBlock buffer(HEADER_SIZE);
+            memcpy(buffer.data(), input, length);
+            memset(buffer.data() + length, 0, buffer.size() - length);
+            unchecked_write_header(buffer.data());
         }
 
         void flush_header() override { m_metastream.flush(); }

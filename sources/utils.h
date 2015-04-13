@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string>
 #include <array>
+#include <type_traits>
 
 #define DISABLE_COPY_MOVE(cls)                                                                     \
     cls(const cls&) = delete;                                                                      \
@@ -57,5 +58,29 @@ inline bool is_all_zeros(const void* data, size_t len)
 {
     auto bytes = static_cast<const byte*>(data);
     return is_all_equal(bytes, bytes + len, 0);
+}
+
+template <class T>
+inline void to_little_endian(T value, void* output)
+{
+    static_assert(std::is_unsigned<T>::value, "Must be an unsigned integer type");
+    auto bytes = static_cast<byte*>(output);
+    for (size_t i = 0; i < sizeof(T); ++i)
+    {
+        bytes[i] = value >> (8 * i);
+    }
+}
+
+template <class T>
+inline T from_little_endian(const void* input)
+{
+    static_assert(std::is_unsigned<T>::value, "Must be an unsigned integer type");
+    auto bytes = static_cast<const byte*>(input);
+    T value = 0;
+    for (size_t i = 0; i < sizeof(T); ++i)
+    {
+        value |= static_cast<T>(bytes[i]) << (8 * i);
+    }
+    return value;
 }
 }
