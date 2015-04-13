@@ -264,7 +264,6 @@ void CryptStream::zero_fill(offset_type offset, offset_type finish)
         read_then_write_block(block_num, zeros.get(), begin, end);
         auto rc = end - begin;
         offset += rc;
-        finish -= rc;
     }
 }
 
