@@ -1,5 +1,5 @@
-CPPFLAGS := -I/usr/include -I/usr/local/include -I./sources -I./cryptopp/include -DNDEBUG
-CXXFLAGS := -g -O2 -march=native -mtune=native -std=c++0x -pipe
+CPPFLAGS := -isystem/usr/include -isystem/usr/local/include -I./sources -isystem./cryptopp/include -DNDEBUG
+CXXFLAGS := -g -O2 -march=native -mtune=native -std=c++0x -pipe -Wall -Wextra -pedantic
 LDFLAGS := -L/usr/local/lib -L./cryptopp/lib -lcryptopp
 ifeq ($(shell uname), Darwin)
 	LDFLAGS += -losxfuse

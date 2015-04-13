@@ -145,7 +145,10 @@ private:
     offset_type m_off;
 
 public:
-    explicit MessageVerificationException(const id_type& id, offset_type off) : m_off(off) {}
+    explicit MessageVerificationException(const id_type& id, offset_type off) : m_off(off)
+    {
+        memcpy(m_id.data(), id.data(), id.size());
+    }
     const char* type_name() const noexcept override { return "MessageVerificationException"; }
 
     std::string message() const override
