@@ -140,6 +140,7 @@ TEST_CASE("Test streams")
         std::vector<byte> header(aes_gcm_stream.second->header_length(), 5);
         aes_gcm_stream.second->write_header(header.data(), header.size());
         test(*aes_gcm_stream.first, 1000);
+        aes_gcm_stream.second->flush_header();
         aes_gcm_stream.second->read_header(header.data(), header.size());
         REQUIRE(securefs::is_all_equal(header.begin(), header.end(), 5));
         test(*aes_gcm_stream.first, 3000);

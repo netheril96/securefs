@@ -123,6 +123,12 @@ public:
     void resize(length_type new_length) override;
 };
 
+/**
+ * AESGCMCryptStream is both a CryptStream and a HeaderBase.
+ *
+ * Returns a pair because the client does not need to know whether the two interfaces are
+ * implemented by the same class.
+ */
 std::pair<std::shared_ptr<CryptStream>, std::shared_ptr<HeaderBase>>
 make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
                          std::shared_ptr<StreamBase> meta_stream,

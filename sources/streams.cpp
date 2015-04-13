@@ -465,6 +465,8 @@ namespace internal
                                                length);
             m_metastream.write(buffer, 0, sizeof(buffer));
         }
+
+        void flush_header() override { m_metastream.flush(); }
     };
 }
 
