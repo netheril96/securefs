@@ -303,13 +303,13 @@ void CryptStream::resize(length_type new_size)
 
 namespace internal
 {
-
-    class AESGCMCryptStream final : public CryptStream
+    class AESGCMCryptStream final : public CryptStream, public HeaderBase
     {
     public:
         typedef CryptoPP::GCM<CryptoPP::AES> AES_GCM;
 
         static const size_t IV_SIZE = 32, MAC_SIZE = 16, HEADER_SIZE = 32;
+        static const size_t ENCRYPTED_HEADER_SIZE = HEADER_SIZE + IV_SIZE + MAC_SIZE;
 
     private:
         AES_GCM::Encryption m_encryptor;
@@ -321,7 +321,7 @@ namespace internal
     private:
         length_type meta_position_for_iv(offset_type block_num) const noexcept
         {
-            return HEADER_SIZE + (IV_SIZE + MAC_SIZE) * block_num;
+            return ENCRYPTED_HEADER_SIZE + (IV_SIZE + MAC_SIZE) * (block_num);
         }
 
     public:
@@ -417,7 +417,7 @@ namespace internal
         {
             CryptStream::resize(new_size);
             auto num_blocks = (new_size + m_block_size - 1) / m_block_size;
-            m_metastream.resize(HEADER_SIZE + num_blocks * (IV_SIZE + MAC_SIZE));
+            m_metastream.resize(ENCRYPTED_HEADER_SIZE + num_blocks * (IV_SIZE + MAC_SIZE));
         }
 
         void flush() override
@@ -425,15 +425,58 @@ namespace internal
             CryptStream::flush();
             m_metastream.flush();
         }
+
+    public:
+        void read_header(void* output, length_type length) override
+        {
+            if (length != HEADER_SIZE)
+                throw InvalidArgumentException("Length mismatch");
+            byte buffer[ENCRYPTED_HEADER_SIZE];
+            if (m_metastream.read(buffer, 0, sizeof(buffer)) != sizeof(buffer))
+                throw CorruptedMetaDataException(m_param->id, "Not enough header field");
+            m_decryptor.DecryptAndVerify(static_cast<byte*>(output),
+                                         buffer + IV_SIZE,
+                                         MAC_SIZE,
+                                         buffer,
+                                         IV_SIZE,
+                                         m_param->id.data(),
+                                         m_param->id.size(),
+                                         buffer + IV_SIZE + MAC_SIZE,
+                                         HEADER_SIZE);
+        }
+
+        length_type header_length() const noexcept override { return HEADER_SIZE; }
+
+        void write_header(const void* input, length_type length) override
+        {
+            if (length != HEADER_SIZE)
+                throw InvalidArgumentException("Length mismatch");
+
+            byte buffer[ENCRYPTED_HEADER_SIZE];
+            thread_local CryptoPP::AutoSeededRandomPool random_pool;
+            random_pool.GenerateBlock(buffer, IV_SIZE);
+            m_encryptor.EncryptAndAuthenticate(buffer + IV_SIZE + MAC_SIZE,
+                                               buffer + IV_SIZE,
+                                               MAC_SIZE,
+                                               buffer,
+                                               IV_SIZE,
+                                               m_param->id.data(),
+                                               m_param->id.size(),
+                                               static_cast<const byte*>(input),
+                                               length);
+            m_metastream.write(buffer, 0, sizeof(buffer));
+        }
     };
 }
 
-std::shared_ptr<CryptStream> make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
-                                                      std::shared_ptr<StreamBase> meta_stream,
-                                                      std::shared_ptr<const SecureParam> param,
-                                                      bool check)
+std::pair<std::shared_ptr<CryptStream>, std::shared_ptr<HeaderBase>>
+make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
+                         std::shared_ptr<StreamBase> meta_stream,
+                         std::shared_ptr<const SecureParam> param,
+                         bool check)
 {
-    return std::make_shared<internal::AESGCMCryptStream>(
+    auto stream = std::make_shared<internal::AESGCMCryptStream>(
         std::move(data_stream), std::move(meta_stream), std::move(param), check);
+    return {stream, stream};
 }
 }

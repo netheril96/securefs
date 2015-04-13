@@ -65,7 +65,7 @@ public:
     virtual ~HeaderBase() {}
     DISABLE_COPY_MOVE(HeaderBase);
 
-    virtual length_type max_length() const noexcept = 0;
+    virtual length_type header_length() const noexcept = 0;
     virtual void read_header(void* output, length_type length) = 0;
     virtual void write_header(const void* input, length_type length) = 0;
 };

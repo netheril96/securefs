@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include <unistd.h>
+#include <fcntl.h>
 
 static void test(securefs::StreamBase& stream, unsigned times)
 {
@@ -83,13 +84,6 @@ namespace dummy
                      void* output,
                      length_type length) override
         {
-            // This is an unreliable way to detect sparse blocks
-            // Only for testing purposes
-            if (is_sparse() && is_all_zeros(input, length))
-            {
-                std::memset(output, 0, length);
-                return;
-            }
             auto a = static_cast<byte>(block_number);
             for (length_type i = 0; i < length; ++i)
             {
@@ -110,19 +104,27 @@ namespace dummy
             : CryptStream(std::move(stream), block_size)
         {
         }
-
-        bool is_sparse() const noexcept override { return m_stream->is_sparse(); }
     };
 }
+}
+
+void dump_contents(const std::vector<byte>& bytes, const char* filename)
+{
+    securefs::POSIXFileStream fs(::open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0600));
+    fs.write(bytes.data(), 0, bytes.size());
 }
 
 TEST_CASE("Test streams")
 {
     char temp_template[] = "/tmp/C6AD402F-B5FD-430A-BB2E-90006B22A1B8.XXXXXX";
+
+    auto param = std::make_shared<securefs::SecureParam>();
+    std::memset(param->key.data(), 0xFF, param->key.size());
+    std::memset(param->id.data(), 0xFF, param->id.size());
+
     auto posix_stream = std::make_shared<securefs::POSIXFileStream>(mkstemp(temp_template));
     {
-        auto hmac_stream = securefs::make_stream_hmac(
-            std::make_shared<securefs::SecureParam>(), posix_stream, true);
+        auto hmac_stream = securefs::make_stream_hmac(param, posix_stream, true);
         test(*hmac_stream, 5000);
     }
     {
@@ -133,9 +135,13 @@ TEST_CASE("Test streams")
         char temp_template[] = "/tmp/42127B9D-4F88-4489-956C-05BE32340B77.XXXXXX";
         auto meta_posix_stream
             = std::make_shared<securefs::POSIXFileStream>(mkstemp(temp_template));
-        auto param = std::make_shared<securefs::SecureParam>();
         auto aes_gcm_stream
             = securefs::make_cryptstream_aes_gcm(posix_stream, meta_posix_stream, param, true);
-        test(*aes_gcm_stream, 5000);
+        std::vector<byte> header(aes_gcm_stream.second->header_length(), 5);
+        aes_gcm_stream.second->write_header(header.data(), header.size());
+        test(*aes_gcm_stream.first, 1000);
+        aes_gcm_stream.second->read_header(header.data(), header.size());
+        REQUIRE(securefs::is_all_equal(header.begin(), header.end(), 5));
+        test(*aes_gcm_stream.first, 3000);
     }
 }
