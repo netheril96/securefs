@@ -464,7 +464,7 @@ namespace internal
         }
 
     public:
-        length_type read_header(void* output, length_type length) override
+        bool read_header(void* output, length_type length) override
         {
             if (length > HEADER_SIZE)
                 throw InvalidArgumentException("Header too long");
@@ -474,7 +474,7 @@ namespace internal
             CryptoPP::AlignedSecByteBlock buffer(HEADER_SIZE);
             auto rc = unchecked_read_header(buffer.data());
             memcpy(output, buffer.data(), std::min(length, rc));
-            return std::min(length, rc);
+            return rc != 0;
         }
 
         length_type max_header_length() const noexcept override { return HEADER_SIZE; }

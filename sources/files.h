@@ -8,7 +8,6 @@
 
 namespace securefs
 {
-
 class Filebase
 {
 private:
@@ -16,7 +15,7 @@ private:
     std::shared_ptr<HeaderBase> m_header;
     std::shared_ptr<StreamBase> m_stream;
     uint32_t m_mode, m_uid, m_gid;
-    uint32_t m_root_page, m_free_page;
+    uint32_t m_root_page, m_start_free_page, m_num_free_page;
     bool m_dirty;
 
 private:
@@ -29,10 +28,16 @@ protected:
         m_root_page = value;
         m_dirty = true;
     }
-    uint32_t get_free_page() const noexcept { return m_free_page; }
-    void set_free_page(uint32_t value) noexcept
+    uint32_t get_start_free_page() const noexcept { return m_start_free_page; }
+    void set_start_free_page(uint32_t value) noexcept
     {
-        m_free_page = value;
+        m_start_free_page = value;
+        m_dirty = true;
+    }
+    uint32_t get_num_free_page() const noexcept { return m_num_free_page; }
+    void set_num_free_page(uint32_t value) noexcept
+    {
+        m_num_free_page = value;
         m_dirty = true;
     }
 

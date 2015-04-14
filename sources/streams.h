@@ -61,7 +61,16 @@ public:
     DISABLE_COPY_MOVE(HeaderBase);
 
     virtual length_type max_header_length() const noexcept = 0;
-    virtual length_type read_header(void* output, length_type length) = 0;
+
+    /**
+     * Returns: true if read in full, false if no header is present.
+     * Never reads in part.
+     */
+    virtual bool read_header(void* output, length_type length) = 0;
+
+    /**
+     * Always write in full.
+     */
     virtual void write_header(const void* input, length_type length) = 0;
     virtual void flush_header() = 0;
 };
