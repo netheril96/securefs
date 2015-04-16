@@ -1,6 +1,6 @@
-CPPFLAGS := -isystem/usr/include -isystem/usr/local/include -I./sources -isystem./cryptopp/include -DNDEBUG
+CPPFLAGS := -isystem/usr/include -isystem/usr/local/include -I"$(CURDIR)/sources" -isystem"$(CURDIR)/cryptopp/include" -DNDEBUG
 CXXFLAGS := -g -O2 -march=native -mtune=native -std=c++0x -pipe -Wall -Wextra -pedantic
-LDFLAGS := -L/usr/local/lib -L./cryptopp/lib -lcryptopp
+LDFLAGS := -L/usr/local/lib -L"$(CURDIR)/cryptopp/lib" -lcryptopp
 ifeq ($(shell uname), Darwin)
 	LDFLAGS += -losxfuse
 else
@@ -14,6 +14,10 @@ TEST_SOURCES := $(wildcard test/*.cpp)
 TEST_OBJECTS := $(TEST_SOURCES:.cpp=.o)
 
 .PHONY: all clean cryptopp test deepclean
+
+$(TEST_OBJECTS): $(OBJECTS)
+
+$(OBJECTS): cryptopp
 
 cryptopp:
 	$(MAKE) -C cryptopp static

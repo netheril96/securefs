@@ -353,25 +353,25 @@ namespace internal
                 return;
 
             thread_local CryptoPP::AutoSeededRandomPool random_pool;
-            byte iv[IV_SIZE];
-            byte mac[MAC_SIZE];
+            byte buffer[IV_SIZE + MAC_SIZE];
+            byte* iv = buffer;
+            byte* mac = iv + IV_SIZE;
+
             do
             {
-                random_pool.GenerateBlock(iv, sizeof(iv));
-            } while (is_all_zeros(iv, sizeof(iv)));    // Null IVs are markers for sparse blocks
+                random_pool.GenerateBlock(iv, IV_SIZE);
+            } while (is_all_zeros(iv, IV_SIZE));    // Null IVs are markers for sparse blocks
             m_encryptor.EncryptAndAuthenticate(static_cast<byte*>(output),
                                                mac,
-                                               sizeof(mac),
+                                               MAC_SIZE,
                                                iv,
-                                               sizeof(iv),
+                                               IV_SIZE,
                                                m_param->id.data(),
                                                m_param->id.size(),
                                                static_cast<const byte*>(input),
                                                length);
-            auto iv_pos = meta_position_for_iv(block_number);
-            auto mac_pos = iv_pos + IV_SIZE;
-            m_metastream.write(iv, iv_pos, sizeof(iv));
-            m_metastream.write(mac, mac_pos, sizeof(mac));
+            auto pos = meta_position_for_iv(block_number);
+            m_metastream.write(buffer, pos, sizeof(buffer));
         }
 
         void decrypt(offset_type block_number,
@@ -382,24 +382,24 @@ namespace internal
             if (length == 0)
                 return;
 
-            byte iv[IV_SIZE];
-            byte mac[MAC_SIZE];
-            auto iv_pos = meta_position_for_iv(block_number);
-            auto mac_pos = iv_pos + IV_SIZE;
-            if (m_metastream.read(iv, iv_pos, sizeof(iv)) != sizeof(iv))
-                throw CorruptedMetaDataException(m_param->id, "No IV found");
-            if (m_metastream.read(mac, mac_pos, sizeof(mac)) != sizeof(mac))
-                throw CorruptedMetaDataException(m_param->id, "No MAC found");
-            if (is_all_zeros(iv, sizeof(iv)))
+            byte buffer[IV_SIZE + MAC_SIZE];
+            auto pos = meta_position_for_iv(block_number);
+            if (m_metastream.read(buffer, pos, sizeof(buffer)) != sizeof(buffer))
+                throw CorruptedMetaDataException(m_param->id, "MAC/IV not found");
+
+            const byte* iv = buffer;
+            byte* mac = buffer + IV_SIZE;
+
+            if (is_all_zeros(iv, IV_SIZE))
             {
                 memset(output, 0, length);
                 return;
             }
             bool success = m_decryptor.DecryptAndVerify(static_cast<byte*>(output),
                                                         mac,
-                                                        sizeof(mac),
+                                                        MAC_SIZE,
                                                         iv,
-                                                        sizeof(iv),
+                                                        IV_SIZE,
                                                         m_param->id.data(),
                                                         m_param->id.size(),
                                                         static_cast<const byte*>(input),

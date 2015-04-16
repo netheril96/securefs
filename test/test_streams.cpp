@@ -129,7 +129,7 @@ TEST_CASE("Test streams")
         test(*hmac_stream, 5000);
     }
     {
-        securefs::dummy::DummpyCryptStream ds(posix_stream, 19);
+        securefs::dummy::DummpyCryptStream ds(posix_stream, 8000);
         test(ds, 5000);
     }
     {

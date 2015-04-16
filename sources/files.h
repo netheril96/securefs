@@ -51,7 +51,7 @@ public:
 
 public:
     explicit FileBase(std::shared_ptr<StreamBase> stream, std::shared_ptr<HeaderBase> header)
-        : m_stream(stream), m_header(header)
+        : m_header(header), m_stream(stream)
     {
         if (!m_stream || !m_header)
             NULL_EXCEPT();
@@ -84,7 +84,9 @@ public:
         m_flags[3] = value;
         m_dirty = true;
     }
-    length_type get_size() const { return m_stream->size(); }
+
+    void lock() { m_lock.lock(); }
+    void unlock() { m_lock.unlock(); }
 
     virtual int type() const noexcept = 0;
     void flush();
@@ -97,7 +99,13 @@ public:
             st->st_gid = get_gid();
             st->st_nlink = get_nlink();
             st->st_mode = get_mode();
-            st->st_size = get_size();
+            st->st_size = m_stream->size();
+            auto blk_sz = m_stream->optimal_block_size();
+            if (blk_sz > 1 && blk_sz < std::numeric_limits<decltype(st->st_blksize)>::max())
+            {
+                st->st_blksize = static_cast<decltype(st->st_blksize)>(blk_sz);
+                st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
+            }
         }
     }
     void fsync() { return m_stream->fsync(); }
@@ -134,7 +142,8 @@ public:
     std::string get()
     {
         std::string result(m_stream->size(), 0);
-        m_stream->read(&result[0], 0, result.size());
+        auto rc = m_stream->read(&result[0], 0, result.size());
+        result.resize(rc);
         return result;
     }
     void set(const std::string& path) { m_stream->write(path.data(), 0, path.size()); }

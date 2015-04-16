@@ -52,12 +52,17 @@ public:
     /**
      * Methods implemented by file streams or their wrappers.
      */
-    virtual void stat(struct stat* st) { throw NotImplementedException(__PRETTY_FUNCTION__); }
+    virtual void stat(struct stat*) { throw NotImplementedException(__PRETTY_FUNCTION__); }
 
     /**
      * Methods implemented by file streams or their wrappers.
      */
     virtual void fsync() { throw NotImplementedException(__PRETTY_FUNCTION__); }
+
+    /**
+     * Certain streams are more efficient when reads and writes are aligned to blocks
+     */
+    virtual length_type optimal_block_size() const noexcept { return 1; }
 };
 
 /**
@@ -212,6 +217,7 @@ public:
     void resize(length_type new_length) override;
     void stat(struct stat* st) override { return m_stream->stat(st); }
     void fsync() override { return m_stream->fsync(); }
+    length_type optimal_block_size() const noexcept override { return m_block_size; }
 };
 
 /**
