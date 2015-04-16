@@ -58,6 +58,8 @@ public:
         read_header();
     }
     virtual ~FileBase();
+    DISABLE_COPY_MOVE(FileBase);
+
     uint32_t get_mode() const noexcept { return m_flags[0]; }
     void set_mode(uint32_t value) noexcept
     {
@@ -82,10 +84,23 @@ public:
         m_flags[3] = value;
         m_dirty = true;
     }
-    DISABLE_COPY_MOVE(FileBase);
+    length_type get_size() const { return m_stream->size(); }
 
     virtual int type() const noexcept = 0;
     void flush();
+    void stat(struct stat* st)
+    {
+        m_stream->stat(st);
+        if (st)
+        {
+            st->st_uid = get_uid();
+            st->st_gid = get_gid();
+            st->st_nlink = get_nlink();
+            st->st_mode = get_mode();
+            st->st_size = get_size();
+        }
+    }
+    void fsync() { return m_stream->fsync(); }
 };
 
 class RegularFile : public FileBase

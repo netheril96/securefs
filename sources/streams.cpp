@@ -138,6 +138,8 @@ namespace internal
         }
 
         bool is_sparse() const noexcept override { return m_stream->is_sparse(); }
+        void stat(struct stat* st) override { return m_stream->stat(st); }
+        void fsync() override { return m_stream->fsync(); }
     };
 }
 

@@ -42,6 +42,22 @@ class FatalException : public ExceptionBase
 {
 };
 
+class NotImplementedException : public SeriousException
+{
+private:
+    const char* m_func;
+
+public:
+    explicit NotImplementedException(const char* func_name) : m_func(func_name) {}
+
+    std::string message() const override
+    {
+        return fmt::format("Function/method {} of this instance is not implemented", m_func);
+    }
+
+    const char* type_name() const noexcept override { return "NotImplementedException"; }
+};
+
 class NullPointerException : public FatalException
 {
 private:

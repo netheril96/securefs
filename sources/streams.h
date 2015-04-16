@@ -48,6 +48,16 @@ public:
      * Some algorithms may be specialized on sparse streams.
      */
     virtual bool is_sparse() const noexcept { return false; }
+
+    /**
+     * Methods implemented by file streams or their wrappers.
+     */
+    virtual void stat(struct stat* st) { throw NotImplementedException(__PRETTY_FUNCTION__); }
+
+    /**
+     * Methods implemented by file streams or their wrappers.
+     */
+    virtual void fsync() { throw NotImplementedException(__PRETTY_FUNCTION__); }
 };
 
 /**
@@ -127,6 +137,20 @@ public:
     length_type size() const override { return m_size; }
 
     bool is_sparse() const noexcept override { return true; }
+
+    void stat(struct stat* st) override
+    {
+        int rc = ::fstat(m_fd, st);
+        if (rc < 0)
+            throw OSException(errno);
+    }
+
+    void fsync() override
+    {
+        int rc = ::fsync(m_fd);
+        if (rc < 0)
+            throw OSException(errno);
+    }
 };
 
 std::shared_ptr<StreamBase> make_stream_hmac(std::shared_ptr<const SecureParam> param,
@@ -186,6 +210,8 @@ public:
     void flush() override { m_stream->flush(); }
     length_type size() const override { return m_stream->size(); }
     void resize(length_type new_length) override;
+    void stat(struct stat* st) override { return m_stream->stat(st); }
+    void fsync() override { return m_stream->fsync(); }
 };
 
 /**
