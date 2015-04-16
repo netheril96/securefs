@@ -13,8 +13,7 @@ class FileBase
 private:
     std::mutex m_lock;
     std::shared_ptr<HeaderBase> m_header;
-    uint32_t m_mode, m_uid, m_gid;
-    uint32_t m_root_page, m_start_free_page, m_num_free_page;
+    uint32_t m_flags[7];
     bool m_dirty;
 
 private:
@@ -23,22 +22,22 @@ private:
 protected:
     std::shared_ptr<StreamBase> m_stream;
 
-    uint32_t get_root_page() const noexcept { return m_root_page; }
+    uint32_t get_root_page() const noexcept { return m_flags[4]; }
     void set_root_page(uint32_t value) noexcept
     {
-        m_root_page = value;
+        m_flags[4] = value;
         m_dirty = true;
     }
-    uint32_t get_start_free_page() const noexcept { return m_start_free_page; }
+    uint32_t get_start_free_page() const noexcept { return m_flags[5]; }
     void set_start_free_page(uint32_t value) noexcept
     {
-        m_start_free_page = value;
+        m_flags[5] = value;
         m_dirty = true;
     }
-    uint32_t get_num_free_page() const noexcept { return m_num_free_page; }
+    uint32_t get_num_free_page() const noexcept { return m_flags[6]; }
     void set_num_free_page(uint32_t value) noexcept
     {
-        m_num_free_page = value;
+        m_flags[6] = value;
         m_dirty = true;
     }
 
@@ -59,22 +58,28 @@ public:
         read_header();
     }
     virtual ~FileBase();
-    uint32_t get_mode() const noexcept { return m_mode; }
+    uint32_t get_mode() const noexcept { return m_flags[0]; }
     void set_mode(uint32_t value) noexcept
     {
-        m_mode = value;
+        m_flags[0] = value;
         m_dirty = true;
     }
-    uint32_t get_uid() const noexcept { return m_uid; }
+    uint32_t get_uid() const noexcept { return m_flags[1]; }
     void set_uid(uint32_t value) noexcept
     {
-        m_uid = value;
+        m_flags[1] = value;
         m_dirty = true;
     }
-    uint32_t get_gid() const noexcept { return m_gid; }
+    uint32_t get_gid() const noexcept { return m_flags[2]; }
     void set_gid(uint32_t value) noexcept
     {
-        m_gid = value;
+        m_flags[2] = value;
+        m_dirty = true;
+    }
+    uint32_t get_nlink() const noexcept { return m_flags[3]; }
+    void set_nlink(uint32_t value) noexcept
+    {
+        m_flags[3] = value;
         m_dirty = true;
     }
     DISABLE_COPY_MOVE(FileBase);

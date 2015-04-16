@@ -63,23 +63,25 @@ inline bool is_all_zeros(const void* data, size_t len)
 template <class T>
 inline void to_little_endian(T value, void* output)
 {
-    static_assert(std::is_unsigned<T>::value, "Must be an unsigned integer type");
+    typedef typename std::remove_reference<T>::type underlying_type;
+    static_assert(std::is_unsigned<underlying_type>::value, "Must be an unsigned integer type");
     auto bytes = static_cast<byte*>(output);
-    for (size_t i = 0; i < sizeof(T); ++i)
+    for (size_t i = 0; i < sizeof(underlying_type); ++i)
     {
         bytes[i] = value >> (8 * i);
     }
 }
 
 template <class T>
-inline T from_little_endian(const void* input)
+    inline typename std::remove_reference<T>::type from_little_endian(const void* input)
 {
-    static_assert(std::is_unsigned<T>::value, "Must be an unsigned integer type");
+    typedef typename std::remove_reference<T>::type underlying_type;
+    static_assert(std::is_unsigned<underlying_type>::value, "Must be an unsigned integer type");
     auto bytes = static_cast<const byte*>(input);
-    T value = 0;
+    underlying_type value = 0;
     for (size_t i = 0; i < sizeof(T); ++i)
     {
-        value |= static_cast<T>(bytes[i]) << (8 * i);
+        value |= static_cast<underlying_type>(bytes[i]) << (8 * i);
     }
     return value;
 }
