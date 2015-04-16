@@ -129,6 +129,12 @@ namespace internal
             }
         }
 
+        void iterate_over_entries(callback cb) override
+        {
+            for (const auto& pair : m_table)
+                cb(pair.first, pair.second.first, pair.second.second);
+        }
+
         ~SimpleDirectory()
         {
             try

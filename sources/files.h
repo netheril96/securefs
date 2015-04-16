@@ -5,6 +5,7 @@
 #include <mutex>
 #include <string>
 #include <memory>
+#include <functional>
 
 namespace securefs
 {
@@ -164,6 +165,9 @@ public:
     virtual bool get_entry(const std::string& name, id_type& id, int& type) = 0;
     virtual bool add_entry(const std::string& name, const id_type& id, int type) = 0;
     virtual bool remove_entry(const std::string& name) = 0;
+
+    typedef std::function<void(const std::string&, const id_type&, int)> callback;
+    virtual void iterate_over_entries(callback cb) = 0;
 };
 
 std::shared_ptr<Directory> make_directory(std::shared_ptr<StreamBase> stream,
