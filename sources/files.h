@@ -13,6 +13,7 @@ class FileBase
 {
 private:
     std::mutex m_lock;
+    ptrdiff_t m_refcount;
     std::shared_ptr<HeaderBase> m_header;
     uint32_t m_flags[7];
     bool m_dirty;
@@ -61,6 +62,7 @@ public:
     virtual ~FileBase();
     DISABLE_COPY_MOVE(FileBase);
 
+    // --Begin of getters and setters for stats---
     uint32_t get_mode() const noexcept { return m_flags[0]; }
     void set_mode(uint32_t value) noexcept
     {
@@ -85,11 +87,17 @@ public:
         m_flags[3] = value;
         m_dirty = true;
     }
+    // --End of getters and setters for stats---
+
+    const id_type& get_id() const { return m_stream->get_id(); }
 
     void lock() { m_lock.lock(); }
     void unlock() { m_lock.unlock(); }
+    ptrdiff_t incref() noexcept { return ++m_refcount; }
+    ptrdiff_t decref() noexcept { return --m_refcount; }
 
     virtual int type() const noexcept = 0;
+
     void flush();
     void stat(struct stat* st)
     {

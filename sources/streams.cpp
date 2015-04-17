@@ -140,6 +140,7 @@ namespace internal
         bool is_sparse() const noexcept override { return m_stream->is_sparse(); }
         void stat(struct stat* st) override { return m_stream->stat(st); }
         void fsync() override { return m_stream->fsync(); }
+        const id_type& get_id() const override { return m_param->id; }
     };
 }
 
@@ -426,6 +427,8 @@ namespace internal
             CryptStream::flush();
             m_metastream.flush();
         }
+
+        const id_type& get_id() const override { return m_param->id; }
 
     private:
         length_type unchecked_read_header(void* output)

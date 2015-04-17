@@ -63,6 +63,11 @@ public:
      * Certain streams are more efficient when reads and writes are aligned to blocks
      */
     virtual length_type optimal_block_size() const noexcept { return 1; }
+
+    /**
+     * Cryptographic streams may have this for authentication purposes
+     */
+    virtual const id_type& get_id() const { throw NotImplementedException(__PRETTY_FUNCTION__); }
 };
 
 /**
