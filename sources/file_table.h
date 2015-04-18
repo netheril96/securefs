@@ -41,6 +41,7 @@ private:
 
 private:
     void eject();
+    void finalize(FileBase*);
 
 public:
     uint32_t READ_ONLY = 0x1, NO_AUTHENTICATION = 0x2;

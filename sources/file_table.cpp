@@ -1,4 +1,13 @@
 #include "file_table.h"
+#include "utils.h"
+#include "exceptions.h"
+
+#include <vector>
+#include <limits>
+#include <algorithm>
+#include <utility>
+#include <string>
+#include <string.h>
 
 #include <cryptopp/osrng.h>
 #include <cryptopp/hmac.h>
@@ -63,7 +72,13 @@ size_t FileTable::id_hash::operator()(const id_type& id) const noexcept
     return from_little_endian<size_t>(id.data() + (id.size() - sizeof(size_t))) ^ m_seed;
 }
 
-FileTable::~FileTable() {}
+FileTable::~FileTable()
+{
+    for (auto&& pair : m_opened)
+        finalize(pair.second.get());
+    for (auto&& pair : m_closed)
+        finalize(pair.second.get());
+}
 
 FileBase* FileTable::open_as(const id_type& id, int type)
 {
@@ -162,14 +177,16 @@ void FileTable::close(FileBase* fb)
     if (it == m_opened.end())
         throw InvalidArgumentException("File handle not in this table");
 
+    if (fb != it->second.get())
+        throw InvalidArgumentException("File handle not a match with its ID");
+
     if (fb->decref() <= 0)
     {
         if (m_closed.size() >= MAX_NUM_CLOSED)
             eject();
         it->second->setref(
             static_cast<ptrdiff_t>(m_counter));    // Reuse the refcount field for the timestamp
-        ++m_counter;    // While this may overflow, it won't affect the correctness of the
-                        // algorithm, only slightly reduce performance
+        ++m_counter;                               // This acts as a timestamp
         m_closed.emplace(*it);
         m_opened.erase(it);
     }
@@ -202,8 +219,29 @@ void FileTable::eject()
     std::partial_sort(temp.begin(), temp.begin() + NUM_EJECT, temp.end());
     for (size_t i = 0; i < NUM_EJECT; ++i)
     {
-        temp[i].iter->second->flush();
-        m_closed.erase(temp[i].iter);
+        auto iter = temp[i].iter;
+        finalize(iter->second.get());
+        m_closed.erase(iter);
+    }
+}
+
+void FileTable::finalize(FileBase* fb)
+{
+    if (!fb)
+        return;
+
+    if (fb->is_unlinked())
+    {
+        std::string first_level_dir, second_level_dir, filename, metaname;
+        calculate_paths(fb->get_id(), first_level_dir, second_level_dir, filename, metaname);
+        ::unlinkat(m_dir_fd, filename.c_str(), 0);
+        ::unlinkat(m_dir_fd, metaname.c_str(), 0);
+        ::unlinkat(m_dir_fd, second_level_dir.c_str(), AT_REMOVEDIR);
+        ::unlinkat(m_dir_fd, first_level_dir.c_str(), AT_REMOVEDIR);
+    }
+    else
+    {
+        fb->flush();
     }
 }
 }

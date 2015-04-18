@@ -135,6 +135,8 @@ namespace internal
                 cb(pair.first, pair.second.first, pair.second.second);
         }
 
+        bool empty() const override { return m_table.empty(); }
+
         ~SimpleDirectory()
         {
             try

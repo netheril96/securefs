@@ -23,6 +23,7 @@ private:
 
 protected:
     std::shared_ptr<StreamBase> m_stream;
+    bool m_removed;
 
     uint32_t get_root_page() const noexcept { return m_flags[4]; }
     void set_root_page(uint32_t value) noexcept
@@ -72,6 +73,7 @@ public:
         , m_header(std::move(header))
         , m_dirty(false)
         , m_stream(std::move(stream))
+        , m_removed(false)
     {
         if (!m_stream || !m_header)
             NULL_EXCEPT();
@@ -118,6 +120,8 @@ public:
     void setref(ptrdiff_t value) noexcept { m_refcount = value; }
 
     virtual int type() const noexcept = 0;
+    bool is_unlinked() const noexcept { return m_removed; }
+    virtual void unlink() = 0;
 
     void flush();
     void stat(struct stat* st)
@@ -159,6 +163,14 @@ public:
     }
     length_type size() const noexcept { return m_stream->size(); }
     void truncate(length_type new_size) { return m_stream->resize(new_size); }
+    void unlink() override
+    {
+        auto nlink = get_nlink();
+        --nlink;
+        set_nlink(nlink);
+        if (nlink == 0)
+            m_removed = true;
+    }
 };
 
 class Symlink : public FileBase
@@ -177,6 +189,7 @@ public:
         return result;
     }
     void set(const std::string& path) { m_stream->write(path.data(), 0, path.size()); }
+    void unlink() override { m_removed = true; }
 };
 
 class Directory : public FileBase
@@ -197,14 +210,23 @@ public:
 
     typedef std::function<void(const std::string&, const id_type&, int)> callback;
     virtual void iterate_over_entries(callback cb) = 0;
+
+    virtual bool empty() const = 0;
+    void unlink() override
+    {
+        if (empty())
+            m_removed = true;
+        else
+            throw OSException(ENOTEMPTY);
+    }
 };
 
 std::shared_ptr<Directory> make_directory(std::shared_ptr<StreamBase> stream,
                                           std::shared_ptr<HeaderBase> header);
 
 inline std::shared_ptr<FileBase> make_file_from_type(int type,
-                                              std::shared_ptr<StreamBase> stream,
-                                              std::shared_ptr<HeaderBase> header)
+                                                     std::shared_ptr<StreamBase> stream,
+                                                     std::shared_ptr<HeaderBase> header)
 {
     switch (type)
     {
