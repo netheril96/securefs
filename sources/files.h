@@ -51,9 +51,27 @@ protected:
 public:
     static const int REGULAR_FILE = 0, SYMLINK = 1, DIRECTORY = 2;
 
+    static int error_number_for_not(int type) noexcept
+    {
+        switch (type)
+        {
+        case REGULAR_FILE:
+            return EPERM;
+        case SYMLINK:
+            return EINVAL;
+        case DIRECTORY:
+            return ENOTDIR;
+        }
+        return EINVAL;
+    }
+
 public:
     explicit FileBase(std::shared_ptr<StreamBase> stream, std::shared_ptr<HeaderBase> header)
-        : m_header(header), m_stream(stream)
+        : m_lock()
+        , m_refcount(1)
+        , m_header(std::move(header))
+        , m_dirty(false)
+        , m_stream(std::move(stream))
     {
         if (!m_stream || !m_header)
             NULL_EXCEPT();
@@ -93,8 +111,11 @@ public:
 
     void lock() { m_lock.lock(); }
     void unlock() { m_lock.unlock(); }
+
     ptrdiff_t incref() noexcept { return ++m_refcount; }
     ptrdiff_t decref() noexcept { return --m_refcount; }
+    ptrdiff_t getref() const noexcept { return m_refcount; }
+    void setref(ptrdiff_t value) noexcept { m_refcount = value; }
 
     virtual int type() const noexcept = 0;
 
@@ -180,4 +201,20 @@ public:
 
 std::shared_ptr<Directory> make_directory(std::shared_ptr<StreamBase> stream,
                                           std::shared_ptr<HeaderBase> header);
+
+inline std::shared_ptr<FileBase> make_file_from_type(int type,
+                                              std::shared_ptr<StreamBase> stream,
+                                              std::shared_ptr<HeaderBase> header)
+{
+    switch (type)
+    {
+    case FileBase::REGULAR_FILE:
+        return std::make_shared<RegularFile>(std::move(stream), std::move(header));
+    case FileBase::SYMLINK:
+        return std::make_shared<Symlink>(std::move(stream), std::move(header));
+    case FileBase::DIRECTORY:
+        return make_directory(std::move(stream), std::move(header));
+    }
+    throw InvalidArgumentException("Unrecognized file type");
+}
 }
