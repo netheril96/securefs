@@ -66,6 +66,20 @@ public:
         return EINVAL;
     }
 
+    static mode_t mode_for_type(int type) noexcept
+    {
+        switch (type)
+        {
+        case REGULAR_FILE:
+            return S_IFREG;
+        case DIRECTORY:
+            return S_IFDIR;
+        case SYMLINK:
+            return S_IFLNK;
+        }
+        return 0;
+    }
+
 public:
     explicit FileBase(std::shared_ptr<StreamBase> stream, std::shared_ptr<HeaderBase> header)
         : m_lock()

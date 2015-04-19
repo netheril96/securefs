@@ -283,7 +283,8 @@ namespace operations
             memset(&st, 0, sizeof(st));
             auto actions = [&](const std::string& name, const id_type&, int type) -> bool
             {
-                return filler(buffer, name.c_str(), nullptr, 0) == 0;
+                st.st_mode = FileBase::mode_for_type(type);
+                return filler(buffer, name.c_str(), &st, 0) == 0;
             };
             std::lock_guard<FileBase> lg(*fb);
             static_cast<Directory*>(fb)->iterate_over_entries(actions);
