@@ -353,14 +353,13 @@ namespace internal
             if (length == 0)
                 return;
 
-            thread_local CryptoPP::AutoSeededRandomPool random_pool;
             byte buffer[IV_SIZE + MAC_SIZE];
             byte* iv = buffer;
             byte* mac = iv + IV_SIZE;
 
             do
             {
-                random_pool.GenerateBlock(iv, IV_SIZE);
+                generate_random(iv, IV_SIZE);
             } while (is_all_zeros(iv, IV_SIZE));    // Null IVs are markers for sparse blocks
             m_encryptor.EncryptAndAuthenticate(static_cast<byte*>(output),
                                                mac,
@@ -454,8 +453,7 @@ namespace internal
         void unchecked_write_header(const void* input)
         {
             byte buffer[ENCRYPTED_HEADER_SIZE];
-            thread_local CryptoPP::AutoSeededRandomPool random_pool;
-            random_pool.GenerateBlock(buffer, IV_SIZE);
+            generate_random(buffer, IV_SIZE);
             m_encryptor.EncryptAndAuthenticate(buffer + IV_SIZE + MAC_SIZE,
                                                buffer + IV_SIZE,
                                                MAC_SIZE,

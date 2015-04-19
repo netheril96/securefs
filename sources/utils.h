@@ -4,6 +4,7 @@
 #include <string>
 #include <array>
 #include <type_traits>
+#include <vector>
 
 #define DISABLE_COPY_MOVE(cls)                                                                     \
     cls(const cls&) = delete;                                                                      \
@@ -73,7 +74,7 @@ inline void to_little_endian(T value, void* output)
 }
 
 template <class T>
-    inline typename std::remove_reference<T>::type from_little_endian(const void* input)
+inline typename std::remove_reference<T>::type from_little_endian(const void* input)
 {
     typedef typename std::remove_reference<T>::type underlying_type;
     static_assert(std::is_unsigned<underlying_type>::value, "Must be an unsigned integer type");
@@ -85,4 +86,26 @@ template <class T>
     }
     return value;
 }
+
+template <class Iterator>
+inline std::vector<std::string> split(Iterator begin, Iterator end, char separator)
+{
+    std::vector<std::string> result;
+    while (begin != end)
+    {
+        auto it = std::find(begin, end, separator);
+        if (begin != it)
+            result.emplace_back(begin, it);
+        begin = it;
+        ++begin;
+    }
+    return result;
+}
+
+inline std::vector<std::string> split(const std::string& str, char separator)
+{
+    return split(str.cbegin(), str.cend(), separator);
+}
+
+void generate_random(void* data, size_t size);
 }

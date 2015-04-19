@@ -48,7 +48,7 @@ public:
 
 public:
     explicit FileTable(int dir_fd, const key_type& master_key, uint32_t flags)
-        : m_dir_fd(dir_fd), m_flags(flags), m_counter(0)
+        : m_counter(0), m_dir_fd(dir_fd), m_flags(flags)
     {
         memcpy(m_master_key.data(), master_key.data(), master_key.size());
     }
