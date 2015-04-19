@@ -1,7 +1,7 @@
 #include "catch.hpp"
 #include "utils.h"
 
-TEST_CASE("Test utilities")
+TEST_CASE("Test endian")
 {
     using namespace securefs;
 
@@ -13,4 +13,12 @@ TEST_CASE("Test utilities")
     REQUIRE(raw[2] == 0xAB);
     REQUIRE(raw[3] == 0);
     REQUIRE(from_little_endian<uint32_t>(raw) == 0xABCDEF);
+}
+
+TEST_CASE("Test split")
+{
+    REQUIRE((securefs::split("/tmp//abcde/123/", '/')
+             == std::vector<std::string>{"tmp", "abcde", "123"}));
+    REQUIRE((securefs::split("", 'a')).empty());
+    REQUIRE((securefs::split("//////", '/')).empty());
 }

@@ -25,9 +25,9 @@ namespace operations
         ~FileSystem() {}
     };
 
-    void* init(struct fuse_conn_info*) { return fuse_get_context()->private_data; }
+    inline void* init(struct fuse_conn_info*) { return fuse_get_context()->private_data; }
 
-    void destroy(void* ptr) { delete static_cast<FileSystem*>(ptr); }
+    inline void destroy(void* ptr) { delete static_cast<FileSystem*>(ptr); }
 
     int getattr(const char*, struct stat*);
 }

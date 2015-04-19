@@ -91,11 +91,13 @@ template <class Iterator>
 inline std::vector<std::string> split(Iterator begin, Iterator end, char separator)
 {
     std::vector<std::string> result;
-    while (begin != end)
+    while (true)
     {
         auto it = std::find(begin, end, separator);
         if (begin != it)
             result.emplace_back(begin, it);
+        if (it == end)
+            break;
         begin = it;
         ++begin;
     }
