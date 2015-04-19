@@ -41,12 +41,30 @@ namespace operations
 
     int open(const char*, struct fuse_file_info*);
 
+    int release(const char*, struct fuse_file_info*);
+
     int read(const char*, char*, size_t, off_t, struct fuse_file_info*);
 
     int write(const char*, const char*, size_t, off_t, struct fuse_file_info*);
 
+    int flush(const char*, struct fuse_file_info*);
+
     int truncate(const char*, off_t);
 
+    int ftruncate(const char*, off_t, struct fuse_file_info*);
+
     int unlink(const char*);
+
+    int mkdir(const char*, mode_t);
+
+    int rmdir(const char*);
+
+    int chmod(const char*, mode_t);
+
+    int chown(const char* path, uid_t uid, gid_t gid);
+
+    int symlink(const char* to, const char* from);
+
+    int readlink(const char* path, char* buf, size_t size);
 }
 }

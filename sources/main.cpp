@@ -53,5 +53,14 @@ int main(int argc, char** argv)
     opt.write = &securefs::operations::write;
     opt.truncate = &securefs::operations::truncate;
     opt.unlink = &securefs::operations::unlink;
+    opt.mkdir = &securefs::operations::mkdir;
+    opt.rmdir = &securefs::operations::rmdir;
+    opt.release = &securefs::operations::release;
+    opt.ftruncate = &securefs::operations::ftruncate;
+    opt.flush = &securefs::operations::flush;
+    opt.chmod = &securefs::operations::chmod;
+    opt.chown = &securefs::operations::chown;
+    opt.symlink = &securefs::operations::symlink;
+    opt.readlink = &securefs::operations::readlink;
     return fuse_main(argc, argv, &opt, fs);
 }
