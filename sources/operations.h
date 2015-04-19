@@ -36,5 +36,17 @@ namespace operations
     int releasedir(const char*, struct fuse_file_info*);
 
     int readdir(const char*, void*, fuse_fill_dir_t, off_t, struct fuse_file_info*);
+
+    int create(const char*, mode_t, struct fuse_file_info*);
+
+    int open(const char*, struct fuse_file_info*);
+
+    int read(const char*, char*, size_t, off_t, struct fuse_file_info*);
+
+    int write(const char*, const char*, size_t, off_t, struct fuse_file_info*);
+
+    int truncate(const char*, off_t);
+
+    int unlink(const char*);
 }
 }

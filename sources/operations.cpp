@@ -172,6 +172,37 @@ namespace internal
         return result;
     }
 
+    void remove(struct fuse_context* ctx, const std::string& path, int want_type)
+    {
+        auto fs = static_cast<operations::FileSystem*>(ctx->private_data);
+        std::string last_component;
+        auto dir = open_base_dir(ctx, path, last_component);
+        if (last_component.empty())
+            throw OSException(EPERM);
+        id_type id;
+        int type;
+        {
+            std::lock_guard<FileBase> guard(*dir);
+            bool exists = dir.get_as<Directory>()->get_entry(last_component, id, type);
+            if (!exists)
+                throw OSException(ENOENT);
+            if (type != want_type)
+                throw OSException(FileBase::error_number_for_not(want_type));
+            if (!dir.get_as<Directory>()->remove_entry(last_component))
+                throw OSException(ENOENT);
+        }
+        FileGuard to_be_removed(&fs->table, table_open_as(fs->table, id, type));
+        {
+            std::lock_guard<FileBase> guard(*to_be_removed);
+            to_be_removed->unlink();
+        }
+    }
+
+    bool is_readonly(struct fuse_context* ctx)
+    {
+        return static_cast<operations::FileSystem*>(ctx->private_data)->table.is_readonly();
+    }
+
     int log_error(struct fuse_context*, const ExceptionBase& e)
     {
         fprintf(stderr, "%s: %s\n", e.type_name(), e.message().c_str());
@@ -199,6 +230,7 @@ namespace operations
         try
         {
             auto fg = internal::open_all(ctx, path);
+            std::lock_guard<FileBase> lg(*fg);
             fg->stat(st);
             return 0;
         }
@@ -253,7 +285,119 @@ namespace operations
             {
                 return filler(buffer, name.c_str(), nullptr, 0) == 0;
             };
+            std::lock_guard<FileBase> lg(*fb);
             static_cast<Directory*>(fb)->iterate_over_entries(actions);
+            return 0;
+        }
+        COMMON_CATCH_BLOCK
+    }
+
+    int create(const char* path, mode_t mode, struct fuse_file_info* info)
+    {
+        auto ctx = fuse_get_context();
+        mode &= ~static_cast<uint32_t>(S_IFMT);
+        mode |= S_IFREG;
+        try
+        {
+            if (internal::is_readonly(ctx))
+                return -EROFS;
+            auto fg = internal::create(ctx, path, FileBase::REGULAR_FILE);
+            if (fg->type() != FileBase::REGULAR_FILE)
+                return -EPERM;
+            fg->set_uid(ctx->uid);
+            fg->set_gid(ctx->gid);
+            fg->set_nlink(1);
+            fg->set_mode(mode);
+            info->fh = reinterpret_cast<uintptr_t>(fg.release());
+            return 0;
+        }
+        COMMON_CATCH_BLOCK
+    }
+
+    int open(const char* path, struct fuse_file_info* info)
+    {
+        auto ctx = fuse_get_context();
+        // bool rdonly = info->flags & O_RDONLY;
+        bool rdwr = info->flags & O_RDWR;
+        bool wronly = info->flags & O_WRONLY;
+        bool append = info->flags & O_APPEND;
+        // bool require_read = rdonly | rdwr;
+        bool require_write = wronly | append | rdwr;
+
+        try
+        {
+            if (require_write && internal::is_readonly(ctx))
+                return -EROFS;
+            auto fg = internal::open_all(ctx, path);
+            if (fg->type() != FileBase::REGULAR_FILE)
+                return -EPERM;
+            if (info->flags & O_TRUNC)
+            {
+                std::lock_guard<FileBase> lg(*fg);
+                fg.get_as<RegularFile>()->truncate(0);
+            }
+            info->fh = reinterpret_cast<uintptr_t>(fg.release());
+            return 0;
+        }
+        COMMON_CATCH_BLOCK
+    }
+
+    int read(const char*, char* buffer, size_t len, off_t off, struct fuse_file_info* info)
+    {
+        auto ctx = fuse_get_context();
+        try
+        {
+            auto fb = reinterpret_cast<FileBase*>(info->fh);
+            if (!fb)
+                return -EINVAL;
+            if (fb->type() != FileBase::REGULAR_FILE)
+                return -EPERM;
+            std::lock_guard<FileBase> lg(*fb);
+            return static_cast<int>(static_cast<RegularFile*>(fb)->read(buffer, off, len));
+        }
+        COMMON_CATCH_BLOCK
+    }
+
+    int write(const char*, const char* buffer, size_t len, off_t off, struct fuse_file_info* info)
+    {
+        auto ctx = fuse_get_context();
+        try
+        {
+            auto fb = reinterpret_cast<FileBase*>(info->fh);
+            if (!fb)
+                return -EINVAL;
+            if (fb->type() != FileBase::REGULAR_FILE)
+                return -EPERM;
+            std::lock_guard<FileBase> lg(*fb);
+            static_cast<RegularFile*>(fb)->write(buffer, off, len);
+            return static_cast<int>(len);
+        }
+        COMMON_CATCH_BLOCK
+    }
+
+    int truncate(const char* path, off_t size)
+    {
+        auto ctx = fuse_get_context();
+        try
+        {
+            auto fg = internal::open_all(ctx, path);
+            if (fg->type() != FileBase::REGULAR_FILE)
+                return -EPERM;
+            std::lock_guard<FileBase> lg(*fg);
+            fg.get_as<RegularFile>()->truncate(size);
+            return 0;
+        }
+        COMMON_CATCH_BLOCK
+    }
+
+    int unlink(const char* path)
+    {
+        auto ctx = fuse_get_context();
+        try
+        {
+            if (internal::is_readonly(ctx))
+                return -EROFS;
+            internal::remove(ctx, path, FileBase::REGULAR_FILE);
             return 0;
         }
         COMMON_CATCH_BLOCK

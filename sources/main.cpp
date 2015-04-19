@@ -47,5 +47,11 @@ int main(int argc, char** argv)
     opt.opendir = &securefs::operations::opendir;
     opt.releasedir = &securefs::operations::releasedir;
     opt.readdir = &securefs::operations::readdir;
+    opt.create = &securefs::operations::create;
+    opt.open = &securefs::operations::open;
+    opt.read = &securefs::operations::read;
+    opt.write = &securefs::operations::write;
+    opt.truncate = &securefs::operations::truncate;
+    opt.unlink = &securefs::operations::unlink;
     return fuse_main(argc, argv, &opt, fs);
 }
