@@ -99,7 +99,9 @@ namespace internal
     {
         assert(dir);
         std::lock_guard<FileBase> lg(*dir);
-        return dir->add_entry(name, id, type);
+        bool result = dir->add_entry(name, id, type);
+        dir->flush();
+        return result;
     }
 
     FileGuard
@@ -172,7 +174,7 @@ namespace internal
         return result;
     }
 
-    void remove(struct fuse_context* ctx, const std::string& path, int want_type)
+    void remove(struct fuse_context* ctx, const std::string& path)
     {
         auto fs = static_cast<operations::FileSystem*>(ctx->private_data);
         std::string last_component;
@@ -186,10 +188,9 @@ namespace internal
             bool exists = dir.get_as<Directory>()->get_entry(last_component, id, type);
             if (!exists)
                 throw OSException(ENOENT);
-            if (type != want_type)
-                throw OSException(FileBase::error_number_for_not(want_type));
             if (!dir.get_as<Directory>()->remove_entry(last_component))
                 throw OSException(ENOENT);
+            dir->flush();
         }
         FileGuard to_be_removed(&fs->table, table_open_as(fs->table, id, type));
         {
@@ -232,6 +233,7 @@ namespace operations
             auto fg = internal::open_all(ctx, path);
             std::lock_guard<FileBase> lg(*fg);
             fg->stat(st);
+            fg->flush();
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -251,21 +253,9 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-    int releasedir(const char*, struct fuse_file_info* info)
+    int releasedir(const char* path, struct fuse_file_info* info)
     {
-        auto ctx = fuse_get_context();
-        try
-        {
-            auto fb = reinterpret_cast<FileBase*>(info->fh);
-            if (!fb)
-                return -EINVAL;
-            if (fb->type() != FileBase::DIRECTORY)
-                return -ENOTDIR;
-            internal::FileGuard fg(&static_cast<FileSystem*>(ctx->private_data)->table, fb);
-            fg.reset(nullptr);
-            return 0;
-        }
-        COMMON_CATCH_BLOCK
+        return ::securefs::operations::release(path, info);
     }
 
     int
@@ -351,8 +341,7 @@ namespace operations
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EINVAL;
-            if (fb->type() != FileBase::REGULAR_FILE)
-                return -EPERM;
+            fb->flush();
             internal::FileGuard fg(&static_cast<FileSystem*>(ctx->private_data)->table, fb);
             fg.reset(nullptr);
             return 0;
@@ -417,7 +406,7 @@ namespace operations
         {
             auto fg = internal::open_all(ctx, path);
             if (fg->type() != FileBase::REGULAR_FILE)
-                return -EPERM;
+                return -EINVAL;
             std::lock_guard<FileBase> lg(*fg);
             fg.get_as<RegularFile>()->truncate(size);
             return 0;
@@ -434,7 +423,7 @@ namespace operations
             if (!fb)
                 return -EINVAL;
             if (fb->type() != FileBase::REGULAR_FILE)
-                return -EPERM;
+                return -EINVAL;
             std::lock_guard<FileBase> lg(*fb);
             static_cast<RegularFile*>(fb)->truncate(size);
             return 0;
@@ -449,7 +438,7 @@ namespace operations
         {
             if (internal::is_readonly(ctx))
                 return -EROFS;
-            internal::remove(ctx, path, FileBase::REGULAR_FILE);
+            internal::remove(ctx, path);
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -476,18 +465,7 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-    int rmdir(const char* path)
-    {
-        auto ctx = fuse_get_context();
-        try
-        {
-            if (internal::is_readonly(ctx))
-                return -EROFS;
-            internal::remove(ctx, path, FileBase::DIRECTORY);
-            return 0;
-        }
-        COMMON_CATCH_BLOCK
-    }
+    int rmdir(const char* path) { return ::securefs::operations::unlink(path); }
 
     int chmod(const char* path, mode_t mode)
     {
@@ -532,7 +510,7 @@ namespace operations
             fg->set_uid(ctx->uid);
             fg->set_gid(ctx->gid);
             fg->set_nlink(1);
-            fg->set_mode(S_IFLNK);
+            fg->set_mode(S_IFLNK | 0755);
             fg.get_as<Symlink>()->set(to);
             return 0;
         }
