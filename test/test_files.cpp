@@ -44,6 +44,7 @@ TEST_CASE("File table")
         dir->iterate_over_entries([&](const std::string& fn, const id_type&, int)
                                   {
                                       filenames.insert(fn);
+                                      return true;
                                   });
         REQUIRE((filenames == decltype(filenames){".", "..", "hello"}));
         id_type id;

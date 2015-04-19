@@ -208,7 +208,10 @@ public:
     virtual bool add_entry(const std::string& name, const id_type& id, int type) = 0;
     virtual bool remove_entry(const std::string& name) = 0;
 
-    typedef std::function<void(const std::string&, const id_type&, int)> callback;
+    typedef std::function<bool(const std::string&, const id_type&, int)> callback;
+    /**
+     * When callback returns false, the iteration will be terminated
+     */
     virtual void iterate_over_entries(callback cb) = 0;
 
     virtual bool empty() const = 0;

@@ -29,7 +29,11 @@ int main(int argc, char** argv)
     }
     try
     {
-        fs->table.create_as(fs->root_id, securefs::FileBase::DIRECTORY);
+        auto root = fs->table.create_as(fs->root_id, securefs::FileBase::DIRECTORY);
+        root->set_uid(getuid());
+        root->set_gid(getgid());
+        root->set_mode(S_IFDIR | 0755);
+        root->set_nlink(1);
     }
     catch (...)
     {
@@ -37,8 +41,11 @@ int main(int argc, char** argv)
     }
     struct fuse_operations opt;
     memset(&opt, 0, sizeof(opt));
-    opt.init = securefs::operations::init;
-    opt.destroy = securefs::operations::destroy;
-    opt.getattr = securefs::operations::getattr;
+    opt.getattr = &securefs::operations::getattr;
+    opt.init = &securefs::operations::init;
+    opt.destroy = &securefs::operations::destroy;
+    opt.opendir = &securefs::operations::opendir;
+    opt.releasedir = &securefs::operations::releasedir;
+    opt.readdir = &securefs::operations::readdir;
     return fuse_main(argc, argv, &opt, fs);
 }

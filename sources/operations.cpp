@@ -171,23 +171,92 @@ namespace internal
         }
         return result;
     }
+
+    int log_error(struct fuse_context*, const ExceptionBase& e)
+    {
+        fprintf(stderr, "%s: %s\n", e.type_name(), e.message().c_str());
+        return -e.error_number();
+    }
+
+    int log_general_error(struct fuse_context*, const std::exception& e)
+    {
+        fprintf(stderr, "An unexpected exception occured: %s\n", e.what());
+        return -EPERM;
+    }
 }
 
 namespace operations
 {
+
+#define COMMON_CATCH_BLOCK                                                                         \
+    catch (const OSException& e) { return -e.error_number(); }                                     \
+    catch (const ExceptionBase& e) { return internal::log_error(ctx, e); }                         \
+    catch (const std::exception& e) { return internal::log_general_error(ctx, e); }
+
     int getattr(const char* path, struct stat* st)
     {
+        auto ctx = fuse_get_context();
         try
         {
-            auto fg = internal::open_all(fuse_get_context(), path);
+            auto fg = internal::open_all(ctx, path);
             fg->stat(st);
             return 0;
         }
-        catch (const ExceptionBase& e)
+        COMMON_CATCH_BLOCK
+    }
+
+    int opendir(const char* path, struct fuse_file_info* info)
+    {
+        auto ctx = fuse_get_context();
+        try
         {
-            fprintf(stderr, "%s\n", e.message().c_str());
-            return -e.error_number();
+            auto fg = internal::open_all(ctx, path);
+            if (fg->type() != FileBase::DIRECTORY)
+                return -ENOTDIR;
+            info->fh = reinterpret_cast<uintptr_t>(fg.release());
+            return 0;
         }
+        COMMON_CATCH_BLOCK
+    }
+
+    int releasedir(const char*, struct fuse_file_info* info)
+    {
+        auto ctx = fuse_get_context();
+        try
+        {
+            auto fb = reinterpret_cast<FileBase*>(info->fh);
+            if (!fb)
+                return -EINVAL;
+            if (fb->type() != FileBase::DIRECTORY)
+                return -ENOTDIR;
+            internal::FileGuard fg(&static_cast<FileSystem*>(ctx->private_data)->table, fb);
+            fg.reset(nullptr);
+            return 0;
+        }
+        COMMON_CATCH_BLOCK
+    }
+
+    int
+    readdir(const char*, void* buffer, fuse_fill_dir_t filler, off_t, struct fuse_file_info* info)
+    {
+        auto ctx = fuse_get_context();
+        try
+        {
+            auto fb = reinterpret_cast<FileBase*>(info->fh);
+            if (!fb)
+                return -EINVAL;
+            if (fb->type() != FileBase::DIRECTORY)
+                return -ENOTDIR;
+            struct stat st;
+            memset(&st, 0, sizeof(st));
+            auto actions = [&](const std::string& name, const id_type&, int type) -> bool
+            {
+                return filler(buffer, name.c_str(), nullptr, 0) == 0;
+            };
+            static_cast<Directory*>(fb)->iterate_over_entries(actions);
+            return 0;
+        }
+        COMMON_CATCH_BLOCK
     }
 }
 }

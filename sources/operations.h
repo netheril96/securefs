@@ -30,5 +30,11 @@ namespace operations
     inline void destroy(void* ptr) { delete static_cast<FileSystem*>(ptr); }
 
     int getattr(const char*, struct stat*);
+
+    int opendir(const char*, struct fuse_file_info*);
+
+    int releasedir(const char*, struct fuse_file_info*);
+
+    int readdir(const char*, void*, fuse_fill_dir_t, off_t, struct fuse_file_info*);
 }
 }
