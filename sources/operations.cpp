@@ -5,6 +5,10 @@
 #include <utility>
 #include <string>
 
+#include <utime.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+
 namespace securefs
 {
 namespace internal
@@ -610,6 +614,63 @@ namespace operations
                 internal::remove(ctx, dst_id, dst_type);
             }
 
+            return 0;
+        }
+        COMMON_CATCH_BLOCK
+    }
+
+    int fsync(const char*, int, struct fuse_file_info* fi)
+    {
+        auto ctx = fuse_get_context();
+        try
+        {
+            auto fb = reinterpret_cast<FileBase*>(fi->fh);
+            if (!fb)
+                return -EINVAL;
+            std::lock_guard<FileBase> lg(*fb);
+            int fd = fb->file_descriptor();
+            int rc = ::fsync(fd);
+            if (rc < 0)
+                return -errno;
+            return 0;
+        }
+        COMMON_CATCH_BLOCK
+    }
+
+    int fsyncdir(const char* path, int isdatasync, struct fuse_file_info* fi)
+    {
+        return ::securefs::operations::fsync(path, isdatasync, fi);
+    }
+
+    int utimens(const char* path, const struct timespec ts[2])
+    {
+        auto ctx = fuse_get_context();
+        try
+        {
+            auto fg = internal::open_all(ctx, path);
+            int rc = 0;
+            std::lock_guard<FileBase> lg(*fg);
+            int fd = fg->file_descriptor();
+
+#if _XOPEN_SOURCE >= 700 || _POSIX_C_SOURCE >= 200809L
+            rc = ::futimens(fd, ts);
+#else
+            if (!ts)
+                rc = ::futimes(fd, nullptr);
+            else
+            {
+                struct timeval time_values[2];
+                for (size_t i = 0; i < 2; ++i)
+                {
+                    time_values[i].tv_sec = ts[i].tv_sec;
+                    time_values[i].tv_usec
+                        = static_cast<decltype(time_values[i].tv_usec)>(ts[i].tv_nsec / 1000);
+                }
+                rc = ::futimes(fd, time_values);
+            }
+#endif
+            if (rc < 0)
+                return -errno;
             return 0;
         }
         COMMON_CATCH_BLOCK

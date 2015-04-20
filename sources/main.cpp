@@ -63,5 +63,8 @@ int main(int argc, char** argv)
     opt.symlink = &securefs::operations::symlink;
     opt.readlink = &securefs::operations::readlink;
     opt.rename = &securefs::operations::rename;
+    opt.fsync = &securefs::operations::fsync;
+    opt.fsyncdir = &securefs::operations::fsyncdir;
+    opt.utimens = &securefs::operations::utimens;
     return fuse_main(argc, argv, &opt, fs);
 }

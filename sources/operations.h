@@ -6,6 +6,7 @@
 
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/time.h>
 
 namespace securefs
 {
@@ -68,5 +69,11 @@ namespace operations
     int readlink(const char* path, char* buf, size_t size);
 
     int rename(const char*, const char*);
+
+    int fsync(const char* path, int isdatasync, struct fuse_file_info* fi);
+
+    int fsyncdir(const char* path, int isdatasync, struct fuse_file_info* fi);
+
+    int utimens(const char* path, const struct timespec ts[2]);
 }
 }
