@@ -140,23 +140,26 @@ public:
     void flush();
     void stat(struct stat* st)
     {
-        m_stream->stat(st);
-        if (st)
+        if (!st)
+            throw OSException(EFAULT);
+        int fd = m_stream->file_descriptor();
+        int rc = ::fstat(fd, st);
+        if (rc < 0)
+            throw OSException(errno);
+
+        st->st_uid = get_uid();
+        st->st_gid = get_gid();
+        st->st_nlink = get_nlink();
+        st->st_mode = get_mode();
+        st->st_size = m_stream->size();
+        auto blk_sz = m_stream->optimal_block_size();
+        if (blk_sz > 1 && blk_sz < std::numeric_limits<decltype(st->st_blksize)>::max())
         {
-            st->st_uid = get_uid();
-            st->st_gid = get_gid();
-            st->st_nlink = get_nlink();
-            st->st_mode = get_mode();
-            st->st_size = m_stream->size();
-            auto blk_sz = m_stream->optimal_block_size();
-            if (blk_sz > 1 && blk_sz < std::numeric_limits<decltype(st->st_blksize)>::max())
-            {
-                st->st_blksize = static_cast<decltype(st->st_blksize)>(blk_sz);
-                st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
-            }
+            st->st_blksize = static_cast<decltype(st->st_blksize)>(blk_sz);
+            st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
         }
     }
-    void fsync() { return m_stream->fsync(); }
+    int file_descriptor() const { return m_stream->file_descriptor(); }
 };
 
 class RegularFile : public FileBase

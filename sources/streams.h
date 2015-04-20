@@ -52,12 +52,7 @@ public:
     /**
      * Methods implemented by file streams or their wrappers.
      */
-    virtual void stat(struct stat*) { throw NotImplementedException(__PRETTY_FUNCTION__); }
-
-    /**
-     * Methods implemented by file streams or their wrappers.
-     */
-    virtual void fsync() { throw NotImplementedException(__PRETTY_FUNCTION__); }
+    virtual int file_descriptor() const { throw NotImplementedException(__PRETTY_FUNCTION__); }
 
     /**
      * Certain streams are more efficient when reads and writes are aligned to blocks
@@ -95,7 +90,7 @@ public:
     virtual void flush_header() = 0;
 };
 
-class POSIXFileStream : public StreamBase
+class POSIXFileStream final : public StreamBase
 {
 private:
     int m_fd;
@@ -148,19 +143,7 @@ public:
 
     bool is_sparse() const noexcept override { return true; }
 
-    void stat(struct stat* st) override
-    {
-        int rc = ::fstat(m_fd, st);
-        if (rc < 0)
-            throw OSException(errno);
-    }
-
-    void fsync() override
-    {
-        int rc = ::fsync(m_fd);
-        if (rc < 0)
-            throw OSException(errno);
-    }
+    int file_descriptor() const override { return m_fd; }
 };
 
 std::shared_ptr<StreamBase> make_stream_hmac(std::shared_ptr<const SecureParam> param,
@@ -220,8 +203,7 @@ public:
     void flush() override { m_stream->flush(); }
     length_type size() const override { return m_stream->size(); }
     void resize(length_type new_length) override;
-    void stat(struct stat* st) override { return m_stream->stat(st); }
-    void fsync() override { return m_stream->fsync(); }
+    int file_descriptor() const override { return m_stream->file_descriptor(); }
     length_type optimal_block_size() const noexcept override { return m_block_size; }
 };
 

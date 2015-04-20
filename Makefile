@@ -1,11 +1,13 @@
 CPPFLAGS := -isystem/usr/include -isystem/usr/local/include -I"$(CURDIR)/sources" -isystem"$(CURDIR)/cryptopp/include" -DNDEBUG -D_FILE_OFFSET_BITS=64
-CXXFLAGS := -g -O2 -march=native -mtune=native -std=c++0x -pipe -Wall -Wextra -pedantic
+CXXFLAGS := -g -O3 -march=native -mtune=native -std=c++0x -pipe -Wall -Wextra -pedantic
 LDFLAGS := -L/usr/local/lib -L"$(CURDIR)/cryptopp/lib" -lcryptopp
 ifeq ($(shell uname), Darwin)
 	LDFLAGS += -losxfuse
+	LDFLAGS += -Wl,-dead_strip
 	CPPFLAGS += -isystem/usr/local/include/osxfuse
 else
 	LDFLAGS += -lfuse
+	LDFLAGS += -Wl,--gc-sections
 endif
 
 SOURCES := $(wildcard sources/*.cpp)
