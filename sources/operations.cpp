@@ -174,9 +174,24 @@ namespace internal
         return result;
     }
 
+    void remove(struct fuse_context* ctx, const id_type& id, int type)
+    {
+        try
+        {
+            auto fs = static_cast<operations::FileSystem*>(ctx->private_data);
+            FileGuard to_be_removed(&fs->table, table_open_as(fs->table, id, type));
+            std::lock_guard<FileBase> guard(*to_be_removed);
+            to_be_removed->unlink();
+        }
+        catch (...)
+        {
+            // Errors in unlinking the actual underlying file can be ignored
+            // They will not affect the apparent filesystem operations
+        }
+    }
+
     void remove(struct fuse_context* ctx, const std::string& path)
     {
-        auto fs = static_cast<operations::FileSystem*>(ctx->private_data);
         std::string last_component;
         auto dir = open_base_dir(ctx, path, last_component);
         if (last_component.empty())
@@ -189,11 +204,7 @@ namespace internal
                 throw OSException(ENOENT);
             dir->flush();
         }
-        FileGuard to_be_removed(&fs->table, table_open_as(fs->table, id, type));
-        {
-            std::lock_guard<FileBase> guard(*to_be_removed);
-            to_be_removed->unlink();
-        }
+        remove(ctx, id, type);
     }
 
     bool is_readonly(struct fuse_context* ctx)
@@ -534,6 +545,71 @@ namespace operations
             auto destination = fg.get_as<Symlink>()->get();
             memset(buf, 0, size);
             memcpy(buf, destination.data(), std::min(destination.size(), size - 1));
+            return 0;
+        }
+        COMMON_CATCH_BLOCK
+    }
+
+    int rename(const char* src, const char* dst)
+    {
+        auto ctx = fuse_get_context();
+        try
+        {
+            std::string src_filename, dst_filename;
+            auto src_dir_guard = internal::open_base_dir(ctx, src, src_filename);
+            auto dst_dir_guard = internal::open_base_dir(ctx, dst, dst_filename);
+            auto src_dir = src_dir_guard.get_as<Directory>();
+            auto dst_dir = dst_dir_guard.get_as<Directory>();
+
+            id_type src_id, dst_id;
+            int src_type, dst_type;
+            bool src_exists, dst_exists;
+
+            auto move_entries = [&]() -> void
+            {
+                src_exists = src_dir->get_entry(src_filename, src_id, src_type);
+                if (!src_exists)
+                    return;
+                dst_exists = dst_dir->remove_entry(dst_filename, dst_id, dst_type);
+                dst_dir->add_entry(dst_filename, src_id, src_type);
+                src_dir->remove_entry(src_filename, src_id, src_type);
+                dst_dir->flush();
+                src_dir->flush();
+            };
+
+            // For templates greater, less, greater_equal, and less_equal, the specializations for
+            // any pointer type yield a total order, even if the built-in operators <, >, <=, >= do
+            // not.
+            std::less<Directory*> comparator;
+
+            // We use the order of pointers to enforce the order of locking so that deadlock
+            // cannot occur
+            if (comparator(src_dir, dst_dir))
+            {
+                std::lock_guard<FileBase> lg1(*src_dir);
+                std::lock_guard<FileBase> lg2(*dst_dir);
+                move_entries();
+            }
+            else if (comparator(dst_dir, src_dir))
+            {
+                std::lock_guard<FileBase> lg1(*dst_dir);
+                std::lock_guard<FileBase> lg2(*src_dir);
+                move_entries();
+            }
+            else
+            {
+                std::lock_guard<FileBase> lg1(*dst_dir);
+                move_entries();
+            }
+
+            if (!src_exists)
+                return -ENOENT;
+
+            if (dst_exists)
+            {
+                internal::remove(ctx, dst_id, dst_type);
+            }
+
             return 0;
         }
         COMMON_CATCH_BLOCK

@@ -66,5 +66,7 @@ namespace operations
     int symlink(const char* to, const char* from);
 
     int readlink(const char* path, char* buf, size_t size);
+
+    int rename(const char*, const char*);
 }
 }

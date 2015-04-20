@@ -107,6 +107,7 @@ namespace internal
             memcpy(id.data(), it->second.first.data(), id.size());
             type = it->second.second;
             m_table.erase(it);
+            m_dirty = true;
             return true;
         }
 

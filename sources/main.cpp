@@ -62,5 +62,6 @@ int main(int argc, char** argv)
     opt.chown = &securefs::operations::chown;
     opt.symlink = &securefs::operations::symlink;
     opt.readlink = &securefs::operations::readlink;
+    opt.rename = &securefs::operations::rename;
     return fuse_main(argc, argv, &opt, fs);
 }
