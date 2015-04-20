@@ -299,6 +299,7 @@ namespace operations
             fg->set_gid(ctx->gid);
             fg->set_nlink(1);
             fg->set_mode(mode);
+            fg->flush();
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
             return 0;
         }
@@ -409,6 +410,7 @@ namespace operations
                 return -EINVAL;
             std::lock_guard<FileBase> lg(*fg);
             fg.get_as<RegularFile>()->truncate(size);
+            fg->flush();
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -426,6 +428,7 @@ namespace operations
                 return -EINVAL;
             std::lock_guard<FileBase> lg(*fb);
             static_cast<RegularFile*>(fb)->truncate(size);
+            fb->flush();
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -460,6 +463,7 @@ namespace operations
             fg->set_gid(ctx->gid);
             fg->set_nlink(1);
             fg->set_mode(mode);
+            fg->flush();
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -478,6 +482,7 @@ namespace operations
             mode &= 0777;
             mode |= original_mode & S_IFMT;
             fg->set_mode(mode);
+            fg->flush();
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -492,6 +497,7 @@ namespace operations
             std::lock_guard<FileBase> lg(*fg);
             fg->set_uid(uid);
             fg->set_gid(gid);
+            fg->flush();
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -512,6 +518,7 @@ namespace operations
             fg->set_nlink(1);
             fg->set_mode(S_IFLNK | 0755);
             fg.get_as<Symlink>()->set(to);
+            fg->flush();
             return 0;
         }
         COMMON_CATCH_BLOCK
