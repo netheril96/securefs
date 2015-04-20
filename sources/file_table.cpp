@@ -98,6 +98,7 @@ FileBase* FileTable::open_as(const id_type& id, int type)
         auto fb = it->second;
         m_opened.emplace(*it);
         m_closed.erase(it);
+        fb->setref(1);
         return fb.get();
     }
     std::string first_level_dir, second_level_dir, filename, metaname;
