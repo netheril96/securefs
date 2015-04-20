@@ -99,12 +99,15 @@ namespace internal
             return rv.second;
         }
 
-        bool remove_entry(const std::string& name) override
+        bool remove_entry(const std::string& name, id_type& id, int& type) override
         {
-            auto count = m_table.erase(name);
-            if (count > 0)
-                m_dirty = true;
-            return count > 0;
+            auto it = m_table.find(name);
+            if (it == m_table.end())
+                return false;
+            memcpy(id.data(), it->second.first.data(), id.size());
+            type = it->second.second;
+            m_table.erase(it);
+            return true;
         }
 
         void subflush() override

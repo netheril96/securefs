@@ -50,7 +50,8 @@ protected:
     virtual void subflush() {}
 
 public:
-    static const int REGULAR_FILE = 0, SYMLINK = 1, DIRECTORY = 2;
+    static const int REGULAR_FILE = S_IFREG >> 12, SYMLINK = S_IFLNK >> 12,
+                     DIRECTORY = S_IFDIR >> 12;
 
     static int error_number_for_not(int type) noexcept
     {
@@ -66,19 +67,7 @@ public:
         return EINVAL;
     }
 
-    static mode_t mode_for_type(int type) noexcept
-    {
-        switch (type)
-        {
-        case REGULAR_FILE:
-            return S_IFREG;
-        case DIRECTORY:
-            return S_IFDIR;
-        case SYMLINK:
-            return S_IFLNK;
-        }
-        return 0;
-    }
+    static mode_t mode_for_type(int type) noexcept { return type << 12; }
 
 public:
     explicit FileBase(std::shared_ptr<StreamBase> stream, std::shared_ptr<HeaderBase> header)
@@ -223,7 +212,12 @@ public:
 
     virtual bool get_entry(const std::string& name, id_type& id, int& type) = 0;
     virtual bool add_entry(const std::string& name, const id_type& id, int type) = 0;
-    virtual bool remove_entry(const std::string& name) = 0;
+
+    /**
+     * Removes the entry while also report the info of said entry.
+     * Returns false when the entry is not found.
+     */
+    virtual bool remove_entry(const std::string& name, id_type& id, int& type) = 0;
 
     typedef std::function<bool(const std::string&, const id_type&, int)> callback;
     /**

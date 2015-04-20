@@ -185,10 +185,7 @@ namespace internal
         int type;
         {
             std::lock_guard<FileBase> guard(*dir);
-            bool exists = dir.get_as<Directory>()->get_entry(last_component, id, type);
-            if (!exists)
-                throw OSException(ENOENT);
-            if (!dir.get_as<Directory>()->remove_entry(last_component))
+            if (!dir.get_as<Directory>()->remove_entry(last_component, id, type))
                 throw OSException(ENOENT);
             dir->flush();
         }
