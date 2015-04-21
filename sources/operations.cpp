@@ -571,12 +571,26 @@ namespace operations
 
             auto move_entries = [&]() -> void
             {
+                // The order of operation is very important.
+                //
+                // When any of this fail, we'd rather let the directory entries vanish than have two
+                // directory entries pointing to the same file without incrementing the nlink field.
+                // The unreferenced file can still be recovered, but dubious reference may get the
+                // actual file deleted when the user tries to remove one of the wrong entry.
+                //
+                // Incrementing and decrementing nlink for the source file will make synchronization
+                // tricky, because then there will be three locking operations interleaving, which
+                // may lead to deadlock or livelock.
                 src_exists = src_dir->get_entry(src_filename, src_id, src_type);
                 if (!src_exists)
                     return;
-                dst_exists = dst_dir->remove_entry(dst_filename, dst_id, dst_type);
-                dst_dir->add_entry(dst_filename, src_id, src_type);
+                dst_exists = dst_dir->get_entry(dst_filename, dst_id, dst_type);
+                if (memcmp(src_id.data(), dst_id.data(), ID_LENGTH) == 0)
+                    return;
+                if (dst_exists)
+                    dst_dir->remove_entry(dst_filename, dst_id, dst_type);
                 src_dir->remove_entry(src_filename, src_id, src_type);
+                dst_dir->add_entry(dst_filename, src_id, src_type);
                 dst_dir->flush();
                 src_dir->flush();
             };

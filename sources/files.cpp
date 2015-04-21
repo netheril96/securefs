@@ -115,6 +115,7 @@ namespace internal
         {
             if (m_dirty)
             {
+                m_stream->resize(0);
                 char buffer[Directory::MAX_FILENAME_LENGTH + 1 + 32 + 4];
                 offset_type off = 0;
                 for (auto&& pair : m_table)
