@@ -15,7 +15,9 @@ private:
     std::mutex m_lock;
     ptrdiff_t m_refcount;
     std::shared_ptr<HeaderBase> m_header;
+    std::shared_ptr<const SecureParam> m_param;
     uint32_t m_flags[7];
+    int m_data_fd, m_meta_fd;
     bool m_dirty;
 
 private:
@@ -70,18 +72,10 @@ public:
     static mode_t mode_for_type(int type) noexcept { return type << 12; }
 
 public:
-    explicit FileBase(std::shared_ptr<StreamBase> stream, std::shared_ptr<HeaderBase> header)
-        : m_lock()
-        , m_refcount(1)
-        , m_header(std::move(header))
-        , m_dirty(false)
-        , m_stream(std::move(stream))
-        , m_removed(false)
-    {
-        if (!m_stream || !m_header)
-            NULL_EXCEPT();
-        read_header();
-    }
+    explicit FileBase(int data_fd,
+                      int meta_fd,
+                      std::shared_ptr<const SecureParam> param,
+                      bool check);
     virtual ~FileBase();
     DISABLE_COPY_MOVE(FileBase);
 
@@ -112,7 +106,8 @@ public:
     }
     // --End of getters and setters for stats---
 
-    const id_type& get_id() const { return m_stream->get_id(); }
+    const id_type& get_id() const { return m_param->id; }
+    const key_type& get_key() const { return m_param->key; }
 
     void lock() { m_lock.lock(); }
     void unlock() { m_lock.unlock(); }
@@ -131,8 +126,7 @@ public:
     {
         if (!st)
             throw OSException(EFAULT);
-        int fd = m_stream->file_descriptor();
-        int rc = ::fstat(fd, st);
+        int rc = ::fstat(file_descriptor(), st);
         if (rc < 0)
             throw OSException(errno);
 
@@ -148,14 +142,15 @@ public:
             st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
         }
     }
-    int file_descriptor() const { return m_stream->file_descriptor(); }
+    int file_descriptor() const { return m_data_fd; }
 };
 
 class RegularFile : public FileBase
 {
 public:
-    explicit RegularFile(std::shared_ptr<StreamBase> stream, std::shared_ptr<HeaderBase> header)
-        : FileBase(std::move(stream), std::move(header))
+    template <class... Args>
+    explicit RegularFile(Args&&... args)
+        : FileBase(std::forward<Args>(args)...)
     {
     }
     int type() const noexcept override { return FileBase::REGULAR_FILE; }
@@ -182,8 +177,9 @@ public:
 class Symlink : public FileBase
 {
 public:
-    explicit Symlink(std::shared_ptr<StreamBase> stream, std::shared_ptr<HeaderBase> header)
-        : FileBase(std::move(stream), std::move(header))
+    template <class... Args>
+    explicit Symlink(Args&&... args)
+        : FileBase(std::forward<Args>(args)...)
     {
     }
     int type() const noexcept override { return FileBase::SYMLINK; }
@@ -204,10 +200,12 @@ public:
     static const size_t MAX_FILENAME_LENGTH = 255;
 
 public:
-    explicit Directory(std::shared_ptr<StreamBase> stream, std::shared_ptr<HeaderBase> header)
-        : FileBase(std::move(stream), std::move(header))
+    template <class... Args>
+    explicit Directory(Args&&... args)
+        : FileBase(std::forward<Args>(args)...)
     {
     }
+
     int type() const noexcept override { return FileBase::DIRECTORY; }
 
     virtual bool get_entry(const std::string& name, id_type& id, int& type) = 0;
@@ -235,21 +233,20 @@ public:
     }
 };
 
-std::shared_ptr<Directory> make_directory(std::shared_ptr<StreamBase> stream,
-                                          std::shared_ptr<HeaderBase> header);
+std::shared_ptr<Directory>
+make_directory(int data_fd, int meta_fd, std::shared_ptr<const SecureParam> param, bool check);
 
-inline std::shared_ptr<FileBase> make_file_from_type(int type,
-                                                     std::shared_ptr<StreamBase> stream,
-                                                     std::shared_ptr<HeaderBase> header)
+template <class... Args>
+inline std::shared_ptr<FileBase> make_file_from_type(int type, Args&&... args)
 {
     switch (type)
     {
     case FileBase::REGULAR_FILE:
-        return std::make_shared<RegularFile>(std::move(stream), std::move(header));
+        return std::make_shared<RegularFile>(std::forward<Args>(args)...);
     case FileBase::SYMLINK:
-        return std::make_shared<Symlink>(std::move(stream), std::move(header));
+        return std::make_shared<Symlink>(std::forward<Args>(args)...);
     case FileBase::DIRECTORY:
-        return make_directory(std::move(stream), std::move(header));
+        return make_directory(std::forward<Args>(args)...);
     }
     throw InvalidArgumentException("Unrecognized file type");
 }

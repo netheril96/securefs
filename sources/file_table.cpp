@@ -101,23 +101,24 @@ FileBase* FileTable::open_as(const id_type& id, int type)
         fb->setref(1);
         return fb.get();
     }
-    std::string first_level_dir, second_level_dir, filename, metaname;
-    calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
-    int open_flags = is_readonly() ? O_RDONLY : O_RDWR;
-    int fd = ::openat(m_dir_fd, filename.c_str(), open_flags);
-    if (fd < 0)
-        throw OSException(errno);
-    auto main_stream = std::make_shared<POSIXFileStream>(fd);
-    fd = ::openat(m_dir_fd, metaname.c_str(), open_flags);
-    if (fd < 0)
-        throw OSException(errno);
-    auto meta_stream = std::make_shared<POSIXFileStream>(fd);
+
     auto param = std::make_shared<SecureParam>();
     memcpy(param->id.data(), id.data(), id.size());
     derive(m_master_key, id, param->key);
-    auto crypt = make_cryptstream_aes_gcm(
-        std::move(main_stream), std::move(meta_stream), std::move(param), is_auth_enabled());
-    auto fb = make_file_from_type(type, std::move(crypt.first), std::move(crypt.second));
+
+    std::string first_level_dir, second_level_dir, filename, metaname;
+    calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
+    int open_flags = is_readonly() ? O_RDONLY : O_RDWR;
+    int data_fd = ::openat(m_dir_fd, filename.c_str(), open_flags);
+    if (data_fd < 0)
+        throw OSException(errno);
+    int meta_fd = ::openat(m_dir_fd, metaname.c_str(), open_flags);
+    if (meta_fd < 0)
+    {
+        ::close(data_fd);
+        throw OSException(errno);
+    }
+    auto fb = make_file_from_type(type, data_fd, meta_fd, param, is_auth_enabled());
     m_opened.emplace(id, fb);
     fb->setref(1);
     return fb.get();
@@ -132,37 +133,37 @@ FileBase* FileTable::create_as(const id_type& id, int type)
 
     std::string first_level_dir, second_level_dir, filename, metaname;
     calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
-    bool file_created = false, meta_created = false;
+    int data_fd = -1, meta_fd = -1;
     try
     {
         ensure_directory(m_dir_fd, first_level_dir.c_str(), 0755);
         ensure_directory(m_dir_fd, second_level_dir.c_str(), 0755);
-        int fd = ::openat(m_dir_fd, filename.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
-        if (fd < 0)
+        data_fd = ::openat(m_dir_fd, filename.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
+        if (data_fd < 0)
             throw OSException(errno);
-        file_created = true;
-        auto main_stream = std::make_shared<POSIXFileStream>(fd);
-        fd = ::openat(m_dir_fd, metaname.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
-        if (fd < 0)
+        meta_fd = ::openat(m_dir_fd, metaname.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
+        if (meta_fd < 0)
             throw OSException(errno);
-        meta_created = true;
-        auto meta_stream = std::make_shared<POSIXFileStream>(fd);
         auto param = std::make_shared<SecureParam>();
         memcpy(param->id.data(), id.data(), id.size());
         derive(m_master_key, id, param->key);
-        auto crypt = make_cryptstream_aes_gcm(
-            std::move(main_stream), std::move(meta_stream), std::move(param), is_auth_enabled());
-        auto fb = make_file_from_type(type, std::move(crypt.first), std::move(crypt.second));
+        auto fb = make_file_from_type(type, data_fd, meta_fd, param, is_auth_enabled());
         m_opened.emplace(id, fb);
         fb->setref(1);
         return fb.get();
     }
     catch (...)
     {
-        if (file_created)
+        if (data_fd >= 0)
+        {
+            ::close(data_fd);
             ::unlinkat(m_dir_fd, filename.c_str(), 0);
-        if (meta_created)
+        }
+        if (meta_fd >= 0)
+        {
+            ::close(meta_fd);
             ::unlinkat(m_dir_fd, metaname.c_str(), 0);
+        }
         ::unlinkat(m_dir_fd, second_level_dir.c_str(), AT_REMOVEDIR);
         ::unlinkat(m_dir_fd, first_level_dir.c_str(), AT_REMOVEDIR);
         throw;

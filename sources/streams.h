@@ -50,19 +50,9 @@ public:
     virtual bool is_sparse() const noexcept { return false; }
 
     /**
-     * Methods implemented by file streams or their wrappers.
-     */
-    virtual int file_descriptor() const { throw NotImplementedException(__PRETTY_FUNCTION__); }
-
-    /**
      * Certain streams are more efficient when reads and writes are aligned to blocks
      */
     virtual length_type optimal_block_size() const noexcept { return 1; }
-
-    /**
-     * Cryptographic streams may have this for authentication purposes
-     */
-    virtual const id_type& get_id() const { throw NotImplementedException(__PRETTY_FUNCTION__); }
 };
 
 /**
@@ -142,8 +132,6 @@ public:
     length_type size() const override { return m_size; }
 
     bool is_sparse() const noexcept override { return true; }
-
-    int file_descriptor() const override { return m_fd; }
 };
 
 std::shared_ptr<StreamBase> make_stream_hmac(std::shared_ptr<const SecureParam> param,
@@ -203,7 +191,6 @@ public:
     void flush() override { m_stream->flush(); }
     length_type size() const override { return m_stream->size(); }
     void resize(length_type new_length) override;
-    int file_descriptor() const override { return m_stream->file_descriptor(); }
     length_type optimal_block_size() const noexcept override { return m_block_size; }
 };
 

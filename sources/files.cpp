@@ -6,6 +6,21 @@
 
 namespace securefs
 {
+
+FileBase::FileBase(int data_fd, int meta_fd, std::shared_ptr<const SecureParam> param, bool check)
+    : m_param(param), m_data_fd(data_fd), m_meta_fd(meta_fd)
+{
+    if (!param)
+        NULL_EXCEPT();
+    auto data_stream = std::make_shared<POSIXFileStream>(data_fd);
+    auto meta_stream = std::make_shared<POSIXFileStream>(meta_fd);
+    auto crypt
+        = make_cryptstream_aes_gcm(std::move(data_stream), std::move(meta_stream), param, check);
+    m_stream = crypt.first;
+    m_header = crypt.second;
+    read_header();
+}
+
 void FileBase::read_header()
 {
     byte header[sizeof(m_flags)];
@@ -55,9 +70,9 @@ namespace internal
         bool m_dirty;
 
     public:
-        explicit SimpleDirectory(std::shared_ptr<StreamBase> stream,
-                                 std::shared_ptr<HeaderBase> header)
-            : Directory(std::move(stream), std::move(header)), m_dirty(false)
+        template <class... Args>
+        explicit SimpleDirectory(Args&&... args)
+            : Directory(std::forward<Args>(args)...)
         {
             char buffer[Directory::MAX_FILENAME_LENGTH + 1 + 32 + 4];
             offset_type off = 0;
@@ -159,9 +174,9 @@ namespace internal
     };
 }
 
-std::shared_ptr<Directory> make_directory(std::shared_ptr<StreamBase> stream,
-                                          std::shared_ptr<HeaderBase> header)
+std::shared_ptr<Directory>
+make_directory(int data_fd, int meta_fd, std::shared_ptr<const SecureParam> param, bool check)
 {
-    return std::make_shared<internal::SimpleDirectory>(std::move(stream), std::move(header));
+    return std::make_shared<internal::SimpleDirectory>(data_fd, meta_fd, std::move(param), check);
 }
 }
