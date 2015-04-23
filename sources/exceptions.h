@@ -194,4 +194,27 @@ public:
                            m_off);
     }
 };
+
+class XattrVerificationException : public VerificationException
+{
+private:
+    id_type m_id;
+    std::string m_name;
+
+public:
+    explicit XattrVerificationException(const id_type& id, std::string name)
+    {
+        memcpy(m_id.data(), id.data(), id.size());
+        m_name.swap(name);
+    }
+
+    const char* type_name() const noexcept override { return "XattrVerificationException"; }
+
+    std::string message() const override
+    {
+        return fmt::format("Extended attribute for ID {} and name \"{}\" has wrong checksum",
+                           hexify(m_id.data(), m_id.size()),
+                           m_name);
+    }
+};
 }

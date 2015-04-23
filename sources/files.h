@@ -17,8 +17,8 @@ private:
     std::shared_ptr<HeaderBase> m_header;
     std::shared_ptr<const SecureParam> m_param;
     uint32_t m_flags[7];
-    int m_data_fd, m_meta_fd;
-    bool m_dirty;
+    int m_data_fd;
+    bool m_dirty, m_check;
 
 private:
     void read_header();
@@ -143,6 +143,9 @@ public:
         }
     }
     int file_descriptor() const { return m_data_fd; }
+    ssize_t listxattr(char* buffer, size_t size);
+    ssize_t getxattr(const char* name, char* value, size_t size);
+    void setxattr(const char* name, const char* value, size_t size, int flags);
 };
 
 class RegularFile : public FileBase

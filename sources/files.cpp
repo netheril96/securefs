@@ -1,14 +1,34 @@
 #include "files.h"
+#include "utils.h"
 
 #include <unordered_map>
 #include <utility>
 #include <algorithm>
 
+#include <cryptopp/aes.h>
+#include <cryptopp/gcm.h>
+#include <cryptopp/secblock.h>
+
+#include <sys/types.h>
+#ifdef __APPLE__
+#include <sys/xattr.h>
+#else
+#include <attr/xattr.h>
+#endif
+
 namespace securefs
 {
 
 FileBase::FileBase(int data_fd, int meta_fd, std::shared_ptr<const SecureParam> param, bool check)
-    : m_param(param), m_data_fd(data_fd), m_meta_fd(meta_fd)
+    : m_lock()
+    , m_refcount(1)
+    , m_header()
+    , m_param(param)
+    , m_data_fd(data_fd)
+    , m_dirty(false)
+    , m_check(check)
+    , m_stream()
+    , m_removed(false)
 {
     if (!param)
         NULL_EXCEPT();
@@ -59,6 +79,131 @@ void FileBase::flush()
     }
     m_header->flush_header();
     m_stream->flush();
+}
+
+static const ssize_t XATTR_IV_LENGTH = 32, XATTR_MAC_LENGTH = 16;
+
+ssize_t FileBase::listxattr(char* buffer, size_t size)
+{
+#ifdef __APPLE__
+    auto rc = ::flistxattr(file_descriptor(), buffer, size, 0);
+#else
+    auto rc = ::flistxattr(file_descriptor(), buffer, size);
+#endif
+    if (rc < 0)
+        throw OSException(errno);
+    return rc;
+}
+
+ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
+{
+    ssize_t encrypted_length;
+#ifdef __APPLE__
+    encrypted_length = ::fgetxattr(file_descriptor(), name, nullptr, 0, 0, 0);
+#else
+    encrypted_length = ::fgetxattr(file_descriptor(), name, nullptr, 0);
+#endif
+
+    if (encrypted_length < 0)
+        throw OSException(errno);
+
+    if (encrypted_length <= XATTR_MAC_LENGTH + XATTR_IV_LENGTH)
+        return 0;
+
+    if (!value)
+        return encrypted_length - XATTR_MAC_LENGTH - XATTR_IV_LENGTH;
+
+    std::unique_ptr<byte[]> read_buffer(new byte[encrypted_length]);
+#ifdef __APPLE__
+    auto rc = ::fgetxattr(file_descriptor(), name, read_buffer.get(), encrypted_length, 0, 0);
+#else
+    auto rc = ::fgetxattr(file_descriptor(), name, read_buffer.get(), encrypted_length);
+#endif
+
+    if (rc < 0)
+        throw OSException(errno);
+    if (rc != encrypted_length)
+        throw OSException(EBUSY);
+
+    auto name_len = strlen(name);
+    std::unique_ptr<byte[]> header(new byte[name_len + ID_LENGTH]);
+    memcpy(header.get(), get_id().data(), ID_LENGTH);
+    memcpy(header.get() + ID_LENGTH, name, name_len);
+
+    byte* iv = read_buffer.get();
+    byte* mac = iv + XATTR_IV_LENGTH;
+    byte* ciphertext = mac + XATTR_MAC_LENGTH;
+    auto length = static_cast<size_t>(rc - XATTR_IV_LENGTH - XATTR_MAC_LENGTH);
+
+    CryptoPP::GCM<CryptoPP::AES>::Decryption dec;
+    dec.SetKeyWithIV(get_key().data(), KEY_LENGTH, iv, XATTR_IV_LENGTH);
+    bool success = false;
+
+    if (length <= size)
+    {
+        success = dec.DecryptAndVerify(reinterpret_cast<byte*>(value),
+                                       mac,
+                                       XATTR_MAC_LENGTH,
+                                       iv,
+                                       XATTR_IV_LENGTH,
+                                       header.get(),
+                                       name_len + ID_LENGTH,
+                                       ciphertext,
+                                       length);
+    }
+    else
+    {
+        CryptoPP::AlignedSecByteBlock buffer(length);
+        success = dec.DecryptAndVerify(buffer.data(),
+                                       mac,
+                                       XATTR_MAC_LENGTH,
+                                       iv,
+                                       XATTR_IV_LENGTH,
+                                       header.get(),
+                                       name_len + ID_LENGTH,
+                                       ciphertext,
+                                       length);
+        memcpy(value, buffer.data(), size);
+    }
+
+    if (m_check && !success)
+        throw XattrVerificationException(get_id(), name);
+    return length;
+}
+
+void FileBase::setxattr(const char* name, const char* value, size_t size, int flags)
+{
+    std::unique_ptr<byte[]> buffer(new byte[size + XATTR_IV_LENGTH + XATTR_MAC_LENGTH]);
+    byte* iv = buffer.get();
+    generate_random(iv, XATTR_IV_LENGTH);
+    byte* mac = iv + XATTR_IV_LENGTH;
+    byte* ciphertext = mac + XATTR_MAC_LENGTH;
+
+    auto name_len = strlen(name);
+    std::unique_ptr<byte[]> header(new byte[name_len + ID_LENGTH]);
+    memcpy(header.get(), get_id().data(), ID_LENGTH);
+    memcpy(header.get() + ID_LENGTH, name, name_len);
+
+    CryptoPP::GCM<CryptoPP::AES>::Encryption enc;
+    enc.SetKeyWithIV(get_key().data(), KEY_LENGTH, iv, XATTR_IV_LENGTH);
+    enc.EncryptAndAuthenticate(ciphertext,
+                               mac,
+                               XATTR_MAC_LENGTH,
+                               iv,
+                               XATTR_IV_LENGTH,
+                               header.get(),
+                               name_len + ID_LENGTH,
+                               reinterpret_cast<const byte*>(value),
+                               size);
+#ifdef __APPLE__
+    auto rc = ::fsetxattr(
+        file_descriptor(), name, buffer.get(), size + XATTR_IV_LENGTH + XATTR_MAC_LENGTH, 0, flags);
+#else
+    auto rc = ::fsetxattr(
+        file_descriptor(), name, buffer.get(), size + XATTR_IV_LENGTH + XATTR_MAC_LENGTH, flags);
+#endif
+    if (rc < 0)
+        throw OSException(errno);
 }
 
 namespace internal
