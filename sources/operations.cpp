@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <utility>
 #include <string>
+#include <string.h>
 
 #include <utime.h>
 #include <fcntl.h>
