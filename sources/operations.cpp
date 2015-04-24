@@ -689,5 +689,88 @@ namespace operations
         }
         COMMON_CATCH_BLOCK
     }
+
+    int listxattr(const char* path, char* list, size_t size)
+    {
+        auto ctx = fuse_get_context();
+        try
+        {
+            auto fg = internal::open_all(ctx, path);
+            std::lock_guard<FileBase> lg(*fg);
+            return static_cast<int>(fg->listxattr(list, size));
+        }
+        COMMON_CATCH_BLOCK
+    }
+
+#ifdef __APPLE__
+    int getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position)
+    {
+        auto ctx = fuse_get_context();
+        try
+        {
+            auto fg = internal::open_all(ctx, path);
+            std::lock_guard<FileBase> lg(*fg);
+            return static_cast<int>(fg->getxattr(name, value, size, position));
+        }
+        COMMON_CATCH_BLOCK
+    }
+
+    int setxattr(const char* path,
+                 const char* name,
+                 const char* value,
+                 size_t size,
+                 int flags,
+                 uint32_t position)
+    {
+        auto ctx = fuse_get_context();
+        try
+        {
+            auto fg = internal::open_all(ctx, path);
+            std::lock_guard<FileBase> lg(*fg);
+            fg->setxattr(name, value, size, flags, position);
+            return 0;
+        }
+        COMMON_CATCH_BLOCK
+    }
+
+#else
+    int getxattr(const char* path, const char* name, char* value, size_t size)
+    {
+        auto ctx = fuse_get_context();
+        try
+        {
+            auto fg = internal::open_all(ctx, path);
+            std::lock_guard<FileBase> lg(*fg);
+            return static_cast<int>(fg->getxattr(name, value, size));
+        }
+        COMMON_CATCH_BLOCK
+    }
+
+    int setxattr(const char* path, const char* name, const char* value, size_t size, int flags)
+    {
+        auto ctx = fuse_get_context();
+        try
+        {
+            auto fg = internal::open_all(ctx, path);
+            std::lock_guard<FileBase> lg(*fg);
+            fg->setxattr(name, value, size, flags);
+            return 0;
+        }
+        COMMON_CATCH_BLOCK
+    }
+#endif
+
+    int removexattr(const char* path, const char* name)
+    {
+        auto ctx = fuse_get_context();
+        try
+        {
+            auto fg = internal::open_all(ctx, path);
+            std::lock_guard<FileBase> lg(*fg);
+            fg->removexattr(name);
+            return 0;
+        }
+        COMMON_CATCH_BLOCK
+    }
 }
 }

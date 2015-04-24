@@ -95,8 +95,15 @@ ssize_t FileBase::listxattr(char* buffer, size_t size)
     return rc;
 }
 
+#ifdef __APPLE__
+ssize_t FileBase::getxattr(const char* name, char* value, size_t size, uint32_t position)
+{
+    if (position != 0)
+        throw InvalidArgumentException("postion must be zero");
+#else
 ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
 {
+#endif
     ssize_t encrypted_length;
 #ifdef __APPLE__
     encrypted_length = ::fgetxattr(file_descriptor(), name, nullptr, 0, 0, 0);
@@ -171,8 +178,16 @@ ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
     return length;
 }
 
+#ifdef __APPLE__
+void FileBase::setxattr(
+    const char* name, const char* value, size_t size, int flags, uint32_t position)
+{
+    if (position != 0)
+        throw InvalidArgumentException("postion must be zero");
+#else
 void FileBase::setxattr(const char* name, const char* value, size_t size, int flags)
 {
+#endif
     std::unique_ptr<byte[]> buffer(new byte[size + XATTR_IV_LENGTH + XATTR_MAC_LENGTH]);
     byte* iv = buffer.get();
     generate_random(iv, XATTR_IV_LENGTH);
@@ -201,6 +216,17 @@ void FileBase::setxattr(const char* name, const char* value, size_t size, int fl
 #else
     auto rc = ::fsetxattr(
         file_descriptor(), name, buffer.get(), size + XATTR_IV_LENGTH + XATTR_MAC_LENGTH, flags);
+#endif
+    if (rc < 0)
+        throw OSException(errno);
+}
+
+void FileBase::removexattr(const char* name)
+{
+#ifdef __APPLE__
+    auto rc = ::fremovexattr(file_descriptor(), name, 0);
+#else
+    auto rc = ::fremovexattr(file_descriptor(), name);
 #endif
     if (rc < 0)
         throw OSException(errno);

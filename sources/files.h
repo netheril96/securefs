@@ -144,8 +144,16 @@ public:
     }
     int file_descriptor() const { return m_data_fd; }
     ssize_t listxattr(char* buffer, size_t size);
+
+#ifdef __APPLE__
+    ssize_t getxattr(const char* name, char* value, size_t size, uint32_t position);
+    void setxattr(const char* name, const char* value, size_t size, int flags, uint32_t position);
+#else
     ssize_t getxattr(const char* name, char* value, size_t size);
     void setxattr(const char* name, const char* value, size_t size, int flags);
+#endif
+
+    void removexattr(const char* name);
 };
 
 class RegularFile : public FileBase

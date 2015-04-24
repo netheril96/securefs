@@ -66,5 +66,9 @@ int main(int argc, char** argv)
     opt.fsync = &securefs::operations::fsync;
     opt.fsyncdir = &securefs::operations::fsyncdir;
     opt.utimens = &securefs::operations::utimens;
+    opt.listxattr = &securefs::operations::listxattr;
+    opt.getxattr = &securefs::operations::getxattr;
+    opt.setxattr = &securefs::operations::setxattr;
+    opt.removexattr = &securefs::operations::removexattr;
     return fuse_main(argc, argv, &opt, fs);
 }
