@@ -8,6 +8,13 @@
 #include <utime.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+
+#ifdef __APPLE__
+#include <sys/xattr.h>
+#else
+#include <attr/xattr.h>
+#endif
 
 namespace securefs
 {
@@ -722,7 +729,12 @@ namespace operations
                  int flags,
                  uint32_t position)
     {
+        static const char* APPLE_QUARANTINE = "com.apple.quarantine";
+        if (strcmp(name, APPLE_QUARANTINE) == 0)
+            return 0;    // workaround for the "XXX is damaged" bug on OS X
+
         auto ctx = fuse_get_context();
+        flags &= XATTR_CREATE | XATTR_REPLACE;
         try
         {
             auto fg = internal::open_all(ctx, path);
@@ -749,6 +761,7 @@ namespace operations
     int setxattr(const char* path, const char* name, const char* value, size_t size, int flags)
     {
         auto ctx = fuse_get_context();
+        flags &= XATTR_CREATE | XATTR_REPLACE;
         try
         {
             auto fg = internal::open_all(ctx, path);
