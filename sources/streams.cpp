@@ -10,9 +10,6 @@
 #include <cryptopp/hmac.h>
 #include <cryptopp/sha.h>
 #include <cryptopp/secblock.h>
-#include <cryptopp/aes.h>
-#include <cryptopp/gcm.h>
-#include <cryptopp/osrng.h>
 
 namespace securefs
 {
@@ -305,14 +302,10 @@ namespace internal
     class AESGCMCryptStream final : public CryptStream, public HeaderBase
     {
     public:
-        typedef CryptoPP::GCM<CryptoPP::AES> AES_GCM;
-
         static const size_t IV_SIZE = 32, MAC_SIZE = 16, HEADER_SIZE = 32;
         static const size_t ENCRYPTED_HEADER_SIZE = HEADER_SIZE + IV_SIZE + MAC_SIZE;
 
     private:
-        AES_GCM::Encryption m_encryptor;
-        AES_GCM::Decryption m_decryptor;
         HMACStream m_metastream;
         std::shared_ptr<const SecureParam> m_param;
         bool m_check;
@@ -333,12 +326,6 @@ namespace internal
             , m_param(param)
             , m_check(check)
         {
-            byte null_iv[IV_SIZE];
-            memset(null_iv, 0, sizeof(null_iv));
-            m_encryptor.SetKeyWithIV(
-                m_param->key.data(), m_param->key.size(), null_iv, sizeof(null_iv));
-            m_decryptor.SetKeyWithIV(
-                m_param->key.data(), m_param->key.size(), null_iv, sizeof(null_iv));
         }
 
     protected:
@@ -358,15 +345,17 @@ namespace internal
             {
                 generate_random(iv, IV_SIZE);
             } while (is_all_zeros(iv, IV_SIZE));    // Null IVs are markers for sparse blocks
-            m_encryptor.EncryptAndAuthenticate(static_cast<byte*>(output),
-                                               mac,
-                                               MAC_SIZE,
-                                               iv,
-                                               IV_SIZE,
-                                               m_param->id.data(),
-                                               m_param->id.size(),
-                                               static_cast<const byte*>(input),
-                                               length);
+            aes_gcm_encrypt(input,
+                            length,
+                            m_param->id.data(),
+                            m_param->id.size(),
+                            m_param->key.data(),
+                            m_param->key.size(),
+                            iv,
+                            IV_SIZE,
+                            mac,
+                            MAC_SIZE,
+                            output);
             auto pos = meta_position_for_iv(block_number);
             m_metastream.write(buffer, pos, sizeof(buffer));
         }
@@ -392,15 +381,17 @@ namespace internal
                 memset(output, 0, length);
                 return;
             }
-            bool success = m_decryptor.DecryptAndVerify(static_cast<byte*>(output),
-                                                        mac,
-                                                        MAC_SIZE,
-                                                        iv,
-                                                        IV_SIZE,
-                                                        m_param->id.data(),
-                                                        m_param->id.size(),
-                                                        static_cast<const byte*>(input),
-                                                        length);
+            bool success = aes_gcm_decrypt(input,
+                                           length,
+                                           m_param->id.data(),
+                                           m_param->id.size(),
+                                           m_param->key.data(),
+                                           m_param->key.size(),
+                                           iv,
+                                           IV_SIZE,
+                                           mac,
+                                           MAC_SIZE,
+                                           output);
             if (m_check && !success)
                 throw MessageVerificationException(m_param->id, block_number * m_block_size);
         }
@@ -433,31 +424,43 @@ namespace internal
                 return 0;
             if (rc != sizeof(buffer))
                 throw CorruptedMetaDataException(m_param->id, "Not enough header field");
-            m_decryptor.DecryptAndVerify(static_cast<byte*>(output),
-                                         buffer + IV_SIZE,
-                                         MAC_SIZE,
-                                         buffer,
-                                         IV_SIZE,
-                                         m_param->id.data(),
-                                         m_param->id.size(),
-                                         buffer + IV_SIZE + MAC_SIZE,
-                                         HEADER_SIZE);
+
+            byte* iv = buffer;
+            byte* mac = iv + IV_SIZE;
+            byte* ciphertext = mac + MAC_SIZE;
+            aes_gcm_decrypt(ciphertext,
+                            HEADER_SIZE,
+                            m_param->id.data(),
+                            m_param->id.size(),
+                            m_param->key.data(),
+                            m_param->key.size(),
+                            iv,
+                            IV_SIZE,
+                            mac,
+                            MAC_SIZE,
+                            output);
             return sizeof(buffer);
         }
 
         void unchecked_write_header(const void* input)
         {
             byte buffer[ENCRYPTED_HEADER_SIZE];
-            generate_random(buffer, IV_SIZE);
-            m_encryptor.EncryptAndAuthenticate(buffer + IV_SIZE + MAC_SIZE,
-                                               buffer + IV_SIZE,
-                                               MAC_SIZE,
-                                               buffer,
-                                               IV_SIZE,
-                                               m_param->id.data(),
-                                               m_param->id.size(),
-                                               static_cast<const byte*>(input),
-                                               HEADER_SIZE);
+            byte* iv = buffer;
+            byte* mac = iv + IV_SIZE;
+            byte* ciphertext = mac + MAC_SIZE;
+            generate_random(iv, IV_SIZE);
+
+            aes_gcm_encrypt(input,
+                            HEADER_SIZE,
+                            m_param->id.data(),
+                            m_param->id.size(),
+                            m_param->key.data(),
+                            m_param->key.size(),
+                            iv,
+                            IV_SIZE,
+                            mac,
+                            MAC_SIZE,
+                            ciphertext);
             m_metastream.write(buffer, 0, sizeof(buffer));
         }
 

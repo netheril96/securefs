@@ -5,8 +5,6 @@
 #include <utility>
 #include <algorithm>
 
-#include <cryptopp/aes.h>
-#include <cryptopp/gcm.h>
 #include <cryptopp/secblock.h>
 
 #include <sys/types.h>
@@ -142,34 +140,36 @@ ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
     byte* ciphertext = mac + XATTR_MAC_LENGTH;
     auto length = static_cast<size_t>(rc - XATTR_IV_LENGTH - XATTR_MAC_LENGTH);
 
-    CryptoPP::GCM<CryptoPP::AES>::Decryption dec;
-    dec.SetKeyWithIV(get_key().data(), KEY_LENGTH, iv, XATTR_IV_LENGTH);
     bool success = false;
 
     if (length <= size)
     {
-        success = dec.DecryptAndVerify(reinterpret_cast<byte*>(value),
-                                       mac,
-                                       XATTR_MAC_LENGTH,
-                                       iv,
-                                       XATTR_IV_LENGTH,
-                                       header.get(),
-                                       name_len + ID_LENGTH,
-                                       ciphertext,
-                                       length);
+        success = aes_gcm_decrypt(ciphertext,
+                                  length,
+                                  header.get(),
+                                  name_len + ID_LENGTH,
+                                  get_key().data(),
+                                  get_key().size(),
+                                  iv,
+                                  XATTR_IV_LENGTH,
+                                  mac,
+                                  XATTR_MAC_LENGTH,
+                                  value);
     }
     else
     {
         CryptoPP::AlignedSecByteBlock buffer(length);
-        success = dec.DecryptAndVerify(buffer.data(),
-                                       mac,
-                                       XATTR_MAC_LENGTH,
-                                       iv,
-                                       XATTR_IV_LENGTH,
-                                       header.get(),
-                                       name_len + ID_LENGTH,
-                                       ciphertext,
-                                       length);
+        success = aes_gcm_decrypt(ciphertext,
+                                  length,
+                                  header.get(),
+                                  name_len + ID_LENGTH,
+                                  get_key().data(),
+                                  get_key().size(),
+                                  iv,
+                                  XATTR_IV_LENGTH,
+                                  mac,
+                                  XATTR_MAC_LENGTH,
+                                  buffer.data());
         memcpy(value, buffer.data(), size);
     }
 
@@ -199,17 +199,18 @@ void FileBase::setxattr(const char* name, const char* value, size_t size, int fl
     memcpy(header.get(), get_id().data(), ID_LENGTH);
     memcpy(header.get() + ID_LENGTH, name, name_len);
 
-    CryptoPP::GCM<CryptoPP::AES>::Encryption enc;
-    enc.SetKeyWithIV(get_key().data(), KEY_LENGTH, iv, XATTR_IV_LENGTH);
-    enc.EncryptAndAuthenticate(ciphertext,
-                               mac,
-                               XATTR_MAC_LENGTH,
-                               iv,
-                               XATTR_IV_LENGTH,
-                               header.get(),
-                               name_len + ID_LENGTH,
-                               reinterpret_cast<const byte*>(value),
-                               size);
+    aes_gcm_encrypt(value,
+                    size,
+                    header.get(),
+                    name_len + ID_LENGTH,
+                    get_key().data(),
+                    get_key().size(),
+                    iv,
+                    XATTR_IV_LENGTH,
+                    mac,
+                    XATTR_MAC_LENGTH,
+                    ciphertext);
+
 #ifdef __APPLE__
     auto rc = ::fsetxattr(
         file_descriptor(), name, buffer.get(), size + XATTR_IV_LENGTH + XATTR_MAC_LENGTH, 0, flags);
