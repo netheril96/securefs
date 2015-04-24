@@ -110,4 +110,42 @@ inline std::vector<std::string> split(const std::string& str, char separator)
 }
 
 void generate_random(void* data, size_t size);
+
+void aes_gcm_encrypt(const void* plaintext,
+                     size_t text_len,
+                     const void* header,
+                     size_t header_len,
+                     const void* key,
+                     size_t key_len,
+                     const void* iv,
+                     size_t iv_len,
+                     void* mac,
+                     size_t mac_len,
+                     void* ciphertext);
+
+bool aes_gcm_decrypt(const void* ciphertext,
+                     size_t text_len,
+                     const void* header,
+                     size_t header_len,
+                     const void* key,
+                     size_t key_len,
+                     const void* iv,
+                     size_t iv_len,
+                     const void* mac,
+                     size_t mac_len,
+                     void* plaintext);
+
+void hmac_sha256_calculate(const void* message,
+                           size_t msg_len,
+                           const void* key,
+                           size_t key_len,
+                           void* mac,
+                           size_t mac_len);
+
+bool hmac_sha256_verify(const void* message,
+                        size_t msg_len,
+                        const void* key,
+                        size_t key_len,
+                        const void* mac,
+                        size_t mac_len);
 }
