@@ -1,3 +1,4 @@
+#ifdef UNIT_TEST
 #include "catch.hpp"
 #include "utils.h"
 
@@ -22,3 +23,14 @@ TEST_CASE("Test split")
     REQUIRE((securefs::split("", 'a')).empty());
     REQUIRE((securefs::split("//////", '/')).empty());
 }
+
+TEST_CASE("Test conversion of hex")
+{
+    securefs::id_type id;
+    securefs::generate_random(id.data(), id.size());
+    auto hex = securefs::hexify(id);
+    securefs::id_type id_copy;
+    securefs::parse_hex(hex, id_copy.data(), id_copy.size());
+    REQUIRE(memcmp(id.data(), id_copy.data(), id.size()) == 0);
+}
+#endif

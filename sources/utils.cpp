@@ -10,12 +10,132 @@
 
 #include <vector>
 #include <algorithm>
+#include <unordered_map>
 #include <string.h>
 
 #include <termios.h>
 
 namespace securefs
 {
+
+void parse_hex(const std::string& hex, byte* output, size_t len)
+{
+    if (hex.size() % 2 != 0)
+        throw InvalidArgumentException("Hex string must have an even length");
+    if (hex.size() / 2 != len)
+        throw InvalidArgumentException("Mismatch hex and raw length");
+
+    for (size_t i = 0; i < hex.size(); i += 2, ++output)
+    {
+        switch (hex[i])
+        {
+        case '0':
+            *output = 0x0;
+            break;
+        case '1':
+            *output = 0x10;
+            break;
+        case '2':
+            *output = 0x20;
+            break;
+        case '3':
+            *output = 0x30;
+            break;
+        case '4':
+            *output = 0x40;
+            break;
+        case '5':
+            *output = 0x50;
+            break;
+        case '6':
+            *output = 0x60;
+            break;
+        case '7':
+            *output = 0x70;
+            break;
+        case '8':
+            *output = 0x80;
+            break;
+        case '9':
+            *output = 0x90;
+            break;
+        case 'a':
+            *output = 0xa0;
+            break;
+        case 'b':
+            *output = 0xb0;
+            break;
+        case 'c':
+            *output = 0xc0;
+            break;
+        case 'd':
+            *output = 0xd0;
+            break;
+        case 'e':
+            *output = 0xe0;
+            break;
+        case 'f':
+            *output = 0xf0;
+            break;
+        default:
+            throw InvalidArgumentException("Invalid character in hexadecimal string");
+        }
+        switch (hex[i + 1])
+        {
+        case '0':
+            *output += 0x0;
+            break;
+        case '1':
+            *output += 0x1;
+            break;
+        case '2':
+            *output += 0x2;
+            break;
+        case '3':
+            *output += 0x3;
+            break;
+        case '4':
+            *output += 0x4;
+            break;
+        case '5':
+            *output += 0x5;
+            break;
+        case '6':
+            *output += 0x6;
+            break;
+        case '7':
+            *output += 0x7;
+            break;
+        case '8':
+            *output += 0x8;
+            break;
+        case '9':
+            *output += 0x9;
+            break;
+        case 'a':
+            *output += 0xa;
+            break;
+        case 'b':
+            *output += 0xb;
+            break;
+        case 'c':
+            *output += 0xc;
+            break;
+        case 'd':
+            *output += 0xd;
+            break;
+        case 'e':
+            *output += 0xe;
+            break;
+        case 'f':
+            *output += 0xf;
+            break;
+        default:
+            throw InvalidArgumentException("Invalid character in hexadecimal string");
+        }
+    }
+}
+
 void generate_random(void* data, size_t size)
 {
     thread_local CryptoPP::AutoSeededRandomPool pool;

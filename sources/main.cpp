@@ -1,5 +1,8 @@
+#ifdef UNIT_TEST
 #define CATCH_CONFIG_RUNNER 1
 #include "catch.hpp"
+#endif
+
 #include "utils.h"
 #include "exceptions.h"
 #include "streams.h"
@@ -70,6 +73,53 @@ nlohmann::json generate_config(const securefs::key_type& master_key,
     return config;
 }
 
+bool parse_config(const nlohmann::json& config,
+                  const void* password,
+                  size_t pass_len,
+                  securefs::key_type& master_key)
+{
+    using namespace securefs;
+    unsigned version = config["version"];
+    if (version != 1)
+        throw InvalidArgumentException(fmt::format("Unsupported version {}", version));
+    unsigned iterations = config["iterations"];
+
+    byte iv[CONFIG_IV_LENGTH];
+    byte mac[CONFIG_MAC_LENGTH];
+    key_type salt, encrypted_key, key_to_encrypt_master_key;
+
+    std::string salt_hex = config["salt"];
+    std::string iv_hex = config["encrypted_key"]["iv"];
+    std::string mac_hex = config["encrypted_key"]["mac"];
+    std::string ekey_hex = config["encrypted_key"]["ciphertext"];
+
+    parse_hex(salt_hex, salt.data(), salt.size());
+    parse_hex(iv_hex, iv, sizeof(iv));
+    parse_hex(mac_hex, mac, sizeof(mac));
+    parse_hex(ekey_hex, encrypted_key.data(), encrypted_key.size());
+
+    pbkdf_hmac_sha256(password,
+                      pass_len,
+                      salt.data(),
+                      salt.size(),
+                      iterations,
+                      0,
+                      key_to_encrypt_master_key.data(),
+                      key_to_encrypt_master_key.size());
+
+    return aes_gcm_decrypt(encrypted_key.data(),
+                           encrypted_key.size(),
+                           nullptr,
+                           0,
+                           key_to_encrypt_master_key.data(),
+                           key_to_encrypt_master_key.size(),
+                           iv,
+                           sizeof(iv),
+                           mac,
+                           sizeof(mac),
+                           master_key.data());
+}
+
 size_t try_read_password(void* password, size_t length)
 {
     std::unique_ptr<byte[]> second_password(new byte[length]);
@@ -108,7 +158,7 @@ void create_filesys(const std::string& folder)
     generate_random(master_key.data(), master_key.size());
     generate_random(salt.data(), salt.size());
 
-    byte password[1024];
+    byte password[MAX_PASS_LEN];
     auto pass_len = try_read_password(password, sizeof(password));
     auto config = generate_config(master_key, salt, password, pass_len).dump();
 
@@ -181,6 +231,10 @@ void init_fuse_operations(const char* underlying_path, struct fuse_operations& o
 
 int main(int argc, char** argv)
 {
+#ifdef UNIT_TEST
+    Catch::Session s;
+    return s.run(argc, argv);
+#else
     try
     {
         if (argc == 3 && strcmp(argv[1], "create") == 0)
@@ -200,4 +254,5 @@ int main(int argc, char** argv)
         fmt::print(stderr, "Error: {}\n", e.what());
         return 1;
     }
+#endif
 }

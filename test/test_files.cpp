@@ -1,3 +1,4 @@
+#ifdef UNIT_TEST
 #include "catch.hpp"
 #include "files.h"
 #include "file_table.h"
@@ -57,3 +58,4 @@ TEST_CASE("File table")
         ::close(tmp_fd);
     }
 }
+#endif

@@ -47,6 +47,8 @@ inline std::string hexify(const byte* data, size_t length)
     return result;
 }
 
+void parse_hex(const std::string& hex, byte* output, size_t len);
+
 template <class ByteContainer>
 inline std::string hexify(const ByteContainer& c)
 {

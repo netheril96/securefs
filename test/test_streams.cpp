@@ -1,3 +1,4 @@
+#ifdef UNIT_TEST
 #include "catch.hpp"
 
 #include "streams.h"
@@ -147,3 +148,4 @@ TEST_CASE("Test streams")
         test(*aes_gcm_stream.first, 3000);
     }
 }
+#endif
