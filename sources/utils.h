@@ -7,6 +7,9 @@
 #include <type_traits>
 #include <vector>
 
+#include <unistd.h>
+#include <fcntl.h>
+
 #define DISABLE_COPY_MOVE(cls)                                                                     \
     cls(const cls&) = delete;                                                                      \
     cls(cls&&) = delete;                                                                           \
@@ -115,6 +118,26 @@ inline std::vector<std::string> split(const std::string& str, char separator)
 {
     return split(str.cbegin(), str.cend(), separator);
 }
+
+class FileDescriptorGuard
+{
+private:
+    int m_fd;
+
+public:
+    explicit FileDescriptorGuard(int fd) : m_fd(fd) {}
+    FileDescriptorGuard(FileDescriptorGuard&& other) noexcept : m_fd(other.m_fd)
+    {
+        other.m_fd = -1;
+    }
+    FileDescriptorGuard& operator=(FileDescriptorGuard&& other) noexcept
+    {
+        std::swap(m_fd, other.m_fd);
+        return *this;
+    }
+    ~FileDescriptorGuard() { ::close(m_fd); }
+    int get() const noexcept { return m_fd; }
+};
 
 void generate_random(void* data, size_t size);
 

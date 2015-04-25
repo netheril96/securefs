@@ -142,7 +142,10 @@ size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size
         NULL_EXCEPT();
 
     if (prompt)
-        fputs(prompt, fp);
+    {
+        fputs(prompt, stderr);
+        fflush(stderr);
+    }
 
     size_t actual_read = 0;
     auto output = static_cast<unsigned char*>(password);
@@ -176,6 +179,9 @@ size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t
     int rc = ::tcgetattr(fd, &old_termios);
     if (rc < 0)
         throw OSException(errno);
+    if (!(old_termios.c_lflag & ECHO))
+        throw InvalidArgumentException("Unechoed terminal");
+
     memcpy(&new_termios, &old_termios, sizeof(old_termios));
     new_termios.c_lflag &= ~ECHO;
     rc = ::tcsetattr(fd, TCSAFLUSH, &new_termios);

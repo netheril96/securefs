@@ -10,6 +10,8 @@
 #include <format.h>
 
 #include <typeinfo>
+#include <memory>
+#include <algorithm>
 #include <string.h>
 
 #include <fcntl.h>
@@ -27,6 +29,113 @@ static const unsigned MIN_ITERATIONS = 20000;
 static const unsigned MIN_DERIVE_SECONDS = 1;
 static const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
 static const size_t MAX_PASS_LEN = 1024;
+
+nlohmann::json generate_config(const securefs::key_type& master_key,
+                               const securefs::key_type& salt,
+                               const void* password,
+                               size_t pass_len)
+{
+    nlohmann::json config;
+    config["version"] = 1;
+    securefs::key_type key_to_encrypt, encrypted_master_key;
+    config["iterations"] = securefs::pbkdf_hmac_sha256(password,
+                                                       pass_len,
+                                                       salt.data(),
+                                                       salt.size(),
+                                                       MIN_ITERATIONS,
+                                                       MIN_DERIVE_SECONDS,
+                                                       key_to_encrypt.data(),
+                                                       key_to_encrypt.size());
+    config["salt"] = securefs::hexify(salt);
+
+    byte iv[CONFIG_IV_LENGTH];
+    byte mac[CONFIG_MAC_LENGTH];
+    securefs::generate_random(iv, sizeof(iv));
+
+    securefs::aes_gcm_encrypt(master_key.data(),
+                              master_key.size(),
+                              nullptr,
+                              0,
+                              key_to_encrypt.data(),
+                              key_to_encrypt.size(),
+                              iv,
+                              sizeof(iv),
+                              mac,
+                              sizeof(mac),
+                              encrypted_master_key.data());
+
+    config["encrypted_key"] = {{"IV", securefs::hexify(iv, sizeof(iv))},
+                               {"MAC", securefs::hexify(mac, sizeof(mac))},
+                               {"key", securefs::hexify(encrypted_master_key)}};
+    return config;
+}
+
+size_t try_read_password(void* password, size_t length)
+{
+    std::unique_ptr<byte[]> second_password(new byte[length]);
+    static const char* first_prompt = "Password: ";
+    static const char* second_prompt = "Retype password: ";
+    size_t len1, len2;
+    try
+    {
+        len1 = securefs::secure_read_password(stdin, first_prompt, password, length);
+        len2 = securefs::secure_read_password(stdin, second_prompt, second_password.get(), length);
+    }
+    catch (const std::exception& e)
+    {
+        fmt::print(stderr, "Warning: failed to disable echoing of passwords ({})\n", e.what());
+        len1 = securefs::insecure_read_password(stdin, first_prompt, password, length);
+        len2
+            = securefs::insecure_read_password(stdin, second_prompt, second_password.get(), length);
+    }
+    if (len1 != len2 || memcmp(password, second_password.get(), len1) != 0)
+    {
+        fmt::print(stderr, "Error: mismatched passwords\n");
+        exit(1);
+    }
+    return len1;
+}
+
+void create_filesys(const std::string& folder)
+{
+    using namespace securefs;
+    int folder_fd = ::open(folder.c_str(), O_RDONLY);
+    if (folder_fd < 0)
+        throw OSException(errno);
+    FileDescriptorGuard guard_folder_fd(folder_fd);
+
+    key_type master_key, salt;
+    generate_random(master_key.data(), master_key.size());
+    generate_random(salt.data(), salt.size());
+
+    byte password[1024];
+    auto pass_len = try_read_password(password, sizeof(password));
+    auto config = generate_config(master_key, salt, password, pass_len).dump();
+
+    byte hmac[32];
+    hmac_sha256_calculate(
+        config.data(), config.size(), master_key.data(), master_key.size(), hmac, sizeof(hmac));
+
+    auto config_fd = ::openat(folder_fd, CONFIG_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
+    if (config_fd < 0)
+        throw OSException(errno);
+    POSIXFileStream config_stream(config_fd);
+    config_stream.write(config.data(), 0, config.size());
+
+    auto hmac_fd = ::openat(folder_fd, CONFIG_HMAC_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
+    if (hmac_fd < 0)
+        throw OSException(errno);
+    POSIXFileStream config_hmac_stream(hmac_fd);
+    config_hmac_stream.write(hmac, 0, sizeof(hmac));
+
+    operations::FileSystem fs(folder_fd, master_key, 0);
+    auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
+    root->set_uid(getuid());
+    root->set_gid(getgid());
+    root->set_mode(S_IFDIR | 0755);
+    root->set_nlink(1);
+    root->flush();
+}
 
 void init_fuse_operations(const char* underlying_path, struct fuse_operations& opt)
 {
@@ -72,31 +181,23 @@ void init_fuse_operations(const char* underlying_path, struct fuse_operations& o
 
 int main(int argc, char** argv)
 {
-    int dir_fd = ::open("/Users/rsy/secret", O_RDONLY);
-    securefs::key_type master_key{};
-    securefs::operations::FileSystem* fs;
     try
     {
-        fs = new securefs::operations::FileSystem(dir_fd, master_key, 0);
+        if (argc == 3 && strcmp(argv[1], "create") == 0)
+        {
+            create_filesys(argv[2]);
+            fmt::print(stderr, "Success in creating a new secure filesystem at {}\n", argv[2]);
+            return 0;
+        }
+        else
+        {
+            fmt::print(stderr, "Unrecognized command line arguments\n");
+            return 2;
+        }
     }
     catch (const std::exception& e)
     {
-        fprintf(stderr, "Error initializing filesystem\n%s: %s\n", typeid(e).name(), e.what());
-        return -1;
+        fmt::print(stderr, "Error: {}\n", e.what());
+        return 1;
     }
-    try
-    {
-        auto root = fs->table.create_as(fs->root_id, securefs::FileBase::DIRECTORY);
-        root->set_uid(getuid());
-        root->set_gid(getgid());
-        root->set_mode(S_IFDIR | 0755);
-        root->set_nlink(1);
-    }
-    catch (...)
-    {
-        // ignore
-    }
-    struct fuse_operations opt;
-    init_fuse_operations("/Users/rsy/secret", opt);
-    return fuse_main(argc, argv, &opt, fs);
 }
