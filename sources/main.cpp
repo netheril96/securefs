@@ -7,9 +7,7 @@
 
 #include <fuse.h>
 #include <json.hpp>
-
-#include <cryptopp/pwdbased.h>
-#include <cryptopp/sha.h>
+#include <format.h>
 
 #include <typeinfo>
 #include <string.h>
@@ -28,39 +26,7 @@ static const char* CONFIG_HMAC_FILE_NAME = ".securefs.hmac-sha256";
 static const unsigned MIN_ITERATIONS = 20000;
 static const unsigned MIN_DERIVE_SECONDS = 1;
 static const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
-
-void create_configuration(const void* password, size_t pass_length, const std::string& folder)
-{
-    using namespace securefs;
-    key_type master_key, salt, key_to_encrypt_master_key;
-    generate_random(master_key.data(), master_key.size());
-    generate_random(salt.data(), salt.size());
-
-    CryptoPP::PKCS5_PBKDF2_HMAC<CryptoPP::SHA256> pbkdf;
-    auto actual_iterations = pbkdf.DeriveKey(key_to_encrypt_master_key.data(),
-                                             key_to_encrypt_master_key.size(),
-                                             0,
-                                             static_cast<const byte*>(password),
-                                             pass_length,
-                                             salt.data(),
-                                             salt.size(),
-                                             MIN_ITERATIONS,
-                                             MIN_DERIVE_SECONDS);
-    byte IV[CONFIG_IV_LENGTH];
-    byte MAC[CONFIG_MAC_LENGTH];
-    generate_random(IV, sizeof(IV));
-
-    nlohmann::json config;
-    config["version"] = 1;
-    config["salt"] = hexify(salt.data(), salt.size());
-    config["iterations"] = actual_iterations;
-    config["encrypted_key"] = {{"IV", hexify(IV, sizeof(IV))},
-                               {"MAC", hexify(MAC, sizeof(MAC))},
-                               {"ciphertext", hexify(master_key.data(), master_key.size())}};
-    auto config_str = config.dump();
-
-    int fd = ::open((folder + '/' + CONFIG_FILE_NAME).c_str(), O_WRONLY | O_CREAT | O_EXCL, 0600);
-}
+static const size_t MAX_PASS_LEN = 1024;
 
 void init_fuse_operations(const char* underlying_path, struct fuse_operations& opt)
 {

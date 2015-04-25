@@ -6,6 +6,7 @@
 #include <cryptopp/gcm.h>
 #include <cryptopp/hmac.h>
 #include <cryptopp/sha.h>
+#include <cryptopp/pwdbased.h>
 
 #include <vector>
 #include <algorithm>
@@ -112,6 +113,27 @@ bool hmac_sha256_verify(const void* message,
     CryptoPP::HMAC<CryptoPP::SHA256> hmac(static_cast<const byte*>(key), key_len);
     hmac.Update(static_cast<const byte*>(message), msg_len);
     return hmac.TruncatedVerify(static_cast<const byte*>(mac), mac_len);
+}
+
+unsigned int pbkdf_hmac_sha256(const void* password,
+                               size_t pass_len,
+                               const void* salt,
+                               size_t salt_len,
+                               unsigned int min_iterations,
+                               double min_seconds,
+                               void* derived,
+                               size_t derive_len)
+{
+    CryptoPP::PKCS5_PBKDF2_HMAC<CryptoPP::SHA256> kdf;
+    return kdf.DeriveKey(static_cast<byte*>(derived),
+                         derive_len,
+                         0,
+                         static_cast<const byte*>(password),
+                         pass_len,
+                         static_cast<const byte*>(salt),
+                         salt_len,
+                         min_iterations,
+                         min_seconds);
 }
 
 size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length)

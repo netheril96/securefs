@@ -44,6 +44,12 @@ inline std::string hexify(const byte* data, size_t length)
     return result;
 }
 
+template <class ByteContainer>
+inline std::string hexify(const ByteContainer& c)
+{
+    return hexify(c.data(), c.size());
+}
+
 template <class Iterator, class T>
 inline bool is_all_equal(Iterator begin, Iterator end, const T& value)
 {
@@ -149,6 +155,15 @@ bool hmac_sha256_verify(const void* message,
                         size_t key_len,
                         const void* mac,
                         size_t mac_len);
+
+unsigned int pbkdf_hmac_sha256(const void* password,
+                               size_t pass_len,
+                               const void* salt,
+                               size_t salt_len,
+                               unsigned int min_iterations,
+                               double min_seconds,
+                               void* derived,
+                               size_t derive_len);
 
 size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length);
 size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length);
