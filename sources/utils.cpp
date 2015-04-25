@@ -114,7 +114,37 @@ bool hmac_sha256_verify(const void* message,
     return hmac.TruncatedVerify(static_cast<const byte*>(mac), mac_len);
 }
 
-size_t secure_read_password(FILE* fp, void* password, size_t max_length)
+size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length)
+{
+    if (!fp || !password)
+        NULL_EXCEPT();
+
+    if (prompt)
+        fputs(prompt, fp);
+
+    size_t actual_read = 0;
+    auto output = static_cast<unsigned char*>(password);
+
+    while (actual_read < max_length)
+    {
+        int ch = fgetc(fp);
+        if (ch == EOF)
+        {
+            if (feof(fp))
+                break;
+            if (ferror(fp))
+                throw OSException(errno);
+        }
+        if (ch == '\0' || ch == '\n' || ch == '\r')
+            break;
+        *output = static_cast<unsigned char>(ch);
+        ++output;
+        ++actual_read;
+    }
+    return actual_read;
+}
+
+size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length)
 {
     if (!fp || !password)
         NULL_EXCEPT();
@@ -129,6 +159,8 @@ size_t secure_read_password(FILE* fp, void* password, size_t max_length)
     rc = ::tcsetattr(fd, TCSAFLUSH, &new_termios);
     if (rc < 0)
         throw OSException(errno);
-    return rc;
+    auto retval = insecure_read_password(fp, prompt, password, max_length);
+    (void)::tcsetattr(fd, TCSAFLUSH, &old_termios);
+    return retval;
 }
 }

@@ -150,5 +150,6 @@ bool hmac_sha256_verify(const void* message,
                         const void* mac,
                         size_t mac_len);
 
-size_t secure_read_password(FILE* fp, void* password, size_t max_length);
+size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length);
+size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length);
 }
