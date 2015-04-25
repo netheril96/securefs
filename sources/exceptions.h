@@ -25,7 +25,16 @@ public:
     const char* what() const noexcept final override
     {
         if (m_cached_msg.empty())
-            message().swap(m_cached_msg);
+        {
+            try
+            {
+                message().swap(m_cached_msg);
+            }
+            catch (...)
+            {
+                m_cached_msg = "Mysterious error";
+            }
+        }
         return m_cached_msg.c_str();
     }
 };
@@ -119,15 +128,7 @@ public:
 
     int error_number() const noexcept override { return m_errno; }
 
-    std::string message() const override
-    {
-        // strerror() is not thread safe
-        // strerror_r() is different on different platforms
-        // Fall back to the "deprecated" but only sane way to stringify the errno
-        if (m_errno >= 0 && m_errno < sys_nerr)
-            return sys_errlist[m_errno];
-        return fmt::format("Unknown error code {}", m_errno);
-    }
+    std::string message() const override { return sane_strerror(m_errno); }
 };
 
 class VerificationException : public SeriousException

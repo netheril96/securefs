@@ -18,6 +18,86 @@
 namespace securefs
 {
 
+/*
+ Formatting library for C++
+
+ Copyright (c) 2012 - 2015, Victor Zverovich
+ All rights reserved.
+
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are met:
+
+ 1. Redistributions of source code must retain the above copyright notice, this
+ list of conditions and the following disclaimer.
+ 2. Redistributions in binary form must reproduce the above copyright notice,
+ this list of conditions and the following disclaimer in the documentation
+ and/or other materials provided with the distribution.
+
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+// Portable thread-safe version of strerror.
+// Sets buffer to point to a string describing the error code.
+// This can be either a pointer to a string stored in buffer,
+// or a pointer to some static immutable string.
+// Returns one of the following values:
+//   0      - success
+//   ERANGE - buffer is not large enough to store the error message
+//   other  - failure
+// Buffer should be at least of size 1.
+static int safe_strerror(int error_code, char*& buffer, size_t buffer_size) noexcept
+{
+    assert(buffer != 0 && buffer_size != 0);
+    int result = 0;
+#if ((_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600) && !_GNU_SOURCE) || __ANDROID__
+    // XSI-compliant version of strerror_r.
+    result = strerror_r(error_code, buffer, buffer_size);
+    if (result != 0)
+        result = errno;
+#elif _GNU_SOURCE
+    // GNU-specific version of strerror_r.
+    char* message = strerror_r(error_code, buffer, buffer_size);
+    // If the buffer is full then the message is probably truncated.
+    if (message == buffer && strlen(buffer) == buffer_size - 1)
+        result = ERANGE;
+    buffer = message;
+#elif __MINGW32__
+    errno = 0;
+    (void)buffer_size;
+    buffer = strerror(error_code);
+    result = errno;
+#elif _WIN32
+    result = strerror_s(buffer, buffer_size, error_code);
+    // If the buffer is full then the message is probably truncated.
+    if (result == 0 && std::strlen(buffer) == buffer_size - 1)
+        result = ERANGE;
+#else
+    result = strerror_r(error_code, buffer, buffer_size);
+    if (result == -1)
+        result = errno;    // glibc versions before 2.13 return result in errno.
+#endif
+    return result;
+}
+
+std::string sane_strerror(int error_number)
+{
+    char buffer[4096];
+    char* output = buffer;
+    int rc = safe_strerror(error_number, output, sizeof(buffer));
+    if (rc == 0)
+        return std::string(output);
+    return fmt::format("Unknown error with code {}", error_number);
+}
+
 void parse_hex(const std::string& hex, byte* output, size_t len)
 {
     if (hex.size() % 2 != 0)

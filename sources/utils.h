@@ -121,6 +121,8 @@ inline std::vector<std::string> split(const std::string& str, char separator)
     return split(str.cbegin(), str.cend(), separator);
 }
 
+std::string sane_strerror(int error_number);
+
 class FileDescriptorGuard
 {
 private:
