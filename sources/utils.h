@@ -1,6 +1,7 @@
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string>
 #include <array>
 #include <type_traits>
@@ -148,4 +149,6 @@ bool hmac_sha256_verify(const void* message,
                         size_t key_len,
                         const void* mac,
                         size_t mac_len);
+
+size_t secure_read_password(FILE* fp, void* password, size_t max_length);
 }
