@@ -15,10 +15,13 @@
 #include <typeinfo>
 #include <memory>
 #include <algorithm>
+#include <stdexcept>
+#include <typeinfo>
 #include <string.h>
 
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/file.h>
 
 #ifdef __APPLE__
 #include <sys/xattr.h>
@@ -32,6 +35,24 @@ static const unsigned MIN_ITERATIONS = 20000;
 static const unsigned MIN_DERIVE_SECONDS = 1;
 static const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
 static const size_t MAX_PASS_LEN = 1024;
+
+void lock_base_directory(int dir_fd)
+{
+    auto rc = ::flock(dir_fd, LOCK_EX | LOCK_NB);
+    if (rc < 0)
+    {
+        if (errno == EWOULDBLOCK)
+        {
+            throw std::runtime_error(
+                "Error: another process is holding the lock on the underlying directory\n");
+        }
+        else
+        {
+            throw std::runtime_error(
+                fmt::format("Error locking base directory: {}", securefs::sane_strerror(errno)));
+        }
+    }
+}
 
 nlohmann::json generate_config(const securefs::key_type& master_key,
                                const securefs::key_type& salt,
@@ -88,10 +109,11 @@ bool parse_config(const nlohmann::json& config,
     byte mac[CONFIG_MAC_LENGTH];
     key_type salt, encrypted_key, key_to_encrypt_master_key;
 
-    std::string salt_hex = config["salt"];
-    std::string iv_hex = config["encrypted_key"]["iv"];
-    std::string mac_hex = config["encrypted_key"]["mac"];
-    std::string ekey_hex = config["encrypted_key"]["ciphertext"];
+    std::string salt_hex = config.at("salt");
+    auto&& encrypted_key_json_value = config.at("encrypted_key");
+    std::string iv_hex = encrypted_key_json_value.at("iv");
+    std::string mac_hex = encrypted_key_json_value.at("mac");
+    std::string ekey_hex = encrypted_key_json_value.at("ciphertext");
 
     parse_hex(salt_hex, salt.data(), salt.size());
     parse_hex(iv_hex, iv, sizeof(iv));
@@ -120,6 +142,23 @@ bool parse_config(const nlohmann::json& config,
                            master_key.data());
 }
 
+nlohmann::json read_config(int dir_fd)
+{
+    using namespace securefs;
+    int config_fd = ::openat(dir_fd, CONFIG_FILE_NAME, O_RDONLY);
+    if (config_fd < 0)
+        throw std::runtime_error(
+            fmt::format("Error opening {}: {}", CONFIG_FILE_NAME, sane_strerror(errno)));
+
+    POSIXFileStream config_stream(config_fd);
+    std::string config_str(config_stream.size(), 0);
+    if (config_str.empty())
+        throw std::runtime_error("Error parsing config file: file is empty");
+
+    config_stream.read(&config_str[0], 0, config_str.size());
+    return nlohmann::json::parse(config_str);
+}
+
 size_t try_read_password(void* password, size_t length)
 {
     std::unique_ptr<byte[]> second_password(new byte[length]);
@@ -133,15 +172,14 @@ size_t try_read_password(void* password, size_t length)
     }
     catch (const std::exception& e)
     {
-        fmt::print(stderr, "Warning: failed to disable echoing of passwords ({})\n", e.what());
+        fprintf(stderr, "Warning: failed to disable echoing of passwords (%s)\n", e.what());
         len1 = securefs::insecure_read_password(stdin, first_prompt, password, length);
         len2
             = securefs::insecure_read_password(stdin, second_prompt, second_password.get(), length);
     }
     if (len1 != len2 || memcmp(password, second_password.get(), len1) != 0)
     {
-        fmt::print(stderr, "Error: mismatched passwords\n");
-        exit(1);
+        throw std::runtime_error("Error: mismatched passwords");
     }
     return len1;
 }
@@ -151,40 +189,56 @@ void create_filesys(const std::string& folder)
     using namespace securefs;
     int folder_fd = ::open(folder.c_str(), O_RDONLY);
     if (folder_fd < 0)
-        throw OSException(errno);
+        throw std::runtime_error(
+            fmt::format("Error opening directory {}: {}", folder, sane_strerror(errno)));
     FileDescriptorGuard guard_folder_fd(folder_fd);
+    lock_base_directory(folder_fd);
 
-    key_type master_key, salt;
-    generate_random(master_key.data(), master_key.size());
-    generate_random(salt.data(), salt.size());
+    int config_fd = -1, hmac_fd = -1;
+    try
+    {
+        key_type master_key, salt;
+        generate_random(master_key.data(), master_key.size());
+        generate_random(salt.data(), salt.size());
 
-    byte password[MAX_PASS_LEN];
-    auto pass_len = try_read_password(password, sizeof(password));
-    auto config = generate_config(master_key, salt, password, pass_len).dump();
+        byte password[MAX_PASS_LEN];
+        auto pass_len = try_read_password(password, sizeof(password));
+        auto config = generate_config(master_key, salt, password, pass_len).dump();
 
-    byte hmac[32];
-    hmac_sha256_calculate(
-        config.data(), config.size(), master_key.data(), master_key.size(), hmac, sizeof(hmac));
+        byte hmac[CONFIG_MAC_LENGTH];
+        hmac_sha256_calculate(
+            config.data(), config.size(), master_key.data(), master_key.size(), hmac, sizeof(hmac));
 
-    auto config_fd = ::openat(folder_fd, CONFIG_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
-    if (config_fd < 0)
-        throw OSException(errno);
-    POSIXFileStream config_stream(config_fd);
-    config_stream.write(config.data(), 0, config.size());
+        config_fd = ::openat(folder_fd, CONFIG_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
+        if (config_fd < 0)
+            throw std::runtime_error(fmt::format(
+                "Error creating {} for writing: {}", CONFIG_FILE_NAME, sane_strerror(errno)));
+        POSIXFileStream config_stream(config_fd);
+        config_stream.write(config.data(), 0, config.size());
 
-    auto hmac_fd = ::openat(folder_fd, CONFIG_HMAC_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
-    if (hmac_fd < 0)
-        throw OSException(errno);
-    POSIXFileStream config_hmac_stream(hmac_fd);
-    config_hmac_stream.write(hmac, 0, sizeof(hmac));
+        hmac_fd = ::openat(folder_fd, CONFIG_HMAC_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
+        if (hmac_fd < 0)
+            throw std::runtime_error(fmt::format(
+                "Error creating {} for writing: {}", CONFIG_HMAC_FILE_NAME, sane_strerror(errno)));
+        POSIXFileStream config_hmac_stream(hmac_fd);
+        config_hmac_stream.write(hmac, 0, sizeof(hmac));
 
-    operations::FileSystem fs(folder_fd, master_key, 0);
-    auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
-    root->set_uid(getuid());
-    root->set_gid(getgid());
-    root->set_mode(S_IFDIR | 0755);
-    root->set_nlink(1);
-    root->flush();
+        operations::FileSystem fs(folder_fd, master_key, 0);
+        auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
+        root->set_uid(getuid());
+        root->set_gid(getgid());
+        root->set_mode(S_IFDIR | 0755);
+        root->set_nlink(1);
+        root->flush();
+    }
+    catch (...)
+    {
+        if (config_fd >= 0)
+            ::unlinkat(folder_fd, CONFIG_FILE_NAME, 0);
+        if (hmac_fd >= 0)
+            ::unlinkat(folder_fd, CONFIG_HMAC_FILE_NAME, 0);
+        throw;
+    }
 }
 
 void init_fuse_operations(const char* underlying_path, struct fuse_operations& opt)
@@ -246,13 +300,23 @@ int main(int argc, char** argv)
         else
         {
             fmt::print(stderr, "Unrecognized command line arguments\n");
-            return 2;
+            return 4;
         }
+    }
+    catch (const std::runtime_error& e)
+    {
+        fprintf(stderr, "%s\n", e.what());
+        return 1;
+    }
+    catch (const securefs::ExceptionBase& e)
+    {
+        fprintf(stderr, "%s: %s\n", e.type_name(), e.message().c_str());
+        return 2;
     }
     catch (const std::exception& e)
     {
-        fmt::print(stderr, "Error: {}\n", e.what());
-        return 1;
+        fprintf(stderr, "%s: %s\n", typeid(e).name(), e.what());
+        return 3;
     }
 #endif
 }
