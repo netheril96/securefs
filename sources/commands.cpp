@@ -6,6 +6,7 @@
 #include <fuse.h>
 #include <json.hpp>
 #include <format.h>
+#include <tclap/CmdLine.h>
 
 #include <typeinfo>
 #include <memory>
@@ -13,6 +14,7 @@
 #include <stdexcept>
 #include <typeinfo>
 #include <string.h>
+#include <unordered_map>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -23,6 +25,72 @@
 #else
 #include <attr/xattr.h>
 #endif
+
+namespace
+{
+
+enum class CommandAction
+{
+    CREATE,
+    MOUNT
+};
+
+struct command_args
+{
+    CommandAction action;
+    std::string underlying_path, mount_point, log_filename;
+    bool no_check = false, single_threaded = false, foreground = false, debug = false,
+         log_to_stderr = false, no_log = false, stdinpass = false, readonly = false;
+};
+
+typedef int (*command_impl)(const command_args&);
+
+void parse_args(int argc, char** argv, command_args& output)
+{
+    TCLAP::CmdLine cmdline(
+        "securefs: a filesystem in userspace that transparently encrypts and authenticates data",
+        ' ',
+        "0.1");
+    TCLAP::SwitchArg no_check(
+        "", "no_check", "Disable verification of authentication codes", cmdline, false);
+    TCLAP::SwitchArg single_threaded(
+        "s", "single_threaded", "Disable usage of multithreading", cmdline, false);
+    TCLAP::SwitchArg foreground(
+        "f", "foreground", "Request that the program stays in the foreground", cmdline, false);
+    TCLAP::SwitchArg debug(
+        "d", "debug", "Output FUSE debug information; imply foreground", cmdline, false);
+    TCLAP::SwitchArg stdinpass("", "stdinpass", "Read passwords from stdin", cmdline, false);
+    TCLAP::SwitchArg readonly(
+        "r", "readonly", "Mount the filesystem in read-only mode", cmdline, false);
+    TCLAP::ValueArg<std::string> underlying_path("u",
+                                                 "underlying",
+                                                 "The folder where the encrypted files are stored",
+                                                 false,
+                                                 "",
+                                                 "string",
+                                                 cmdline);
+    TCLAP::ValueArg<std::string> mountpoint(
+        "m", "mountpoint", "The mount point", false, "", "string", cmdline);
+
+    TCLAP::SwitchArg create("", "create", "Create a new secure filesystem", false);
+    TCLAP::SwitchArg mount("", "mount", "Mount a given secure filesystem", false);
+    cmdline.xorAdd(create, mount);
+
+    cmdline.parse(argc, argv);
+    output.mount_point.swap(mountpoint.getValue());
+    output.underlying_path.swap(underlying_path.getValue());
+    output.no_check = no_check.getValue();
+    output.single_threaded = single_threaded.getValue();
+    output.foreground = foreground.getValue();
+    output.readonly = readonly.getValue();
+    output.stdinpass = stdinpass.getValue();
+    output.debug = debug.getValue();
+
+    if (create.isSet())
+        output.action = CommandAction::CREATE;
+    else if (mount.isSet())
+        output.action = CommandAction::MOUNT;
+}
 
 static const char* CONFIG_FILE_NAME = ".securefs.json";
 static const char* CONFIG_HMAC_FILE_NAME = ".securefs.hmac-sha256";
@@ -179,13 +247,13 @@ size_t try_read_password(void* password, size_t length)
     return len1;
 }
 
-void create_filesys(const std::string& folder)
+void create_filesys(const command_args& args)
 {
     using namespace securefs;
-    int folder_fd = ::open(folder.c_str(), O_RDONLY);
+    int folder_fd = ::open(args.underlying_path.c_str(), O_RDONLY);
     if (folder_fd < 0)
-        throw std::runtime_error(
-            fmt::format("Error opening directory {}: {}", folder, sane_strerror(errno)));
+        throw std::runtime_error(fmt::format(
+            "Error opening directory {}: {}", args.underlying_path, sane_strerror(errno)));
     FileDescriptorGuard guard_folder_fd(folder_fd);
     lock_base_directory(folder_fd);
 
@@ -197,7 +265,12 @@ void create_filesys(const std::string& folder)
         generate_random(salt.data(), salt.size());
 
         byte password[MAX_PASS_LEN];
-        auto pass_len = try_read_password(password, sizeof(password));
+        size_t pass_len;
+        if (args.stdinpass)
+            pass_len = insecure_read_password(stdin, nullptr, password, sizeof(password));
+        else
+            pass_len = try_read_password(password, sizeof(password));
+
         auto config = generate_config(master_key, salt, password, pass_len).dump();
 
         byte hmac[CONFIG_MAC_LENGTH];
@@ -277,6 +350,7 @@ void init_fuse_operations(const char* underlying_path, struct fuse_operations& o
     opt.setxattr = &securefs::operations::setxattr;
     opt.removexattr = &securefs::operations::removexattr;
 }
+}
 
 namespace securefs
 {
@@ -284,17 +358,25 @@ int commands_main(int argc, char** argv)
 {
     try
     {
-        if (argc == 3 && strcmp(argv[1], "create") == 0)
+        command_args args;
+        parse_args(argc, argv, args);
+        switch (args.action)
         {
-            create_filesys(argv[2]);
-            fmt::print(stderr, "Success in creating a new secure filesystem at {}\n", argv[2]);
-            return 0;
+        case CommandAction::CREATE:
+            create_filesys(args);
+            break;
+
+        default:
+            fprintf(stderr, "Action not implemented\n");
+            return -1;
         }
-        else
-        {
-            fmt::print(stderr, "Unrecognized command line arguments\n");
-            return 4;
-        }
+        return 0;
+    }
+    catch (const TCLAP::ArgException& e)
+    {
+        fprintf(
+            stderr, "Error parsing arguments: %s at %s\n", e.error().c_str(), e.argId().c_str());
+        return 5;
     }
     catch (const std::runtime_error& e)
     {

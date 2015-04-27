@@ -384,6 +384,7 @@ size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t
 
     memcpy(&new_termios, &old_termios, sizeof(old_termios));
     new_termios.c_lflag &= ~ECHO;
+    new_termios.c_lflag |= ECHONL;
     rc = ::tcsetattr(fd, TCSAFLUSH, &new_termios);
     if (rc < 0)
         throw OSException(errno);
