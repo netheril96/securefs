@@ -366,6 +366,11 @@ size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size
         ++output;
         ++actual_read;
     }
+
+    if (actual_read >= max_length)
+        fprintf(stderr,
+                "Warning: password is longer than %llu and therefore truncated\n",
+                static_cast<unsigned long long>(max_length));
     return actual_read;
 }
 

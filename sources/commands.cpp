@@ -7,8 +7,10 @@
 #include <json.hpp>
 #include <format.h>
 #include <tclap/CmdLine.h>
+#include <cryptopp/secblock.h>
 
 #include <typeinfo>
+#include <vector>
 #include <memory>
 #include <algorithm>
 #include <stdexcept>
@@ -28,22 +30,16 @@
 
 namespace
 {
-
-enum class CommandAction
-{
-    CREATE,
-    MOUNT
-};
+struct command_args;
+typedef int (*command_action)(const command_args&);
 
 struct command_args
 {
-    CommandAction action;
+    command_action action;
     std::string underlying_path, mount_point, log_filename;
     bool no_check = false, single_threaded = false, foreground = false, debug = false,
          log_to_stderr = false, no_log = false, stdinpass = false, readonly = false;
 };
-
-typedef int (*command_impl)(const command_args&);
 
 void parse_args(int argc, char** argv, command_args& output)
 {
@@ -62,23 +58,17 @@ void parse_args(int argc, char** argv, command_args& output)
     TCLAP::SwitchArg stdinpass("", "stdinpass", "Read passwords from stdin", cmdline, false);
     TCLAP::SwitchArg readonly(
         "r", "readonly", "Mount the filesystem in read-only mode", cmdline, false);
-    TCLAP::ValueArg<std::string> underlying_path("u",
-                                                 "underlying",
-                                                 "The folder where the encrypted files are stored",
-                                                 false,
-                                                 "",
-                                                 "string",
-                                                 cmdline);
     TCLAP::ValueArg<std::string> mountpoint(
-        "m", "mountpoint", "The mount point", false, "", "string", cmdline);
+        "p", "point", "The mount point", false, "", "path", cmdline);
 
-    TCLAP::SwitchArg create("", "create", "Create a new secure filesystem", false);
-    TCLAP::SwitchArg mount("", "mount", "Mount a given secure filesystem", false);
+    TCLAP::ValueArg<std::string> create(
+        "c", "create", "Create a new secure filesystem", true, "", "path");
+    TCLAP::ValueArg<std::string> mount(
+        "m", "mount", "Mount a given secure filesystem", true, "", "path");
     cmdline.xorAdd(create, mount);
 
     cmdline.parse(argc, argv);
     output.mount_point.swap(mountpoint.getValue());
-    output.underlying_path.swap(underlying_path.getValue());
     output.no_check = no_check.getValue();
     output.single_threaded = single_threaded.getValue();
     output.foreground = foreground.getValue();
@@ -87,9 +77,17 @@ void parse_args(int argc, char** argv, command_args& output)
     output.debug = debug.getValue();
 
     if (create.isSet())
-        output.action = CommandAction::CREATE;
+    {
+        int create_filesys(const command_args&);
+        output.action = &create_filesys;
+        output.underlying_path.swap(create.getValue());
+    }
     else if (mount.isSet())
-        output.action = CommandAction::MOUNT;
+    {
+        int mount_filesys(const command_args&);
+        output.action = &mount_filesys;
+        output.underlying_path.swap(mount.getValue());
+    }
 }
 
 static const char* CONFIG_FILE_NAME = ".securefs.json";
@@ -174,9 +172,9 @@ bool parse_config(const nlohmann::json& config,
 
     std::string salt_hex = config.at("salt");
     auto&& encrypted_key_json_value = config.at("encrypted_key");
-    std::string iv_hex = encrypted_key_json_value.at("iv");
-    std::string mac_hex = encrypted_key_json_value.at("mac");
-    std::string ekey_hex = encrypted_key_json_value.at("ciphertext");
+    std::string iv_hex = encrypted_key_json_value.at("IV");
+    std::string mac_hex = encrypted_key_json_value.at("MAC");
+    std::string ekey_hex = encrypted_key_json_value.at("key");
 
     parse_hex(salt_hex, salt.data(), salt.size());
     parse_hex(iv_hex, iv, sizeof(iv));
@@ -222,39 +220,57 @@ nlohmann::json read_config(int dir_fd)
     return nlohmann::json::parse(config_str);
 }
 
-size_t try_read_password(void* password, size_t length)
+void read_hmac(int dir_fd, void* buffer, size_t size)
 {
-    std::unique_ptr<byte[]> second_password(new byte[length]);
+    using namespace securefs;
+    int hmac_fd = ::openat(dir_fd, CONFIG_HMAC_FILE_NAME, O_RDONLY);
+    if (hmac_fd < 0)
+    {
+        throw std::runtime_error(
+            fmt::format("Error opening {}: {}", CONFIG_HMAC_FILE_NAME, sane_strerror(errno)));
+    }
+
+    POSIXFileStream hmac_stream(hmac_fd);
+    if (hmac_stream.size() != size)
+        throw std::runtime_error(fmt::format("Wrong size of {}: expect {}, get {}",
+                                             CONFIG_HMAC_FILE_NAME,
+                                             size,
+                                             hmac_stream.size()));
+    hmac_stream.read(buffer, 0, size);
+}
+
+size_t try_read_password_with_confirmation(void* password, size_t length)
+{
+    CryptoPP::AlignedSecByteBlock second_password(length);
     static const char* first_prompt = "Password: ";
     static const char* second_prompt = "Retype password: ";
     size_t len1, len2;
     try
     {
         len1 = securefs::secure_read_password(stdin, first_prompt, password, length);
-        len2 = securefs::secure_read_password(stdin, second_prompt, second_password.get(), length);
+        len2 = securefs::secure_read_password(stdin, second_prompt, second_password.data(), length);
     }
     catch (const std::exception& e)
     {
         fprintf(stderr, "Warning: failed to disable echoing of passwords (%s)\n", e.what());
         len1 = securefs::insecure_read_password(stdin, first_prompt, password, length);
-        len2
-            = securefs::insecure_read_password(stdin, second_prompt, second_password.get(), length);
+        len2 = securefs::insecure_read_password(
+            stdin, second_prompt, second_password.data(), length);
     }
-    if (len1 != len2 || memcmp(password, second_password.get(), len1) != 0)
+    if (len1 != len2 || memcmp(password, second_password.data(), len1) != 0)
     {
         throw std::runtime_error("Error: mismatched passwords");
     }
     return len1;
 }
 
-void create_filesys(const command_args& args)
+int create_filesys(const command_args& args)
 {
     using namespace securefs;
     int folder_fd = ::open(args.underlying_path.c_str(), O_RDONLY);
     if (folder_fd < 0)
         throw std::runtime_error(fmt::format(
             "Error opening directory {}: {}", args.underlying_path, sane_strerror(errno)));
-    FileDescriptorGuard guard_folder_fd(folder_fd);
     lock_base_directory(folder_fd);
 
     int config_fd = -1, hmac_fd = -1;
@@ -264,14 +280,14 @@ void create_filesys(const command_args& args)
         generate_random(master_key.data(), master_key.size());
         generate_random(salt.data(), salt.size());
 
-        byte password[MAX_PASS_LEN];
+        CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
         size_t pass_len;
         if (args.stdinpass)
-            pass_len = insecure_read_password(stdin, nullptr, password, sizeof(password));
+            pass_len = insecure_read_password(stdin, nullptr, password.data(), password.size());
         else
-            pass_len = try_read_password(password, sizeof(password));
+            pass_len = try_read_password_with_confirmation(password.data(), password.size());
 
-        auto config = generate_config(master_key, salt, password, pass_len).dump();
+        auto config = generate_config(master_key, salt, password.data(), pass_len).dump();
 
         byte hmac[CONFIG_MAC_LENGTH];
         hmac_sha256_calculate(
@@ -298,6 +314,7 @@ void create_filesys(const command_args& args)
         root->set_mode(S_IFDIR | 0755);
         root->set_nlink(1);
         root->flush();
+        return 0;
     }
     catch (...)
     {
@@ -350,6 +367,85 @@ void init_fuse_operations(const char* underlying_path, struct fuse_operations& o
     opt.setxattr = &securefs::operations::setxattr;
     opt.removexattr = &securefs::operations::removexattr;
 }
+
+size_t try_read_password(void* password, size_t size)
+{
+    static const char* prompt = "Password: ";
+    try
+    {
+        return securefs::secure_read_password(stdin, prompt, password, size);
+    }
+    catch (const std::exception& e)
+    {
+        fprintf(stderr, "Warning: failed to disable echoing of passwords (%s)\n", e.what());
+        return securefs::insecure_read_password(stdin, prompt, password, size);
+    }
+}
+
+int mount_filesys(const command_args& args)
+{
+    using namespace securefs;
+    int folder_fd = ::open(args.underlying_path.c_str(), O_RDONLY);
+    if (folder_fd < 0)
+        throw std::runtime_error(fmt::format(
+            "Error opening directory {}: {}", args.underlying_path, sane_strerror(errno)));
+    lock_base_directory(folder_fd);
+
+    auto config_json = read_config(folder_fd);
+    key_type master_key;
+
+    CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
+    size_t pass_len = 0;
+    if (args.stdinpass)
+        pass_len = insecure_read_password(stdin, nullptr, password.data(), password.size());
+    else
+        pass_len = try_read_password(password.data(), password.size());
+
+    if (!parse_config(config_json, password, pass_len, master_key))
+        throw std::runtime_error("Error: wrong password");
+
+    if (!args.no_check)
+    {
+        byte hmac[CONFIG_MAC_LENGTH];
+        read_hmac(folder_fd, hmac, sizeof(hmac));
+        auto config_string = config_json.dump();
+        if (!hmac_sha256_verify(config_string.data(),
+                                config_string.size(),
+                                master_key.data(),
+                                master_key.size(),
+                                hmac,
+                                sizeof(hmac)))
+            throw std::runtime_error("Error: HMAC mismatch for the configuration file");
+    }
+
+    unsigned flags = 0;
+    if (args.readonly)
+        flags |= FileTable::READ_ONLY;
+    if (args.no_check)
+        flags |= FileTable::NO_AUTHENTICATION;
+
+    std::unique_ptr<securefs::operations::FileSystem> fs(
+        new securefs::operations::FileSystem(folder_fd, master_key, flags));
+    struct fuse_operations opt;
+    init_fuse_operations(args.underlying_path.c_str(), opt);
+
+    std::vector<const char*> fuse_args;
+    fuse_args.push_back("securefs");
+    if (args.foreground)
+        fuse_args.push_back("-f");
+    if (args.single_threaded)
+        fuse_args.push_back("-s");
+    if (args.debug)
+        fuse_args.push_back("-d");
+    if (args.readonly)
+        fuse_args.push_back("-r");
+    fuse_args.push_back(args.mount_point.c_str());
+
+    return fuse_main(static_cast<int>(fuse_args.size()),
+                     const_cast<char**>(fuse_args.data()),
+                     &opt,
+                     fs.release());
+}
 }
 
 namespace securefs
@@ -360,17 +456,12 @@ int commands_main(int argc, char** argv)
     {
         command_args args;
         parse_args(argc, argv, args);
-        switch (args.action)
+        if (!args.action)
         {
-        case CommandAction::CREATE:
-            create_filesys(args);
-            break;
-
-        default:
             fprintf(stderr, "Action not implemented\n");
             return -1;
         }
-        return 0;
+        return args.action(args);
     }
     catch (const TCLAP::ArgException& e)
     {

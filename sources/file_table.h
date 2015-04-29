@@ -44,7 +44,7 @@ private:
     void finalize(FileBase*);
 
 public:
-    uint32_t READ_ONLY = 0x1, NO_AUTHENTICATION = 0x2;
+    static const uint32_t READ_ONLY = 0x1, NO_AUTHENTICATION = 0x2;
 
 public:
     explicit FileTable(int dir_fd, const key_type& master_key, uint32_t flags)
