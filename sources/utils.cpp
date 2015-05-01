@@ -12,8 +12,10 @@
 #include <algorithm>
 #include <unordered_map>
 #include <string.h>
+#include <time.h>
 
 #include <termios.h>
+#include <sys/time.h>
 
 namespace securefs
 {
@@ -396,5 +398,21 @@ size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t
     auto retval = insecure_read_password(fp, prompt, password, max_length);
     (void)::tcsetattr(fd, TCSAFLUSH, &old_termios);
     return retval;
+}
+
+std::string format_current_time()
+{
+    struct timeval now;
+    (void)gettimeofday(&now, nullptr);
+    struct tm tm;
+    gmtime_r(&now.tv_sec, &tm);
+    return fmt::format("{}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}.{:06d}Z",
+                       tm.tm_year + 1900,
+                       tm.tm_mon + 1,
+                       tm.tm_mday,
+                       tm.tm_hour,
+                       tm.tm_min,
+                       tm.tm_sec,
+                       now.tv_usec);
 }
 }
