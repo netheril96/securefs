@@ -130,8 +130,19 @@ TEST_CASE("Test streams")
         test(*hmac_stream, 5000);
     }
     {
+        posix_stream->resize(0);
         securefs::dummy::DummpyCryptStream ds(posix_stream, 8000);
         test(ds, 5000);
+    }
+    {
+        posix_stream->resize(0);
+        byte password[20];
+        securefs::generate_random(password, sizeof(password));
+        auto salsa20stream
+            = securefs::make_stream_salsa20(posix_stream, password, sizeof(password));
+        test(*salsa20stream, 2000);
+        salsa20stream = securefs::make_stream_salsa20(posix_stream, password, sizeof(password));
+        test(*salsa20stream, 2000);
     }
     {
         char temp_template[] = "/tmp/42127B9D-4F88-4489-956C-05BE32340B77.XXXXXX";
