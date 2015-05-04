@@ -44,11 +44,12 @@ static void test(securefs::StreamBase& stream, unsigned times)
 
         case 1:
         {
-            std::fill(buffer.begin(), buffer.end(), 0xFF);
             posix_buffer = buffer;
-            stream.read(buffer.data(), a, std::min<size_t>(b, buffer.size()));
-            posix_stream.read(posix_buffer.data(), a, std::min<size_t>(b, posix_buffer.size()));
-            auto equal = (buffer == posix_buffer);
+            auto read_sz = stream.read(buffer.data(), a, std::min<size_t>(b, buffer.size()));
+            auto posix_read_sz = posix_stream.read(
+                posix_buffer.data(), a, std::min<size_t>(b, posix_buffer.size()));
+            auto equal = (read_sz == posix_read_sz)
+                && (memcmp(buffer.data(), posix_buffer.data(), read_sz) == 0);
             REQUIRE(equal);
             break;
         }
@@ -110,10 +111,11 @@ namespace dummy
 }
 }
 
-void dump_contents(const std::vector<byte>& bytes, const char* filename)
+// Used for debugging
+void dump_contents(const std::vector<byte>& bytes, const char* filename, size_t max_size)
 {
     securefs::POSIXFileStream fs(::open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0600));
-    fs.write(bytes.data(), 0, bytes.size());
+    fs.write(bytes.data(), 0, max_size);
 }
 
 TEST_CASE("Test streams")

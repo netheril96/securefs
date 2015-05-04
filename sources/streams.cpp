@@ -556,8 +556,30 @@ namespace internal
 
     private:
         std::shared_ptr<StreamBase> m_stream;
-        CryptoPP::Salsa20::Encryption m_enc;
-        CryptoPP::Salsa20::Decryption m_dec;
+        CryptoPP::Salsa20::Encryption m_cipher;
+
+    private:
+        void unchecked_write(const void* data, offset_type off, length_type len)
+        {
+            std::unique_ptr<byte[]> buffer(new byte[len]);
+            m_cipher.Seek(off);
+            m_cipher.ProcessString(buffer.get(), static_cast<const byte*>(data), len);
+            m_stream->write(buffer.get(), off + HEADER_LEN, len);
+        }
+
+        void zero_fill(length_type pos)
+        {
+            auto sz = size();
+            if (pos > sz)
+            {
+                auto gap_len = pos - sz;
+                std::unique_ptr<byte[]> buffer(new byte[gap_len]);
+                memset(buffer.get(), 0, gap_len);
+                m_cipher.Seek(sz);
+                m_cipher.ProcessString(buffer.get(), gap_len);
+                m_stream->write(buffer.get(), sz + HEADER_LEN, gap_len);
+            }
+        }
 
     public:
         static const size_t HEADER_LEN = Header::HEADER_LEN;
@@ -601,9 +623,7 @@ namespace internal
                               0,
                               m_key.data(),
                               m_key.size());
-
-            m_enc.SetKeyWithIV(m_key.data(), m_key.size(), m_header.IV, sizeof(m_header.IV));
-            m_dec.SetKeyWithIV(m_key.data(), m_key.size(), m_header.IV, sizeof(m_header.IV));
+            m_cipher.SetKeyWithIV(m_key.data(), m_key.size(), m_header.IV, sizeof(m_header.IV));
         }
 
         length_type read(void* buffer, offset_type off, length_type len) override
@@ -611,8 +631,8 @@ namespace internal
             auto real_len = m_stream->read(buffer, off + HEADER_LEN, len);
             if (real_len == 0)
                 return 0;
-            m_dec.Seek(off);
-            m_dec.ProcessString(static_cast<byte*>(buffer), real_len);
+            m_cipher.Seek(off);
+            m_cipher.ProcessString(static_cast<byte*>(buffer), real_len);
             return real_len;
         }
 
@@ -620,10 +640,8 @@ namespace internal
         {
             if (len == 0)
                 return;
-            std::unique_ptr<byte[]> buffer(new byte[len]);
-            m_enc.Seek(off);
-            m_enc.ProcessString(buffer.get(), static_cast<const byte*>(data), len);
-            m_stream->write(buffer.get(), off + HEADER_LEN, len);
+            zero_fill(off);
+            unchecked_write(data, off, len);
         }
 
         length_type size() const override
@@ -632,7 +650,11 @@ namespace internal
             return sz <= HEADER_LEN ? 0 : sz - HEADER_LEN;
         }
         void flush() override { return m_stream->flush(); }
-        void resize(length_type len) { return m_stream->resize(len + HEADER_LEN); }
+        void resize(length_type len)
+        {
+            zero_fill(len);
+            return m_stream->resize(len + HEADER_LEN);
+        }
     };
 
     const char* Salsa20Stream::MAGIC = "securefs:salsa20";

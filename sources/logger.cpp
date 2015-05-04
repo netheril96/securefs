@@ -20,7 +20,7 @@ void Logger::log(LoggingLevel level,
     try
     {
         auto full_msg = fmt::format("[{}] [{}] [{}] [{}:{} {}]      {}\n",
-                                    stringify(get_level()),
+                                    stringify(level),
                                     format_current_time(),
                                     std::this_thread::get_id(),
                                     file,

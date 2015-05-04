@@ -29,6 +29,8 @@ cryptopp:
 securefs: $(OBJECTS)
 	$(CXX) $(CXXFLAGS) $(OBJECTS) $(LDFLAGS) -o securefs
 
+securefs_test: CPPFLAGS += -DUNIT_TEST
+
 securefs_test: $(OBJECTS) $(TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(TEST_OBJECTS) $(OBJECTS) $(LDFLAGS) -o securefs_test
 
