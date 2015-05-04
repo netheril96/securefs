@@ -10,6 +10,7 @@
 #include <cryptopp/hmac.h>
 #include <cryptopp/sha.h>
 #include <cryptopp/secblock.h>
+#include <cryptopp/salsa.h>
 
 namespace securefs
 {
@@ -507,5 +508,134 @@ make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
     auto stream = std::make_shared<internal::AESGCMCryptStream>(
         std::move(data_stream), std::move(meta_stream), std::move(param), check);
     return {stream, stream};
+}
+
+namespace internal
+{
+    class Salsa20Stream : public StreamBase
+    {
+    private:
+        std::shared_ptr<StreamBase> m_stream;
+        CryptoPP::Salsa20::Encryption m_enc;
+        CryptoPP::Salsa20::Decryption m_dec;
+
+    public:
+        static const char* MAGIC;
+        static const size_t MAGIC_LEN = 16;
+
+    private:
+        class Header
+        {
+        public:
+            uint32_t iterations;
+            byte IV[8];
+            byte salt[36];
+
+            static const size_t HEADER_LEN = Salsa20Stream::MAGIC_LEN + sizeof(iterations)
+                + sizeof(IV) + sizeof(salt);
+
+            void to_bytes(byte buffer[HEADER_LEN])
+            {
+                memcpy(buffer, MAGIC, Salsa20Stream::MAGIC_LEN);
+                buffer += Salsa20Stream::MAGIC_LEN;
+                to_little_endian(iterations, buffer);
+                buffer += sizeof(iterations);
+                memcpy(buffer, IV, sizeof(IV));
+                buffer += sizeof(IV);
+                memcpy(buffer, salt, sizeof(salt));
+            }
+
+            bool from_bytes(const byte buffer[HEADER_LEN])
+            {
+                if (memcmp(buffer, Salsa20Stream::MAGIC, Salsa20Stream::MAGIC_LEN))
+                    return false;
+                buffer += Salsa20Stream::MAGIC_LEN;
+                iterations = from_little_endian<uint>(buffer);
+                buffer += sizeof(iterations);
+                memcpy(IV, buffer, sizeof(IV));
+                buffer += sizeof(IV);
+                memcpy(salt, buffer, sizeof(salt));
+                return true;
+            }
+        };
+
+    public:
+        static const size_t HEADER_LEN = Header::HEADER_LEN;
+
+    public:
+        explicit Salsa20Stream(std::shared_ptr<StreamBase> stream,
+                               const void* password,
+                               size_t pass_len)
+            : m_stream(std::move(stream))
+        {
+            if (!m_stream)
+                NULL_EXCEPT();
+
+            if (strlen(MAGIC) != MAGIC_LEN)
+                UNREACHABLE();
+
+            byte buffer[HEADER_LEN];
+            Header header;
+            if (m_stream->read(buffer, 0, sizeof(buffer)) == sizeof(buffer))
+            {
+                if (!header.from_bytes(buffer))
+                    throw std::runtime_error("Incorrect file type");
+            }
+            else
+            {
+                generate_random(header.IV, sizeof(header.IV));
+                generate_random(header.salt, sizeof(header.salt));
+                header.iterations = 20000;
+                header.to_bytes(buffer);
+                m_stream->resize(0);
+                m_stream->write(buffer, 0, sizeof(buffer));
+            }
+
+            key_type key;
+            pbkdf_hmac_sha256(password,
+                              pass_len,
+                              header.salt,
+                              sizeof(header.salt),
+                              header.iterations,
+                              0,
+                              key.data(),
+                              key.size());
+
+            m_enc.SetKeyWithIV(key.data(), key.size(), header.IV, sizeof(header.IV));
+            m_dec.SetKeyWithIV(key.data(), key.size(), header.IV, sizeof(header.IV));
+        }
+
+        length_type read(void* buffer, offset_type off, length_type len) override
+        {
+            auto real_len = m_stream->read(buffer, off, len);
+            if (real_len == 0)
+                return 0;
+            m_dec.Seek(off);
+            m_dec.ProcessString(static_cast<byte*>(buffer), real_len);
+            return real_len;
+        }
+
+        void write(const void* data, offset_type off, length_type len) override
+        {
+            if (len == 0)
+                return;
+            std::unique_ptr<byte[]> buffer(new byte[len]);
+            m_enc.Seek(off);
+            m_enc.ProcessString(buffer.get(), static_cast<const byte*>(data), len);
+            m_stream->write(buffer.get(), off, len);
+        }
+
+        length_type size() const override { return m_stream->size(); }
+        void flush() override { return m_stream->flush(); }
+        void resize(length_type len) { return m_stream->resize(len); }
+    };
+
+    const char* Salsa20Stream::MAGIC = "securefs:salsa20";
+}
+
+std::shared_ptr<StreamBase>
+make_stream_salsa20(std::shared_ptr<StreamBase> stream, const void* password, size_t pass_len)
+{
+    return std::make_shared<internal::Salsa20Stream>(std::move(stream), password, pass_len);
 }
 }

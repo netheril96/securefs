@@ -37,8 +37,7 @@ inline const char* stringify(LoggingLevel lvl)
 class Logger
 {
 protected:
-    // Logging shall not throw exceptions, for we have nowhere to log logging errors
-    virtual void append(const void* data, size_t length) noexcept = 0;
+    virtual void append(const void* data, size_t length) = 0;
 
 private:
     LoggingLevel m_level;

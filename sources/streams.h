@@ -138,6 +138,9 @@ std::shared_ptr<StreamBase> make_stream_hmac(std::shared_ptr<const SecureParam> 
                                              std::shared_ptr<StreamBase> stream,
                                              bool check);
 
+std::shared_ptr<StreamBase>
+make_stream_salsa20(std::shared_ptr<StreamBase> stream, const void* password, size_t pass_len);
+
 /**
  * Base classes for streams that encrypt and decrypt data transparently
  * The transformation is done in blocks,
