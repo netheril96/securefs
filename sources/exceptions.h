@@ -11,6 +11,14 @@
 
 namespace securefs
 {
+enum class ExceptionLevel
+{
+    DEBUG = 0,
+    WARN = 1,
+    ERROR = 2,
+    FATAL = 3
+};
+
 class ExceptionBase : public std::exception
 {
 private:
@@ -22,6 +30,7 @@ public:
     virtual const char* type_name() const noexcept = 0;
     virtual std::string message() const = 0;
     virtual int error_number() const noexcept { return EPERM; }
+    virtual ExceptionLevel level() const noexcept = 0;
     const char* what() const noexcept final override
     {
         if (m_cached_msg.empty())
@@ -41,14 +50,17 @@ public:
 
 class CommonException : public ExceptionBase
 {
+    ExceptionLevel level() const noexcept override { return ExceptionLevel::WARN; }
 };
 
 class SeriousException : public ExceptionBase
 {
+    ExceptionLevel level() const noexcept override { return ExceptionLevel::ERROR; }
 };
 
 class FatalException : public ExceptionBase
 {
+    ExceptionLevel level() const noexcept override { return ExceptionLevel::FATAL; }
 };
 
 class NotImplementedException : public SeriousException

@@ -21,13 +21,6 @@ namespace
 
 const size_t FIRST_LEVEL = 1, SECOND_LEVEL = 5;
 
-void ensure_directory(int base_fd, const char* dir_name, mode_t mode)
-{
-    int rc = ::mkdirat(base_fd, dir_name, mode);
-    if (rc < 0 && errno != EEXIST)
-        throw securefs::OSException(errno);
-}
-
 void calculate_paths(const securefs::id_type& id,
                      std::string& first_level_dir,
                      std::string& second_level_dir,

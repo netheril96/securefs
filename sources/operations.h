@@ -1,5 +1,6 @@
 #pragma once
 #include "file_table.h"
+#include "logger.h"
 
 #define FUSE_USE_VERSION 27
 #include <fuse.h>
@@ -16,6 +17,7 @@ namespace operations
     {
         FileTable table;
         id_type root_id;
+        std::shared_ptr<Logger> logger;
 
         explicit FileSystem(int dir_fd, const key_type& master_key, uint32_t flags)
             : table(dir_fd, master_key, flags)

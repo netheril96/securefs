@@ -62,10 +62,14 @@ void parse_args(int argc, char** argv, command_args& output)
         "p", "point", "The mount point", false, "", "path", cmdline);
 
     TCLAP::ValueArg<std::string> create(
-        "c", "create", "Create a new secure filesystem", true, "", "path");
+        "c", "create", "Create a new secure filesystem", true, "", "dirname");
     TCLAP::ValueArg<std::string> mount(
-        "m", "mount", "Mount a given secure filesystem", true, "", "path");
-    cmdline.xorAdd(create, mount);
+        "m", "mount", "Mount a given secure filesystem", true, "", "dirname");
+    TCLAP::ValueArg<std::string> viewlog(
+        "", "viewlog", "View the encrypted log file", true, "", "filename");
+
+    std::vector<TCLAP::Arg*> xor_args{&create, &mount, &viewlog};
+    cmdline.xorAdd(xor_args);
 
     cmdline.parse(argc, argv);
     output.mount_point.swap(mountpoint.getValue());
@@ -88,6 +92,12 @@ void parse_args(int argc, char** argv, command_args& output)
         output.action = &mount_filesys;
         output.underlying_path.swap(mount.getValue());
     }
+    else if (viewlog.isSet())
+    {
+        int viewlog_filesys(const command_args&);
+        output.action = &viewlog_filesys;
+        output.log_filename.swap(viewlog.getValue());
+    }
 }
 
 static const char* CONFIG_FILE_NAME = ".securefs.json";
@@ -95,7 +105,7 @@ static const char* CONFIG_HMAC_FILE_NAME = ".securefs.hmac-sha256";
 static const unsigned MIN_ITERATIONS = 20000;
 static const unsigned MIN_DERIVE_SECONDS = 1;
 static const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
-static const size_t MAX_PASS_LEN = 1024;
+static const size_t MAX_PASS_LEN = 4000;
 
 void lock_base_directory(int dir_fd)
 {
@@ -382,6 +392,50 @@ size_t try_read_password(void* password, size_t size)
     }
 }
 
+std::shared_ptr<securefs::Logger>
+init_logger(const command_args& args, const void* password, size_t pass_len)
+{
+    if (args.no_log)
+        return {};
+
+    if (args.log_to_stderr)
+        return std::make_shared<securefs::FileLogger>(securefs::LoggingLevel::WARN, stderr);
+
+    auto create_salsa20_logger = [password, pass_len](const std::string& filename)
+    {
+        int fd = ::open(filename.c_str(), O_WRONLY | O_CREAT, 0644);
+        if (fd < 0)
+            throw std::runtime_error(fmt::format(
+                "Error creating log file {}: {}", filename, securefs::sane_strerror(errno)));
+        auto ps_stream = std::make_shared<securefs::POSIXFileStream>(fd);
+        return std::make_shared<securefs::StreamLogger>(
+            securefs::LoggingLevel::WARN,
+            securefs::make_stream_salsa20(std::move(ps_stream), password, pass_len));
+    };
+
+    if (!args.log_filename.empty())
+        return create_salsa20_logger(args.log_filename);
+
+    const char* home_dir = getenv("HOME");
+    if (!home_dir)
+        throw std::runtime_error("Error locating HOME directory");
+
+    int home_fd = ::open(home_dir, O_RDONLY);
+    if (home_fd < 0)
+        throw std::runtime_error(
+            fmt::format("Error opening {}: {}", home_dir, securefs::sane_strerror(errno)));
+    securefs::FileDescriptorGuard guard(home_fd);
+
+    securefs::ensure_directory(home_fd, ".local", 0700);
+    securefs::ensure_directory(home_fd, ".local/securefs", 0700);
+    securefs::ensure_directory(home_fd, ".local/securefs/logs", 0700);
+
+    return create_salsa20_logger(fmt::format("{}/.local/securefs/logs/{}-pid{}.log",
+                                             home_dir,
+                                             securefs::format_current_time(),
+                                             getpid()));
+}
+
 int mount_filesys(const command_args& args)
 {
     using namespace securefs;
@@ -426,6 +480,8 @@ int mount_filesys(const command_args& args)
 
     std::unique_ptr<securefs::operations::FileSystem> fs(
         new securefs::operations::FileSystem(folder_fd, master_key, flags));
+    fs->logger = init_logger(args, password, pass_len);
+
     struct fuse_operations opt;
     init_fuse_operations(args.underlying_path.c_str(), opt);
 
@@ -445,6 +501,36 @@ int mount_filesys(const command_args& args)
                      const_cast<char**>(fuse_args.data()),
                      &opt,
                      fs.release());
+}
+
+int viewlog_filesys(const command_args& args)
+{
+    using namespace securefs;
+    CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
+    size_t pass_len = 0;
+    if (args.stdinpass)
+        pass_len = insecure_read_password(stdin, nullptr, password.data(), password.size());
+    else
+        pass_len = try_read_password(password.data(), password.size());
+
+    int fd = ::open(args.log_filename.c_str(), O_RDONLY);
+    if (fd < 0)
+        throw std::runtime_error(
+            fmt::format("Error opening log file {}: {}", args.log_filename, sane_strerror(errno)));
+
+    auto stream = make_stream_salsa20(std::make_shared<POSIXFileStream>(fd), password, pass_len);
+    byte buffer[4096];
+    length_type off = 0;
+    while (true)
+    {
+        auto len = stream->read(buffer, off, sizeof(buffer));
+        if (len == 0)
+            break;
+        fwrite(buffer, 1, len, stdout);
+        off += len;
+    }
+    fflush(stdout);
+    return 0;
 }
 }
 

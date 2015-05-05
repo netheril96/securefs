@@ -121,7 +121,14 @@ inline std::vector<std::string> split(const std::string& str, char separator)
     return split(str.cbegin(), str.cend(), separator);
 }
 
+inline std::vector<std::string> split(const char* str, char separator)
+{
+    return split(str, str + strlen(str), separator);
+}
+
 std::string sane_strerror(int error_number);
+
+void ensure_directory(int base_fd, const char* dir_name, mode_t mode);
 
 class FileDescriptorGuard
 {

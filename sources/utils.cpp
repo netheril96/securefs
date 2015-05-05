@@ -16,6 +16,9 @@
 
 #include <termios.h>
 #include <sys/time.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 
 namespace securefs
 {
@@ -414,5 +417,12 @@ std::string format_current_time()
                        tm.tm_min,
                        tm.tm_sec,
                        now.tv_usec);
+}
+
+void ensure_directory(int base_fd, const char* dir_name, mode_t mode)
+{
+    int rc = ::mkdirat(base_fd, dir_name, mode);
+    if (rc < 0 && errno != EEXIST)
+        throw securefs::OSException(errno);
 }
 }

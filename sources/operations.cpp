@@ -5,6 +5,7 @@
 #include <utility>
 #include <string>
 #include <string.h>
+#include <typeinfo>
 
 #include <utime.h>
 #include <fcntl.h>
@@ -21,6 +22,13 @@ namespace securefs
 {
 namespace internal
 {
+    inline operations::FileSystem* get_fs(struct fuse_context* ctx)
+    {
+        return static_cast<operations::FileSystem*>(ctx->private_data);
+    }
+
+    inline Logger* get_logger(struct fuse_context* ctx) { return get_fs(ctx)->logger.get(); }
+
     class FileGuard
     {
     private:
@@ -121,7 +129,7 @@ namespace internal
     {
         assert(ctx);
         auto components = split(path, '/');
-        auto fs = static_cast<operations::FileSystem*>(ctx->private_data);
+        auto fs = get_fs(ctx);
         FileGuard result(&fs->table, table_open_as(fs->table, fs->root_id, FileBase::DIRECTORY));
         if (components.empty())
         {
@@ -146,7 +154,7 @@ namespace internal
 
     FileGuard open_all(struct fuse_context* ctx, const std::string& path)
     {
-        auto fs = static_cast<operations::FileSystem*>(ctx->private_data);
+        auto fs = get_fs(ctx);
         std::string last_component;
         auto fg = open_base_dir(ctx, path, last_component);
         if (last_component.empty())
@@ -162,7 +170,7 @@ namespace internal
 
     FileGuard create(struct fuse_context* ctx, const std::string& path, int type)
     {
-        auto fs = static_cast<operations::FileSystem*>(ctx->private_data);
+        auto fs = get_fs(ctx);
         std::string last_component;
         auto dir = open_base_dir(ctx, path, last_component);
         id_type id;
@@ -190,7 +198,7 @@ namespace internal
     {
         try
         {
-            auto fs = static_cast<operations::FileSystem*>(ctx->private_data);
+            auto fs = get_fs(ctx);
             FileGuard to_be_removed(&fs->table, table_open_as(fs->table, id, type));
             std::lock_guard<FileBase> guard(*to_be_removed);
             to_be_removed->unlink();
@@ -224,15 +232,34 @@ namespace internal
         return static_cast<operations::FileSystem*>(ctx->private_data)->table.is_readonly();
     }
 
-    int log_error(struct fuse_context*, const ExceptionBase& e)
+    int log_error(struct fuse_context* ctx,
+                  const ExceptionBase& e,
+                  const char* func,
+                  const char* file,
+                  int line)
     {
-        fprintf(stderr, "%s: %s\n", e.type_name(), e.message().c_str());
+        auto logger = get_logger(ctx);
+        if (logger && e.level() >= logger->get_level())
+            logger->log(
+                e.level(), fmt::format("{}: {}", e.type_name(), e.message()), func, file, line);
         return -e.error_number();
     }
 
-    int log_general_error(struct fuse_context*, const std::exception& e)
+    int log_general_error(struct fuse_context* ctx,
+                          const std::exception& e,
+                          const char* func,
+                          const char* file,
+                          int line)
     {
-        fprintf(stderr, "An unexpected exception occured: %s\n", e.what());
+        auto logger = get_logger(ctx);
+        if (logger && LoggingLevel::ERROR >= logger->get_level())
+            logger->log(LoggingLevel::ERROR,
+                        fmt::format("An unexcepted exception of type {} occurrs: {}",
+                                    typeid(e).name(),
+                                    e.what()),
+                        func,
+                        file,
+                        line);
         return -EPERM;
     }
 }
@@ -242,8 +269,14 @@ namespace operations
 
 #define COMMON_CATCH_BLOCK                                                                         \
     catch (const OSException& e) { return -e.error_number(); }                                     \
-    catch (const ExceptionBase& e) { return internal::log_error(ctx, e); }                         \
-    catch (const std::exception& e) { return internal::log_general_error(ctx, e); }
+    catch (const ExceptionBase& e)                                                                 \
+    {                                                                                              \
+        return internal::log_error(ctx, e, __PRETTY_FUNCTION__, __FILE__, __LINE__);               \
+    }                                                                                              \
+    catch (const std::exception& e)                                                                \
+    {                                                                                              \
+        return internal::log_general_error(ctx, e, __PRETTY_FUNCTION__, __FILE__, __LINE__);       \
+    }
 
     int getattr(const char* path, struct stat* st)
     {
