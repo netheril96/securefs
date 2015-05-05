@@ -52,14 +52,21 @@ void parse_args(int argc, char** argv, command_args& output)
     TCLAP::SwitchArg single_threaded(
         "s", "single_threaded", "Disable usage of multithreading", cmdline, false);
     TCLAP::SwitchArg foreground(
-        "f", "foreground", "Request that the program stays in the foreground", cmdline, false);
+        "f",
+        "foreground",
+        "Request that the program stays in the foreground; also outputs logs to stderr",
+        cmdline,
+        false);
     TCLAP::SwitchArg debug(
         "d", "debug", "Output FUSE debug information; imply foreground", cmdline, false);
     TCLAP::SwitchArg stdinpass("", "stdinpass", "Read passwords from stdin", cmdline, false);
     TCLAP::SwitchArg readonly(
         "r", "readonly", "Mount the filesystem in read-only mode", cmdline, false);
     TCLAP::ValueArg<std::string> mountpoint(
-        "p", "point", "The mount point", false, "", "path", cmdline);
+        "p", "point", "The mount point", false, "", "dirname", cmdline);
+    TCLAP::SwitchArg no_log("", "no_log", "Disable logging", cmdline, false);
+    TCLAP::ValueArg<std::string> log_filename(
+        "l", "log", "Log file name", false, "", "filename", cmdline);
 
     TCLAP::ValueArg<std::string> create(
         "c", "create", "Create a new secure filesystem", true, "", "dirname");
@@ -75,10 +82,13 @@ void parse_args(int argc, char** argv, command_args& output)
     output.mount_point.swap(mountpoint.getValue());
     output.no_check = no_check.getValue();
     output.single_threaded = single_threaded.getValue();
-    output.foreground = foreground.getValue();
+    output.foreground = foreground.getValue() | debug.getValue();
     output.readonly = readonly.getValue();
     output.stdinpass = stdinpass.getValue();
     output.debug = debug.getValue();
+    output.no_log = no_log.getValue();
+    output.log_filename.swap(log_filename.getValue());
+    output.log_to_stderr = output.foreground;
 
     if (create.isSet())
     {
@@ -403,7 +413,7 @@ init_logger(const command_args& args, const void* password, size_t pass_len)
 
     auto create_salsa20_logger = [password, pass_len](const std::string& filename)
     {
-        int fd = ::open(filename.c_str(), O_WRONLY | O_CREAT, 0644);
+        int fd = ::open(filename.c_str(), O_RDWR | O_CREAT, 0644);
         if (fd < 0)
             throw std::runtime_error(fmt::format(
                 "Error creating log file {}: {}", filename, securefs::sane_strerror(errno)));

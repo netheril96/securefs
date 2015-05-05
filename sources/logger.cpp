@@ -15,11 +15,9 @@ void Logger::log(LoggingLevel level,
                  const char* file,
                  int line) noexcept
 {
-    struct timeval now;
-    (void)gettimeofday(&now, nullptr);
     try
     {
-        auto full_msg = fmt::format("[{}] [{}] [{}] [{}:{} {}]      {}\n",
+        auto full_msg = fmt::format("[{}] [{}] [thread={}] [{}:{}] [{}]      {}\n",
                                     stringify(level),
                                     format_current_time(),
                                     std::this_thread::get_id(),
@@ -27,6 +25,7 @@ void Logger::log(LoggingLevel level,
                                     line,
                                     func,
                                     msg);
+        std::lock_guard<std::mutex> guard(m_lock);
         append(full_msg.data(), full_msg.size());
     }
     catch (...)

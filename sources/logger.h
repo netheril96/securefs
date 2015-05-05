@@ -35,7 +35,8 @@ protected:
 
 private:
     LoggingLevel m_level;
-
+    std::mutex m_lock;
+    
 public:
     explicit Logger(LoggingLevel level) : m_level(level) {}
 
@@ -55,7 +56,6 @@ class FileLogger : public Logger
 {
 private:
     FILE* m_fp;
-    std::mutex m_lock;
 
 public:
     explicit FileLogger(LoggingLevel lvl, FILE* fp) : Logger(lvl), m_fp(fp)
@@ -67,8 +67,8 @@ public:
 protected:
     void append(const void* data, size_t length) noexcept override
     {
-        std::lock_guard<std::mutex> guard(m_lock);
         fwrite(data, 1, length, m_fp);
+        fflush(m_fp);
     }
 };
 
@@ -76,7 +76,6 @@ class StreamLogger : public Logger
 {
 private:
     std::shared_ptr<StreamBase> m_stream;
-    std::mutex m_lock;
 
 public:
     explicit StreamLogger(LoggingLevel lvl, std::shared_ptr<StreamBase> stream)
@@ -87,7 +86,6 @@ public:
 protected:
     void append(const void* data, size_t length) override
     {
-        std::lock_guard<std::mutex> guard(m_lock);
         m_stream->write(data, m_stream->size(), length);
         m_stream->flush();
     }
