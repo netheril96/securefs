@@ -35,6 +35,21 @@ void calculate_paths(const securefs::id_type& id,
                            id.size() - FIRST_LEVEL - SECOND_LEVEL);
     meta_filename = full_filename + ".meta";
 }
+
+/**
+ * Use HMAC-SHA256 to derive a per-id key from the master key.
+ * Because HMAC is pseudorandom, and master key is secret,
+ * the generated key should have enough entropy not to be predicted.
+ */
+void derive(const securefs::key_type& master_key,
+            const securefs::id_type& id,
+            securefs::key_type& generated_key)
+{
+    CryptoPP::HMAC<CryptoPP::SHA256> hmac_calculator(master_key.data(), master_key.size());
+    static_assert(hmac_calculator.DIGESTSIZE == securefs::KEY_LENGTH, "Unmatched digest size");
+    hmac_calculator.Update(id.data(), id.size());
+    hmac_calculator.Final(generated_key.data());
+}
 }
 
 namespace securefs
@@ -82,7 +97,7 @@ FileBase* FileTable::open_as(const id_type& id, int type)
 
     auto param = std::make_shared<SecureParam>();
     memcpy(param->id.data(), id.data(), id.size());
-    memcpy(param->key.data(), m_master_key.data(), param->key.size());
+    derive(m_master_key, id, param->key);
 
     std::string first_level_dir, second_level_dir, filename, metaname;
     calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
@@ -124,7 +139,7 @@ FileBase* FileTable::create_as(const id_type& id, int type)
             throw OSException(errno);
         auto param = std::make_shared<SecureParam>();
         memcpy(param->id.data(), id.data(), id.size());
-        memcpy(param->key.data(), m_master_key.data(), param->key.size());
+        derive(m_master_key, id, param->key);
         auto fb = make_file_from_type(type, data_fd, meta_fd, param, is_auth_enabled());
         m_opened.emplace(id, fb);
         fb->setref(1);

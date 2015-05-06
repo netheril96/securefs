@@ -152,15 +152,6 @@ public:
 
 void generate_random(void* data, size_t size);
 
-// AES-CTR is self inverting, that is, encryption and decryption are the same process.
-void aes_ctr(const void* input,
-             size_t text_len,
-             const void* key,
-             size_t key_len,
-             const void* iv,
-             size_t iv_len,
-             void* output);
-
 void aes_gcm_encrypt(const void* plaintext,
                      size_t text_len,
                      const void* header,

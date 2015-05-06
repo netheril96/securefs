@@ -7,7 +7,6 @@
 #include <cryptopp/hmac.h>
 #include <cryptopp/sha.h>
 #include <cryptopp/pwdbased.h>
-#include <cryptopp/modes.h>
 
 #include <vector>
 #include <algorithm>
@@ -233,20 +232,6 @@ void generate_random(void* data, size_t size)
         total = 0;
         pool.Reseed();
     }
-}
-
-void aes_ctr(const void* input,
-             size_t text_len,
-             const void* key,
-             size_t key_len,
-             const void* iv,
-             size_t iv_len,
-             void* output)
-{
-    thread_local CryptoPP::CTR_Mode<CryptoPP::AES>::Encryption encryptor;
-    encryptor.SetKeyWithIV(
-        static_cast<const byte*>(key), key_len, static_cast<const byte*>(iv), iv_len);
-    encryptor.ProcessData(static_cast<byte*>(output), static_cast<const byte*>(input), text_len);
 }
 
 void aes_gcm_encrypt(const void* plaintext,
