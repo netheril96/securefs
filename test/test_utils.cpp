@@ -33,4 +33,15 @@ TEST_CASE("Test conversion of hex")
     securefs::parse_hex(hex, id_copy.data(), id_copy.size());
     REQUIRE(memcmp(id.data(), id_copy.data(), id.size()) == 0);
 }
+
+TEST_CASE("Test AES-CTR")
+{
+    securefs::key_type key{};
+    const char data[] = "hello, world\n";
+    char ciphertext[sizeof(data)];
+    byte IV[16] = {};
+    securefs::aes_ctr(data, sizeof(data), key.data(), key.size(), IV, sizeof(IV), ciphertext);
+    securefs::aes_ctr(ciphertext, sizeof(ciphertext), key.data(), key.size(), IV, sizeof(IV), ciphertext);
+    REQUIRE(memcmp(data, ciphertext, sizeof(data)) == 0);
+}
 #endif

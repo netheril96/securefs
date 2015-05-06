@@ -30,7 +30,10 @@ namespace internal
         }
 
         const char* type_name() const noexcept override { return "InvalidHMACStreamException"; }
-        std::string message() const override { return m_msg; }
+        std::string message() const override
+        {
+            return fmt::format("{} (ID={})", m_msg, hexify(m_id));
+        }
     };
 
     class HMACStream final : public StreamBase
@@ -303,18 +306,20 @@ namespace internal
     class AESGCMCryptStream final : public CryptStream, public HeaderBase
     {
     public:
-        static const size_t IV_SIZE = 32, MAC_SIZE = 16, HEADER_SIZE = 32;
-        static const size_t ENCRYPTED_HEADER_SIZE = HEADER_SIZE + IV_SIZE + MAC_SIZE;
+        static const size_t IV_SIZE = 32, MAC_SIZE = 16, HEADER_SIZE = 32, SESSION_KEY_IV_SIZE = 16,
+                            HEADER_IV_SIZE = 16;
+        static const size_t ENCRYPTED_HEADER_SIZE = HEADER_SIZE + HEADER_IV_SIZE;
 
     private:
         HMACStream m_metastream;
-        std::shared_ptr<const SecureParam> m_param;
+        std::shared_ptr<SecureParam> m_param;
         bool m_check;
 
     private:
         length_type meta_position_for_iv(offset_type block_num) const noexcept
         {
-            return ENCRYPTED_HEADER_SIZE + (IV_SIZE + MAC_SIZE) * (block_num);
+            return SESSION_KEY_IV_SIZE + KEY_LENGTH + ENCRYPTED_HEADER_SIZE
+                + (IV_SIZE + MAC_SIZE) * (block_num);
         }
 
     public:
@@ -324,9 +329,37 @@ namespace internal
                                    bool check)
             : CryptStream(data_stream, BLOCK_SIZE)
             , m_metastream(param, meta_stream, check)
-            , m_param(param)
             , m_check(check)
         {
+            byte buffer[SESSION_KEY_IV_SIZE + KEY_LENGTH];
+            m_param = std::make_shared<SecureParam>();
+            memcpy(m_param->id.data(), param->id.data(), param->id.size());
+
+            if (m_metastream.read(buffer, 0, sizeof(buffer)) == sizeof(buffer))
+            {
+                aes_ctr(buffer + SESSION_KEY_IV_SIZE,
+                        KEY_LENGTH,
+                        param->key.data(),
+                        param->key.size(),
+                        buffer,
+                        SESSION_KEY_IV_SIZE,
+                        m_param->key.data());
+            }
+            else
+            {
+                m_metastream.resize(0);
+                generate_random(m_param->key.data(), m_param->key.size());
+                generate_random(buffer, SESSION_KEY_IV_SIZE);
+                aes_ctr(m_param->key.data(),
+                        m_param->key.size(),
+                        param->key.data(),
+                        param->key.size(),
+                        buffer,
+                        SESSION_KEY_IV_SIZE,
+                        buffer + SESSION_KEY_IV_SIZE);
+                m_metastream.write(buffer, 0, sizeof(buffer));
+                m_metastream.flush();
+            }
         }
 
     protected:
@@ -407,7 +440,7 @@ namespace internal
         {
             CryptStream::resize(new_size);
             auto num_blocks = (new_size + m_block_size - 1) / m_block_size;
-            m_metastream.resize(ENCRYPTED_HEADER_SIZE + num_blocks * (IV_SIZE + MAC_SIZE));
+            m_metastream.resize(meta_position_for_iv(num_blocks));
         }
 
         void flush() override
@@ -420,26 +453,21 @@ namespace internal
         length_type unchecked_read_header(void* output)
         {
             byte buffer[ENCRYPTED_HEADER_SIZE];
-            auto rc = m_metastream.read(buffer, 0, sizeof(buffer));
+            auto rc = m_metastream.read(buffer, SESSION_KEY_IV_SIZE + KEY_LENGTH, sizeof(buffer));
             if (rc == 0)
                 return 0;
             if (rc != sizeof(buffer))
                 throw CorruptedMetaDataException(m_param->id, "Not enough header field");
 
-            byte* iv = buffer;
-            byte* mac = iv + IV_SIZE;
-            byte* ciphertext = mac + MAC_SIZE;
-            aes_gcm_decrypt(ciphertext,
-                            HEADER_SIZE,
-                            m_param->id.data(),
-                            m_param->id.size(),
-                            m_param->key.data(),
-                            m_param->key.size(),
-                            iv,
-                            IV_SIZE,
-                            mac,
-                            MAC_SIZE,
-                            output);
+            const byte* iv = buffer;
+            const byte* ciphertext = iv + HEADER_IV_SIZE;
+            aes_ctr(ciphertext,
+                    HEADER_SIZE,
+                    m_param->key.data(),
+                    m_param->key.size(),
+                    iv,
+                    HEADER_IV_SIZE,
+                    output);
             return sizeof(buffer);
         }
 
@@ -447,22 +475,17 @@ namespace internal
         {
             byte buffer[ENCRYPTED_HEADER_SIZE];
             byte* iv = buffer;
-            byte* mac = iv + IV_SIZE;
-            byte* ciphertext = mac + MAC_SIZE;
-            generate_random(iv, IV_SIZE);
+            byte* ciphertext = iv + HEADER_IV_SIZE;
+            generate_random(iv, HEADER_IV_SIZE);
 
-            aes_gcm_encrypt(input,
-                            HEADER_SIZE,
-                            m_param->id.data(),
-                            m_param->id.size(),
-                            m_param->key.data(),
-                            m_param->key.size(),
-                            iv,
-                            IV_SIZE,
-                            mac,
-                            MAC_SIZE,
-                            ciphertext);
-            m_metastream.write(buffer, 0, sizeof(buffer));
+            aes_ctr(input,
+                    HEADER_SIZE,
+                    m_param->key.data(),
+                    m_param->key.size(),
+                    iv,
+                    HEADER_IV_SIZE,
+                    ciphertext);
+            m_metastream.write(buffer, SESSION_KEY_IV_SIZE + KEY_LENGTH, sizeof(buffer));
         }
 
     public:
@@ -613,6 +636,7 @@ namespace internal
                 m_header.to_bytes(buffer);
                 m_stream->resize(0);
                 m_stream->write(buffer, 0, sizeof(buffer));
+                m_stream->flush();
             }
 
             pbkdf_hmac_sha256(password,
