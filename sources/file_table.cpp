@@ -36,19 +36,19 @@ void calculate_paths(const securefs::id_type& id,
     meta_filename = full_filename + ".meta";
 }
 
-/**
- * Use HMAC-SHA256 to derive a per-id key from the master key.
- * Because HMAC is pseudorandom, and master key is secret,
- * the generated key should have enough entropy not to be predicted.
- */
 void derive(const securefs::key_type& master_key,
             const securefs::id_type& id,
             securefs::key_type& generated_key)
 {
-    CryptoPP::HMAC<CryptoPP::SHA256> hmac_calculator(master_key.data(), master_key.size());
-    static_assert(hmac_calculator.DIGESTSIZE == securefs::KEY_LENGTH, "Unmatched digest size");
-    hmac_calculator.Update(id.data(), id.size());
-    hmac_calculator.Final(generated_key.data());
+    const char* info = "securefs";
+    securefs::hkdf(master_key.data(),
+                   master_key.size(),
+                   id.data(),
+                   id.size(),
+                   info,
+                   strlen(info),
+                   generated_key.data(),
+                   generated_key.size());
 }
 }
 
