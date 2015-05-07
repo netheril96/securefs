@@ -35,21 +35,6 @@ void calculate_paths(const securefs::id_type& id,
                            id.size() - FIRST_LEVEL - SECOND_LEVEL);
     meta_filename = full_filename + ".meta";
 }
-
-void derive(const securefs::key_type& master_key,
-            const securefs::id_type& id,
-            securefs::key_type& generated_key)
-{
-    const char* info = "securefs";
-    securefs::hkdf(master_key.data(),
-                   master_key.size(),
-                   id.data(),
-                   id.size(),
-                   info,
-                   strlen(info),
-                   generated_key.data(),
-                   generated_key.size());
-}
 }
 
 namespace securefs
@@ -95,9 +80,9 @@ FileBase* FileTable::open_as(const id_type& id, int type)
         return fb.get();
     }
 
-    auto param = std::make_shared<SecureParam>();
-    memcpy(param->id.data(), id.data(), id.size());
-    derive(m_master_key, id, param->key);
+    SecureParam param;
+    memcpy(param.id.data(), id.data(), id.size());
+    memcpy(param.key.data(), m_master_key.data(), param.key.size());
 
     std::string first_level_dir, second_level_dir, filename, metaname;
     calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
@@ -137,9 +122,9 @@ FileBase* FileTable::create_as(const id_type& id, int type)
         meta_fd = ::openat(m_dir_fd, metaname.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
         if (meta_fd < 0)
             throw OSException(errno);
-        auto param = std::make_shared<SecureParam>();
-        memcpy(param->id.data(), id.data(), id.size());
-        derive(m_master_key, id, param->key);
+        SecureParam param;
+        generate_random(param.id.data(), param.id.size());
+        memcpy(param.key.data(), m_master_key.data(), param.key.size());
         auto fb = make_file_from_type(type, data_fd, meta_fd, param, is_auth_enabled());
         m_opened.emplace(id, fb);
         fb->setref(1);

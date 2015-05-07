@@ -134,9 +134,8 @@ public:
     bool is_sparse() const noexcept override { return true; }
 };
 
-std::shared_ptr<StreamBase> make_stream_hmac(std::shared_ptr<const SecureParam> param,
-                                             std::shared_ptr<StreamBase> stream,
-                                             bool check);
+std::shared_ptr<StreamBase>
+make_stream_hmac(const SecureParam& param, std::shared_ptr<StreamBase> stream, bool check);
 
 std::shared_ptr<StreamBase>
 make_stream_salsa20(std::shared_ptr<StreamBase> stream, const void* password, size_t pass_len);
@@ -206,6 +205,6 @@ public:
 std::pair<std::shared_ptr<CryptStream>, std::shared_ptr<HeaderBase>>
 make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
                          std::shared_ptr<StreamBase> meta_stream,
-                         std::shared_ptr<const SecureParam> param,
+                         const SecureParam& param,
                          bool check);
 }

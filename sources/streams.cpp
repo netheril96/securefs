@@ -36,7 +36,7 @@ namespace internal
     class HMACStream final : public StreamBase
     {
     private:
-        std::shared_ptr<const SecureParam> m_param;
+        SecureParam m_param;
         std::shared_ptr<StreamBase> m_stream;
         bool is_dirty;
 
@@ -44,9 +44,13 @@ namespace internal
 
         static const size_t hmac_length = hmac_calculator_type::DIGESTSIZE;
 
+    private:
+        const id_type& id() const noexcept { return m_param.id; }
+        const key_type& key() const noexcept { return m_param.key; }
+
         void run_mac(CryptoPP::MessageAuthenticationCode& calculator)
         {
-            calculator.Update(m_param->id.data(), m_param->id.size());
+            calculator.Update(id().data(), id().size());
             std::array<byte, 4096> buffer;
             offset_type off = hmac_length;
             while (true)
@@ -60,12 +64,12 @@ namespace internal
         }
 
     public:
-        explicit HMACStream(std::shared_ptr<const SecureParam> param,
+        explicit HMACStream(const SecureParam& param,
                             std::shared_ptr<StreamBase> stream,
                             bool check = true)
-            : m_param(std::move(param)), m_stream(std::move(stream)), is_dirty(false)
+            : m_param(param), m_stream(std::move(stream)), is_dirty(false)
         {
-            if (!m_param || !m_stream)
+            if (!m_stream)
                 NULL_EXCEPT();
             if (check)
             {
@@ -75,12 +79,12 @@ namespace internal
                     return;
                 if (rc != hmac_length)
                     throw InvalidHMACStreamException(
-                        m_param->id, "The header field for stream is not of enough length");
+                        id(), "The header field for stream is not of enough length");
                 hmac_calculator_type calculator;
-                calculator.SetKey(m_param->key.data(), m_param->key.size());
+                calculator.SetKey(key().data(), key().size());
                 run_mac(calculator);
                 if (!calculator.Verify(hmac.data()))
-                    throw InvalidHMACStreamException(m_param->id, "HMAC mismatch");
+                    throw InvalidHMACStreamException(id(), "HMAC mismatch");
             }
         }
 
@@ -101,7 +105,7 @@ namespace internal
             if (!is_dirty)
                 return;
             hmac_calculator_type calculator;
-            calculator.SetKey(m_param->key.data(), m_param->key.size());
+            calculator.SetKey(key().data(), key().size());
             run_mac(calculator);
             std::array<byte, hmac_length> hmac;
             calculator.Final(hmac.data());
@@ -139,9 +143,8 @@ namespace internal
     };
 }
 
-std::shared_ptr<StreamBase> make_stream_hmac(std::shared_ptr<const SecureParam> param,
-                                             std::shared_ptr<StreamBase> stream,
-                                             bool check)
+std::shared_ptr<StreamBase>
+make_stream_hmac(const SecureParam& param, std::shared_ptr<StreamBase> stream, bool check)
 {
     return std::make_shared<internal::HMACStream>(std::move(param), std::move(stream), check);
 }
@@ -308,7 +311,7 @@ namespace internal
 
     private:
         HMACStream m_metastream;
-        std::shared_ptr<const SecureParam> m_param;
+        SecureParam m_param;
         bool m_check;
 
     private:
@@ -316,11 +319,13 @@ namespace internal
         {
             return ENCRYPTED_HEADER_SIZE + (IV_SIZE + MAC_SIZE) * (block_num);
         }
+        const id_type& id() const noexcept { return m_param.id; }
+        const key_type& key() const noexcept { return m_param.key; }
 
     public:
         explicit AESGCMCryptStream(std::shared_ptr<StreamBase> data_stream,
                                    std::shared_ptr<StreamBase> meta_stream,
-                                   std::shared_ptr<const SecureParam> param,
+                                   const SecureParam& param,
                                    bool check)
             : CryptStream(data_stream, BLOCK_SIZE)
             , m_metastream(param, meta_stream, check)
@@ -348,10 +353,10 @@ namespace internal
             } while (is_all_zeros(iv, IV_SIZE));    // Null IVs are markers for sparse blocks
             aes_gcm_encrypt(input,
                             length,
-                            m_param->id.data(),
-                            m_param->id.size(),
-                            m_param->key.data(),
-                            m_param->key.size(),
+                            id().data(),
+                            id().size(),
+                            key().data(),
+                            key().size(),
                             iv,
                             IV_SIZE,
                             mac,
@@ -372,7 +377,7 @@ namespace internal
             byte buffer[IV_SIZE + MAC_SIZE];
             auto pos = meta_position_for_iv(block_number);
             if (m_metastream.read(buffer, pos, sizeof(buffer)) != sizeof(buffer))
-                throw CorruptedMetaDataException(m_param->id, "MAC/IV not found");
+                throw CorruptedMetaDataException(id(), "MAC/IV not found");
 
             const byte* iv = buffer;
             byte* mac = buffer + IV_SIZE;
@@ -384,17 +389,17 @@ namespace internal
             }
             bool success = aes_gcm_decrypt(input,
                                            length,
-                                           m_param->id.data(),
-                                           m_param->id.size(),
-                                           m_param->key.data(),
-                                           m_param->key.size(),
+                                           id().data(),
+                                           id().size(),
+                                           key().data(),
+                                           key().size(),
                                            iv,
                                            IV_SIZE,
                                            mac,
                                            MAC_SIZE,
                                            output);
             if (m_check && !success)
-                throw MessageVerificationException(m_param->id, block_number * m_block_size);
+                throw MessageVerificationException(id(), block_number * m_block_size);
         }
 
     public:
@@ -424,17 +429,17 @@ namespace internal
             if (rc == 0)
                 return 0;
             if (rc != sizeof(buffer))
-                throw CorruptedMetaDataException(m_param->id, "Not enough header field");
+                throw CorruptedMetaDataException(id(), "Not enough header field");
 
             byte* iv = buffer;
             byte* mac = iv + IV_SIZE;
             byte* ciphertext = mac + MAC_SIZE;
             aes_gcm_decrypt(ciphertext,
                             HEADER_SIZE,
-                            m_param->id.data(),
-                            m_param->id.size(),
-                            m_param->key.data(),
-                            m_param->key.size(),
+                            id().data(),
+                            id().size(),
+                            key().data(),
+                            key().size(),
                             iv,
                             IV_SIZE,
                             mac,
@@ -453,10 +458,10 @@ namespace internal
 
             aes_gcm_encrypt(input,
                             HEADER_SIZE,
-                            m_param->id.data(),
-                            m_param->id.size(),
-                            m_param->key.data(),
-                            m_param->key.size(),
+                            id().data(),
+                            id().size(),
+                            key().data(),
+                            key().size(),
                             iv,
                             IV_SIZE,
                             mac,
@@ -502,7 +507,7 @@ namespace internal
 std::pair<std::shared_ptr<CryptStream>, std::shared_ptr<HeaderBase>>
 make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
                          std::shared_ptr<StreamBase> meta_stream,
-                         std::shared_ptr<const SecureParam> param,
+                         const SecureParam& param,
                          bool check)
 {
     auto stream = std::make_shared<internal::AESGCMCryptStream>(

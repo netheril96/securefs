@@ -17,7 +17,7 @@
 namespace securefs
 {
 
-FileBase::FileBase(int data_fd, int meta_fd, std::shared_ptr<const SecureParam> param, bool check)
+FileBase::FileBase(int data_fd, int meta_fd, const SecureParam& param, bool check)
     : m_lock()
     , m_refcount(1)
     , m_header()
@@ -28,8 +28,6 @@ FileBase::FileBase(int data_fd, int meta_fd, std::shared_ptr<const SecureParam> 
     , m_stream()
     , m_removed(false)
 {
-    if (!param)
-        NULL_EXCEPT();
     auto data_stream = std::make_shared<POSIXFileStream>(data_fd);
     auto meta_stream = std::make_shared<POSIXFileStream>(meta_fd);
     auto crypt
@@ -347,7 +345,7 @@ namespace internal
 }
 
 std::shared_ptr<Directory>
-make_directory(int data_fd, int meta_fd, std::shared_ptr<const SecureParam> param, bool check)
+make_directory(int data_fd, int meta_fd, const SecureParam& param, bool check)
 {
     return std::make_shared<internal::SimpleDirectory>(data_fd, meta_fd, std::move(param), check);
 }
