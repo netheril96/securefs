@@ -15,7 +15,8 @@ private:
     std::mutex m_lock;
     ptrdiff_t m_refcount;
     std::shared_ptr<HeaderBase> m_header;
-    const SecureParam& m_param;
+    key_type m_key;
+    id_type m_id;
     uint32_t m_flags[7];
     int m_data_fd;
     bool m_dirty, m_check;
@@ -72,7 +73,8 @@ public:
     static mode_t mode_for_type(int type) noexcept { return type << 12; }
 
 public:
-    explicit FileBase(int data_fd, int meta_fd, const SecureParam& param, bool check);
+    explicit FileBase(
+        int data_fd, int meta_fd, const key_type& key_, const id_type& id_, bool check);
     virtual ~FileBase();
     DISABLE_COPY_MOVE(FileBase);
 
@@ -103,8 +105,8 @@ public:
     }
     // --End of getters and setters for stats---
 
-    const id_type& get_id() const { return m_param.id; }
-    const key_type& get_key() const { return m_param.key; }
+    const id_type& get_id() const { return m_id; }
+    const key_type& get_key() const { return m_key; }
 
     void lock() { m_lock.lock(); }
     void unlock() { m_lock.unlock(); }
@@ -242,7 +244,7 @@ public:
 };
 
 std::shared_ptr<Directory>
-make_directory(int data_fd, int meta_fd, const SecureParam& param, bool check);
+make_directory(int data_fd, int meta_fd, const key_type& key_, const id_type& id_, bool check);
 
 template <class... Args>
 inline std::shared_ptr<FileBase> make_file_from_type(int type, Args&&... args)

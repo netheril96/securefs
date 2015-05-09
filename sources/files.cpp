@@ -17,11 +17,11 @@
 namespace securefs
 {
 
-FileBase::FileBase(int data_fd, int meta_fd, const SecureParam& param, bool check)
+FileBase::FileBase(int data_fd, int meta_fd, const key_type& key_, const id_type& id_, bool check)
     : m_lock()
     , m_refcount(1)
     , m_header()
-    , m_param(param)
+    , m_id(id_)
     , m_data_fd(data_fd)
     , m_dirty(false)
     , m_check(check)
@@ -30,11 +30,20 @@ FileBase::FileBase(int data_fd, int meta_fd, const SecureParam& param, bool chec
 {
     auto data_stream = std::make_shared<POSIXFileStream>(data_fd);
     auto meta_stream = std::make_shared<POSIXFileStream>(meta_fd);
-    auto crypt
-        = make_cryptstream_aes_gcm(std::move(data_stream), std::move(meta_stream), param, check);
+    auto crypt = make_cryptstream_aes_gcm(
+        std::move(data_stream), std::move(meta_stream), key_, id_, check);
     m_stream = crypt.first;
     m_header = crypt.second;
     read_header();
+    const char* info = "FileBase";
+    hkdf(key_.data(),
+         key_.size(),
+         id_.data(),
+         id_.size(),
+         info,
+         strlen(info),
+         m_key.data(),
+         m_key.size());
 }
 
 void FileBase::read_header()
@@ -345,8 +354,8 @@ namespace internal
 }
 
 std::shared_ptr<Directory>
-make_directory(int data_fd, int meta_fd, const SecureParam& param, bool check)
+make_directory(int data_fd, int meta_fd, const key_type& key_, const id_type& id_, bool check)
 {
-    return std::make_shared<internal::SimpleDirectory>(data_fd, meta_fd, std::move(param), check);
+    return std::make_shared<internal::SimpleDirectory>(data_fd, meta_fd, key_, id_, check);
 }
 }

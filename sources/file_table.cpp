@@ -80,10 +80,6 @@ FileBase* FileTable::open_as(const id_type& id, int type)
         return fb.get();
     }
 
-    SecureParam param;
-    memcpy(param.id.data(), id.data(), id.size());
-    memcpy(param.key.data(), m_master_key.data(), param.key.size());
-
     std::string first_level_dir, second_level_dir, filename, metaname;
     calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
     int open_flags = is_readonly() ? O_RDONLY : O_RDWR;
@@ -96,7 +92,7 @@ FileBase* FileTable::open_as(const id_type& id, int type)
         ::close(data_fd);
         throw OSException(errno);
     }
-    auto fb = make_file_from_type(type, data_fd, meta_fd, param, is_auth_enabled());
+    auto fb = make_file_from_type(type, data_fd, meta_fd, m_master_key, id, is_auth_enabled());
     m_opened.emplace(id, fb);
     fb->setref(1);
     return fb.get();
@@ -122,10 +118,8 @@ FileBase* FileTable::create_as(const id_type& id, int type)
         meta_fd = ::openat(m_dir_fd, metaname.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
         if (meta_fd < 0)
             throw OSException(errno);
-        SecureParam param;
-        generate_random(param.id.data(), param.id.size());
-        memcpy(param.key.data(), m_master_key.data(), param.key.size());
-        auto fb = make_file_from_type(type, data_fd, meta_fd, param, is_auth_enabled());
+
+        auto fb = make_file_from_type(type, data_fd, meta_fd, m_master_key, id, is_auth_enabled());
         m_opened.emplace(id, fb);
         fb->setref(1);
         return fb.get();

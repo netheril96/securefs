@@ -3,7 +3,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string>
-#include <array>
 #include <type_traits>
 #include <vector>
 
@@ -25,14 +24,27 @@ typedef uint64_t offset_type;
 
 constexpr uint32_t KEY_LENGTH = 32, ID_LENGTH = 32, BLOCK_SIZE = 4096;
 
-typedef std::array<byte, KEY_LENGTH> key_type;
-typedef std::array<byte, ID_LENGTH> id_type;
-
-struct SecureParam
+template <class T, size_t Size>
+class PODArray
 {
-    key_type key;
-    id_type id;
+private:
+    T m_data[Size];
+
+    static_assert(std::is_pod<T>::value, "Only POD types are supported");
+
+public:
+    explicit PODArray() {}
+    explicit PODArray(const T& value) { std::fill(std::begin(m_data), std::end(m_data), value); }
+    PODArray(const PODArray& other) { memcpy(m_data, other.m_data, size()); }
+    const T* data() const { return m_data; }
+    T* data() { return m_data; }
+    static constexpr size_t size() { return Size; };
+    bool operator==(const PODArray& other) const { return memcmp(m_data, other.m_data, size()) == 0; }
+    bool operator!=(const PODArray& other) const { return !(*this == other); }
 };
+
+typedef PODArray<byte, KEY_LENGTH> key_type;
+typedef PODArray<byte, ID_LENGTH> id_type;
 
 inline std::string hexify(const byte* data, size_t length)
 {

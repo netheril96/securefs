@@ -122,13 +122,13 @@ TEST_CASE("Test streams")
 {
     char temp_template[] = "/tmp/C6AD402F-B5FD-430A-BB2E-90006B22A1B8.XXXXXX";
 
-    auto param = std::make_shared<securefs::SecureParam>();
-    memset(param->key.data(), 0xFF, param->key.size());
-    memset(param->id.data(), 0xFF, param->id.size());
-
+    securefs::key_type key;
+    securefs::id_type id;
+    memset(key.data(), 0xff, key.size());
+    memset(id.data(), 0xee, id.size());
     auto posix_stream = std::make_shared<securefs::POSIXFileStream>(mkstemp(temp_template));
     {
-        auto hmac_stream = securefs::make_stream_hmac(param, posix_stream, true);
+        auto hmac_stream = securefs::make_stream_hmac(key, id, posix_stream, true);
         test(*hmac_stream, 5000);
     }
     {
@@ -151,7 +151,7 @@ TEST_CASE("Test streams")
         auto meta_posix_stream
             = std::make_shared<securefs::POSIXFileStream>(mkstemp(temp_template));
         auto aes_gcm_stream
-            = securefs::make_cryptstream_aes_gcm(posix_stream, meta_posix_stream, param, true);
+            = securefs::make_cryptstream_aes_gcm(posix_stream, meta_posix_stream, key, id, true);
         std::vector<byte> header(aes_gcm_stream.second->max_header_length() - 1, 5);
         aes_gcm_stream.second->write_header(header.data(), header.size());
         test(*aes_gcm_stream.first, 1000);
