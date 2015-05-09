@@ -41,77 +41,10 @@ struct command_args
          log_to_stderr = false, no_log = false, stdinpass = false, readonly = false;
 };
 
-void parse_args(int argc, char** argv, command_args& output)
-{
-    TCLAP::CmdLine cmdline(
-        "securefs: a filesystem in userspace that transparently encrypts and authenticates data",
-        ' ',
-        "0.1");
-    TCLAP::SwitchArg no_check(
-        "", "no_check", "Disable verification of authentication codes", cmdline, false);
-    TCLAP::SwitchArg single_threaded(
-        "s", "single_threaded", "Disable usage of multithreading", cmdline, false);
-    TCLAP::SwitchArg foreground(
-        "f",
-        "foreground",
-        "Request that the program stays in the foreground; also outputs logs to stderr",
-        cmdline,
-        false);
-    TCLAP::SwitchArg debug(
-        "d", "debug", "Output FUSE debug information; imply foreground", cmdline, false);
-    TCLAP::SwitchArg stdinpass("", "stdinpass", "Read passwords from stdin", cmdline, false);
-    TCLAP::SwitchArg readonly(
-        "r", "readonly", "Mount the filesystem in read-only mode", cmdline, false);
-    TCLAP::ValueArg<std::string> mountpoint(
-        "p", "point", "The mount point", false, "", "dirname", cmdline);
-    TCLAP::SwitchArg no_log("", "no_log", "Disable logging", cmdline, false);
-    TCLAP::ValueArg<std::string> log_filename(
-        "l", "log", "Log file name", false, "", "filename", cmdline);
-
-    TCLAP::ValueArg<std::string> create(
-        "c", "create", "Create a new secure filesystem", true, "", "dirname");
-    TCLAP::ValueArg<std::string> mount(
-        "m", "mount", "Mount a given secure filesystem", true, "", "dirname");
-    TCLAP::ValueArg<std::string> viewlog(
-        "", "viewlog", "View the encrypted log file", true, "", "filename");
-
-    std::vector<TCLAP::Arg*> xor_args{&create, &mount, &viewlog};
-    cmdline.xorAdd(xor_args);
-
-    cmdline.parse(argc, argv);
-    output.mount_point.swap(mountpoint.getValue());
-    output.no_check = no_check.getValue();
-    output.single_threaded = single_threaded.getValue();
-    output.foreground = foreground.getValue() | debug.getValue();
-    output.readonly = readonly.getValue();
-    output.stdinpass = stdinpass.getValue();
-    output.debug = debug.getValue();
-    output.no_log = no_log.getValue();
-    output.log_filename.swap(log_filename.getValue());
-    output.log_to_stderr = output.foreground;
-
-    if (create.isSet())
-    {
-        int create_filesys(const command_args&);
-        output.action = &create_filesys;
-        output.underlying_path.swap(create.getValue());
-    }
-    else if (mount.isSet())
-    {
-        int mount_filesys(const command_args&);
-        output.action = &mount_filesys;
-        output.underlying_path.swap(mount.getValue());
-    }
-    else if (viewlog.isSet())
-    {
-        int viewlog_filesys(const command_args&);
-        output.action = &viewlog_filesys;
-        output.log_filename.swap(viewlog.getValue());
-    }
-}
-
 static const char* CONFIG_FILE_NAME = ".securefs.json";
 static const char* CONFIG_HMAC_FILE_NAME = ".securefs.hmac-sha256";
+static const char* CONFIG_TMP_FILE_NAME = ".securefs.json.tmp";
+static const char* CONFIG_TMP_HMAC_FILE_NAME = ".securefs.hmac-sha256.tmp";
 static const unsigned MIN_ITERATIONS = 20000;
 static const unsigned MIN_DERIVE_SECONDS = 1;
 static const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
@@ -284,14 +217,20 @@ size_t try_read_password_with_confirmation(void* password, size_t length)
     return len1;
 }
 
+int open_and_lock_base_dir(const std::string& path)
+{
+    int folder_fd = ::open(path.c_str(), O_RDONLY);
+    if (folder_fd < 0)
+        throw std::runtime_error(
+            fmt::format("Error opening directory {}: {}", path, securefs::sane_strerror(errno)));
+    lock_base_directory(folder_fd);
+    return folder_fd;
+}
+
 int create_filesys(const command_args& args)
 {
     using namespace securefs;
-    int folder_fd = ::open(args.underlying_path.c_str(), O_RDONLY);
-    if (folder_fd < 0)
-        throw std::runtime_error(fmt::format(
-            "Error opening directory {}: {}", args.underlying_path, sane_strerror(errno)));
-    lock_base_directory(folder_fd);
+    int folder_fd = open_and_lock_base_dir(args.underlying_path);
 
     int config_fd = -1, hmac_fd = -1;
     try
@@ -449,11 +388,7 @@ init_logger(const command_args& args, const void* password, size_t pass_len)
 int mount_filesys(const command_args& args)
 {
     using namespace securefs;
-    int folder_fd = ::open(args.underlying_path.c_str(), O_RDONLY);
-    if (folder_fd < 0)
-        throw std::runtime_error(fmt::format(
-            "Error opening directory {}: {}", args.underlying_path, sane_strerror(errno)));
-    lock_base_directory(folder_fd);
+    int folder_fd = open_and_lock_base_dir(args.underlying_path);
 
     auto config_json = read_config(folder_fd);
     key_type master_key;
@@ -541,6 +476,148 @@ int viewlog_filesys(const command_args& args)
     }
     fflush(stdout);
     return 0;
+}
+
+int chpass_filesys(const command_args& args)
+{
+    using namespace securefs;
+    int folder_fd = open_and_lock_base_dir(args.underlying_path);
+
+    auto config_json = read_config(folder_fd);
+    key_type master_key;
+
+    CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
+    size_t pass_len = try_read_password(password.data(), password.size());
+
+    if (!parse_config(config_json, password, pass_len, master_key))
+        throw std::runtime_error("Error: wrong password");
+
+    if (!args.no_check)
+    {
+        byte hmac[CONFIG_MAC_LENGTH];
+        read_hmac(folder_fd, hmac, sizeof(hmac));
+        auto config_string = config_json.dump();
+        if (!hmac_sha256_verify(config_string.data(),
+                                config_string.size(),
+                                master_key.data(),
+                                master_key.size(),
+                                hmac,
+                                sizeof(hmac)))
+            throw std::runtime_error("Error: HMAC mismatch for the configuration file");
+    }
+
+    fprintf(stderr, "Authentication success. Now enter new password.\n");
+    pass_len = try_read_password_with_confirmation(password, password.size());
+
+    key_type salt;
+    generate_random(salt.data(), salt.size());
+    auto config = generate_config(master_key, salt, password.data(), pass_len).dump();
+
+    byte hmac[CONFIG_MAC_LENGTH];
+    hmac_sha256_calculate(
+        config.data(), config.size(), master_key.data(), master_key.size(), hmac, sizeof(hmac));
+
+    int config_fd = ::openat(folder_fd, CONFIG_TMP_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
+    if (config_fd < 0)
+        throw std::runtime_error(fmt::format(
+            "Error creating {} for writing: {}", CONFIG_TMP_FILE_NAME, sane_strerror(errno)));
+    POSIXFileStream config_stream(config_fd);
+    config_stream.write(config.data(), 0, config.size());
+
+    int hmac_fd = ::openat(folder_fd, CONFIG_TMP_HMAC_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
+    if (hmac_fd < 0)
+        throw std::runtime_error(fmt::format(
+            "Error creating {} for writing: {}", CONFIG_TMP_HMAC_FILE_NAME, sane_strerror(errno)));
+    POSIXFileStream config_hmac_stream(hmac_fd);
+    config_hmac_stream.write(hmac, 0, sizeof(hmac));
+
+    int rc = ::renameat(folder_fd, CONFIG_TMP_HMAC_FILE_NAME, folder_fd, CONFIG_HMAC_FILE_NAME);
+    if (rc < 0)
+        throw std::runtime_error(fmt::format("Error moving {} to {}: {}",
+                                             CONFIG_TMP_HMAC_FILE_NAME,
+                                             CONFIG_HMAC_FILE_NAME,
+                                             sane_strerror(errno)));
+
+    rc = ::renameat(folder_fd, CONFIG_TMP_FILE_NAME, folder_fd, CONFIG_FILE_NAME);
+    if (rc < 0)
+        throw std::runtime_error(fmt::format("Error moving {} to {}: {}",
+                                             CONFIG_TMP_FILE_NAME,
+                                             CONFIG_FILE_NAME,
+                                             sane_strerror(errno)));
+    return 0;
+}
+
+void parse_args(int argc, char** argv, command_args& output)
+{
+    TCLAP::CmdLine cmdline(
+        "securefs: a filesystem in userspace that transparently encrypts and authenticates data",
+        ' ',
+        "0.1");
+    TCLAP::SwitchArg no_check(
+        "", "no_check", "Disable verification of authentication codes", cmdline, false);
+    TCLAP::SwitchArg single_threaded(
+        "s", "single_threaded", "Disable usage of multithreading", cmdline, false);
+    TCLAP::SwitchArg foreground(
+        "f",
+        "foreground",
+        "Request that the program stays in the foreground; also outputs logs to stderr",
+        cmdline,
+        false);
+    TCLAP::SwitchArg debug(
+        "d", "debug", "Output FUSE debug information; imply foreground", cmdline, false);
+    TCLAP::SwitchArg stdinpass("", "stdinpass", "Read passwords from stdin", cmdline, false);
+    TCLAP::SwitchArg readonly(
+        "r", "readonly", "Mount the filesystem in read-only mode", cmdline, false);
+    TCLAP::ValueArg<std::string> mountpoint(
+        "p", "point", "The mount point", false, "", "dirname", cmdline);
+    TCLAP::SwitchArg no_log("", "no_log", "Disable logging", cmdline, false);
+    TCLAP::ValueArg<std::string> log_filename(
+        "l", "log", "Log file name", false, "", "filename", cmdline);
+
+    TCLAP::ValueArg<std::string> create(
+        "c", "create", "Create a new secure filesystem", true, "", "dirname");
+    TCLAP::ValueArg<std::string> mount(
+        "m", "mount", "Mount a given secure filesystem", true, "", "dirname");
+    TCLAP::ValueArg<std::string> viewlog(
+        "", "viewlog", "View the encrypted log file", true, "", "filename");
+    TCLAP::ValueArg<std::string> chpass(
+        "", "chpass", "Change the password of secure filesystem", true, "", "dirname");
+
+    std::vector<TCLAP::Arg*> xor_args{&create, &mount, &viewlog, &chpass};
+    cmdline.xorAdd(xor_args);
+
+    cmdline.parse(argc, argv);
+    output.mount_point.swap(mountpoint.getValue());
+    output.no_check = no_check.getValue();
+    output.single_threaded = single_threaded.getValue();
+    output.foreground = foreground.getValue() | debug.getValue();
+    output.readonly = readonly.getValue();
+    output.stdinpass = stdinpass.getValue();
+    output.debug = debug.getValue();
+    output.no_log = no_log.getValue();
+    output.log_filename.swap(log_filename.getValue());
+    output.log_to_stderr = output.foreground;
+
+    if (create.isSet())
+    {
+        output.action = &create_filesys;
+        output.underlying_path.swap(create.getValue());
+    }
+    else if (mount.isSet())
+    {
+        output.action = &mount_filesys;
+        output.underlying_path.swap(mount.getValue());
+    }
+    else if (viewlog.isSet())
+    {
+        output.action = &viewlog_filesys;
+        output.log_filename.swap(viewlog.getValue());
+    }
+    else if (chpass.isSet())
+    {
+        output.action = &chpass_filesys;
+        output.underlying_path.swap(chpass.getValue());
+    }
 }
 }
 
