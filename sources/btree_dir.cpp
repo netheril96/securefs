@@ -7,8 +7,8 @@
 
 namespace
 {
-const size_t BLOCK_SIZE = 4096;
 const uint32_t INVALID_PAGE = -1;
+const int MAX_DEPTH = 32;
 }
 
 namespace securefs
@@ -49,8 +49,11 @@ public:
     byte type;
 
     int compare(const Entry& other) const { return strcmp(filename.data(), other.filename.data()); }
+    int compare(const std::string& name) const { return strcmp(filename.data(), name.c_str()); }
     bool operator<(const Entry& other) const { return compare(other) < 0; }
     bool operator==(const Entry& other) const { return compare(other) == 0; }
+    bool operator<(const std::string& other) const { return compare(other) < 0; }
+    bool operator==(const std::string& other) const { return compare(other) == 0; }
 };
 
 class BtreeDirectory::Node
@@ -63,9 +66,9 @@ public:
 public:
     explicit Node(uint32_t parent) : parent_page(parent) {}
 
-    void from_buffer(const byte buffer[BLOCK_SIZE])
+    void from_buffer(const byte* buffer, size_t size)
     {
-        const byte* end_of_buffer = buffer + BLOCK_SIZE;
+        const byte* end_of_buffer = buffer + size;
 
         auto flag = from_little_endian<uint32_t>(buffer);
         if (flag == 0)
@@ -96,9 +99,9 @@ public:
         }
     }
 
-    void to_buffer(byte buffer[BLOCK_SIZE]) const
+    void to_buffer(byte* buffer, size_t size) const
     {
-        const byte* end_of_buffer = buffer + BLOCK_SIZE;
+        const byte* end_of_buffer = buffer + size;
         to_little_endian(static_cast<uint32_t>(1), buffer);
         buffer += sizeof(uint32_t);
         to_little_endian(parent_page, buffer);
@@ -130,27 +133,44 @@ void BtreeDirectory::read_node(uint32_t num, BtreeDirectory::Node& n)
     byte buffer[BLOCK_SIZE];
     if (m_stream->read(buffer, num * BLOCK_SIZE, BLOCK_SIZE) != BLOCK_SIZE)
         throw CorruptedDirectoryException();
-    n.from_buffer(buffer);
+    n.from_buffer(buffer, sizeof(buffer));
 }
 
 void BtreeDirectory::write_node(uint32_t num, const BtreeDirectory::Node& n)
 {
     byte buffer[BLOCK_SIZE];
-    n.to_buffer(buffer);
+    n.to_buffer(buffer, sizeof(buffer));
     m_stream->write(buffer, num * BLOCK_SIZE, BLOCK_SIZE);
 }
 
 bool BtreeDirectory::get_entry(const std::string& name, id_type& id, int& type)
 {
+    if (name.size() > MAX_FILENAME_LENGTH)
+        throw OSException(ENAMETOOLONG);
+
     auto page = get_root_page();
     if (page == INVALID_PAGE)
         return false;
 
     Node n(INVALID_PAGE);
-    while (true)
+
+    for (int i = 0; i < MAX_DEPTH; ++i)
     {
         read_node(page, n);
-        
+        auto iter = std::lower_bound(n.entries.begin(), n.entries.end(), name);
+        if (iter != n.entries.end() && iter->compare(name) == 0)
+        {
+            id = iter->id;
+            type = iter->type;
+            return true;
+        }
+
+        size_t child = iter - n.entries.begin();
+        if (child >= n.child_indices.size())
+            return false;
+
+        read_node(n.child_indices[child], n);
     }
+    throw CorruptedDirectoryException();    // The operation is stuck in an infinite loop
 }
 }
