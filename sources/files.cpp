@@ -23,6 +23,7 @@ FileBase::FileBase(int data_fd, int meta_fd, const key_type& key_, const id_type
     , m_header()
     , m_id(id_)
     , m_data_fd(data_fd)
+    , m_meta_fd(meta_fd)
     , m_dirty(false)
     , m_check(check)
     , m_stream()
@@ -86,7 +87,9 @@ void FileBase::flush()
     m_stream->flush();
 }
 
-static const ssize_t XATTR_IV_LENGTH = 32, XATTR_MAC_LENGTH = 16;
+// These values cannot be changed, because OS X has a peculiar restriction where the xattr value for
+// com.apple.FinderInfo is fixed at 32 bytes.
+static const ssize_t XATTR_IV_LENGTH = 16, XATTR_MAC_LENGTH = 16;
 
 ssize_t FileBase::listxattr(char* buffer, size_t size)
 {
@@ -100,106 +103,81 @@ ssize_t FileBase::listxattr(char* buffer, size_t size)
     return rc;
 }
 
-#ifdef __APPLE__
-ssize_t FileBase::getxattr(const char* name, char* value, size_t size, uint32_t position)
+static ssize_t fgetxattr_wrapper(int fd, const char* name, void* value, size_t size)
 {
-    if (position != 0)
-        throw InvalidArgumentException("postion must be zero");
+#ifdef __APPLE__
+    return ::fgetxattr(fd, name, value, size, 0, 0);
 #else
+    return ::fgetxattr(fd, name, value, size);
+#endif
+}
+
 ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
 {
-#endif
-    ssize_t encrypted_length;
-#ifdef __APPLE__
-    encrypted_length = ::fgetxattr(file_descriptor(), name, nullptr, 0, 0, 0);
-#else
-    encrypted_length = ::fgetxattr(file_descriptor(), name, nullptr, 0);
-#endif
+    if (!name)
+        throw OSException(EFAULT);
 
-    if (encrypted_length < 0)
+    auto true_size = fgetxattr_wrapper(file_descriptor(), name, value, size);
+    if (true_size < 0)
         throw OSException(errno);
-
-    if (encrypted_length <= XATTR_MAC_LENGTH + XATTR_IV_LENGTH)
-        return 0;
-
     if (!value)
-        return encrypted_length - XATTR_MAC_LENGTH - XATTR_IV_LENGTH;
+        return true_size;
 
-    std::unique_ptr<byte[]> read_buffer(new byte[encrypted_length]);
-#ifdef __APPLE__
-    auto rc = ::fgetxattr(file_descriptor(), name, read_buffer.get(), encrypted_length, 0, 0);
-#else
-    auto rc = ::fgetxattr(file_descriptor(), name, read_buffer.get(), encrypted_length);
-#endif
-
-    if (rc < 0)
+    byte meta[XATTR_IV_LENGTH + XATTR_MAC_LENGTH];
+    auto true_meta_size = fgetxattr_wrapper(m_meta_fd, name, meta, sizeof(meta));
+    if (true_meta_size < 0)
+    {
+        if (errno == ERANGE)
+            errno = EIO;
         throw OSException(errno);
-    if (rc != encrypted_length)
-        throw OSException(EBUSY);
+    }
 
     auto name_len = strlen(name);
     std::unique_ptr<byte[]> header(new byte[name_len + ID_LENGTH]);
     memcpy(header.get(), get_id().data(), ID_LENGTH);
     memcpy(header.get() + ID_LENGTH, name, name_len);
 
-    byte* iv = read_buffer.get();
-    byte* mac = iv + XATTR_IV_LENGTH;
-    byte* ciphertext = mac + XATTR_MAC_LENGTH;
-    auto length = static_cast<size_t>(rc - XATTR_IV_LENGTH - XATTR_MAC_LENGTH);
+    byte* iv = meta;
+    byte* mac = meta + XATTR_IV_LENGTH;
+    byte* ciphertext = reinterpret_cast<byte*>(value);
 
-    bool success = false;
-
-    if (length <= size)
-    {
-        success = aes_gcm_decrypt(ciphertext,
-                                  length,
-                                  header.get(),
-                                  name_len + ID_LENGTH,
-                                  get_key().data(),
-                                  get_key().size(),
-                                  iv,
-                                  XATTR_IV_LENGTH,
-                                  mac,
-                                  XATTR_MAC_LENGTH,
-                                  value);
-    }
-    else
-    {
-        CryptoPP::AlignedSecByteBlock buffer(length);
-        success = aes_gcm_decrypt(ciphertext,
-                                  length,
-                                  header.get(),
-                                  name_len + ID_LENGTH,
-                                  get_key().data(),
-                                  get_key().size(),
-                                  iv,
-                                  XATTR_IV_LENGTH,
-                                  mac,
-                                  XATTR_MAC_LENGTH,
-                                  buffer.data());
-        memcpy(value, buffer.data(), size);
-    }
-
+    bool success = aes_gcm_decrypt(ciphertext,
+                                   true_size,
+                                   header.get(),
+                                   name_len + ID_LENGTH,
+                                   get_key().data(),
+                                   get_key().size(),
+                                   iv,
+                                   XATTR_IV_LENGTH,
+                                   mac,
+                                   XATTR_MAC_LENGTH,
+                                   value);
     if (m_check && !success)
         throw XattrVerificationException(get_id(), name);
-    return length;
+    return true_size;
 }
 
-#ifdef __APPLE__
-void FileBase::setxattr(
-    const char* name, const char* value, size_t size, int flags, uint32_t position)
+static int fsetxattr_wrapper(int fd, const char* name, void* value, size_t size, int flags)
 {
-    if (position != 0)
-        throw InvalidArgumentException("postion must be zero");
+#ifdef __APPLE__
+    return ::fsetxattr(fd, name, value, size, 0, flags);
 #else
+    return ::fsetxattr(fd, name, value, size, flags);
+#endif
+}
+
 void FileBase::setxattr(const char* name, const char* value, size_t size, int flags)
 {
-#endif
-    std::unique_ptr<byte[]> buffer(new byte[size + XATTR_IV_LENGTH + XATTR_MAC_LENGTH]);
-    byte* iv = buffer.get();
-    generate_random(iv, XATTR_IV_LENGTH);
+    if (!name || !value)
+        throw OSException(EFAULT);
+
+    std::unique_ptr<byte[]> buffer(new byte[size]);
+    byte* ciphertext = buffer.get();
+
+    byte meta[XATTR_MAC_LENGTH + XATTR_IV_LENGTH];
+    byte* iv = meta;
     byte* mac = iv + XATTR_IV_LENGTH;
-    byte* ciphertext = mac + XATTR_MAC_LENGTH;
+    generate_random(iv, XATTR_IV_LENGTH);
 
     auto name_len = strlen(name);
     std::unique_ptr<byte[]> header(new byte[name_len + ID_LENGTH]);
@@ -218,13 +196,10 @@ void FileBase::setxattr(const char* name, const char* value, size_t size, int fl
                     XATTR_MAC_LENGTH,
                     ciphertext);
 
-#ifdef __APPLE__
-    auto rc = ::fsetxattr(
-        file_descriptor(), name, buffer.get(), size + XATTR_IV_LENGTH + XATTR_MAC_LENGTH, 0, flags);
-#else
-    auto rc = ::fsetxattr(
-        file_descriptor(), name, buffer.get(), size + XATTR_IV_LENGTH + XATTR_MAC_LENGTH, flags);
-#endif
+    auto rc = fsetxattr_wrapper(file_descriptor(), name, ciphertext, size, flags);
+    if (rc < 0)
+        throw OSException(errno);
+    rc = fsetxattr_wrapper(m_meta_fd, name, meta, sizeof(meta), flags);
     if (rc < 0)
         throw OSException(errno);
 }

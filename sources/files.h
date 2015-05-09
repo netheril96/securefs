@@ -18,7 +18,7 @@ private:
     key_type m_key;
     id_type m_id;
     uint32_t m_flags[7];
-    int m_data_fd;
+    int m_data_fd, m_meta_fd;
     bool m_dirty, m_check;
 
 private:
@@ -144,14 +144,8 @@ public:
     int file_descriptor() const { return m_data_fd; }
     ssize_t listxattr(char* buffer, size_t size);
 
-#ifdef __APPLE__
-    ssize_t getxattr(const char* name, char* value, size_t size, uint32_t position);
-    void setxattr(const char* name, const char* value, size_t size, int flags, uint32_t position);
-#else
     ssize_t getxattr(const char* name, char* value, size_t size);
     void setxattr(const char* name, const char* value, size_t size, int flags);
-#endif
-
     void removexattr(const char* name);
 };
 

@@ -23,6 +23,8 @@ TEST_CASE("File table")
     memset(master_key.data(), 0xFF, master_key.size());
     memset(null_id.data(), 0, null_id.size());
     memset(file_id.data(), 0xEE, file_id.size());
+    const char* xattr_name = "com.apple.FinderInfo...";
+    const securefs::PODArray<char, 32> xattr_value(0x11);
 
     {
         int tmp_fd = ::open(dir_template, O_RDONLY);
@@ -32,6 +34,7 @@ TEST_CASE("File table")
         dir->add_entry(".", null_id, FileBase::DIRECTORY);
         dir->add_entry("..", null_id, FileBase::DIRECTORY);
         dir->add_entry("hello", file_id, FileBase::REGULAR_FILE);
+        dir->setxattr(xattr_name, xattr_value.data(), xattr_value.size(), 0);
         table.close(dir);
         ::close(tmp_fd);
     }
@@ -41,6 +44,10 @@ TEST_CASE("File table")
         REQUIRE(tmp_fd >= 0);
         FileTable table(tmp_fd, master_key, 0);
         auto dir = dynamic_cast<Directory*>(table.open_as(null_id, FileBase::DIRECTORY));
+        securefs::PODArray<char, 32> xattr_test_value(0);
+        dir->getxattr(xattr_name, xattr_test_value.data(), xattr_test_value.size());
+        REQUIRE(xattr_value == xattr_test_value);
+
         std::set<std::string> filenames;
         dir->iterate_over_entries([&](const std::string& fn, const id_type&, int)
                                   {

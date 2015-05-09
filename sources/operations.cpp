@@ -746,12 +746,14 @@ namespace operations
 #ifdef __APPLE__
     int getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position)
     {
+        if (position != 0)
+            return -EINVAL;
         auto ctx = fuse_get_context();
         try
         {
             auto fg = internal::open_all(ctx, path);
             std::lock_guard<FileBase> lg(*fg);
-            return static_cast<int>(fg->getxattr(name, value, size, position));
+            return static_cast<int>(fg->getxattr(name, value, size));
         }
         COMMON_CATCH_BLOCK
     }
@@ -763,9 +765,13 @@ namespace operations
                  int flags,
                  uint32_t position)
     {
-        static const char* APPLE_QUARANTINE = "com.apple.quarantine";
-        if (strcmp(name, APPLE_QUARANTINE) == 0)
+        if (position != 0)
+            return -EINVAL;
+        if (strcmp(name, "com.apple.quarantine") == 0)
             return 0;    // workaround for the "XXX is damaged" bug on OS X
+        if (strcmp(name, "com.apple.FinderInfo") == 0)
+            return -EACCES;    // FinderInfo cannot be encrypted, because its format and length is
+                               // artificially restricted
 
         auto ctx = fuse_get_context();
         flags &= XATTR_CREATE | XATTR_REPLACE;
@@ -773,7 +779,7 @@ namespace operations
         {
             auto fg = internal::open_all(ctx, path);
             std::lock_guard<FileBase> lg(*fg);
-            fg->setxattr(name, value, size, flags, position);
+            fg->setxattr(name, value, size, flags);
             return 0;
         }
         COMMON_CATCH_BLOCK
