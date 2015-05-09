@@ -314,7 +314,7 @@ namespace internal
         static const size_t ENCRYPTED_HEADER_SIZE = HEADER_SIZE + IV_SIZE + MAC_SIZE;
 
     private:
-        std::unique_ptr<HMACStream> m_metastream;
+        HMACStream m_metastream;
         key_type m_key;
         id_type m_id;
         bool m_check;
@@ -330,25 +330,16 @@ namespace internal
     public:
         explicit AESGCMCryptStream(std::shared_ptr<StreamBase> data_stream,
                                    std::shared_ptr<StreamBase> meta_stream,
-                                   const key_type& key_,
+                                   const key_type& data_key,
+                                   const key_type& meta_key,
                                    const id_type& id_,
                                    bool check)
-            : CryptStream(data_stream, BLOCK_SIZE), m_id(id_), m_check(check)
+            : CryptStream(data_stream, BLOCK_SIZE)
+            , m_metastream(meta_key, id_, meta_stream, check)
+            , m_key(data_key)
+            , m_id(id_)
+            , m_check(check)
         {
-            byte generated_keys[KEY_LENGTH * 2];
-            const char* info = "AESGCMCryptStream";
-            hkdf(key_.data(),
-                 key_.size(),
-                 id_.data(),
-                 id_.size(),
-                 info,
-                 strlen(info),
-                 generated_keys,
-                 sizeof(generated_keys));
-            memcpy(m_key.data(), generated_keys, KEY_LENGTH);
-            key_type hmac_key;
-            memcpy(hmac_key.data(), generated_keys + KEY_LENGTH, KEY_LENGTH);
-            m_metastream.reset(new HMACStream(hmac_key, id_, std::move(meta_stream), m_check));
         }
 
     protected:
@@ -380,7 +371,7 @@ namespace internal
                             MAC_SIZE,
                             output);
             auto pos = meta_position_for_iv(block_number);
-            m_metastream->write(buffer, pos, sizeof(buffer));
+            m_metastream.write(buffer, pos, sizeof(buffer));
         }
 
         void decrypt(offset_type block_number,
@@ -393,7 +384,7 @@ namespace internal
 
             byte buffer[IV_SIZE + MAC_SIZE];
             auto pos = meta_position_for_iv(block_number);
-            if (m_metastream->read(buffer, pos, sizeof(buffer)) != sizeof(buffer))
+            if (m_metastream.read(buffer, pos, sizeof(buffer)) != sizeof(buffer))
                 throw CorruptedMetaDataException(id(), "MAC/IV not found");
 
             const byte* iv = buffer;
@@ -422,27 +413,27 @@ namespace internal
     public:
         bool is_sparse() const noexcept override
         {
-            return m_stream->is_sparse() && m_metastream->is_sparse();
+            return m_stream->is_sparse() && m_metastream.is_sparse();
         }
 
         void resize(length_type new_size) override
         {
             CryptStream::resize(new_size);
             auto num_blocks = (new_size + m_block_size - 1) / m_block_size;
-            m_metastream->resize(ENCRYPTED_HEADER_SIZE + num_blocks * (IV_SIZE + MAC_SIZE));
+            m_metastream.resize(ENCRYPTED_HEADER_SIZE + num_blocks * (IV_SIZE + MAC_SIZE));
         }
 
         void flush() override
         {
             CryptStream::flush();
-            m_metastream->flush();
+            m_metastream.flush();
         }
 
     private:
         length_type unchecked_read_header(void* output)
         {
             byte buffer[ENCRYPTED_HEADER_SIZE];
-            auto rc = m_metastream->read(buffer, 0, sizeof(buffer));
+            auto rc = m_metastream.read(buffer, 0, sizeof(buffer));
             if (rc == 0)
                 return 0;
             if (rc != sizeof(buffer))
@@ -484,7 +475,7 @@ namespace internal
                             mac,
                             MAC_SIZE,
                             ciphertext);
-            m_metastream->write(buffer, 0, sizeof(buffer));
+            m_metastream.write(buffer, 0, sizeof(buffer));
         }
 
     public:
@@ -517,19 +508,20 @@ namespace internal
             unchecked_write_header(buffer.data());
         }
 
-        void flush_header() override { m_metastream->flush(); }
+        void flush_header() override { m_metastream.flush(); }
     };
 }
 
 std::pair<std::shared_ptr<CryptStream>, std::shared_ptr<HeaderBase>>
 make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
                          std::shared_ptr<StreamBase> meta_stream,
-                         const key_type& key_,
+                         const key_type& data_key,
+                         const key_type& meta_key,
                          const id_type& id_,
                          bool check)
 {
     auto stream = std::make_shared<internal::AESGCMCryptStream>(
-        std::move(data_stream), std::move(meta_stream), key_, id_, check);
+        std::move(data_stream), std::move(meta_stream), data_key, meta_key, id_, check);
     return {stream, stream};
 }
 

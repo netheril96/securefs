@@ -31,20 +31,27 @@ FileBase::FileBase(int data_fd, int meta_fd, const key_type& key_, const id_type
 {
     auto data_stream = std::make_shared<POSIXFileStream>(data_fd);
     auto meta_stream = std::make_shared<POSIXFileStream>(meta_fd);
-    auto crypt = make_cryptstream_aes_gcm(
-        std::move(data_stream), std::move(meta_stream), key_, id_, check);
-    m_stream = crypt.first;
-    m_header = crypt.second;
-    read_header();
-    const char* info = "FileBase";
+
+    key_type data_key, meta_key;
+    byte generated_keys[KEY_LENGTH * 3];
+    const char* info = "securefs";
     hkdf(key_.data(),
          key_.size(),
          id_.data(),
          id_.size(),
          info,
          strlen(info),
-         m_key.data(),
-         m_key.size());
+         generated_keys,
+         sizeof(generated_keys));
+    memcpy(data_key.data(), generated_keys, KEY_LENGTH);
+    memcpy(meta_key.data(), generated_keys + KEY_LENGTH, KEY_LENGTH);
+    memcpy(m_key.data(), generated_keys + 2 * KEY_LENGTH, KEY_LENGTH);
+    auto crypt = make_cryptstream_aes_gcm(
+        std::move(data_stream), std::move(meta_stream), data_key, meta_key, id_, check);
+
+    m_stream = crypt.first;
+    m_header = crypt.second;
+    read_header();
 }
 
 void FileBase::read_header()
