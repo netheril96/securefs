@@ -5,6 +5,7 @@
 #include <string>
 #include <type_traits>
 #include <vector>
+#include <array>
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -39,12 +40,15 @@ public:
     const T* data() const { return m_data; }
     T* data() { return m_data; }
     static constexpr size_t size() { return Size; };
-    bool operator==(const PODArray& other) const { return memcmp(m_data, other.m_data, size()) == 0; }
+    bool operator==(const PODArray& other) const
+    {
+        return memcmp(m_data, other.m_data, size()) == 0;
+    }
     bool operator!=(const PODArray& other) const { return !(*this == other); }
 };
 
-typedef PODArray<byte, KEY_LENGTH> key_type;
-typedef PODArray<byte, ID_LENGTH> id_type;
+typedef std::array<byte, KEY_LENGTH> key_type;
+typedef std::array<byte, ID_LENGTH> id_type;
 
 inline std::string hexify(const byte* data, size_t length)
 {

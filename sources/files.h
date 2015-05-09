@@ -53,8 +53,11 @@ protected:
     virtual void subflush() {}
 
 public:
-    static const int REGULAR_FILE = S_IFREG >> 12, SYMLINK = S_IFLNK >> 12,
-                     DIRECTORY = S_IFDIR >> 12;
+    static const byte REGULAR_FILE = S_IFREG >> 12, SYMLINK = S_IFLNK >> 12,
+                      DIRECTORY = S_IFDIR >> 12;
+
+    static_assert(REGULAR_FILE != SYMLINK && SYMLINK != DIRECTORY,
+                  "The value assigned are indistinguishable");
 
     static int error_number_for_not(int type) noexcept
     {
