@@ -82,13 +82,18 @@ uint32_t BtreeDirectory::allocate_page()
     auto pg = get_start_free_page();
     if (pg == INVALID_PAGE)
     {
-        return static_cast<uint32_t>(m_stream->size() / BLOCK_SIZE);
+        auto result = static_cast<uint32_t>(m_stream->size() / BLOCK_SIZE);
+        m_stream->resize(m_stream->size() + BLOCK_SIZE);
+        return result;
     }
+    FreePage fp;
+    read_free_page(pg, fp);
     set_num_free_page(get_num_free_page() - 1);
+    set_start_free_page(fp.next);
     return pg;
 }
 
-void BtreeDirectory::free_page(uint32_t num)
+void BtreeDirectory::deallocate_page(uint32_t num)
 {
     byte buffer[BLOCK_SIZE] = {};
     to_little_endian(get_start_free_page(), buffer + sizeof(uint32_t));
@@ -251,14 +256,14 @@ public:
 
     Entry split(Node& other_part)
     {
-        if (m_entries.size() < 3 || m_entries.size() % 2 != 1)
+        if (m_entries.size() < 3)
             throw InvalidArgumentException("Not fit for node splitting");
         other_part.m_entries.clear();
         other_part.m_child_indices.clear();
         other_part.m_dirty = true;
 
         auto middle_index = m_entries.size() / 2;
-        Entry e = other_part.m_entries[middle_index];
+        Entry e = m_entries[middle_index];
         auto start = m_entries.begin() + middle_index + 1;
         other_part.m_entries.assign(start, m_entries.end());
         m_entries.erase(start, m_entries.end());
@@ -356,17 +361,24 @@ bool BtreeDirectory::add_entry(const std::string& name, const id_type& id, int t
 {
     if (name.size() > MAX_FILENAME_LENGTH)
         throw OSException(ENAMETOOLONG);
-    if (get_root_page() == INVALID_PAGE)
-        return false;
-    std::vector<Node> node_chain;
-    auto find_result = find_node(name, node_chain);
-    if (find_result.second)
-        return false;
     Entry e;
     std::copy(name.begin(), name.end(), e.filename.begin());
     std::fill(e.filename.begin() + name.size(), e.filename.end(), 0);
     e.id = id;
     e.type = type;
+    if (get_root_page() == INVALID_PAGE)
+    {
+        Node root(allocate_page());
+        root.add(e);
+        write_node(root.page_number(), root);
+        set_root_page(root.page_number());
+        return true;
+    }
+
+    std::vector<Node> node_chain;
+    auto find_result = find_node(name, node_chain);
+    if (find_result.second)
+        return false;
     node_chain.back().add(e);
     for (size_t i = node_chain.size(); i-- > 0;)
     {

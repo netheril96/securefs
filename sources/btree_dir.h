@@ -18,7 +18,7 @@ private:
     void read_free_page(uint32_t, FreePage&);
     void write_node(uint32_t, const Node&);
     void write_free_page(uint32_t, const FreePage&);
-    void free_page(uint32_t);
+    void deallocate_page(uint32_t);
     uint32_t allocate_page();
     std::pair<size_t, bool> find_node(const std::string& name, std::vector<Node>& node_chain);
 
@@ -30,8 +30,14 @@ public:
     }
     virtual bool get_entry(const std::string& name, id_type& id, int& type) override;
     virtual bool add_entry(const std::string& name, const id_type& id, int type) override;
-    virtual bool remove_entry(const std::string& name, id_type& id, int& type) override;
-    virtual void iterate_over_entries(callback cb) override;
-    virtual bool empty() const override;
+    virtual bool remove_entry(const std::string& name, id_type& id, int& type) override
+    {
+        throw NotImplementedException(__PRETTY_FUNCTION__);
+    }
+    virtual void iterate_over_entries(callback cb) override
+    {
+        throw NotImplementedException(__PRETTY_FUNCTION__);
+    }
+    virtual bool empty() const override { throw NotImplementedException(__PRETTY_FUNCTION__); }
 };
 }
