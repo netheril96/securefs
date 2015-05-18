@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <utility>
 #include <type_traits>
+#include <assert.h>
 
 namespace
 {
@@ -65,6 +66,7 @@ class BtreeDirectory::FreePage
 {
 public:
     uint32_t next;
+    uint32_t prev;
 };
 
 void BtreeDirectory::read_free_page(uint32_t num, FreePage& fp)
@@ -75,6 +77,15 @@ void BtreeDirectory::read_free_page(uint32_t num, FreePage& fp)
     if (from_little_endian<uint32_t>(buffer) != 0)
         throw CorruptedDirectoryException();
     fp.next = from_little_endian<uint32_t>(buffer + sizeof(uint32_t));
+    fp.prev = from_little_endian<uint32_t>(buffer + sizeof(uint32_t) * 2);
+}
+
+void BtreeDirectory::write_free_page(uint32_t num, const FreePage& fp)
+{
+    byte buffer[BLOCK_SIZE] = {};
+    to_little_endian(fp.next, buffer + sizeof(uint32_t));
+    to_little_endian(fp.prev, buffer + sizeof(uint32_t) * 2);
+    m_stream->write(buffer, BLOCK_SIZE * num, BLOCK_SIZE);
 }
 
 uint32_t BtreeDirectory::allocate_page()
@@ -90,14 +101,21 @@ uint32_t BtreeDirectory::allocate_page()
     read_free_page(pg, fp);
     set_num_free_page(get_num_free_page() - 1);
     set_start_free_page(fp.next);
+    read_free_page(fp.next, fp);
+    fp.prev = INVALID_PAGE;
+    write_free_page(get_start_free_page(), fp);
     return pg;
 }
 
 void BtreeDirectory::deallocate_page(uint32_t num)
 {
-    byte buffer[BLOCK_SIZE] = {};
-    to_little_endian(get_start_free_page(), buffer + sizeof(uint32_t));
-    m_stream->write(buffer, num * BLOCK_SIZE, BLOCK_SIZE);
+    FreePage fp;
+    fp.prev = INVALID_PAGE;
+    fp.next = get_start_free_page();
+    write_free_page(num, fp);
+    read_free_page(get_start_free_page(), fp);
+    fp.prev = num;
+    write_free_page(get_start_free_page(), fp);
     set_start_free_page(num);
     set_num_free_page(get_num_free_page() + 1);
 }
@@ -294,6 +312,27 @@ public:
             return std::make_pair(iter - m_entries.begin(), true);
         return std::make_pair(iter - m_entries.begin(), false);
     }
+
+    void remove_entry(size_t num)
+    {
+        if (num >= m_entries.size())
+            throw std::out_of_range("Entry index out of range");
+        m_entries.erase(m_entries.begin() + num);
+    }
+
+    static void rotate_remove(Node& parent, Node& lchild, Node& rchild, size_t entry_index)
+    {
+        if (lchild.num_entries() >= rchild.num_entries())
+        {
+            parent.m_entries[entry_index] = lchild.m_entries.back();
+            lchild.m_entries.pop_back();
+        }
+        else
+        {
+            parent.m_entries[entry_index] = rchild.m_entries.front();
+            rchild.m_entries.erase(rchild.m_entries.begin());
+        }
+    }
 };
 
 std::pair<size_t, bool> BtreeDirectory::find_node(const std::string& name,
@@ -379,6 +418,7 @@ bool BtreeDirectory::add_entry(const std::string& name, const id_type& id, int t
     auto find_result = find_node(name, node_chain);
     if (find_result.second)
         return false;
+    assert(!node_chain.empty());
     node_chain.back().add(e);
     for (size_t i = node_chain.size(); i-- > 0;)
     {
@@ -408,5 +448,26 @@ bool BtreeDirectory::add_entry(const std::string& name, const id_type& id, int t
             write_node(n.page_number(), n);
     }
     return true;
+}
+
+bool BtreeDirectory::remove_entry(const std::string& name, id_type& id, int& type)
+{
+    throw NotImplementedException(__PRETTY_FUNCTION__);
+}
+
+bool BtreeDirectory::validate_free_list()
+{
+    auto pg = get_root_page();
+    uint32_t prev = INVALID_PAGE;
+    FreePage fp;
+    for (size_t i = 0; i < get_num_free_page(); ++i)
+    {
+        read_free_page(pg, fp);
+        if (fp.prev != prev)
+            return false;
+        prev = pg;
+        pg = fp.next;
+    }
+    return pg == INVALID_PAGE;
 }
 }
