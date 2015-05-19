@@ -130,6 +130,7 @@ private:
     uint32_t allocate_page();
 
     Node* get_node(uint32_t parent_num, uint32_t num);
+    void del_node(Node*);
     Node* get_root_node();
     void flush_cache();
     void clear_cache();
@@ -137,6 +138,8 @@ private:
     std::tuple<Node*, ptrdiff_t, bool> find_node(const std::string& name);
 
     void insert_and_balance(Node*, Entry, uint32_t additional_child, int depth);
+    Node* rotate_down(Node*, const Entry&, int depth);
+    void merge_up(Node*, int depth);
 
 protected:
     void subflush() override;

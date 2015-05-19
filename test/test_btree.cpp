@@ -38,7 +38,12 @@ TEST_CASE("Test BtreeDirectory")
     {
         REQUIRE(dir.add_entry(names[i], ids[i], securefs::FileBase::REGULAR_FILE));
     }
-    for (size_t i = 0; i < NUM_ENTRIES; ++i)
+    for (size_t i = 0; i < NUM_ENTRIES / 2; ++i)
+    {
+        int type;
+        REQUIRE(dir.remove_entry(names[i], ids[i], type));
+    }
+    for (size_t i = NUM_ENTRIES / 2; i < NUM_ENTRIES; ++i)
     {
         securefs::id_type id;
         int type;

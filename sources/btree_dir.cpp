@@ -5,6 +5,7 @@
 #include <utility>
 #include <type_traits>
 #include <assert.h>
+#include <iterator>
 
 namespace securefs
 {
@@ -52,6 +53,13 @@ static void slice(Container& c1, Container& c2, size_t index)
 {
     c2.assign(c1.begin() + index, c1.end());
     c1.erase(c1.begin() + index, c1.end());
+}
+
+template <class Container>
+static void steal(Container& c1, Container& c2)
+{
+    typedef std::move_iterator<typename Container::iterator> iterator;
+    c1.insert(c1.end(), iterator(c2.begin()), iterator(c2.end()));
 }
 
 class BtreeDirectory::FreePage
@@ -332,9 +340,98 @@ void BtreeDirectory::insert_and_balance(BtreeNode* n, Entry e, uint32_t addition
     }
 }
 
+BtreeNode* BtreeDirectory::rotate_down(BtreeNode* n, const DirEntry& e, int depth)
+{
+    if (depth > BTREE_MAX_DEPTH)
+        throw CorruptedDirectoryException();    // Prevent too deep recursion
+    auto iter = std::lower_bound(n->mutable_entries().begin(), n->mutable_entries().end(), e);
+    if (n->is_leaf())
+    {
+        n->mutable_entries().erase(iter);
+        return n;
+    }
+    else
+    {
+        auto index = iter - n->entries().begin();
+        auto lchild = get_node(n->page_number(), n->children()[index]);
+        auto rchild = get_node(n->page_number(), n->children()[index + 1]);
+        if (lchild->entries().size() >= rchild->entries().size())
+        {
+            *iter = lchild->entries().back();
+            return rotate_down(lchild, lchild->entries().back(), depth + 1);
+        }
+        else
+        {
+            *iter = rchild->entries().front();
+            return rotate_down(rchild, rchild->entries().front(), depth + 1);
+        }
+    }
+}
+
+void BtreeDirectory::del_node(BtreeNode* n)
+{
+    if (!n)
+        return;
+    deallocate_page(n->page_number());
+    m_node_cache.erase(n->page_number());
+}
+
+static std::tuple<ptrdiff_t, ptrdiff_t, uint32_t> find_sibling(BtreeNode* parent, uint32_t num)
+{
+    auto iter = std::find(parent->children().begin(), parent->children().end(), num);
+    if (iter == parent->children().end())
+        throw CorruptedDirectoryException();
+    if (iter == parent->children().begin())
+        return std::make_tuple(0, 1, parent->children()[1]);
+    auto idx = iter - parent->children().begin();
+    return std::make_tuple(idx - 1, idx - 1, parent->children()[idx - 1]);
+}
+
+// This funciton assumes that every parent node is in the cache
+void BtreeDirectory::merge_up(BtreeNode* n, int depth)
+{
+    if (depth > BTREE_MAX_DEPTH)
+        throw CorruptedDirectoryException();    // Prevent too deep recursion
+    if (n->parent_page_number() == INVALID_PAGE || n->entries().size() >= MAX_NUM_ENTRIES / 2)
+        return;
+
+    Node* parent = get_node(INVALID_PAGE, n->page_number());
+    ptrdiff_t entry_index, child_index;
+    uint32_t sibling_num;
+    std::tie(entry_index, child_index, sibling_num) = find_sibling(parent, n->page_number());
+    Node* sibling = get_node(parent->page_number(), sibling_num);
+
+    n->mutable_entries().push_back(std::move(parent->mutable_entries()[entry_index]));
+    parent->mutable_entries().erase(parent->entries().begin() + entry_index);
+    parent->mutable_children().erase(parent->children().begin() + child_index);
+
+    steal(n->mutable_entries(), sibling->mutable_entries());
+    steal(n->mutable_children(), sibling->mutable_children());
+    del_node(sibling);
+    merge_up(parent, depth + 1);
+}
+
 bool BtreeDirectory::remove_entry(const std::string& name, id_type& id, int& type)
 {
-    throw NotImplementedException(__PRETTY_FUNCTION__);
+    if (name.size() > MAX_FILENAME_LENGTH)
+        throw OSException(ENAMETOOLONG);
+    auto find_result = find_node(name);
+    if (!std::get<2>(find_result))
+        return false;
+    auto node = std::get<0>(find_result);
+    auto index = std::get<1>(find_result);
+    if (!node)
+        return false;
+    const Entry& e = node->entries().at(index);
+    if (name == e.filename)
+    {
+        id = e.id;
+        type = e.type;
+        return true;
+    }
+    node = rotate_down(node, e, 0);
+    merge_up(node, 0);
+    return true;
 }
 
 bool BtreeDirectory::validate_free_list()
