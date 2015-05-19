@@ -5,13 +5,20 @@
 #include <utility>
 #include <memory>
 #include <string>
-#include <deque>
+#include <unordered_map>
+#include <tuple>
 
 namespace securefs
 {
 const uint32_t INVALID_PAGE = -1;
 const int BTREE_MAX_DEPTH = 32;
 const int MAX_NUM_ENTRIES = 13;
+
+static_assert(MAX_NUM_ENTRIES * (Directory::MAX_FILENAME_LENGTH + 1 + ID_LENGTH + 4)
+                      + (MAX_NUM_ENTRIES + 1) * 4
+                      + 4 + 4
+                  <= BLOCK_SIZE,
+              "A btree node may not fit in a single block");
 
 class CorruptedDirectoryException : public SeriousException
 {
@@ -23,15 +30,12 @@ public:
 class DirEntry
 {
 public:
-    std::array<char, Directory::MAX_FILENAME_LENGTH + 1> filename;
+    std::string filename;
     id_type id;
     uint32_t type;
 
-    int compare(const DirEntry& other) const
-    {
-        return strcmp(filename.data(), other.filename.data());
-    }
-    int compare(const std::string& name) const { return strcmp(filename.data(), name.c_str()); }
+    int compare(const DirEntry& other) const { return filename.compare(other.filename); }
+    int compare(const std::string& name) const { return filename.compare(name); }
     bool operator<(const DirEntry& other) const { return compare(other) < 0; }
     bool operator==(const DirEntry& other) const { return compare(other) == 0; }
     bool operator<(const std::string& other) const { return compare(other) < 0; }
@@ -74,6 +78,11 @@ public:
 
     uint32_t page_number() const { return m_num; }
     uint32_t parent_page_number() const { return m_parent_num; }
+    uint32_t& mutable_parent_page_number()
+    {
+        m_dirty = true;
+        return m_parent_num;
+    }
     bool is_leaf() const
     {
         if (m_child_indices.empty())
@@ -110,7 +119,7 @@ private:
     class FreePage;
 
 private:
-    std::deque<Node> m_node_cache;
+    std::unordered_map<uint32_t, std::unique_ptr<Node>> m_node_cache;
 
 private:
     void read_node(uint32_t, Node&);
@@ -118,13 +127,19 @@ private:
     void write_node(uint32_t, const Node&);
     void write_free_page(uint32_t, const FreePage&);
     void deallocate_page(uint32_t);
+    uint32_t allocate_page();
 
     Node* get_node(uint32_t parent_num, uint32_t num);
+    Node* get_root_node();
     void flush_cache();
     void clear_cache();
 
-    uint32_t allocate_page();
-    std::pair<size_t, bool> find_node(const std::string& name, std::vector<Node>& node_chain);
+    std::tuple<Node*, ptrdiff_t, bool> find_node(const std::string& name);
+
+    void insert_and_balance(Node*, Entry, uint32_t additional_child, int depth);
+
+protected:
+    void subflush() override;
 
 public:
     template <class... Args>
@@ -143,8 +158,4 @@ public:
     virtual bool empty() const override { throw NotImplementedException(__PRETTY_FUNCTION__); }
     bool validate_free_list();
 };
-
-static_assert(std::is_trivially_copyable<DirEntry>::value, "");
-static_assert(sizeof(DirEntry) == 292, "");
-static_assert(8 + 4 * (MAX_NUM_ENTRIES + 1) + sizeof(DirEntry) * MAX_NUM_ENTRIES <= BLOCK_SIZE, "");
 }
