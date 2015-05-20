@@ -198,6 +198,30 @@ void BtreeDirectory::flush_cache()
     }
 }
 
+void BtreeDirectory::validate_node(const BtreeNode* n, int depth)
+{
+    if (depth > BTREE_MAX_DEPTH)
+        throw CorruptedDirectoryException();
+    if (!std::is_sorted(n->entries().begin(), n->entries().end()))
+        throw CorruptedDirectoryException();
+    if (n->parent_page_number() != INVALID_PAGE
+        && (n->entries().size() < MAX_NUM_ENTRIES / 2 || n->entries().size() > MAX_NUM_ENTRIES))
+        throw CorruptedDirectoryException();
+    if (!n->is_leaf())
+    {
+        for (size_t i = 0, size = n->entries().size(); i < size; ++i)
+        {
+            const Entry& e = n->entries()[i];
+            const Node* lchild = get_node(n->page_number(), n->children()[i]);
+            const Node* rchild = get_node(n->page_number(), n->children()[i + 1]);
+            validate_node(lchild, depth + 1);
+            validate_node(rchild, depth + 1);
+            if (e < lchild->entries().back() || rchild->entries().front() < e)
+                throw CorruptedDirectoryException();
+        }
+    }
+}
+
 void BtreeDirectory::clear_cache() { m_node_cache.clear(); }
 
 BtreeDirectory::Node* BtreeDirectory::get_node(uint32_t parent_num, uint32_t num)
@@ -205,6 +229,8 @@ BtreeDirectory::Node* BtreeDirectory::get_node(uint32_t parent_num, uint32_t num
     auto iter = m_node_cache.find(num);
     if (iter != m_node_cache.end())
     {
+        if (parent_num != INVALID_PAGE && parent_num != iter->second->parent_page_number())
+            throw CorruptedDirectoryException();
         return iter->second.get();
     }
     std::unique_ptr<Node> n(new Node(parent_num, num));
@@ -315,10 +341,14 @@ void BtreeDirectory::insert_and_balance(BtreeNode* n, Entry e, uint32_t addition
         Node* sibling = get_node(n->parent_page_number(), allocate_page());
         auto middle_index = n->entries().size() / 2 - 1;
         e = std::move(n->mutable_entries()[middle_index]);
+        if (!n->is_leaf())
+        {
+            for (uint32_t child_num : sibling->children())
+                eject_node(child_num);    // These children must have their parent changed
+            slice(n->mutable_children(), sibling->mutable_children(), middle_index + 1);
+        }
         slice(n->mutable_entries(), sibling->mutable_entries(), middle_index + 1);
         n->mutable_entries().pop_back();
-        if (!n->is_leaf())
-            slice(n->mutable_children(), sibling->mutable_children(), middle_index + 1);
         if (n->parent_page_number() == INVALID_PAGE)
         {
             auto new_root_page = allocate_page();
@@ -368,6 +398,7 @@ BtreeNode* BtreeDirectory::rotate_down(BtreeNode* n, const DirEntry& e, int dept
     }
 }
 
+void BtreeDirectory::eject_node(uint32_t num) { m_node_cache.erase(num); }
 void BtreeDirectory::del_node(BtreeNode* n)
 {
     if (!n)
@@ -448,5 +479,12 @@ bool BtreeDirectory::validate_free_list()
         pg = fp.next;
     }
     return pg == INVALID_PAGE;
+}
+
+void BtreeDirectory::validate_btree_structure()
+{
+    Node* root = get_root_node();
+    if (root)
+        validate_node(root, 0);
 }
 }

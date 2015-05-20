@@ -130,6 +130,7 @@ private:
     uint32_t allocate_page();
 
     Node* get_node(uint32_t parent_num, uint32_t num);
+    void eject_node(uint32_t);
     void del_node(Node*);
     Node* get_root_node();
     void flush_cache();
@@ -140,6 +141,8 @@ private:
     void insert_and_balance(Node*, Entry, uint32_t additional_child, int depth);
     Node* rotate_down(Node*, const Entry&, int depth);
     void merge_up(Node*, int depth);
+
+    void validate_node(const Node* n, int depth);
 
 protected:
     void subflush() override;
@@ -160,5 +163,6 @@ public:
     }
     virtual bool empty() const override { throw NotImplementedException(__PRETTY_FUNCTION__); }
     bool validate_free_list();
+    void validate_btree_structure();
 };
 }
