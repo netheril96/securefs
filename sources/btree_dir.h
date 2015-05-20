@@ -130,7 +130,8 @@ private:
     void deallocate_page(uint32_t);
     uint32_t allocate_page();
 
-    Node* get_node(uint32_t parent_num, uint32_t num);
+    Node* retrieve_node(uint32_t parent_num, uint32_t num);
+    Node* retrieve_existing_node(uint32_t num);
     void eject_node(uint32_t);
     void del_node(Node*);
     Node* get_root_node();
@@ -147,6 +148,8 @@ private:
 
     void write_dot_graph(const Node*, FILE*);
 
+    void recursive_iterate(const Node* n, const callback& cb, int depth);
+
 protected:
     void subflush() override;
 
@@ -160,10 +163,7 @@ public:
     virtual bool get_entry(const std::string& name, id_type& id, int& type) override;
     virtual bool add_entry(const std::string& name, const id_type& id, int type) override;
     virtual bool remove_entry(const std::string& name, id_type& id, int& type) override;
-    virtual void iterate_over_entries(callback cb) override
-    {
-        throw NotImplementedException(__PRETTY_FUNCTION__);
-    }
+    virtual void iterate_over_entries(callback cb) override;
     virtual bool empty() const override { throw NotImplementedException(__PRETTY_FUNCTION__); }
     bool validate_free_list();
     void validate_btree_structure();

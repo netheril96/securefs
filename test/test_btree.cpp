@@ -44,7 +44,7 @@ TEST_CASE("Test BtreeDirectory")
         int type;
         REQUIRE(dir.remove_entry(names[i], ids[i], type));
     }
-    // REQUIRE(dir.validate_free_list());
+    REQUIRE(dir.validate_free_list());
     REQUIRE_NOTHROW(dir.validate_btree_structure());
     for (size_t i = NUM_ENTRIES / 2; i < NUM_ENTRIES; ++i)
     {

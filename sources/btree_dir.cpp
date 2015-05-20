@@ -52,7 +52,8 @@ static byte* write_little_endian_and_forward(const T& value, byte* buffer, const
 template <class Container>
 static void slice(Container& c1, Container& c2, size_t index)
 {
-    c2.assign(c1.begin() + index, c1.end());
+    typedef std::move_iterator<typename Container::iterator> iterator;
+    c2.assign(iterator(c1.begin() + index), iterator(c1.end()));
     c1.erase(c1.begin() + index, c1.end());
 }
 
@@ -114,9 +115,14 @@ void BtreeDirectory::deallocate_page(uint32_t num)
     fp.prev = INVALID_PAGE;
     fp.next = get_start_free_page();
     write_free_page(num, fp);
-    read_free_page(get_start_free_page(), fp);
-    fp.prev = num;
-    write_free_page(get_start_free_page(), fp);
+
+    auto start = get_start_free_page();
+    if (start != INVALID_PAGE)
+    {
+        read_free_page(get_start_free_page(), fp);
+        fp.prev = num;
+        write_free_page(get_start_free_page(), fp);
+    }
     set_start_free_page(num);
     set_num_free_page(get_num_free_page() + 1);
 }
@@ -213,8 +219,8 @@ void BtreeDirectory::validate_node(const BtreeNode* n, int depth)
         for (size_t i = 0, size = n->entries().size(); i < size; ++i)
         {
             const Entry& e = n->entries()[i];
-            const Node* lchild = get_node(n->page_number(), n->children()[i]);
-            const Node* rchild = get_node(n->page_number(), n->children()[i + 1]);
+            const Node* lchild = retrieve_node(n->page_number(), n->children()[i]);
+            const Node* rchild = retrieve_node(n->page_number(), n->children()[i + 1]);
             validate_node(lchild, depth + 1);
             validate_node(rchild, depth + 1);
             if (e < lchild->entries().back() || rchild->entries().front() < e)
@@ -225,7 +231,15 @@ void BtreeDirectory::validate_node(const BtreeNode* n, int depth)
 
 void BtreeDirectory::clear_cache() { m_node_cache.clear(); }
 
-BtreeDirectory::Node* BtreeDirectory::get_node(uint32_t parent_num, uint32_t num)
+BtreeNode* BtreeDirectory::retrieve_existing_node(uint32_t num)
+{
+    auto iter = m_node_cache.find(num);
+    if (iter == m_node_cache.end())
+        return nullptr;
+    return iter->second.get();
+}
+
+BtreeDirectory::Node* BtreeDirectory::retrieve_node(uint32_t parent_num, uint32_t num)
 {
     auto iter = m_node_cache.find(num);
     if (iter != m_node_cache.end())
@@ -255,7 +269,7 @@ std::tuple<BtreeNode*, ptrdiff_t, bool> BtreeDirectory::find_node(const std::str
             return std::make_tuple(n, iter - n->entries().begin(), true);
         if (n->is_leaf())
             return std::make_tuple(n, iter - n->entries().begin(), false);
-        n = get_node(n->page_number(), n->children().at(iter - n->entries().begin()));
+        n = retrieve_node(n->page_number(), n->children().at(iter - n->entries().begin()));
     }
     throw CorruptedDirectoryException();    // A loop is present in the "tree" structure
 }
@@ -265,7 +279,7 @@ BtreeNode* BtreeDirectory::get_root_node()
     auto pg = get_root_page();
     if (pg == INVALID_PAGE)
         return nullptr;
-    return get_node(INVALID_PAGE, pg);
+    return retrieve_node(INVALID_PAGE, pg);
 }
 
 bool BtreeDirectory::get_entry(const std::string& name, id_type& id, int& type)
@@ -332,6 +346,8 @@ void BtreeDirectory::insert_and_balance(BtreeNode* n, Entry e, uint32_t addition
 {
     if (depth > BTREE_MAX_DEPTH)
         throw CorruptedDirectoryException();    // Prevent too deep recursion
+    if (!n)
+        throw CorruptedDirectoryException();
     auto iter = std::lower_bound(n->entries().begin(), n->entries().end(), e);
     if (additional_child != INVALID_PAGE && !n->is_leaf())
         n->mutable_children().insert(n->children().begin() + (iter - n->entries().begin()) + 1,
@@ -339,21 +355,26 @@ void BtreeDirectory::insert_and_balance(BtreeNode* n, Entry e, uint32_t addition
     n->mutable_entries().insert(iter, std::move(e));
     if (n->entries().size() > MAX_NUM_ENTRIES)
     {
-        Node* sibling = get_node(n->parent_page_number(), allocate_page());
+        Node* sibling = retrieve_node(n->parent_page_number(), allocate_page());
         auto middle_index = n->entries().size() / 2 - 1;
         e = std::move(n->mutable_entries()[middle_index]);
         if (!n->is_leaf())
         {
             slice(n->mutable_children(), sibling->mutable_children(), middle_index + 1);
             for (uint32_t child_num : sibling->children())
-                eject_node(child_num);    // These children must have their parent changed
+            {
+                // Adjust the parent pointer in any cached child nodes
+                auto child = retrieve_existing_node(child_num);
+                if (child)
+                    child->mutable_parent_page_number() = sibling->page_number();
+            }
         }
         slice(n->mutable_entries(), sibling->mutable_entries(), middle_index + 1);
         n->mutable_entries().pop_back();
         if (n->parent_page_number() == INVALID_PAGE)
         {
             auto new_root_page = allocate_page();
-            Node* root = get_node(INVALID_PAGE, new_root_page);
+            Node* root = retrieve_node(INVALID_PAGE, new_root_page);
             root->mutable_children().push_back(n->page_number());
             root->mutable_children().push_back(sibling->page_number());
             root->mutable_entries().push_back(std::move(e));
@@ -363,7 +384,7 @@ void BtreeDirectory::insert_and_balance(BtreeNode* n, Entry e, uint32_t addition
         }
         else
         {
-            insert_and_balance(get_node(INVALID_PAGE, n->parent_page_number()),
+            insert_and_balance(retrieve_existing_node(n->parent_page_number()),
                                std::move(e),
                                sibling->page_number(),
                                depth + 1);
@@ -384,8 +405,8 @@ BtreeNode* BtreeDirectory::rotate_down(BtreeNode* n, const DirEntry& e, int dept
     else
     {
         auto index = iter - n->entries().begin();
-        auto lchild = get_node(n->page_number(), n->children()[index]);
-        auto rchild = get_node(n->page_number(), n->children()[index + 1]);
+        auto lchild = retrieve_node(n->page_number(), n->children()[index]);
+        auto rchild = retrieve_node(n->page_number(), n->children()[index + 1]);
         if (lchild->entries().size() >= rchild->entries().size())
         {
             *iter = lchild->entries().back();
@@ -437,11 +458,13 @@ void BtreeDirectory::merge_up(BtreeNode* n, int depth)
     if (n->parent_page_number() == INVALID_PAGE || n->entries().size() >= MAX_NUM_ENTRIES / 2)
         return;
 
-    Node* parent = get_node(INVALID_PAGE, n->page_number());
+    Node* parent = retrieve_existing_node(n->parent_page_number());
+    if (!parent)
+        throw CorruptedDirectoryException();
     ptrdiff_t entry_index, child_index;
     uint32_t sibling_num;
     std::tie(entry_index, child_index, sibling_num) = find_sibling(parent, n->page_number());
-    Node* sibling = get_node(parent->page_number(), sibling_num);
+    Node* sibling = retrieve_node(parent->page_number(), sibling_num);
 
     n->mutable_entries().push_back(std::move(parent->mutable_entries()[entry_index]));
     parent->mutable_entries().erase(parent->entries().begin() + entry_index);
@@ -478,7 +501,7 @@ bool BtreeDirectory::remove_entry(const std::string& name, id_type& id, int& typ
 
 bool BtreeDirectory::validate_free_list()
 {
-    auto pg = get_root_page();
+    auto pg = get_start_free_page();
     uint32_t prev = INVALID_PAGE;
     FreePage fp;
     for (size_t i = 0; i < get_num_free_page(); ++i)
@@ -536,7 +559,23 @@ void BtreeDirectory::write_dot_graph(const BtreeNode* n, FILE* fp)
     for (uint32_t c : n->children())
         fprintf(fp, "    node%u -> node%u;\n", c, n->page_number());
     for (uint32_t c : n->children())
-        write_dot_graph(get_node(n->page_number(), c), fp);
+        write_dot_graph(retrieve_node(n->page_number(), c), fp);
 }
 
+void BtreeDirectory::recursive_iterate(const BtreeNode* n, const callback& cb, int depth)
+{
+    if (depth > BTREE_MAX_DEPTH)
+        throw CorruptedDirectoryException();
+    for (const Entry& e : n->entries())
+        cb(e.filename, e.id, e.type);
+    for (uint32_t c : n->children())
+        recursive_iterate(retrieve_node(n->page_number(), c), cb, depth + 1);
+}
+
+void BtreeDirectory::iterate_over_entries(BtreeDirectory::callback cb)
+{
+    auto root = get_root_node();
+    if (root)
+        recursive_iterate(root, cb, 0);
+}
 }
