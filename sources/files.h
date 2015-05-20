@@ -6,6 +6,7 @@
 #include <string>
 #include <memory>
 #include <functional>
+#include <unordered_map>
 
 namespace securefs
 {
@@ -240,8 +241,44 @@ public:
     }
 };
 
-std::shared_ptr<Directory>
-make_directory(int data_fd, int meta_fd, const key_type& key_, const id_type& id_, bool check);
+class SimpleDirectory : public Directory
+{
+private:
+    std::unordered_map<std::string, std::pair<id_type, int>> m_table;
+    bool m_dirty;
+
+private:
+    void initialize();
+
+public:
+    template <class... Args>
+    explicit SimpleDirectory(Args&&... args)
+        : Directory(std::forward<Args>(args)...)
+    {
+        initialize();
+    }
+
+    bool get_entry(const std::string& name, id_type& id, int& type) override;
+
+    bool add_entry(const std::string& name, const id_type& id, int type) override;
+
+    bool remove_entry(const std::string& name, id_type& id, int& type) override;
+
+    void subflush() override;
+
+    void iterate_over_entries(callback cb) override
+    {
+        for (const auto& pair : m_table)
+        {
+            if (!cb(pair.first, pair.second.first, pair.second.second))
+                break;
+        }
+    }
+
+    bool empty() const override { return m_table.empty(); }
+
+    ~SimpleDirectory();
+};
 
 template <class... Args>
 inline std::shared_ptr<FileBase> make_file_from_type(int type, Args&&... args)
@@ -253,7 +290,7 @@ inline std::shared_ptr<FileBase> make_file_from_type(int type, Args&&... args)
     case FileBase::SYMLINK:
         return std::make_shared<Symlink>(std::forward<Args>(args)...);
     case FileBase::DIRECTORY:
-        return make_directory(std::forward<Args>(args)...);
+        return std::make_shared<SimpleDirectory>(std::forward<Args>(args)...);
     }
     throw InvalidArgumentException("Unrecognized file type");
 }

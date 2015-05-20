@@ -223,122 +223,90 @@ void FileBase::removexattr(const char* name)
         throw OSException(errno);
 }
 
-namespace internal
+void SimpleDirectory::initialize()
 {
-    class SimpleDirectory : public Directory
+    char buffer[Directory::MAX_FILENAME_LENGTH + 1 + 32 + 4];
+    offset_type off = 0;
+    std::string name;
+    std::pair<id_type, int> value;
+    while (true)
     {
-    private:
-        std::unordered_map<std::string, std::pair<id_type, int>> m_table;
-        bool m_dirty;
-
-    public:
-        template <class... Args>
-        explicit SimpleDirectory(Args&&... args)
-            : Directory(std::forward<Args>(args)...)
-        {
-            char buffer[Directory::MAX_FILENAME_LENGTH + 1 + 32 + 4];
-            offset_type off = 0;
-            std::string name;
-            std::pair<id_type, int> value;
-            while (true)
-            {
-                auto rv = this->m_stream->read(buffer, off, sizeof(buffer));
-                if (rv < sizeof(buffer))
-                    break;
-                buffer[MAX_FILENAME_LENGTH]
-                    = 0;    // Set the null terminator in case the data is corrupted
-                name = buffer;
-                memcpy(value.first.data(), buffer + Directory::MAX_FILENAME_LENGTH + 1, ID_LENGTH);
-                value.second
-                    = from_little_endian<uint32_t>(buffer + sizeof(buffer) - sizeof(uint32_t));
-                m_table.emplace(std::move(name), std::move(value));
-                off += sizeof(buffer);
-            }
-        }
-
-        bool get_entry(const std::string& name, id_type& id, int& type) override
-        {
-            auto it = m_table.find(name);
-            if (it == m_table.end())
-                return false;
-            memcpy(id.data(), it->second.first.data(), id.size());
-            type = it->second.second;
-            return true;
-        }
-
-        bool add_entry(const std::string& name, const id_type& id, int type) override
-        {
-            if (name.size() > MAX_FILENAME_LENGTH)
-                throw OSException(ENAMETOOLONG);
-            auto rv = m_table.emplace(name, std::make_pair(id, type));
-            if (rv.second)
-                m_dirty = true;
-            return rv.second;
-        }
-
-        bool remove_entry(const std::string& name, id_type& id, int& type) override
-        {
-            auto it = m_table.find(name);
-            if (it == m_table.end())
-                return false;
-            memcpy(id.data(), it->second.first.data(), id.size());
-            type = it->second.second;
-            m_table.erase(it);
-            m_dirty = true;
-            return true;
-        }
-
-        void subflush() override
-        {
-            if (m_dirty)
-            {
-                m_stream->resize(0);
-                char buffer[Directory::MAX_FILENAME_LENGTH + 1 + 32 + 4];
-                offset_type off = 0;
-                for (auto&& pair : m_table)
-                {
-                    memset(buffer, 0, sizeof(buffer));
-                    if (pair.first.size() > MAX_FILENAME_LENGTH)
-                        continue;
-                    memcpy(buffer, pair.first.data(), pair.first.size());
-                    memcpy(buffer + MAX_FILENAME_LENGTH + 1, pair.second.first.data(), ID_LENGTH);
-                    to_little_endian(static_cast<uint32_t>(pair.second.second),
-                                     buffer + sizeof(buffer) - sizeof(uint32_t));
-                    this->m_stream->write(buffer, off, sizeof(buffer));
-                    off += sizeof(buffer);
-                }
-                m_dirty = false;
-            }
-        }
-
-        void iterate_over_entries(callback cb) override
-        {
-            for (const auto& pair : m_table)
-            {
-                if (!cb(pair.first, pair.second.first, pair.second.second))
-                    break;
-            }
-        }
-
-        bool empty() const override { return m_table.empty(); }
-
-        ~SimpleDirectory()
-        {
-            try
-            {
-                flush();
-            }
-            catch (...)
-            {
-                // Ignore exceptions in destructor
-            }
-        }
-    };
+        auto rv = this->m_stream->read(buffer, off, sizeof(buffer));
+        if (rv < sizeof(buffer))
+            break;
+        buffer[MAX_FILENAME_LENGTH] = 0;    // Set the null terminator in case the data is corrupted
+        name = buffer;
+        memcpy(value.first.data(), buffer + Directory::MAX_FILENAME_LENGTH + 1, ID_LENGTH);
+        value.second = from_little_endian<uint32_t>(buffer + sizeof(buffer) - sizeof(uint32_t));
+        m_table.emplace(std::move(name), std::move(value));
+        off += sizeof(buffer);
+    }
 }
 
-std::shared_ptr<Directory>
-make_directory(int data_fd, int meta_fd, const key_type& key_, const id_type& id_, bool check)
+bool SimpleDirectory::get_entry(const std::string& name, id_type& id, int& type)
 {
-    return std::make_shared<internal::SimpleDirectory>(data_fd, meta_fd, key_, id_, check);
+    auto it = m_table.find(name);
+    if (it == m_table.end())
+        return false;
+    memcpy(id.data(), it->second.first.data(), id.size());
+    type = it->second.second;
+    return true;
+}
+
+bool SimpleDirectory::add_entry(const std::string& name, const id_type& id, int type)
+{
+    if (name.size() > MAX_FILENAME_LENGTH)
+        throw OSException(ENAMETOOLONG);
+    auto rv = m_table.emplace(name, std::make_pair(id, type));
+    if (rv.second)
+        m_dirty = true;
+    return rv.second;
+}
+
+bool SimpleDirectory::remove_entry(const std::string& name, id_type& id, int& type)
+{
+    auto it = m_table.find(name);
+    if (it == m_table.end())
+        return false;
+    memcpy(id.data(), it->second.first.data(), id.size());
+    type = it->second.second;
+    m_table.erase(it);
+    m_dirty = true;
+    return true;
+}
+
+void SimpleDirectory::subflush()
+{
+    if (m_dirty)
+    {
+        m_stream->resize(0);
+        char buffer[Directory::MAX_FILENAME_LENGTH + 1 + 32 + 4];
+        offset_type off = 0;
+        for (auto&& pair : m_table)
+        {
+            memset(buffer, 0, sizeof(buffer));
+            if (pair.first.size() > MAX_FILENAME_LENGTH)
+                continue;
+            memcpy(buffer, pair.first.data(), pair.first.size());
+            memcpy(buffer + MAX_FILENAME_LENGTH + 1, pair.second.first.data(), ID_LENGTH);
+            to_little_endian(static_cast<uint32_t>(pair.second.second),
+                             buffer + sizeof(buffer) - sizeof(uint32_t));
+            this->m_stream->write(buffer, off, sizeof(buffer));
+            off += sizeof(buffer);
+        }
+        m_dirty = false;
+    }
+}
+
+SimpleDirectory::~SimpleDirectory()
+{
+    try
+    {
+        flush();
+    }
+    catch (...)
+    {
+        // Ignore exceptions in destructor
+    }
 }
 }

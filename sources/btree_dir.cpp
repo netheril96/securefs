@@ -488,12 +488,11 @@ bool BtreeDirectory::remove_entry(const std::string& name, id_type& id, int& typ
     if (!node)
         return false;
     const Entry& e = node->entries().at(index);
-    if (name == e.filename)
-    {
-        id = e.id;
-        type = e.type;
-        return true;
-    }
+    if (name != e.filename)
+        return false;
+
+    id = e.id;
+    type = e.type;
     node = rotate_down(node, e, 0);
     merge_up(node, 0);
     return true;
