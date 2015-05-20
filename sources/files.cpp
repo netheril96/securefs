@@ -61,6 +61,7 @@ void FileBase::read_header()
     if (!rc)
     {
         memset(m_flags, 0xFF, sizeof(m_flags));
+        set_num_free_page(0);
     }
     else
     {

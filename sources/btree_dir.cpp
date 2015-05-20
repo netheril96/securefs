@@ -6,6 +6,7 @@
 #include <type_traits>
 #include <assert.h>
 #include <iterator>
+#include <stdio.h>
 
 namespace securefs
 {
@@ -343,9 +344,9 @@ void BtreeDirectory::insert_and_balance(BtreeNode* n, Entry e, uint32_t addition
         e = std::move(n->mutable_entries()[middle_index]);
         if (!n->is_leaf())
         {
+            slice(n->mutable_children(), sibling->mutable_children(), middle_index + 1);
             for (uint32_t child_num : sibling->children())
                 eject_node(child_num);    // These children must have their parent changed
-            slice(n->mutable_children(), sibling->mutable_children(), middle_index + 1);
         }
         slice(n->mutable_entries(), sibling->mutable_entries(), middle_index + 1);
         n->mutable_entries().pop_back();
@@ -398,7 +399,17 @@ BtreeNode* BtreeDirectory::rotate_down(BtreeNode* n, const DirEntry& e, int dept
     }
 }
 
-void BtreeDirectory::eject_node(uint32_t num) { m_node_cache.erase(num); }
+void BtreeDirectory::eject_node(uint32_t num)
+{
+    auto iter = m_node_cache.find(num);
+    if (iter != m_node_cache.end())
+    {
+        if (iter->second->is_dirty())
+            write_node(num, *iter->second);
+        m_node_cache.erase(iter);
+    }
+}
+
 void BtreeDirectory::del_node(BtreeNode* n)
 {
     if (!n)
@@ -487,4 +498,45 @@ void BtreeDirectory::validate_btree_structure()
     if (root)
         validate_node(root, 0);
 }
+
+void BtreeDirectory::to_dot_graph(const char* filename)
+{
+    auto root = get_root_node();
+    if (!root)
+        return;
+    FILE* fp = fopen(filename, "w");
+    if (!fp)
+        throw OSException(errno);
+    fputs("digraph Btree{\nrankdir=LR;\n", fp);
+    write_dot_graph(root, fp);
+    fputs("\n}\n", fp);
+    if (feof(fp))
+    {
+        OSException err(errno);
+        fclose(fp);
+        throw err;
+    }
+    fclose(fp);
+}
+
+void BtreeDirectory::write_dot_graph(const BtreeNode* n, FILE* fp)
+{
+    if (n->parent_page_number() != INVALID_PAGE)
+        fprintf(fp,
+                "    node%u -> node%u [style=dotted];\n",
+                n->page_number(),
+                n->parent_page_number());
+    if (n->entries().size() > 2)
+        fprintf(fp,
+                "node%u [label=\"node%u: %s, ..., %s\"];\n",
+                n->page_number(),
+                n->page_number(),
+                n->entries().front().filename.c_str(),
+                n->entries().back().filename.c_str());
+    for (uint32_t c : n->children())
+        fprintf(fp, "    node%u -> node%u;\n", c, n->page_number());
+    for (uint32_t c : n->children())
+        write_dot_graph(get_node(n->page_number(), c), fp);
+}
+
 }

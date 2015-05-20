@@ -7,6 +7,7 @@
 #include <string>
 #include <unordered_map>
 #include <tuple>
+#include <stdio.h>
 
 namespace securefs
 {
@@ -144,6 +145,8 @@ private:
 
     void validate_node(const Node* n, int depth);
 
+    void write_dot_graph(const Node*, FILE*);
+
 protected:
     void subflush() override;
 
@@ -164,5 +167,6 @@ public:
     virtual bool empty() const override { throw NotImplementedException(__PRETTY_FUNCTION__); }
     bool validate_free_list();
     void validate_btree_structure();
+    void to_dot_graph(const char* filename);
 };
 }

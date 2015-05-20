@@ -21,7 +21,7 @@ TEST_CASE("Test BtreeDirectory")
     {
         names.emplace_back(fmt::format("file{}.abc", i));
     }
-    std::mt19937 engine{0xff9954e};
+    std::mt19937 engine{std::random_device{}()};
     std::shuffle(names.begin(), names.end(), engine);
     std::vector<securefs::id_type> ids(NUM_ENTRIES);
     for (auto&& d : ids)
@@ -36,10 +36,7 @@ TEST_CASE("Test BtreeDirectory")
     securefs::BtreeDirectory dir(::mkstemp(tmp1), ::mkstemp(tmp2), null_key, null_id, true);
     for (size_t i = 0; i < NUM_ENTRIES; ++i)
     {
-        if (i == 140)
-            1;
         REQUIRE(dir.add_entry(names[i], ids[i], securefs::FileBase::REGULAR_FILE));
-        REQUIRE_NOTHROW(dir.validate_btree_structure());
     }
     REQUIRE_NOTHROW(dir.validate_btree_structure());
     for (size_t i = 0; i < NUM_ENTRIES / 2; ++i)
