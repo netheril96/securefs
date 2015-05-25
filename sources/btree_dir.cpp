@@ -603,7 +603,7 @@ void BtreeDirectory::to_dot_graph(const char* filename)
     FILE* fp = fopen(filename, "w");
     if (!fp)
         throw OSException(errno);
-    fputs("digraph Btree{\nrankdir=LR;\n", fp);
+    fputs("digraph Btree{\nrankdir=BT;\n", fp);
     write_dot_graph(root, fp);
     fputs("\n}\n", fp);
     if (feof(fp))
@@ -615,6 +615,17 @@ void BtreeDirectory::to_dot_graph(const char* filename)
     fclose(fp);
 }
 
+static std::string to_string(const std::vector<DirEntry>& entries)
+{
+    std::string result;
+    for (auto&& e : entries)
+    {
+        result += e.filename;
+        result += '\n';
+    }
+    return result;
+}
+
 void BtreeDirectory::write_dot_graph(const BtreeNode* n, FILE* fp)
 {
     if (n->parent_page_number() != INVALID_PAGE)
@@ -622,13 +633,11 @@ void BtreeDirectory::write_dot_graph(const BtreeNode* n, FILE* fp)
                 "    node%u -> node%u [style=dotted];\n",
                 n->page_number(),
                 n->parent_page_number());
-    if (n->entries().size() > 2)
-        fprintf(fp,
-                "node%u [label=\"node%u: %s, ..., %s\"];\n",
-                n->page_number(),
-                n->page_number(),
-                n->entries().front().filename.c_str(),
-                n->entries().back().filename.c_str());
+    fprintf(fp,
+            "node%u [label=\"node%u:\n\n%s\"];\n",
+            n->page_number(),
+            n->page_number(),
+            to_string(n->entries()).c_str());
     for (uint32_t c : n->children())
         fprintf(fp, "    node%u -> node%u;\n", c, n->page_number());
     for (uint32_t c : n->children())
