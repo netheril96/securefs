@@ -457,6 +457,14 @@ void BtreeDirectory::balance_up(BtreeNode* n, int depth)
 {
     if (depth > BTREE_MAX_DEPTH)
         throw CorruptedDirectoryException();    // Prevent too deep recursion
+
+    if (n->parent_page_number() == INVALID_PAGE && n->entries().empty() && !n->children().empty())
+    {
+        retrieve_node(n->page_number(), n->children().front())->mutable_parent_page_number()
+            = INVALID_PAGE;
+        set_root_page(n->children().front());
+        return;
+    }
     if (n->parent_page_number() == INVALID_PAGE || n->entries().size() >= MAX_NUM_ENTRIES / 2)
         return;
 
@@ -486,14 +494,6 @@ void BtreeDirectory::balance_up(BtreeNode* n, int depth)
             }
             steal(left->mutable_children(), right->mutable_children());
             this->del_node(right);
-
-            // Special case: root node gets depleted
-            if (parent->page_number() == INVALID_PAGE && parent->entries().empty())
-            {
-                left->mutable_parent_page_number() = INVALID_PAGE;
-                this->del_node(parent);
-                this->set_root_page(left->page_number());
-            }
         };
 
         if (n->entries().back() < sibling->entries().front())

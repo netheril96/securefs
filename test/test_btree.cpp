@@ -20,25 +20,27 @@ static void test(securefs::BtreeDirectory& dir,
                  unsigned rounds,
                  double prob_get,
                  double prob_add,
-                 double prob_del)
+                 double prob_del,
+                 unsigned sequence)
 {
     bool is_prob_valid = (prob_get >= 0 && prob_add >= 0 && prob_del >= 0
                           && prob_get + prob_add + prob_del <= 1.0);
     REQUIRE(is_prob_valid);
 
-    std::mt19937 engine{0x99fe331};
+    std::mt19937 engine{std::random_device{}()};
     std::uniform_real_distribution<> prob_dist(0, 1);
     std::uniform_int_distribution<unsigned> name_dist(0, std::numeric_limits<unsigned>::max());
     std::vector<std::string> filenames, filenames_prime;
 
-    auto inserter = [&](const std::string& name, const securefs::id_type& id, int type) -> bool
+    securefs::Directory::callback inserter =
+        [&](const std::string& name, const securefs::id_type&, int) -> bool
     {
         filenames.push_back(name);
         return true;
     };
 
-    auto inserter_prime =
-        [&](const std::string& name, const securefs::id_type& id, int type) -> bool
+    securefs::Directory::callback inserter_prime =
+        [&](const std::string& name, const securefs::id_type&, int) -> bool
     {
         filenames_prime.push_back(name);
         return true;
@@ -72,7 +74,7 @@ static void test(securefs::BtreeDirectory& dir,
         }
         else if (p < prob_get + prob_add)
         {
-            auto name = fmt::format("{:10d}", name_dist(engine));
+            auto name = fmt::format("{0:12d}", name_dist(engine));
             securefs::generate_random(id.data(), id.size());
             type = S_IFREG;
             bool added = dir.add_entry(name, id, type);
@@ -97,7 +99,7 @@ static void test(securefs::BtreeDirectory& dir,
             REQUIRE_NOTHROW(dir.validate_btree_structure());
         }
 
-        dir.to_dot_graph(fmt::format("/tmp/{}.dot", i).c_str());
+        dir.to_dot_graph(fmt::format("/tmp/{}.{}.dot", sequence, i).c_str());
     }
 }
 
@@ -126,9 +128,9 @@ TEST_CASE("Test BtreeDirectory")
     securefs::BtreeDirectory dir(::mkstemp(tmp1), ::mkstemp(tmp2), null_key, null_id, true);
     securefs::SimpleDirectory ref_dir(::mkstemp(tmp3), ::mkstemp(tmp4), null_key, null_id, true);
 
-    test(dir, ref_dir, 1000, 0.3, 0.5, 0.1);
-    test(dir, ref_dir, 1000, 0.3, 0.1, 0.5);
-    test(dir, ref_dir, 1000, 0.3, 0.3, 0.3);
+    test(dir, ref_dir, 1000, 0.3, 0.5, 0.1, 1);
+    test(dir, ref_dir, 1000, 0.3, 0.1, 0.5, 2);
+    test(dir, ref_dir, 1000, 0.3, 0.3, 0.3, 3);
 
     for (size_t i = 0; i < NUM_ENTRIES; ++i)
     {
