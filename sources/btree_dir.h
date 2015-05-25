@@ -139,10 +139,12 @@ private:
     void clear_cache();
 
     std::tuple<Node*, ptrdiff_t, bool> find_node(const std::string& name);
+    std::pair<ptrdiff_t, ptrdiff_t> find_sibling(const BtreeNode* parent,
+                                                       const BtreeNode* child);
 
     void insert_and_balance(Node*, Entry, uint32_t additional_child, int depth);
-    Node* rotate_down(Node*, const Entry&, int depth);
-    void merge_up(Node*, int depth);
+    Node* replace_with_sub_entry(Node*, ptrdiff_t index, int depth);
+    void balance_up(Node*, int depth);
 
     void validate_node(const Node* n, int depth);
 

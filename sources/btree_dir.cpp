@@ -103,9 +103,12 @@ uint32_t BtreeDirectory::allocate_page()
     read_free_page(pg, fp);
     set_num_free_page(get_num_free_page() - 1);
     set_start_free_page(fp.next);
-    read_free_page(fp.next, fp);
-    fp.prev = INVALID_PAGE;
-    write_free_page(get_start_free_page(), fp);
+    if (fp.next != INVALID_PAGE)
+    {
+        read_free_page(fp.next, fp);
+        fp.prev = INVALID_PAGE;
+        write_free_page(get_start_free_page(), fp);
+    }
     return pg;
 }
 
@@ -119,9 +122,9 @@ void BtreeDirectory::deallocate_page(uint32_t num)
     auto start = get_start_free_page();
     if (start != INVALID_PAGE)
     {
-        read_free_page(get_start_free_page(), fp);
+        read_free_page(start, fp);
         fp.prev = num;
-        write_free_page(get_start_free_page(), fp);
+        write_free_page(start, fp);
     }
     set_start_free_page(num);
     set_num_free_page(get_num_free_page() + 1);
@@ -150,7 +153,7 @@ void BtreeNode::from_buffer(const byte* buffer, size_t size)
         buffer = read_and_forward(buffer, end_of_buffer, e.type);
         filename.back() = 0;
         e.filename = filename.data();
-        m_entries.push_back(e);
+        m_entries.push_back(std::move(e));
     }
 }
 
@@ -392,31 +395,23 @@ void BtreeDirectory::insert_and_balance(BtreeNode* n, Entry e, uint32_t addition
     }
 }
 
-BtreeNode* BtreeDirectory::rotate_down(BtreeNode* n, const DirEntry& e, int depth)
+BtreeNode* BtreeDirectory::replace_with_sub_entry(BtreeNode* n, ptrdiff_t index, int depth)
 {
     if (depth > BTREE_MAX_DEPTH)
         throw CorruptedDirectoryException();    // Prevent too deep recursion
-    auto iter = std::lower_bound(n->mutable_entries().begin(), n->mutable_entries().end(), e);
     if (n->is_leaf())
     {
-        n->mutable_entries().erase(iter);
+        n->mutable_entries().erase(n->entries().begin() + index);
         return n;
     }
     else
     {
-        auto index = iter - n->entries().begin();
-        auto lchild = retrieve_node(n->page_number(), n->children()[index]);
-        auto rchild = retrieve_node(n->page_number(), n->children()[index + 1]);
-        if (lchild->entries().size() >= rchild->entries().size())
-        {
-            *iter = lchild->entries().back();
-            return rotate_down(lchild, lchild->entries().back(), depth + 1);
-        }
-        else
-        {
-            *iter = rchild->entries().front();
-            return rotate_down(rchild, rchild->entries().front(), depth + 1);
-        }
+        Node* lchild = retrieve_node(n->page_number(), n->children().at(index));
+        while (!lchild->is_leaf())
+            lchild = retrieve_node(lchild->page_number(), lchild->children().back());
+        n->mutable_entries().at(index) = std::move(lchild->mutable_entries().back());
+        lchild->mutable_entries().pop_back();
+        return lchild;
     }
 }
 
@@ -439,19 +434,26 @@ void BtreeDirectory::del_node(BtreeNode* n)
     m_node_cache.erase(n->page_number());
 }
 
-static std::tuple<ptrdiff_t, ptrdiff_t, uint32_t> find_sibling(BtreeNode* parent, uint32_t num)
+std::pair<ptrdiff_t, ptrdiff_t> BtreeDirectory::find_sibling(const BtreeNode* parent,
+                                                             const BtreeNode* node)
 {
-    auto iter = std::find(parent->children().begin(), parent->children().end(), num);
-    if (iter == parent->children().end())
+    if (parent->page_number() != node->parent_page_number())
         throw CorruptedDirectoryException();
-    if (iter == parent->children().begin())
-        return std::make_tuple(0, 1, parent->children()[1]);
-    auto idx = iter - parent->children().begin();
-    return std::make_tuple(idx - 1, idx - 1, parent->children()[idx - 1]);
+    const auto& child_indices = parent->children();
+    auto iter = std::find(child_indices.begin(), child_indices.end(), node->page_number());
+    auto index = iter - child_indices.begin();
+    if (iter == child_indices.end())
+        throw CorruptedDirectoryException();
+
+    if (iter + 1 == child_indices.end())
+        return std::make_pair(index - 1, index - 1);
+
+    auto right_entry_index = index;
+    return std::make_pair(right_entry_index, index + 1);
 }
 
 // This funciton assumes that every parent node is in the cache
-void BtreeDirectory::merge_up(BtreeNode* n, int depth)
+void BtreeDirectory::balance_up(BtreeNode* n, int depth)
 {
     if (depth > BTREE_MAX_DEPTH)
         throw CorruptedDirectoryException();    // Prevent too deep recursion
@@ -461,19 +463,91 @@ void BtreeDirectory::merge_up(BtreeNode* n, int depth)
     Node* parent = retrieve_existing_node(n->parent_page_number());
     if (!parent)
         throw CorruptedDirectoryException();
-    ptrdiff_t entry_index, child_index;
-    uint32_t sibling_num;
-    std::tie(entry_index, child_index, sibling_num) = find_sibling(parent, n->page_number());
-    Node* sibling = retrieve_node(parent->page_number(), sibling_num);
 
-    n->mutable_entries().push_back(std::move(parent->mutable_entries()[entry_index]));
-    parent->mutable_entries().erase(parent->entries().begin() + entry_index);
-    parent->mutable_children().erase(parent->children().begin() + child_index);
+    ptrdiff_t entry_index, sibling_index;
+    std::tie(entry_index, sibling_index) = find_sibling(parent, n);
+    auto sibling = retrieve_node(n->parent_page_number(), parent->children().at(sibling_index));
 
-    steal(n->mutable_entries(), sibling->mutable_entries());
-    steal(n->mutable_children(), sibling->mutable_children());
-    del_node(sibling);
-    merge_up(parent, depth + 1);
+    if (n->entries().size() + sibling->entries().size() < MAX_NUM_ENTRIES)
+    {
+
+        auto merge = [=](Node* left, Node* right)
+        {
+            left->mutable_entries().push_back(std::move(parent->mutable_entries().at(entry_index)));
+            parent->mutable_entries().erase(parent->entries().begin() + entry_index);
+            parent->mutable_children().erase(std::find(
+                parent->children().begin(), parent->children().end(), right->page_number()));
+            steal(left->mutable_entries(), right->mutable_entries());
+            for (uint32_t child_num : right->children())
+            {
+                auto child = retrieve_existing_node(child_num);
+                if (child)
+                    child->mutable_parent_page_number() = left->page_number();
+            }
+            steal(left->mutable_children(), right->mutable_children());
+            this->del_node(right);
+
+            // Special case: root node gets depleted
+            if (parent->page_number() == INVALID_PAGE && parent->entries().empty())
+            {
+                left->mutable_parent_page_number() = INVALID_PAGE;
+                this->del_node(parent);
+                this->set_root_page(left->page_number());
+            }
+        };
+
+        if (n->entries().back() < sibling->entries().front())
+            merge(n, sibling);
+        else
+            merge(sibling, n);
+    }
+    else
+    {
+        auto rotate = [=](Node* left, Node* right)
+        {
+            std::vector<Entry> temp_entries;
+            temp_entries.reserve(left->entries().size() + right->entries().size() + 1);
+
+            typedef std::move_iterator<decltype(temp_entries.begin())> entry_iter;
+
+            temp_entries.insert(temp_entries.end(),
+                                entry_iter(left->mutable_entries().begin()),
+                                entry_iter(left->mutable_entries().end()));
+            temp_entries.push_back(std::move(parent->mutable_entries().at(entry_index)));
+            temp_entries.insert(temp_entries.end(),
+                                entry_iter(right->mutable_entries().begin()),
+                                entry_iter(right->mutable_entries().end()));
+
+            auto middle = temp_entries.size() / 2;
+            parent->mutable_entries().at(entry_index) = std::move(temp_entries.at(middle));
+            left->mutable_entries().assign(entry_iter(temp_entries.begin()),
+                                           entry_iter(temp_entries.begin() + middle));
+            right->mutable_entries().assign(entry_iter(temp_entries.begin() + middle + 1),
+                                            entry_iter(temp_entries.end()));
+
+            if (!left->children().empty() && !right->children().empty())
+            {
+                std::vector<uint32_t> temp_children;
+                temp_children.reserve(left->children().size() + right->children().size());
+                temp_children.insert(
+                    temp_children.end(), left->children().begin(), left->children().end());
+                temp_children.insert(
+                    temp_children.end(), right->children().begin(), right->children().end());
+
+                left->mutable_children().assign(temp_children.begin(),
+                                                temp_children.begin() + middle + 1);
+                right->mutable_children().assign(temp_children.begin() + middle + 1,
+                                                 temp_children.end());
+            }
+        };
+
+        if (n->entries().back() < sibling->entries().front())
+            rotate(n, sibling);
+        else
+            rotate(sibling, n);
+    }
+
+    balance_up(parent, depth + 1);
 }
 
 bool BtreeDirectory::remove_entry(const std::string& name, id_type& id, int& type)
@@ -488,13 +562,13 @@ bool BtreeDirectory::remove_entry(const std::string& name, id_type& id, int& typ
     if (!node)
         return false;
     const Entry& e = node->entries().at(index);
-    if (name != e.filename)
-        return false;
 
     id = e.id;
     type = e.type;
-    node = rotate_down(node, e, 0);
-    merge_up(node, 0);
+    node = replace_with_sub_entry(node, index, 0);
+    balance_up(node, 0);
+    flush_cache();
+    clear_cache();
     return true;
 }
 

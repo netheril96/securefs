@@ -26,7 +26,7 @@ static void test(securefs::BtreeDirectory& dir,
                           && prob_get + prob_add + prob_del <= 1.0);
     REQUIRE(is_prob_valid);
 
-    std::mt19937 engine{std::random_device{}()};
+    std::mt19937 engine{0x99fe331};
     std::uniform_real_distribution<> prob_dist(0, 1);
     std::uniform_int_distribution<unsigned> name_dist(0, std::numeric_limits<unsigned>::max());
     std::vector<std::string> filenames, filenames_prime;
