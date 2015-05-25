@@ -8,14 +8,19 @@
 #include <iterator>
 #include <stdio.h>
 
+static void dir_check(bool condition)
+{
+    if (!condition)
+        throw securefs::CorruptedDirectoryException();
+}
+
 namespace securefs
 {
 template <class T>
 static const byte* read_and_forward(const byte* buffer, const byte* end, T& value)
 {
     static_assert(std::is_trivially_copyable<T>::value, "");
-    if (buffer + sizeof(value) > end)
-        throw CorruptedDirectoryException();
+    dir_check(buffer + sizeof(value) <= end);
     memcpy(&value, buffer, sizeof(value));
     return buffer + sizeof(value);
 }
@@ -24,8 +29,7 @@ template <class T>
 static byte* write_and_forward(const T& value, byte* buffer, const byte* end)
 {
     static_assert(std::is_trivially_copyable<T>::value, "");
-    if (buffer + sizeof(value) > end)
-        throw CorruptedDirectoryException();
+    dir_check(buffer + sizeof(value) <= end);
     memcpy(buffer, &value, sizeof(value));
     return buffer + sizeof(value);
 }
@@ -33,8 +37,7 @@ static byte* write_and_forward(const T& value, byte* buffer, const byte* end)
 template <class T>
 static T read_little_endian_and_forward(const byte** buffer, const byte* end)
 {
-    if (*buffer + sizeof(T) > end)
-        throw CorruptedDirectoryException();
+    dir_check(*buffer + sizeof(T) <= end);
     auto v = from_little_endian<T>(*buffer);
     *buffer += sizeof(T);
     return v;
@@ -43,8 +46,7 @@ static T read_little_endian_and_forward(const byte** buffer, const byte* end)
 template <class T>
 static byte* write_little_endian_and_forward(const T& value, byte* buffer, const byte* end)
 {
-    if (buffer + sizeof(T) > end)
-        throw CorruptedDirectoryException();
+    dir_check(buffer + sizeof(T) <= end);
     to_little_endian(value, buffer);
     return buffer + sizeof(T);
 }
@@ -74,8 +76,7 @@ public:
 void BtreeDirectory::read_free_page(uint32_t num, FreePage& fp)
 {
     byte buffer[BLOCK_SIZE];
-    if (m_stream->read(buffer, num * BLOCK_SIZE, BLOCK_SIZE) != BLOCK_SIZE)
-        throw CorruptedDirectoryException();
+    dir_check(m_stream->read(buffer, num * BLOCK_SIZE, BLOCK_SIZE) == BLOCK_SIZE);
     if (from_little_endian<uint32_t>(buffer) != 0)
         throw CorruptedDirectoryException();
     fp.next = from_little_endian<uint32_t>(buffer + sizeof(uint32_t));
@@ -114,6 +115,13 @@ uint32_t BtreeDirectory::allocate_page()
 
 void BtreeDirectory::deallocate_page(uint32_t num)
 {
+    if (num * BLOCK_SIZE == this->m_stream->size())
+    {
+        this->m_stream->resize((num - 1) * BLOCK_SIZE);
+        return;    // Special case where the stream can be shrinked
+    }
+
+    // Otherwise add the page to free list
     FreePage fp;
     fp.prev = INVALID_PAGE;
     fp.next = get_start_free_page();
@@ -208,15 +216,15 @@ void BtreeDirectory::flush_cache()
     }
 }
 
-void BtreeDirectory::validate_node(const BtreeNode* n, int depth)
+bool BtreeDirectory::validate_node(const BtreeNode* n, int depth)
 {
     if (depth > BTREE_MAX_DEPTH)
-        throw CorruptedDirectoryException();
+        return false;
     if (!std::is_sorted(n->entries().begin(), n->entries().end()))
-        throw CorruptedDirectoryException();
+        return false;
     if (n->parent_page_number() != INVALID_PAGE
         && (n->entries().size() < MAX_NUM_ENTRIES / 2 || n->entries().size() > MAX_NUM_ENTRIES))
-        throw CorruptedDirectoryException();
+        return false;
     if (!n->is_leaf())
     {
         for (size_t i = 0, size = n->entries().size(); i < size; ++i)
@@ -227,9 +235,10 @@ void BtreeDirectory::validate_node(const BtreeNode* n, int depth)
             validate_node(lchild, depth + 1);
             validate_node(rchild, depth + 1);
             if (e < lchild->entries().back() || rchild->entries().front() < e)
-                throw CorruptedDirectoryException();
+                return false;
         }
     }
+    return true;
 }
 
 void BtreeDirectory::clear_cache() { m_node_cache.clear(); }
@@ -247,9 +256,9 @@ BtreeDirectory::Node* BtreeDirectory::retrieve_node(uint32_t parent_num, uint32_
     auto iter = m_node_cache.find(num);
     if (iter != m_node_cache.end())
     {
-        if (parent_num != INVALID_PAGE && parent_num != iter->second->parent_page_number())
-            throw CorruptedDirectoryException();
-        return iter->second.get();
+        auto n = iter->second.get();
+        dir_check(parent_num == INVALID_PAGE || parent_num == n->parent_page_number());
+        return n;
     }
     std::unique_ptr<Node> n(new Node(parent_num, num));
     read_node(num, *n);
@@ -311,8 +320,7 @@ void BtreeDirectory::read_node(uint32_t num, BtreeDirectory::Node& n)
     if (num == INVALID_PAGE)
         throw CorruptedDirectoryException();
     byte buffer[BLOCK_SIZE];
-    if (m_stream->read(buffer, num * BLOCK_SIZE, BLOCK_SIZE) != BLOCK_SIZE)
-        throw CorruptedDirectoryException();
+    dir_check(m_stream->read(buffer, num * BLOCK_SIZE, BLOCK_SIZE) == BLOCK_SIZE);
     n.from_buffer(buffer, sizeof(buffer));
 }
 
@@ -347,10 +355,7 @@ bool BtreeDirectory::add_entry(const std::string& name, const id_type& id, int t
 // This function assumes that every parent node of n is already in the cache
 void BtreeDirectory::insert_and_balance(BtreeNode* n, Entry e, uint32_t additional_child, int depth)
 {
-    if (depth > BTREE_MAX_DEPTH)
-        throw CorruptedDirectoryException();    // Prevent too deep recursion
-    if (!n)
-        throw CorruptedDirectoryException();
+    dir_check(depth < BTREE_MAX_DEPTH);
     auto iter = std::lower_bound(n->entries().begin(), n->entries().end(), e);
     if (additional_child != INVALID_PAGE && !n->is_leaf())
         n->mutable_children().insert(n->children().begin() + (iter - n->entries().begin()) + 1,
@@ -397,8 +402,7 @@ void BtreeDirectory::insert_and_balance(BtreeNode* n, Entry e, uint32_t addition
 
 BtreeNode* BtreeDirectory::replace_with_sub_entry(BtreeNode* n, ptrdiff_t index, int depth)
 {
-    if (depth > BTREE_MAX_DEPTH)
-        throw CorruptedDirectoryException();    // Prevent too deep recursion
+    dir_check(depth < BTREE_MAX_DEPTH);
     if (n->is_leaf())
     {
         n->mutable_entries().erase(n->entries().begin() + index);
@@ -415,17 +419,6 @@ BtreeNode* BtreeDirectory::replace_with_sub_entry(BtreeNode* n, ptrdiff_t index,
     }
 }
 
-void BtreeDirectory::eject_node(uint32_t num)
-{
-    auto iter = m_node_cache.find(num);
-    if (iter != m_node_cache.end())
-    {
-        if (iter->second->is_dirty())
-            write_node(num, *iter->second);
-        m_node_cache.erase(iter);
-    }
-}
-
 void BtreeDirectory::del_node(BtreeNode* n)
 {
     if (!n)
@@ -437,13 +430,11 @@ void BtreeDirectory::del_node(BtreeNode* n)
 std::pair<ptrdiff_t, ptrdiff_t> BtreeDirectory::find_sibling(const BtreeNode* parent,
                                                              const BtreeNode* node)
 {
-    if (parent->page_number() != node->parent_page_number())
-        throw CorruptedDirectoryException();
+    dir_check(parent->page_number() == node->parent_page_number());
     const auto& child_indices = parent->children();
     auto iter = std::find(child_indices.begin(), child_indices.end(), node->page_number());
     auto index = iter - child_indices.begin();
-    if (iter == child_indices.end())
-        throw CorruptedDirectoryException();
+    dir_check(iter != child_indices.end());
 
     if (iter + 1 == child_indices.end())
         return std::make_pair(index - 1, index - 1);
@@ -455,8 +446,7 @@ std::pair<ptrdiff_t, ptrdiff_t> BtreeDirectory::find_sibling(const BtreeNode* pa
 // This funciton assumes that every parent node is in the cache
 void BtreeDirectory::balance_up(BtreeNode* n, int depth)
 {
-    if (depth > BTREE_MAX_DEPTH)
-        throw CorruptedDirectoryException();    // Prevent too deep recursion
+    dir_check(depth < BTREE_MAX_DEPTH);
 
     if (n->parent_page_number() == INVALID_PAGE && n->entries().empty() && !n->children().empty())
     {
@@ -588,11 +578,12 @@ bool BtreeDirectory::validate_free_list()
     return pg == INVALID_PAGE;
 }
 
-void BtreeDirectory::validate_btree_structure()
+bool BtreeDirectory::validate_btree_structure()
 {
     Node* root = get_root_node();
     if (root)
-        validate_node(root, 0);
+        return validate_node(root, 0);
+    return true;
 }
 
 void BtreeDirectory::to_dot_graph(const char* filename)
@@ -646,8 +637,7 @@ void BtreeDirectory::write_dot_graph(const BtreeNode* n, FILE* fp)
 
 void BtreeDirectory::recursive_iterate(const BtreeNode* n, const callback& cb, int depth)
 {
-    if (depth > BTREE_MAX_DEPTH)
-        throw CorruptedDirectoryException();
+    dir_check(depth < BTREE_MAX_DEPTH);
     for (const Entry& e : n->entries())
         cb(e.filename, e.id, e.type);
     for (uint32_t c : n->children())

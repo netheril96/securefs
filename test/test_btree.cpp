@@ -96,10 +96,8 @@ static void test(securefs::BtreeDirectory& dir,
         else
         {
             REQUIRE(dir.validate_free_list());
-            REQUIRE_NOTHROW(dir.validate_btree_structure());
+            REQUIRE(dir.validate_btree_structure());
         }
-
-        dir.to_dot_graph(fmt::format("/tmp/{}.{}.dot", sequence, i).c_str());
     }
 }
 

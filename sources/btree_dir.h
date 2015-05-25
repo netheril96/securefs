@@ -139,14 +139,13 @@ private:
     void clear_cache();
 
     std::tuple<Node*, ptrdiff_t, bool> find_node(const std::string& name);
-    std::pair<ptrdiff_t, ptrdiff_t> find_sibling(const BtreeNode* parent,
-                                                       const BtreeNode* child);
+    std::pair<ptrdiff_t, ptrdiff_t> find_sibling(const BtreeNode* parent, const BtreeNode* child);
 
     void insert_and_balance(Node*, Entry, uint32_t additional_child, int depth);
     Node* replace_with_sub_entry(Node*, ptrdiff_t index, int depth);
     void balance_up(Node*, int depth);
 
-    void validate_node(const Node* n, int depth);
+    bool validate_node(const Node* n, int depth);
 
     void write_dot_graph(const Node*, FILE*);
 
@@ -168,7 +167,7 @@ public:
     virtual void iterate_over_entries(callback cb) override;
     virtual bool empty() const override { throw NotImplementedException(__PRETTY_FUNCTION__); }
     bool validate_free_list();
-    void validate_btree_structure();
+    bool validate_btree_structure();
     void to_dot_graph(const char* filename);
 };
 
