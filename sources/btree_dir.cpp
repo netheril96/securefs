@@ -66,6 +66,28 @@ static void steal(Container& c1, Container& c2)
     c1.insert(c1.end(), iterator(c2.begin()), iterator(c2.end()));
 }
 
+template <class Container>
+static void steal(Container& c1, const Container& c2)
+{
+    c1.insert(c1.end(), c2.begin(), c2.end());
+}
+
+template <class Container>
+typename Container::iterator get_iter(Container& c, size_t index)
+{
+    if (index >= c.size())
+        throw std::out_of_range("index out of range");
+    return std::next(c.begin(), index);
+}
+
+template <class Container>
+typename Container::const_iterator get_iter(const Container& c, size_t index)
+{
+    if (index >= c.size())
+        throw std::out_of_range("index out of range");
+    return std::next(c.begin(), index);
+}
+
 class BtreeDirectory::FreePage
 {
 public:
@@ -298,14 +320,15 @@ bool BtreeDirectory::get_entry(const std::string& name, id_type& id, int& type)
 {
     if (name.size() > MAX_FILENAME_LENGTH)
         throw OSException(ENAMETOOLONG);
-    auto find_result = find_node(name);
-    if (!std::get<2>(find_result))
+
+    BtreeNode* node;
+    ptrdiff_t entry_index;
+    bool is_equal;
+    std::tie(node, entry_index, is_equal) = find_node(name);
+
+    if (!is_equal || !node)
         return false;
-    auto node = std::get<0>(find_result);
-    auto index = std::get<1>(find_result);
-    if (!node)
-        return false;
-    const Entry& e = node->entries().at(index);
+    const Entry& e = node->entries().at(entry_index);
     if (name == e.filename)
     {
         id = e.id;
@@ -337,10 +360,16 @@ bool BtreeDirectory::add_entry(const std::string& name, const id_type& id, int t
 {
     if (name.size() > MAX_FILENAME_LENGTH)
         throw OSException(ENAMETOOLONG);
-    auto find_result = find_node(name);
-    if (std::get<2>(find_result))
+
+    BtreeNode* node;
+    bool is_equal;
+    std::tie(node, std::ignore, is_equal) = find_node(name);
+
+    if (is_equal)
+    {
         return false;
-    auto node = std::get<0>(find_result);
+    }
+
     if (!node)
     {
         set_root_page(allocate_page());
@@ -350,6 +379,16 @@ bool BtreeDirectory::add_entry(const std::string& name, const id_type& id, int t
     }
     insert_and_balance(node, Entry{name, id, static_cast<uint32_t>(type)}, INVALID_PAGE, 0);
     return true;
+}
+
+void BtreeDirectory::adjust_children_in_cache(BtreeNode* n, uint32_t parent)
+{
+    for (uint32_t c : n->children())
+    {
+        auto child = retrieve_existing_node(c);
+        if (child)
+            child->mutable_parent_page_number() = parent;
+    }
 }
 
 // This function assumes that every parent node of n is already in the cache
@@ -369,13 +408,7 @@ void BtreeDirectory::insert_and_balance(BtreeNode* n, Entry e, uint32_t addition
         if (!n->is_leaf())
         {
             slice(n->mutable_children(), sibling->mutable_children(), middle_index + 1);
-            for (uint32_t child_num : sibling->children())
-            {
-                // Adjust the parent pointer in any cached child nodes
-                auto child = retrieve_existing_node(child_num);
-                if (child)
-                    child->mutable_parent_page_number() = sibling->page_number();
-            }
+            adjust_children_in_cache(sibling);
         }
         slice(n->mutable_entries(), sibling->mutable_entries(), middle_index + 1);
         n->mutable_entries().pop_back();
@@ -427,8 +460,8 @@ void BtreeDirectory::del_node(BtreeNode* n)
     m_node_cache.erase(n->page_number());
 }
 
-std::pair<ptrdiff_t, ptrdiff_t> BtreeDirectory::find_sibling(const BtreeNode* parent,
-                                                             const BtreeNode* node)
+std::pair<ptrdiff_t, BtreeNode*> BtreeDirectory::find_sibling(const BtreeNode* parent,
+                                                              const BtreeNode* node)
 {
     dir_check(parent->page_number() == node->parent_page_number());
     const auto& child_indices = parent->children();
@@ -437,10 +470,56 @@ std::pair<ptrdiff_t, ptrdiff_t> BtreeDirectory::find_sibling(const BtreeNode* pa
     dir_check(iter != child_indices.end());
 
     if (iter + 1 == child_indices.end())
-        return std::make_pair(index - 1, index - 1);
+        return std::make_pair(
+            index - 1, retrieve_node(parent->page_number(), parent->children().at(index - 1)));
 
-    auto right_entry_index = index;
-    return std::make_pair(right_entry_index, index + 1);
+    return std::make_pair(index,
+                          retrieve_node(parent->page_number(), parent->children().at(index + 1)));
+}
+
+void BtreeDirectory::rotate(BtreeNode* left, BtreeNode* right, Entry& separator)
+{
+    std::vector<Entry> temp_entries;
+    temp_entries.reserve(left->entries().size() + right->entries().size() + 1);
+
+    typedef std::move_iterator<decltype(temp_entries.begin())> entry_iter;
+
+    steal(temp_entries, left->mutable_entries());
+    temp_entries.push_back(std::move(separator));
+    steal(temp_entries, right->mutable_entries());
+
+    auto middle = temp_entries.size() / 2;
+    separator = std::move(temp_entries.at(middle));
+    left->mutable_entries().assign(entry_iter(temp_entries.begin()),
+                                   entry_iter(temp_entries.begin() + middle));
+    right->mutable_entries().assign(entry_iter(temp_entries.begin() + middle + 1),
+                                    entry_iter(temp_entries.end()));
+
+    if (!left->children().empty() && !right->children().empty())
+    {
+        std::vector<uint32_t> temp_children;
+        temp_children.reserve(left->children().size() + right->children().size());
+        steal(temp_children, left->children());
+        steal(temp_children, right->children());
+
+        left->mutable_children().assign(temp_children.begin(), temp_children.begin() + middle + 1);
+        right->mutable_children().assign(temp_children.begin() + middle + 1, temp_children.end());
+    }
+}
+
+void BtreeDirectory::merge(BtreeNode* left,
+                           BtreeNode* right,
+                           BtreeNode* parent,
+                           ptrdiff_t entry_index)
+{
+    left->mutable_entries().push_back(std::move(parent->mutable_entries().at(entry_index)));
+    parent->mutable_entries().erase(parent->entries().begin() + entry_index);
+    parent->mutable_children().erase(
+        std::find(parent->children().begin(), parent->children().end(), right->page_number()));
+    steal(left->mutable_entries(), right->mutable_entries());
+    this->adjust_children_in_cache(right, left->page_number());
+    steal(left->mutable_children(), right->mutable_children());
+    this->del_node(right);
 }
 
 // This funciton assumes that every parent node is in the cache
@@ -450,91 +529,35 @@ void BtreeDirectory::balance_up(BtreeNode* n, int depth)
 
     if (n->parent_page_number() == INVALID_PAGE && n->entries().empty() && !n->children().empty())
     {
-        retrieve_node(n->page_number(), n->children().front())->mutable_parent_page_number()
-            = INVALID_PAGE;
+        dir_check(n->children().size() == 1);
+        adjust_children_in_cache(n, INVALID_PAGE);
         set_root_page(n->children().front());
+        del_node(n);
         return;
     }
     if (n->parent_page_number() == INVALID_PAGE || n->entries().size() >= MAX_NUM_ENTRIES / 2)
         return;
 
     Node* parent = retrieve_existing_node(n->parent_page_number());
-    if (!parent)
-        throw CorruptedDirectoryException();
+    dir_check(parent);
 
-    ptrdiff_t entry_index, sibling_index;
-    std::tie(entry_index, sibling_index) = find_sibling(parent, n);
-    auto sibling = retrieve_node(n->parent_page_number(), parent->children().at(sibling_index));
+    ptrdiff_t entry_index;
+    BtreeNode* sibling;
+    std::tie(entry_index, sibling) = find_sibling(parent, n);
 
     if (n->entries().size() + sibling->entries().size() < MAX_NUM_ENTRIES)
     {
-
-        auto merge = [=](Node* left, Node* right)
-        {
-            left->mutable_entries().push_back(std::move(parent->mutable_entries().at(entry_index)));
-            parent->mutable_entries().erase(parent->entries().begin() + entry_index);
-            parent->mutable_children().erase(std::find(
-                parent->children().begin(), parent->children().end(), right->page_number()));
-            steal(left->mutable_entries(), right->mutable_entries());
-            for (uint32_t child_num : right->children())
-            {
-                auto child = retrieve_existing_node(child_num);
-                if (child)
-                    child->mutable_parent_page_number() = left->page_number();
-            }
-            steal(left->mutable_children(), right->mutable_children());
-            this->del_node(right);
-        };
-
         if (n->entries().back() < sibling->entries().front())
-            merge(n, sibling);
+            merge(n, sibling, parent, entry_index);
         else
-            merge(sibling, n);
+            merge(sibling, n, parent, entry_index);
     }
     else
     {
-        auto rotate = [=](Node* left, Node* right)
-        {
-            std::vector<Entry> temp_entries;
-            temp_entries.reserve(left->entries().size() + right->entries().size() + 1);
-
-            typedef std::move_iterator<decltype(temp_entries.begin())> entry_iter;
-
-            temp_entries.insert(temp_entries.end(),
-                                entry_iter(left->mutable_entries().begin()),
-                                entry_iter(left->mutable_entries().end()));
-            temp_entries.push_back(std::move(parent->mutable_entries().at(entry_index)));
-            temp_entries.insert(temp_entries.end(),
-                                entry_iter(right->mutable_entries().begin()),
-                                entry_iter(right->mutable_entries().end()));
-
-            auto middle = temp_entries.size() / 2;
-            parent->mutable_entries().at(entry_index) = std::move(temp_entries.at(middle));
-            left->mutable_entries().assign(entry_iter(temp_entries.begin()),
-                                           entry_iter(temp_entries.begin() + middle));
-            right->mutable_entries().assign(entry_iter(temp_entries.begin() + middle + 1),
-                                            entry_iter(temp_entries.end()));
-
-            if (!left->children().empty() && !right->children().empty())
-            {
-                std::vector<uint32_t> temp_children;
-                temp_children.reserve(left->children().size() + right->children().size());
-                temp_children.insert(
-                    temp_children.end(), left->children().begin(), left->children().end());
-                temp_children.insert(
-                    temp_children.end(), right->children().begin(), right->children().end());
-
-                left->mutable_children().assign(temp_children.begin(),
-                                                temp_children.begin() + middle + 1);
-                right->mutable_children().assign(temp_children.begin() + middle + 1,
-                                                 temp_children.end());
-            }
-        };
-
         if (n->entries().back() < sibling->entries().front())
-            rotate(n, sibling);
+            rotate(n, sibling, parent->mutable_entries().at(entry_index));
         else
-            rotate(sibling, n);
+            rotate(sibling, n, parent->mutable_entries().at(entry_index));
     }
 
     balance_up(parent, depth + 1);
@@ -544,19 +567,20 @@ bool BtreeDirectory::remove_entry(const std::string& name, id_type& id, int& typ
 {
     if (name.size() > MAX_FILENAME_LENGTH)
         throw OSException(ENAMETOOLONG);
-    auto find_result = find_node(name);
-    if (!std::get<2>(find_result))
+
+    BtreeNode* node;
+    ptrdiff_t entry_index;
+    bool is_equal;
+    std::tie(node, entry_index, is_equal) = find_node(name);
+
+    if (!is_equal || !node)
         return false;
-    auto node = std::get<0>(find_result);
-    auto index = std::get<1>(find_result);
-    if (!node)
-        return false;
-    const Entry& e = node->entries().at(index);
+    const Entry& e = node->entries().at(entry_index);
 
     id = e.id;
     type = e.type;
-    node = replace_with_sub_entry(node, index, 0);
-    balance_up(node, 0);
+    auto leaf_node = replace_with_sub_entry(node, entry_index, 0);
+    balance_up(leaf_node, 0);
     flush_cache();
     clear_cache();
     return true;

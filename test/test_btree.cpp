@@ -23,6 +23,7 @@ static void test(securefs::BtreeDirectory& dir,
                  double prob_del,
                  unsigned sequence)
 {
+    (void)sequence;    // May be used later
     bool is_prob_valid = (prob_get >= 0 && prob_add >= 0 && prob_del >= 0
                           && prob_get + prob_add + prob_del <= 1.0);
     REQUIRE(is_prob_valid);
@@ -104,16 +105,8 @@ static void test(securefs::BtreeDirectory& dir,
 TEST_CASE("Test BtreeDirectory")
 {
     const size_t NUM_ENTRIES = 1000;
-    std::vector<std::string> names;
-    for (size_t i = 0; i < NUM_ENTRIES; ++i)
-    {
-        names.emplace_back(fmt::format("file{}.abc", i));
-    }
+
     std::mt19937 engine{std::random_device{}()};
-    std::shuffle(names.begin(), names.end(), engine);
-    std::vector<securefs::id_type> ids(NUM_ENTRIES);
-    for (auto&& d : ids)
-        securefs::generate_random(d.data(), d.size());
 
     securefs::key_type null_key{};
     securefs::id_type null_id{};
@@ -123,31 +116,26 @@ TEST_CASE("Test BtreeDirectory")
     char tmp3[] = "/tmp/securefs.btree3.XXXXXX";
     char tmp4[] = "/tmp/securefs.btree4.XXXXXX";
 
-    securefs::BtreeDirectory dir(::mkstemp(tmp1), ::mkstemp(tmp2), null_key, null_id, true);
-    securefs::SimpleDirectory ref_dir(::mkstemp(tmp3), ::mkstemp(tmp4), null_key, null_id, true);
+    {
+        securefs::BtreeDirectory dir(::mkstemp(tmp1), ::mkstemp(tmp2), null_key, null_id, true);
+        securefs::SimpleDirectory ref_dir(
+            ::mkstemp(tmp3), ::mkstemp(tmp4), null_key, null_id, true);
 
-    test(dir, ref_dir, 1000, 0.3, 0.5, 0.1, 1);
-    test(dir, ref_dir, 1000, 0.3, 0.1, 0.5, 2);
-    test(dir, ref_dir, 1000, 0.3, 0.3, 0.3, 3);
-
-    for (size_t i = 0; i < NUM_ENTRIES; ++i)
-    {
-        REQUIRE(dir.add_entry(names[i], ids[i], securefs::FileBase::REGULAR_FILE));
+        test(dir, ref_dir, 1000, 0.3, 0.5, 0.1, 1);
+        test(dir, ref_dir, 1000, 0.3, 0.1, 0.5, 2);
+        test(dir, ref_dir, 1000, 0.3, 0.3, 0.3, 3);
+        dir.flush();
+        ref_dir.flush();
     }
-    REQUIRE_NOTHROW(dir.validate_btree_structure());
-    for (size_t i = 0; i < NUM_ENTRIES / 2; ++i)
     {
-        int type;
-        REQUIRE(dir.remove_entry(names[i], ids[i], type));
-    }
-    REQUIRE(dir.validate_free_list());
-    REQUIRE_NOTHROW(dir.validate_btree_structure());
-    for (size_t i = NUM_ENTRIES / 2; i < NUM_ENTRIES; ++i)
-    {
-        securefs::id_type id;
-        int type;
-        REQUIRE(dir.get_entry(names[i], id, type));
-        REQUIRE(id == ids[i]);
+        // Test if the data persists on the disk
+        securefs::BtreeDirectory dir(
+            ::open(tmp1, O_RDWR), ::open(tmp2, O_RDWR), null_key, null_id, true);
+        securefs::SimpleDirectory ref_dir(
+            ::open(tmp3, O_RDWR), ::open(tmp4, O_RDWR), null_key, null_id, true);
+        test(dir, ref_dir, 1000, 0.3, 0.3, 0.3, 4);
+        dir.flush();
+        ref_dir.flush();
     }
 }
 #endif

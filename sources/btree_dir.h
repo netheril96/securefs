@@ -137,16 +137,19 @@ private:
     Node* get_root_node();
     void flush_cache();
     void clear_cache();
+    void adjust_children_in_cache(BtreeNode* n, uint32_t parent);
+    void adjust_children_in_cache(BtreeNode* n) { adjust_children_in_cache(n, n->page_number()); }
+    void rotate(BtreeNode* left, BtreeNode* right, Entry& separator);
+    void merge(BtreeNode* left, BtreeNode* right, BtreeNode* parent, ptrdiff_t entry_index);
 
     std::tuple<Node*, ptrdiff_t, bool> find_node(const std::string& name);
-    std::pair<ptrdiff_t, ptrdiff_t> find_sibling(const BtreeNode* parent, const BtreeNode* child);
+    std::pair<ptrdiff_t, BtreeNode*> find_sibling(const BtreeNode* parent, const BtreeNode* child);
 
     void insert_and_balance(Node*, Entry, uint32_t additional_child, int depth);
     Node* replace_with_sub_entry(Node*, ptrdiff_t index, int depth);
     void balance_up(Node*, int depth);
 
     bool validate_node(const Node* n, int depth);
-
     void write_dot_graph(const Node*, FILE*);
 
     void recursive_iterate(const Node* n, const callback& cb, int depth);
