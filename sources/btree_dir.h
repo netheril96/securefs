@@ -152,7 +152,8 @@ private:
     bool validate_node(const Node* n, int depth);
     void write_dot_graph(const Node*, FILE*);
 
-    void recursive_iterate(const Node* n, const callback& cb, int depth);
+    template <class Callback>
+    void recursive_iterate(const Node* n, const Callback& cb, int depth);
 
 protected:
     void subflush() override;

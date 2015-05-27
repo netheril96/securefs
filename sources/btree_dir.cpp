@@ -659,7 +659,8 @@ void BtreeDirectory::write_dot_graph(const BtreeNode* n, FILE* fp)
         write_dot_graph(retrieve_node(n->page_number(), c), fp);
 }
 
-void BtreeDirectory::recursive_iterate(const BtreeNode* n, const callback& cb, int depth)
+template <class Callback>
+void BtreeDirectory::recursive_iterate(const BtreeNode* n, const Callback& cb, int depth)
 {
     dir_check(depth < BTREE_MAX_DEPTH);
     for (const Entry& e : n->entries())
