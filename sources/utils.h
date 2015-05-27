@@ -6,9 +6,11 @@
 #include <type_traits>
 #include <vector>
 #include <array>
+#include <stdexcept>
 
 #include <unistd.h>
 #include <fcntl.h>
+#include <pthread.h>
 
 #define DISABLE_COPY_MOVE(cls)                                                                     \
     cls(const cls&) = delete;                                                                      \
@@ -164,6 +166,44 @@ public:
     }
     ~FileDescriptorGuard() { ::close(m_fd); }
     int get() const noexcept { return m_fd; }
+};
+
+template <class T>
+class ThreadLocalStorage
+{
+private:
+    pthread_key_t m_pkey;
+
+public:
+    explicit ThreadLocalStorage()
+    {
+        int rc = ::pthread_key_create(&m_pkey,
+                                      [](void* ptr)
+                                      {
+                                          delete static_cast<T*>(ptr);
+                                      });
+        if (rc < 0)
+            throw std::runtime_error("Fail to initialize pthread TLS");
+    }
+
+    ~ThreadLocalStorage() { pthread_key_delete(m_pkey); }
+
+    T* get()
+    {
+        auto ptr = pthread_getspecific(m_pkey);
+        if (!ptr)
+        {
+            ptr = new T();
+
+            int rc = pthread_setspecific(m_pkey, ptr);
+            if (rc < 0)
+                throw std::runtime_error("Fail to set TLS value");
+        }
+        return static_cast<T*>(ptr);
+    }
+
+    T* operator->() { return get(); }
+    T& operator*() { return *get(); }
 };
 
 void generate_random(void* data, size_t size);

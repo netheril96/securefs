@@ -223,15 +223,8 @@ void parse_hex(const std::string& hex, byte* output, size_t len)
 
 void generate_random(void* data, size_t size)
 {
-    thread_local CryptoPP::AutoSeededRandomPool pool;
-    thread_local size_t total = 0;
-    pool.GenerateBlock(static_cast<byte*>(data), size);
-    total += size;
-    if (total > 1024 * 1024)
-    {
-        total = 0;
-        pool.Reseed();
-    }
+    static ThreadLocalStorage<CryptoPP::AutoSeededRandomPool> pool;
+    pool->GenerateBlock(static_cast<byte*>(data), size);
 }
 
 void aes_gcm_encrypt(const void* plaintext,
@@ -246,25 +239,26 @@ void aes_gcm_encrypt(const void* plaintext,
                      size_t mac_len,
                      void* ciphertext)
 {
-    thread_local CryptoPP::GCM<CryptoPP::AES>::Encryption encryptor;
-    thread_local std::vector<byte> last_key;    // Avoid expensive table computation by SetKey()
+    static ThreadLocalStorage<CryptoPP::GCM<CryptoPP::AES>::Encryption> encryptor;
+    static ThreadLocalStorage<std::vector<byte>> last_key;
+    // Avoid expensive table computation by SetKey()
 
-    if (last_key.size() == key_len && memcmp(last_key.data(), key, key_len) == 0)
+    if (last_key->size() == key_len && memcmp(last_key->data(), key, key_len) == 0)
     {
-        encryptor.Resynchronize(static_cast<const byte*>(iv), static_cast<int>(iv_len));
+        encryptor->Resynchronize(static_cast<const byte*>(iv), static_cast<int>(iv_len));
     }
     else
     {
-        encryptor.SetKeyWithIV(
+        encryptor->SetKeyWithIV(
             static_cast<const byte*>(key), key_len, static_cast<const byte*>(iv), iv_len);
-        last_key.assign(static_cast<const byte*>(key), static_cast<const byte*>(key) + key_len);
+        last_key->assign(static_cast<const byte*>(key), static_cast<const byte*>(key) + key_len);
     }
 
-    encryptor.SpecifyDataLengths(header_len, text_len);
-    encryptor.Update(static_cast<const byte*>(header), header_len);
-    encryptor.ProcessString(
+    encryptor->SpecifyDataLengths(header_len, text_len);
+    encryptor->Update(static_cast<const byte*>(header), header_len);
+    encryptor->ProcessString(
         static_cast<byte*>(ciphertext), static_cast<const byte*>(plaintext), text_len);
-    encryptor.TruncatedFinal(static_cast<byte*>(mac), mac_len);
+    encryptor->TruncatedFinal(static_cast<byte*>(mac), mac_len);
 }
 
 bool aes_gcm_decrypt(const void* ciphertext,
@@ -279,25 +273,26 @@ bool aes_gcm_decrypt(const void* ciphertext,
                      size_t mac_len,
                      void* plaintext)
 {
-    thread_local CryptoPP::GCM<CryptoPP::AES>::Decryption decryptor;
-    thread_local std::vector<byte> last_key;    // Avoid expensive table computation by SetKey()
+    static ThreadLocalStorage<CryptoPP::GCM<CryptoPP::AES>::Decryption> decryptor;
+    static ThreadLocalStorage<std::vector<byte>> last_key;
+    // Avoid expensive table computation by SetKey()
 
-    if (last_key.size() == key_len && memcmp(last_key.data(), key, key_len) == 0)
+    if (last_key->size() == key_len && memcmp(last_key->data(), key, key_len) == 0)
     {
-        decryptor.Resynchronize(static_cast<const byte*>(iv), static_cast<int>(iv_len));
+        decryptor->Resynchronize(static_cast<const byte*>(iv), static_cast<int>(iv_len));
     }
     else
     {
-        decryptor.SetKeyWithIV(
+        decryptor->SetKeyWithIV(
             static_cast<const byte*>(key), key_len, static_cast<const byte*>(iv), iv_len);
-        last_key.assign(static_cast<const byte*>(key), static_cast<const byte*>(key) + key_len);
+        last_key->assign(static_cast<const byte*>(key), static_cast<const byte*>(key) + key_len);
     }
 
-    decryptor.SpecifyDataLengths(header_len, text_len);
-    decryptor.Update(static_cast<const byte*>(header), header_len);
-    decryptor.ProcessString(
+    decryptor->SpecifyDataLengths(header_len, text_len);
+    decryptor->Update(static_cast<const byte*>(header), header_len);
+    decryptor->ProcessString(
         static_cast<byte*>(plaintext), static_cast<const byte*>(ciphertext), text_len);
-    return decryptor.TruncatedVerify(static_cast<const byte*>(mac), mac_len);
+    return decryptor->TruncatedVerify(static_cast<const byte*>(mac), mac_len);
 }
 
 void hmac_sha256_calculate(
