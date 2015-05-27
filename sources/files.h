@@ -280,18 +280,4 @@ public:
     ~SimpleDirectory();
 };
 
-template <class... Args>
-inline std::shared_ptr<FileBase> make_file_from_type(int type, Args&&... args)
-{
-    switch (type)
-    {
-    case FileBase::REGULAR_FILE:
-        return std::make_shared<RegularFile>(std::forward<Args>(args)...);
-    case FileBase::SYMLINK:
-        return std::make_shared<Symlink>(std::forward<Args>(args)...);
-    case FileBase::DIRECTORY:
-        return std::make_shared<SimpleDirectory>(std::forward<Args>(args)...);
-    }
-    throw InvalidArgumentException("Unrecognized file type");
-}
 }

@@ -482,7 +482,7 @@ void BtreeDirectory::rotate(BtreeNode* left, BtreeNode* right, Entry& separator)
     std::vector<Entry> temp_entries;
     temp_entries.reserve(left->entries().size() + right->entries().size() + 1);
 
-    typedef std::move_iterator<decltype(temp_entries.begin())> entry_iter;
+    typedef std::move_iterator<decltype(temp_entries.begin())> entry_move_iterator;
 
     steal(temp_entries, left->mutable_entries());
     temp_entries.push_back(std::move(separator));
@@ -490,10 +490,10 @@ void BtreeDirectory::rotate(BtreeNode* left, BtreeNode* right, Entry& separator)
 
     auto middle = temp_entries.size() / 2;
     separator = std::move(temp_entries.at(middle));
-    left->mutable_entries().assign(entry_iter(temp_entries.begin()),
-                                   entry_iter(temp_entries.begin() + middle));
-    right->mutable_entries().assign(entry_iter(temp_entries.begin() + middle + 1),
-                                    entry_iter(temp_entries.end()));
+    left->mutable_entries().assign(entry_move_iterator(temp_entries.begin()),
+                                   entry_move_iterator(temp_entries.begin() + middle));
+    right->mutable_entries().assign(entry_move_iterator(temp_entries.begin() + middle + 1),
+                                    entry_move_iterator(temp_entries.end()));
 
     if (!left->children().empty() && !right->children().empty())
     {
@@ -504,6 +504,8 @@ void BtreeDirectory::rotate(BtreeNode* left, BtreeNode* right, Entry& separator)
 
         left->mutable_children().assign(temp_children.begin(), temp_children.begin() + middle + 1);
         right->mutable_children().assign(temp_children.begin() + middle + 1, temp_children.end());
+        adjust_children_in_cache(left);
+        adjust_children_in_cache(right);
     }
 }
 
@@ -581,8 +583,6 @@ bool BtreeDirectory::remove_entry(const std::string& name, id_type& id, int& typ
     type = e.type;
     auto leaf_node = replace_with_sub_entry(node, entry_index, 0);
     balance_up(leaf_node, 0);
-    flush_cache();
-    clear_cache();
     return true;
 }
 

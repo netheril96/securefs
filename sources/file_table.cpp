@@ -1,6 +1,7 @@
 #include "file_table.h"
 #include "utils.h"
 #include "exceptions.h"
+#include "btree_dir.h"
 
 #include <vector>
 #include <limits>
@@ -92,7 +93,8 @@ FileBase* FileTable::open_as(const id_type& id, int type)
         ::close(data_fd);
         throw OSException(errno);
     }
-    auto fb = make_file_from_type(type, data_fd, meta_fd, m_master_key, id, is_auth_enabled());
+    auto fb
+        = btree_make_file_from_type(type, data_fd, meta_fd, m_master_key, id, is_auth_enabled());
     m_opened.emplace(id, fb);
     fb->setref(1);
     return fb.get();
@@ -119,7 +121,8 @@ FileBase* FileTable::create_as(const id_type& id, int type)
         if (meta_fd < 0)
             throw OSException(errno);
 
-        auto fb = make_file_from_type(type, data_fd, meta_fd, m_master_key, id, is_auth_enabled());
+        auto fb = btree_make_file_from_type(
+            type, data_fd, meta_fd, m_master_key, id, is_auth_enabled());
         m_opened.emplace(id, fb);
         fb->setref(1);
         return fb.get();
