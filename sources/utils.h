@@ -188,6 +188,8 @@ public:
 
     ~ThreadLocalStorage() { pthread_key_delete(m_pkey); }
 
+    DISABLE_COPY_MOVE(ThreadLocalStorage);
+
     T* get()
     {
         auto ptr = pthread_getspecific(m_pkey);

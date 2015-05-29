@@ -14,7 +14,6 @@ class FileBase
 {
 private:
     std::mutex m_lock;
-    ptrdiff_t m_refcount;
     std::shared_ptr<HeaderBase> m_header;
     key_type m_key;
     id_type m_id;
@@ -114,11 +113,6 @@ public:
 
     void lock() { m_lock.lock(); }
     void unlock() { m_lock.unlock(); }
-
-    ptrdiff_t incref() noexcept { return ++m_refcount; }
-    ptrdiff_t decref() noexcept { return --m_refcount; }
-    ptrdiff_t getref() const noexcept { return m_refcount; }
-    void setref(ptrdiff_t value) noexcept { m_refcount = value; }
 
     virtual int type() const noexcept = 0;
     bool is_unlinked() const noexcept { return m_removed; }
@@ -279,5 +273,4 @@ public:
 
     ~SimpleDirectory();
 };
-
 }

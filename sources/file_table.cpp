@@ -53,32 +53,27 @@ size_t FileTable::id_hash::operator()(const id_type& id) const noexcept
 
 FileTable::~FileTable()
 {
-    for (auto&& pair : m_opened)
-        finalize(pair.second.get());
-    for (auto&& pair : m_closed)
-        finalize(pair.second.get());
+    for (auto&& pair : m_files)
+    {
+        try
+        {
+            finalize(pair.second.get());
+        }
+        catch (...)
+        {
+        }
+    }
 }
 
 FileBase* FileTable::open_as(const id_type& id, int type)
 {
-    auto it = m_opened.find(id);
-    if (it != m_opened.end())
+    auto it = m_files.find(id);
+    if (it != m_files.end())
     {
-        if (it->second->type() != type)
+        auto fp = it->second.get();
+        if (fp->type() != type)
             throw OSException(FileBase::error_number_for_not(type));
-        it->second->incref();
-        return it->second.get();
-    }
-    it = m_closed.find(id);
-    if (it != m_closed.end())
-    {
-        if (it->second->type() != type)
-            throw OSException(FileBase::error_number_for_not(type));
-        auto fb = it->second;
-        m_opened.emplace(*it);
-        m_closed.erase(it);
-        fb->setref(1);
-        return fb.get();
+        return fp;
     }
 
     std::string first_level_dir, second_level_dir, filename, metaname;
@@ -95,8 +90,7 @@ FileBase* FileTable::open_as(const id_type& id, int type)
     }
     auto fb
         = btree_make_file_from_type(type, data_fd, meta_fd, m_master_key, id, is_auth_enabled());
-    m_opened.emplace(id, fb);
-    fb->setref(1);
+    m_files.emplace(id, fb);
     return fb.get();
 }
 
@@ -104,7 +98,7 @@ FileBase* FileTable::create_as(const id_type& id, int type)
 {
     if (is_readonly())
         throw OSException(EROFS);
-    if (m_opened.find(id) != m_opened.end() || m_closed.find(id) != m_closed.end())
+    if (m_files.find(id) != m_files.end())
         throw OSException(EEXIST);
 
     std::string first_level_dir, second_level_dir, filename, metaname;
@@ -123,8 +117,7 @@ FileBase* FileTable::create_as(const id_type& id, int type)
 
         auto fb = btree_make_file_from_type(
             type, data_fd, meta_fd, m_master_key, id, is_auth_enabled());
-        m_opened.emplace(id, fb);
-        fb->setref(1);
+        m_files.emplace(id, fb);
         return fb.get();
     }
     catch (...)
@@ -142,63 +135,6 @@ FileBase* FileTable::create_as(const id_type& id, int type)
         ::unlinkat(m_dir_fd, second_level_dir.c_str(), AT_REMOVEDIR);
         ::unlinkat(m_dir_fd, first_level_dir.c_str(), AT_REMOVEDIR);
         throw;
-    }
-}
-
-void FileTable::close(FileBase* fb)
-{
-    if (!fb)
-        NULL_EXCEPT();
-
-    auto it = m_opened.find(fb->get_id());
-    if (it == m_opened.end())
-        throw InvalidArgumentException("File handle not in this table");
-
-    if (fb != it->second.get())
-        throw InvalidArgumentException("File handle not a match with its ID");
-
-    if (fb->decref() <= 0)
-    {
-        if (m_closed.size() >= MAX_NUM_CLOSED)
-            eject();
-        it->second->setref(
-            static_cast<ptrdiff_t>(m_counter));    // Reuse the refcount field for the timestamp
-        ++m_counter;                               // This acts as a timestamp
-        m_closed.emplace(*it);
-        m_opened.erase(it);
-    }
-}
-
-void FileTable::eject()
-{
-    assert(m_closed.size() > NUM_EJECT);
-
-    struct closure
-    {
-        ptrdiff_t counter;
-        table_type::iterator iter;
-
-        explicit closure(ptrdiff_t counter, table_type::iterator iter)
-            : counter(counter), iter(iter)
-        {
-        }
-
-        bool operator<(const closure& that) const noexcept { return counter < that.counter; }
-    };
-
-    std::vector<closure> temp;
-    for (auto it = m_closed.begin(); it != m_closed.end(); ++it)
-    {
-        temp.emplace_back(it->second->getref(), it);
-    }
-
-    // Eject the file handles closed from the earliest time
-    std::partial_sort(temp.begin(), temp.begin() + NUM_EJECT, temp.end());
-    for (size_t i = 0; i < NUM_EJECT; ++i)
-    {
-        auto iter = temp[i].iter;
-        finalize(iter->second.get());
-        m_closed.erase(iter);
     }
 }
 
