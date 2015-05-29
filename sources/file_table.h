@@ -10,6 +10,7 @@
 #include <utility>
 #include <mutex>
 #include <string.h>
+#include <random>
 
 namespace securefs
 {
@@ -29,7 +30,7 @@ private:
     typedef std::unordered_map<id_type, std::shared_ptr<FileBase>, id_hash> table_type;
 
 private:
-    static const size_t MAX_NUM_CLOSED = 50, NUM_EJECT = 5;
+    static const size_t MAX_NUM_CLOSED = 1024, NUM_EJECT = 5;
 
 private:
     key_type m_master_key;
@@ -38,6 +39,7 @@ private:
     uint64_t m_counter;
     int m_dir_fd;
     uint32_t m_flags;
+    std::mt19937 m_rng;
 
 private:
     void eject();
@@ -48,7 +50,7 @@ public:
 
 public:
     explicit FileTable(int dir_fd, const key_type& master_key, uint32_t flags)
-        : m_counter(0), m_dir_fd(dir_fd), m_flags(flags)
+        : m_counter(0), m_dir_fd(dir_fd), m_flags(flags), m_rng(std::random_device()())
     {
         memcpy(m_master_key.data(), master_key.data(), master_key.size());
     }

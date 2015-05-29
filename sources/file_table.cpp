@@ -10,10 +10,6 @@
 #include <string>
 #include <string.h>
 
-#include <cryptopp/osrng.h>
-#include <cryptopp/hmac.h>
-#include <cryptopp/sha.h>
-
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -40,11 +36,7 @@ void calculate_paths(const securefs::id_type& id,
 
 namespace securefs
 {
-FileTable::id_hash::id_hash()
-{
-    CryptoPP::NonblockingRng rng;
-    rng.GenerateBlock(reinterpret_cast<byte*>(&m_seed), sizeof(m_seed));
-}
+FileTable::id_hash::id_hash() { generate_random(&m_seed, sizeof(m_seed)); }
 
 size_t FileTable::id_hash::operator()(const id_type& id) const noexcept
 {
@@ -172,31 +164,16 @@ void FileTable::close(FileBase* fb)
 void FileTable::eject()
 {
     assert(m_closed.size() > NUM_EJECT);
+    std::vector<const id_type*> closed_ids;
+    closed_ids.reserve(m_closed.size());
+    for (auto&& pair : m_closed)
+        closed_ids.push_back(&pair.first);
+    std::shuffle(closed_ids.begin(), closed_ids.end(), m_rng);
 
-    struct closure
-    {
-        ptrdiff_t counter;
-        table_type::iterator iter;
-
-        explicit closure(ptrdiff_t counter, table_type::iterator iter)
-            : counter(counter), iter(iter)
-        {
-        }
-
-        bool operator<(const closure& that) const noexcept { return counter < that.counter; }
-    };
-
-    std::vector<closure> temp;
-    for (auto it = m_closed.begin(); it != m_closed.end(); ++it)
-    {
-        temp.emplace_back(it->second->getref(), it);
-    }
-
-    // Eject the file handles closed from the earliest time
-    std::partial_sort(temp.begin(), temp.begin() + NUM_EJECT, temp.end());
     for (size_t i = 0; i < NUM_EJECT; ++i)
     {
-        auto iter = temp[i].iter;
+        auto iter = m_closed.find(*closed_ids[i]);
+        assert(iter != m_closed.end());
         finalize(iter->second.get());
         m_closed.erase(iter);
     }
@@ -207,6 +184,7 @@ void FileTable::finalize(FileBase* fb)
     if (!fb)
         return;
 
+    std::lock_guard<FileBase> lg(*fb);
     if (fb->is_unlinked())
     {
         std::string first_level_dir, second_level_dir, filename, metaname;

@@ -120,7 +120,6 @@ namespace internal
         assert(dir);
         std::lock_guard<FileBase> lg(*dir);
         bool result = dir->add_entry(name, id, type);
-        dir->flush();
         return result;
     }
 
@@ -168,28 +167,32 @@ namespace internal
         return fg;
     }
 
-    FileGuard create(struct fuse_context* ctx, const std::string& path, int type)
+    template <class Initializer>
+    FileGuard
+    create(struct fuse_context* ctx, const std::string& path, int type, const Initializer& init)
     {
         auto fs = get_fs(ctx);
         std::string last_component;
         auto dir = open_base_dir(ctx, path, last_component);
         id_type id;
         generate_random(id.data(), id.size());
+
         FileGuard result(&fs->table, table_create_as(fs->table, id, type));
-        bool success = false;
+        {
+            std::lock_guard<FileBase> lg(*result);
+            init(result.get());
+        }
+
         try
         {
-            success = dir_add_entry(dir.get_as<Directory>(), last_component, id, type);
+            bool success = dir_add_entry(dir.get_as<Directory>(), last_component, id, type);
+            if (!success)
+                throw OSException(EEXIST);
         }
         catch (...)
         {
             result->unlink();
             throw;
-        }
-        if (!success)
-        {
-            result->unlink();
-            throw OSException(EEXIST);
         }
         return result;
     }
@@ -222,15 +225,11 @@ namespace internal
             std::lock_guard<FileBase> guard(*dir);
             if (!dir.get_as<Directory>()->remove_entry(last_component, id, type))
                 throw OSException(ENOENT);
-            dir->flush();
         }
         remove(ctx, id, type);
     }
 
-    bool is_readonly(struct fuse_context* ctx)
-    {
-        return static_cast<operations::FileSystem*>(ctx->private_data)->table.is_readonly();
-    }
+    inline bool is_readonly(struct fuse_context* ctx) { return get_fs(ctx)->table.is_readonly(); }
 
     int log_error(struct fuse_context* ctx,
                   const ExceptionBase& e,
@@ -286,7 +285,6 @@ namespace operations
             auto fg = internal::open_all(ctx, path);
             std::lock_guard<FileBase> lg(*fg);
             fg->stat(st);
-            fg->flush();
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -345,14 +343,16 @@ namespace operations
         {
             if (internal::is_readonly(ctx))
                 return -EROFS;
-            auto fg = internal::create(ctx, path, FileBase::REGULAR_FILE);
+            auto init_file = [=](FileBase* fb)
+            {
+                fb->set_uid(ctx->uid);
+                fb->set_gid(ctx->gid);
+                fb->set_nlink(1);
+                fb->set_mode(mode);
+            };
+            auto fg = internal::create(ctx, path, FileBase::REGULAR_FILE, init_file);
             if (fg->type() != FileBase::REGULAR_FILE)
                 return -EPERM;
-            fg->set_uid(ctx->uid);
-            fg->set_gid(ctx->gid);
-            fg->set_nlink(1);
-            fg->set_mode(mode);
-            fg->flush();
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
             return 0;
         }
@@ -395,8 +395,11 @@ namespace operations
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EINVAL;
-            fb->flush();
-            internal::FileGuard fg(&static_cast<FileSystem*>(ctx->private_data)->table, fb);
+            {
+                std::lock_guard<FileBase> lg(*fb);
+                fb->flush();
+            }
+            internal::FileGuard fg(&internal::get_fs(ctx)->table, fb);
             fg.reset(nullptr);
             return 0;
         }
@@ -509,14 +512,16 @@ namespace operations
         {
             if (internal::is_readonly(ctx))
                 return -EROFS;
-            auto fg = internal::create(ctx, path, FileBase::DIRECTORY);
+            auto init_dir = [=](FileBase* fb)
+            {
+                fb->set_uid(ctx->uid);
+                fb->set_gid(ctx->gid);
+                fb->set_nlink(1);
+                fb->set_mode(mode);
+            };
+            auto fg = internal::create(ctx, path, FileBase::DIRECTORY, init_dir);
             if (fg->type() != FileBase::DIRECTORY)
                 return -ENOTDIR;
-            fg->set_uid(ctx->uid);
-            fg->set_gid(ctx->gid);
-            fg->set_nlink(1);
-            fg->set_mode(mode);
-            fg->flush();
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -563,15 +568,17 @@ namespace operations
         {
             if (internal::is_readonly(ctx))
                 return -EROFS;
-            auto fg = internal::create(ctx, from, FileBase::SYMLINK);
+            auto init_symlink = [=](FileBase* fb)
+            {
+                fb->set_uid(ctx->uid);
+                fb->set_gid(ctx->gid);
+                fb->set_nlink(1);
+                fb->set_mode(S_IFLNK | 0755);
+                static_cast<Symlink*>(fb)->set(to);
+            };
+            auto fg = internal::create(ctx, from, FileBase::SYMLINK, init_symlink);
             if (fg->type() != FileBase::SYMLINK)
                 return -EINVAL;
-            fg->set_uid(ctx->uid);
-            fg->set_gid(ctx->gid);
-            fg->set_nlink(1);
-            fg->set_mode(S_IFLNK | 0755);
-            fg.get_as<Symlink>()->set(to);
-            fg->flush();
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -587,6 +594,7 @@ namespace operations
             auto fg = internal::open_all(ctx, path);
             if (fg->type() != FileBase::SYMLINK)
                 return -EINVAL;
+            std::lock_guard<FileBase> lg(*fg);
             auto destination = fg.get_as<Symlink>()->get();
             memset(buf, 0, size);
             memcpy(buf, destination.data(), std::min(destination.size(), size - 1));
@@ -632,8 +640,6 @@ namespace operations
                     dst_dir->remove_entry(dst_filename, dst_id, dst_type);
                 src_dir->remove_entry(src_filename, src_id, src_type);
                 dst_dir->add_entry(dst_filename, src_id, src_type);
-                dst_dir->flush();
-                src_dir->flush();
             };
 
             // For templates greater, less, greater_equal, and less_equal, the specializations for

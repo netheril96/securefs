@@ -7,6 +7,7 @@
 #include <memory>
 #include <functional>
 #include <unordered_map>
+#include <atomic>
 
 namespace securefs
 {
@@ -14,7 +15,7 @@ class FileBase
 {
 private:
     std::mutex m_lock;
-    ptrdiff_t m_refcount;
+    std::atomic<ptrdiff_t> m_refcount;
     std::shared_ptr<HeaderBase> m_header;
     key_type m_key;
     id_type m_id;
@@ -279,5 +280,4 @@ public:
 
     ~SimpleDirectory();
 };
-
 }
