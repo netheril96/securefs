@@ -19,6 +19,7 @@ namespace securefs
 
 FileBase::FileBase(int data_fd, int meta_fd, const key_type& key_, const id_type& id_, bool check)
     : m_lock()
+    , m_refcount(1)
     , m_header()
     , m_id(id_)
     , m_data_fd(data_fd)

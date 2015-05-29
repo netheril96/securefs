@@ -33,12 +33,14 @@ private:
 
 private:
     key_type m_master_key;
-    table_type m_files;
+    table_type m_opened, m_closed;
     std::mutex m_lock;
+    uint64_t m_counter;
     int m_dir_fd;
     uint32_t m_flags;
 
 private:
+    void eject();
     void finalize(FileBase*);
 
 public:
@@ -46,7 +48,7 @@ public:
 
 public:
     explicit FileTable(int dir_fd, const key_type& master_key, uint32_t flags)
-        : m_dir_fd(dir_fd), m_flags(flags)
+        : m_counter(0), m_dir_fd(dir_fd), m_flags(flags)
     {
         memcpy(m_master_key.data(), master_key.data(), master_key.size());
     }
@@ -55,6 +57,7 @@ public:
     void unlock() { m_lock.unlock(); }
     FileBase* open_as(const id_type& id, int type);
     FileBase* create_as(const id_type& id, int type);
+    void close(FileBase*);
     bool is_readonly() const noexcept { return m_flags & READ_ONLY; }
     bool is_auth_enabled() const noexcept { return !(m_flags & NO_AUTHENTICATION); }
 };
