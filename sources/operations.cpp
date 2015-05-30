@@ -6,6 +6,7 @@
 #include <string>
 #include <string.h>
 #include <typeinfo>
+#include <chrono>
 
 #include <utime.h>
 #include <fcntl.h>
@@ -265,6 +266,74 @@ namespace internal
 
 namespace operations
 {
+
+    FileSystem::FileSystem(int dir_fd, const key_type& master_key, uint32_t flags)
+        : table(dir_fd, master_key, flags)
+        , root_id()
+        , m_background_flusher(&FileSystem::flush_in_the_background, this)
+    {
+    }
+
+    FileSystem::~FileSystem()
+    {
+        m_going_down.notify_all();
+        m_background_flusher.join();
+    }
+
+    void FileSystem::flush_in_the_background()
+    {
+        std::unique_lock<std::mutex> guard(m_background_lock);
+        while (true)
+        {
+            auto wait_status = m_going_down.wait_for(guard, std::chrono::seconds(10));
+            std::vector<std::shared_ptr<FileBase>> all_files;
+            {
+                std::lock_guard<FileTable> lg(table);
+                table.all_files().swap(all_files);
+            }
+            for (auto&& fp : all_files)
+            {
+                try
+                {
+                    std::lock_guard<FileBase> lg(*fp);
+                    fp->flush();
+                }
+                catch (const ExceptionBase& e)
+                {
+                    if (logger && e.level() >= logger->get_level())
+                        logger->log(e.level(),
+                                    fmt::format("{}: {}", e.type_name(), e.message()),
+                                    __PRETTY_FUNCTION__,
+                                    __FILE__,
+                                    __LINE__);
+                }
+                catch (const std::exception& e)
+                {
+                    if (logger && LoggingLevel::ERROR >= logger->get_level())
+                        logger->log(LoggingLevel::ERROR,
+                                    fmt::format("An unexcepted exception of type {} occurrs: {}",
+                                                typeid(e).name(),
+                                                e.what()),
+                                    __PRETTY_FUNCTION__,
+                                    __FILE__,
+                                    __LINE__);
+                }
+                catch (...)
+                {
+                    if (logger && LoggingLevel::ERROR >= logger->get_level())
+                        logger->log(LoggingLevel::ERROR,
+                                    "Exception not a subclass of std::exception",
+                                    __PRETTY_FUNCTION__,
+                                    __FILE__,
+                                    __LINE__);
+                }
+            }
+            if (wait_status == std::cv_status::no_timeout)
+            {
+                return;
+            }
+        }
+    }
 
 #define COMMON_CATCH_BLOCK                                                                         \
     catch (const OSException& e) { return -e.error_number(); }                                     \

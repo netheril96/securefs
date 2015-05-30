@@ -199,4 +199,14 @@ void FileTable::finalize(FileBase* fb)
         fb->flush();
     }
 }
+
+std::vector<std::shared_ptr<FileBase>> FileTable::all_files() const
+{
+    std::vector<std::shared_ptr<FileBase>> result;
+    for (auto&& pair : m_opened)
+        result.emplace_back(pair.second);
+    for (auto&& pair : m_closed)
+        result.emplace_back(pair.second);
+    return result;
+}
 }
