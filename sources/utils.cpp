@@ -336,23 +336,17 @@ unsigned int pbkdf_hmac_sha256(const void* password,
                          min_seconds);
 }
 
-void hkdf(const void* key,
-          size_t key_len,
-          const void* salt,
-          size_t salt_len,
-          const void* info,
-          size_t info_len,
-          void* output,
-          size_t out_len)
+static void hkdf_expand(const void* distilled_key,
+                        size_t dis_len,
+                        const void* info,
+                        size_t info_len,
+                        void* output,
+                        size_t out_len)
 {
     typedef CryptoPP::HMAC<CryptoPP::SHA256> hmac_type;
     if (out_len > 255 * hmac_type::DIGESTSIZE)
         throw InvalidArgumentException("Output length too large");
-
-    byte distilled_key[hmac_type::DIGESTSIZE];
-    hmac_sha256_calculate(key, key_len, salt, salt_len, distilled_key, sizeof(distilled_key));
-
-    hmac_type calculator(distilled_key, sizeof(distilled_key));
+    hmac_type calculator(static_cast<const byte*>(distilled_key), dis_len);
     byte* out = static_cast<byte*>(output);
     size_t i = 0, j = 0;
     byte counter = 1;
@@ -366,6 +360,27 @@ void hkdf(const void* key,
         calculator.TruncatedFinal(out + i + j, small_len);
         i += j;
         j = small_len;
+    }
+}
+
+void hkdf(const void* key,
+          size_t key_len,
+          const void* salt,
+          size_t salt_len,
+          const void* info,
+          size_t info_len,
+          void* output,
+          size_t out_len)
+{
+    if (salt && salt_len)
+    {
+        byte distilled_key[32];
+        hmac_sha256_calculate(key, key_len, salt, salt_len, distilled_key, sizeof(distilled_key));
+        hkdf_expand(distilled_key, sizeof(distilled_key), info, info_len, output, out_len);
+    }
+    else
+    {
+        hkdf_expand(key, key_len, info, info_len, output, out_len);
     }
 }
 

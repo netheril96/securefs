@@ -34,13 +34,12 @@ FileBase::FileBase(int data_fd, int meta_fd, const key_type& key_, const id_type
 
     key_type data_key, meta_key;
     byte generated_keys[KEY_LENGTH * 3];
-    const char* info = "securefs";
     hkdf(key_.data(),
          key_.size(),
+         nullptr,
+         0,
          id_.data(),
          id_.size(),
-         info,
-         strlen(info),
          generated_keys,
          sizeof(generated_keys));
     memcpy(data_key.data(), generated_keys, KEY_LENGTH);
