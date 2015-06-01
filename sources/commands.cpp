@@ -282,6 +282,7 @@ int create_filesys(int argc, char** argv)
         root->set_mode(S_IFDIR | 0755);
         root->set_nlink(1);
         root->flush();
+        fputs("Filesystem successfully created\n", stderr);
         return 0;
     }
     catch (...)
@@ -426,6 +427,135 @@ int mount_filesys(int argc, char** argv)
                      &opt,
                      fs.release());
 }
+
+int chpass_filesys(int argc, char** argv)
+{
+    using namespace securefs;
+    TCLAP::CmdLine cmdline("Change the password of a given filesystem");
+    TCLAP::SwitchArg stdinpass(
+        "", "stdinpass", "Read password from stdin directly (useful for piping)");
+    TCLAP::SwitchArg insecure(
+        "i", "insecure", "Disable all integrity verification (insecure mode)");
+    TCLAP::ValueArg<unsigned> rounds(
+        "r",
+        "rounds",
+        "Specify how many rounds of PBKDF2 are applied (0 for automatic)",
+        false,
+        0,
+        "integer");
+    TCLAP::UnlabeledValueArg<std::string> dir(
+        "dir", "Directory where the data are stored", true, "", "directory");
+    cmdline.add(&stdinpass);
+    cmdline.add(&rounds);
+    cmdline.add(&insecure);
+    cmdline.add(&dir);
+    cmdline.parse(argc, argv);
+
+    int folder_fd = open_and_lock_base_dir(dir.getValue());
+
+    auto config_json = read_config(folder_fd);
+    key_type master_key;
+
+    CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
+    size_t pass_len = try_read_password(password.data(), password.size());
+
+    if (!parse_config(config_json, password, pass_len, master_key))
+        throw std::runtime_error("Error: wrong password");
+
+    if (!insecure.getValue())
+    {
+        byte hmac[CONFIG_MAC_LENGTH];
+        read_hmac(folder_fd, hmac, sizeof(hmac));
+        auto config_string = config_json.dump();
+        if (!hmac_sha256_verify(config_string.data(),
+                                config_string.size(),
+                                master_key.data(),
+                                master_key.size(),
+                                hmac,
+                                sizeof(hmac)))
+            throw std::runtime_error("Error: HMAC mismatch for the configuration file");
+    }
+
+    fprintf(stderr, "Authentication success. Now enter new password.\n");
+    pass_len = try_read_password_with_confirmation(password, password.size());
+
+    key_type salt;
+    generate_random(salt.data(), salt.size());
+    auto config
+        = generate_config(master_key, salt, password.data(), pass_len, rounds.getValue()).dump();
+
+    byte hmac[CONFIG_MAC_LENGTH];
+    hmac_sha256_calculate(
+        config.data(), config.size(), master_key.data(), master_key.size(), hmac, sizeof(hmac));
+
+    int config_fd = ::openat(folder_fd, CONFIG_TMP_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
+    if (config_fd < 0)
+        throw std::runtime_error(fmt::format(
+            "Error creating {} for writing: {}", CONFIG_TMP_FILE_NAME, sane_strerror(errno)));
+    POSIXFileStream config_stream(config_fd);
+    config_stream.write(config.data(), 0, config.size());
+
+    int hmac_fd = ::openat(folder_fd, CONFIG_TMP_HMAC_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
+    if (hmac_fd < 0)
+        throw std::runtime_error(fmt::format(
+            "Error creating {} for writing: {}", CONFIG_TMP_HMAC_FILE_NAME, sane_strerror(errno)));
+    POSIXFileStream config_hmac_stream(hmac_fd);
+    config_hmac_stream.write(hmac, 0, sizeof(hmac));
+
+    int rc = ::renameat(folder_fd, CONFIG_TMP_HMAC_FILE_NAME, folder_fd, CONFIG_HMAC_FILE_NAME);
+    if (rc < 0)
+        throw std::runtime_error(fmt::format("Error moving {} to {}: {}",
+                                             CONFIG_TMP_HMAC_FILE_NAME,
+                                             CONFIG_HMAC_FILE_NAME,
+                                             sane_strerror(errno)));
+
+    rc = ::renameat(folder_fd, CONFIG_TMP_FILE_NAME, folder_fd, CONFIG_FILE_NAME);
+    if (rc < 0)
+        throw std::runtime_error(fmt::format("Error moving {} to {}: {}",
+                                             CONFIG_TMP_FILE_NAME,
+                                             CONFIG_FILE_NAME,
+                                             sane_strerror(errno)));
+    fputs("Password change success\n", stderr);
+    return 0;
+}
+
+typedef int (*command_function)(int, char**);
+
+struct CommandInfo
+{
+    const char* short_cmd;
+    const char* long_cmd;
+    const char* help;
+    command_function function;
+};
+
+const CommandInfo commands[]
+    = {{"m", "mount", "Mount filesystem", &mount_filesys},
+       {"c", "create", "Create a new filesystem", &create_filesys},
+       {nullptr, "chpass", "Change the password of existing filesystem", &chpass_filesys}};
+
+const char* get_nonnull(const char* a, const char* b)
+{
+    if (a)
+        return a;
+    if (b)
+        return b;
+    return nullptr;
+}
+
+int print_usage(FILE* fp)
+{
+    fputs("securefs [command] [args]\n\n    Available commands:\n\n", fp);
+    for (auto&& info : commands)
+    {
+        if (info.short_cmd && info.long_cmd)
+            fprintf(fp, "    %s, %s: %s\n", info.short_cmd, info.long_cmd, info.help);
+        else
+            fprintf(fp, "    %s: %s\n", get_nonnull(info.short_cmd, info.long_cmd), info.help);
+    }
+    fputs("\nCall \"securefs [command] -h\" to learn the detailed usage of the command\n", fp);
+    return 8;
+}
 }
 
 namespace securefs
@@ -435,18 +565,16 @@ int commands_main(int argc, char** argv)
     try
     {
         if (argc < 2)
-        {
-            fprintf(stderr, "Not enough arguments\n");
-            return 6;
-        }
+            return print_usage(stderr);
         argc--;
         argv++;
-        if (strcmp(argv[0], "create") == 0)
-            return create_filesys(argc, argv);
-        if (strcmp(argv[0], "mount") == 0)
-            return mount_filesys(argc, argv);
-        fprintf(stderr, "Unknown commands\n");
-        return 7;
+        for (auto&& info : commands)
+        {
+            if ((info.long_cmd && strcmp(argv[0], info.long_cmd) == 0)
+                || (info.short_cmd && strcmp(argv[0], info.short_cmd) == 0))
+                return info.function(argc, argv);
+        }
+        return print_usage(stderr);
     }
     catch (const TCLAP::ArgException& e)
     {
