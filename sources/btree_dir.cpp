@@ -254,7 +254,7 @@ bool BtreeDirectory::validate_node(const BtreeNode* n, int depth)
     if (!std::is_sorted(n->entries().begin(), n->entries().end()))
         return false;
     if (n->parent_page_number() != INVALID_PAGE
-        && (n->entries().size() < MAX_NUM_ENTRIES / 2 || n->entries().size() > MAX_NUM_ENTRIES))
+        && (n->entries().size() < BTREE_MAX_NUM_ENTRIES / 2 || n->entries().size() > BTREE_MAX_NUM_ENTRIES))
         return false;
     if (!n->is_leaf())
     {
@@ -415,7 +415,7 @@ void BtreeDirectory::insert_and_balance(BtreeNode* n, Entry e, uint32_t addition
         n->mutable_children().insert(n->children().begin() + (iter - n->entries().begin()) + 1,
                                      additional_child);
     n->mutable_entries().insert(iter, std::move(e));
-    if (n->entries().size() > MAX_NUM_ENTRIES)
+    if (n->entries().size() > BTREE_MAX_NUM_ENTRIES)
     {
         Node* sibling = retrieve_node(n->parent_page_number(), allocate_page());
         auto middle_index = n->entries().size() / 2 - 1;
@@ -552,7 +552,7 @@ void BtreeDirectory::balance_up(BtreeNode* n, int depth)
         del_node(n);
         return;
     }
-    if (n->parent_page_number() == INVALID_PAGE || n->entries().size() >= MAX_NUM_ENTRIES / 2)
+    if (n->parent_page_number() == INVALID_PAGE || n->entries().size() >= BTREE_MAX_NUM_ENTRIES / 2)
         return;
 
     Node* parent = retrieve_existing_node(n->parent_page_number());
@@ -562,7 +562,7 @@ void BtreeDirectory::balance_up(BtreeNode* n, int depth)
     BtreeNode* sibling;
     std::tie(entry_index, sibling) = find_sibling(parent, n);
 
-    if (n->entries().size() + sibling->entries().size() < MAX_NUM_ENTRIES)
+    if (n->entries().size() + sibling->entries().size() < BTREE_MAX_NUM_ENTRIES)
     {
         if (n->entries().back() < sibling->entries().front())
             merge(n, sibling, parent, entry_index);
@@ -708,7 +708,7 @@ void BtreeDirectory::rebuild()
         return;
 
     std::vector<DirEntry> entries;
-    entries.reserve(this->m_stream->size() / BLOCK_SIZE * MAX_NUM_ENTRIES);
+    entries.reserve(this->m_stream->size() / BLOCK_SIZE * BTREE_MAX_NUM_ENTRIES);
     mutable_recursive_iterate(root,
                               [&](DirEntry&& e)
                               {
