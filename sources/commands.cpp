@@ -31,10 +31,9 @@
 namespace
 {
 
+static const char* VERSION_HEADER = "version=1";
 static const char* CONFIG_FILE_NAME = ".securefs.json";
-static const char* CONFIG_HMAC_FILE_NAME = ".securefs.hmac-sha256";
 static const char* CONFIG_TMP_FILE_NAME = ".securefs.json.tmp";
-static const char* CONFIG_TMP_HMAC_FILE_NAME = ".securefs.hmac-sha256.tmp";
 static const unsigned MIN_ITERATIONS = 20000;
 static const unsigned MIN_DERIVE_SECONDS = 1;
 static const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
@@ -83,8 +82,8 @@ nlohmann::json generate_config(const securefs::key_type& master_key,
 
     securefs::aes_gcm_encrypt(master_key.data(),
                               master_key.size(),
-                              nullptr,
-                              0,
+                              VERSION_HEADER,
+                              strlen(VERSION_HEADER),
                               key_to_encrypt.data(),
                               key_to_encrypt.size(),
                               iv,
@@ -136,8 +135,8 @@ bool parse_config(const nlohmann::json& config,
 
     return aes_gcm_decrypt(encrypted_key.data(),
                            encrypted_key.size(),
-                           nullptr,
-                           0,
+                           VERSION_HEADER,
+                           strlen(VERSION_HEADER),
                            key_to_encrypt_master_key.data(),
                            key_to_encrypt_master_key.size(),
                            iv,
@@ -162,25 +161,6 @@ nlohmann::json read_config(int dir_fd)
 
     config_stream.read(&config_str[0], 0, config_str.size());
     return nlohmann::json::parse(config_str);
-}
-
-void read_hmac(int dir_fd, void* buffer, size_t size)
-{
-    using namespace securefs;
-    int hmac_fd = ::openat(dir_fd, CONFIG_HMAC_FILE_NAME, O_RDONLY);
-    if (hmac_fd < 0)
-    {
-        throw std::runtime_error(
-            fmt::format("Error opening {}: {}", CONFIG_HMAC_FILE_NAME, sane_strerror(errno)));
-    }
-
-    POSIXFileStream hmac_stream(hmac_fd);
-    if (hmac_stream.size() != size)
-        throw std::runtime_error(fmt::format("Wrong size of {}: expect {}, get {}",
-                                             CONFIG_HMAC_FILE_NAME,
-                                             size,
-                                             hmac_stream.size()));
-    hmac_stream.read(buffer, 0, size);
 }
 
 size_t try_read_password_with_confirmation(void* password, size_t length)
@@ -240,7 +220,7 @@ int create_filesys(int argc, char** argv)
 
     int folder_fd = open_and_lock_base_dir(dir.getValue());
 
-    int config_fd = -1, hmac_fd = -1;
+    int config_fd = -1;
     try
     {
         key_type master_key, salt;
@@ -257,23 +237,12 @@ int create_filesys(int argc, char** argv)
         auto config = generate_config(
                           master_key, salt, password.data(), pass_len, rounds.getValue()).dump();
 
-        byte hmac[CONFIG_MAC_LENGTH];
-        hmac_sha256_calculate(
-            config.data(), config.size(), master_key.data(), master_key.size(), hmac, sizeof(hmac));
-
         config_fd = ::openat(folder_fd, CONFIG_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
         if (config_fd < 0)
             throw std::runtime_error(fmt::format(
                 "Error creating {} for writing: {}", CONFIG_FILE_NAME, sane_strerror(errno)));
         POSIXFileStream config_stream(config_fd);
         config_stream.write(config.data(), 0, config.size());
-
-        hmac_fd = ::openat(folder_fd, CONFIG_HMAC_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
-        if (hmac_fd < 0)
-            throw std::runtime_error(fmt::format(
-                "Error creating {} for writing: {}", CONFIG_HMAC_FILE_NAME, sane_strerror(errno)));
-        POSIXFileStream config_hmac_stream(hmac_fd);
-        config_hmac_stream.write(hmac, 0, sizeof(hmac));
 
         operations::FileSystem fs(folder_fd, master_key, 0);
         auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
@@ -289,8 +258,6 @@ int create_filesys(int argc, char** argv)
     {
         if (config_fd >= 0)
             ::unlinkat(folder_fd, CONFIG_FILE_NAME, 0);
-        if (hmac_fd >= 0)
-            ::unlinkat(folder_fd, CONFIG_HMAC_FILE_NAME, 0);
         throw;
     }
 }
@@ -379,6 +346,16 @@ int mount_filesys(int argc, char** argv)
     int folder_fd = open_and_lock_base_dir(data_dir.getValue());
 
     auto config_json = read_config(folder_fd);
+    auto version = config_json.at("version").get<unsigned>();
+    if (version != 1)
+        throw std::runtime_error(fmt::format("Unkown format version {}", version));
+
+    fprintf(stderr,
+            "Mounting filesystem stored at %s onto %s\nFormat version: %u\n",
+            data_dir.getValue().c_str(),
+            mount_point.getValue().c_str(),
+            version);
+
     key_type master_key;
 
     CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
@@ -390,20 +367,6 @@ int mount_filesys(int argc, char** argv)
 
     if (!parse_config(config_json, password, pass_len, master_key))
         throw std::runtime_error("Error: wrong password");
-
-    if (!insecure.getValue())
-    {
-        byte hmac[CONFIG_MAC_LENGTH];
-        read_hmac(folder_fd, hmac, sizeof(hmac));
-        auto config_string = config_json.dump();
-        if (!hmac_sha256_verify(config_string.data(),
-                                config_string.size(),
-                                master_key.data(),
-                                master_key.size(),
-                                hmac,
-                                sizeof(hmac)))
-            throw std::runtime_error("Error: HMAC mismatch for the configuration file");
-    }
 
     unsigned flags = 0;
     if (insecure.getValue())
@@ -434,8 +397,6 @@ int chpass_filesys(int argc, char** argv)
     TCLAP::CmdLine cmdline("Change the password of a given filesystem");
     TCLAP::SwitchArg stdinpass(
         "", "stdinpass", "Read password from stdin directly (useful for piping)");
-    TCLAP::SwitchArg insecure(
-        "i", "insecure", "Disable all integrity verification (insecure mode)");
     TCLAP::ValueArg<unsigned> rounds(
         "r",
         "rounds",
@@ -447,7 +408,6 @@ int chpass_filesys(int argc, char** argv)
         "dir", "Directory where the data are stored", true, "", "directory");
     cmdline.add(&stdinpass);
     cmdline.add(&rounds);
-    cmdline.add(&insecure);
     cmdline.add(&dir);
     cmdline.parse(argc, argv);
 
@@ -462,20 +422,6 @@ int chpass_filesys(int argc, char** argv)
     if (!parse_config(config_json, password, pass_len, master_key))
         throw std::runtime_error("Error: wrong password");
 
-    if (!insecure.getValue())
-    {
-        byte hmac[CONFIG_MAC_LENGTH];
-        read_hmac(folder_fd, hmac, sizeof(hmac));
-        auto config_string = config_json.dump();
-        if (!hmac_sha256_verify(config_string.data(),
-                                config_string.size(),
-                                master_key.data(),
-                                master_key.size(),
-                                hmac,
-                                sizeof(hmac)))
-            throw std::runtime_error("Error: HMAC mismatch for the configuration file");
-    }
-
     fprintf(stderr, "Authentication success. Now enter new password.\n");
     pass_len = try_read_password_with_confirmation(password, password.size());
 
@@ -484,10 +430,6 @@ int chpass_filesys(int argc, char** argv)
     auto config
         = generate_config(master_key, salt, password.data(), pass_len, rounds.getValue()).dump();
 
-    byte hmac[CONFIG_MAC_LENGTH];
-    hmac_sha256_calculate(
-        config.data(), config.size(), master_key.data(), master_key.size(), hmac, sizeof(hmac));
-
     int config_fd = ::openat(folder_fd, CONFIG_TMP_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
     if (config_fd < 0)
         throw std::runtime_error(fmt::format(
@@ -495,21 +437,7 @@ int chpass_filesys(int argc, char** argv)
     POSIXFileStream config_stream(config_fd);
     config_stream.write(config.data(), 0, config.size());
 
-    int hmac_fd = ::openat(folder_fd, CONFIG_TMP_HMAC_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
-    if (hmac_fd < 0)
-        throw std::runtime_error(fmt::format(
-            "Error creating {} for writing: {}", CONFIG_TMP_HMAC_FILE_NAME, sane_strerror(errno)));
-    POSIXFileStream config_hmac_stream(hmac_fd);
-    config_hmac_stream.write(hmac, 0, sizeof(hmac));
-
-    int rc = ::renameat(folder_fd, CONFIG_TMP_HMAC_FILE_NAME, folder_fd, CONFIG_HMAC_FILE_NAME);
-    if (rc < 0)
-        throw std::runtime_error(fmt::format("Error moving {} to {}: {}",
-                                             CONFIG_TMP_HMAC_FILE_NAME,
-                                             CONFIG_HMAC_FILE_NAME,
-                                             sane_strerror(errno)));
-
-    rc = ::renameat(folder_fd, CONFIG_TMP_FILE_NAME, folder_fd, CONFIG_FILE_NAME);
+    int rc = ::renameat(folder_fd, CONFIG_TMP_FILE_NAME, folder_fd, CONFIG_FILE_NAME);
     if (rc < 0)
         throw std::runtime_error(fmt::format("Error moving {} to {}: {}",
                                              CONFIG_TMP_FILE_NAME,
