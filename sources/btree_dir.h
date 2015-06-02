@@ -108,7 +108,7 @@ public:
         m_dirty = true;
         return m_child_indices;
     }
-    void from_buffer(const byte* buffer, size_t size);
+    bool from_buffer(const byte* buffer, size_t size);
     void to_buffer(byte* buffer, size_t size) const;
 };
 
@@ -123,7 +123,7 @@ private:
     std::unordered_map<uint32_t, std::unique_ptr<Node>> m_node_cache;
 
 private:
-    void read_node(uint32_t, Node&);
+    bool read_node(uint32_t, Node&);
     void read_free_page(uint32_t, FreePage&);
     void write_node(uint32_t, const Node&);
     void write_free_page(uint32_t, const FreePage&);
@@ -154,6 +154,8 @@ private:
 
     template <class Callback>
     void recursive_iterate(const Node* n, const Callback& cb, int depth);
+    template <class Callback>
+    void mutable_recursive_iterate(Node* n, const Callback& cb, int depth);
 
 protected:
     void subflush() override;
@@ -170,6 +172,8 @@ public:
     virtual bool remove_entry(const std::string& name, id_type& id, int& type) override;
     virtual void iterate_over_entries(callback cb) override;
     virtual bool empty() const override { throw NotImplementedException(__PRETTY_FUNCTION__); }
+    void rebuild();
+
     bool validate_free_list();
     bool validate_btree_structure();
     void to_dot_graph(const char* filename);
