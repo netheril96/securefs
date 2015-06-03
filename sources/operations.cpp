@@ -267,9 +267,13 @@ namespace internal
 namespace operations
 {
 
-    FileSystem::FileSystem(int dir_fd, const key_type& master_key, uint32_t flags)
+    FileSystem::FileSystem(int dir_fd,
+                           const key_type& master_key,
+                           uint32_t flags,
+                           std::shared_ptr<Logger> logger)
         : table(dir_fd, master_key, flags)
         , root_id()
+        , logger(std::move(logger))
         , m_background_flusher(&FileSystem::flush_in_the_background, this)
     {
     }
@@ -345,6 +349,16 @@ namespace operations
     {                                                                                              \
         return internal::log_general_error(ctx, e, __PRETTY_FUNCTION__, __FILE__, __LINE__);       \
     }
+
+    void* init(struct fuse_conn_info*)
+    {
+        auto args = static_cast<std::tuple<int, key_type, uint32_t, std::shared_ptr<Logger>>*>(
+            fuse_get_context()->private_data);
+        return new FileSystem(
+            std::get<0>(*args), std::get<1>(*args), std::get<2>(*args), std::get<3>(*args));
+    }
+
+    void destroy(void* data) { delete static_cast<FileSystem*>(data); }
 
     int getattr(const char* path, struct stat* st)
     {

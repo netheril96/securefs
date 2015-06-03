@@ -24,7 +24,10 @@ namespace operations
         id_type root_id;
         std::shared_ptr<Logger> logger;
 
-        explicit FileSystem(int dir_fd, const key_type& master_key, uint32_t flags);
+        explicit FileSystem(int dir_fd,
+                            const key_type& master_key,
+                            uint32_t flags,
+                            std::shared_ptr<Logger> logger);
 
         ~FileSystem();
 
@@ -36,9 +39,9 @@ namespace operations
         void flush_in_the_background();
     };
 
-    inline void* init(struct fuse_conn_info*) { return fuse_get_context()->private_data; }
+    void* init(struct fuse_conn_info*);
 
-    inline void destroy(void* ptr) { delete static_cast<FileSystem*>(ptr); }
+    void destroy(void* ptr);
 
     int getattr(const char*, struct stat*);
 

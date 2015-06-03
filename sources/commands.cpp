@@ -244,7 +244,7 @@ int create_filesys(int argc, char** argv)
         POSIXFileStream config_stream(config_fd);
         config_stream.write(config.data(), 0, config.size());
 
-        operations::FileSystem fs(folder_fd, master_key, 0);
+        operations::FileSystem fs(folder_fd, master_key, 0, {});
         auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
         root->set_uid(getuid());
         root->set_gid(getgid());
@@ -330,6 +330,8 @@ int mount_filesys(int argc, char** argv)
     TCLAP::SwitchArg insecure(
         "i", "insecure", "Disable all integrity verification (insecure mode)");
     TCLAP::SwitchArg noxattr("x", "noxattr", "Disable built-in xattr support");
+    TCLAP::ValueArg<std::string> log(
+        "", "log", "Path of the log file (may contain sensitive information", false, "", "path");
 
     TCLAP::UnlabeledValueArg<std::string> data_dir(
         "data_dir", "Directory where the data are stored", true, "", "directory");
@@ -339,6 +341,7 @@ int mount_filesys(int argc, char** argv)
     cmdline.add(&background);
     cmdline.add(&insecure);
     cmdline.add(&noxattr);
+    cmdline.add(&log);
     cmdline.add(&data_dir);
     cmdline.add(&mount_point);
     cmdline.parse(argc, argv);
@@ -368,13 +371,16 @@ int mount_filesys(int argc, char** argv)
     if (!parse_config(config_json, password, pass_len, master_key))
         throw std::runtime_error("Error: wrong password");
 
+    std::shared_ptr<Logger> logger;
+    if (log.isSet())
+        logger = std::make_shared<FileLogger>(LoggingLevel::WARN,
+                                              fopen(log.getValue().c_str(), "w+b"));
+    else
+        logger = std::make_shared<FileLogger>(LoggingLevel::WARN, stderr);
+
     unsigned flags = 0;
     if (insecure.getValue())
         flags |= FileTable::NO_AUTHENTICATION;
-
-    std::unique_ptr<securefs::operations::FileSystem> fs(
-        new securefs::operations::FileSystem(folder_fd, master_key, flags));
-    fs->logger = std::make_shared<FileLogger>(LoggingLevel::WARN, stderr);
 
     struct fuse_operations opt;
     init_fuse_operations(data_dir.getValue().c_str(), opt, !noxattr.getValue());
@@ -385,10 +391,11 @@ int mount_filesys(int argc, char** argv)
         fuse_args.push_back("-f");
     fuse_args.push_back(mount_point.getValue().c_str());
 
-    return fuse_main(static_cast<int>(fuse_args.size()),
-                     const_cast<char**>(fuse_args.data()),
-                     &opt,
-                     fs.release());
+    auto args = std::tuple<int, key_type, uint32_t, std::shared_ptr<Logger>>(
+        folder_fd, master_key, flags, logger);
+
+    return fuse_main(
+        static_cast<int>(fuse_args.size()), const_cast<char**>(fuse_args.data()), &opt, &args);
 }
 
 int chpass_filesys(int argc, char** argv)
