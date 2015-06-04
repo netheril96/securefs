@@ -30,7 +30,7 @@ private:
     typedef std::unordered_map<id_type, std::shared_ptr<FileBase>, id_hash> table_type;
 
 private:
-    static const size_t MAX_NUM_CLOSED = 1024, NUM_EJECT = 5;
+    static const size_t MAX_NUM_CLOSED = 50, NUM_EJECT = 5;
 
 private:
     key_type m_master_key;
