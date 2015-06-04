@@ -1,4 +1,6 @@
-CXXFLAGS = -DNDEBUG -g -O3 -std=c++0x -march=native -mtune=native
+CC := clang
+CXX := clang++
+CXXFLAGS = -DNDEBUG -g -O3 -std=c++11 -march=native -mtune=native -stdlib=libc++ -pthread
 # -O3 fails to link on Cygwin GCC version 4.5.3
 # -fPIC is supported. Please report any breakage of -fPIC as a bug.
 # CXXFLAGS += -fPIC

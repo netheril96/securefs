@@ -6,9 +6,16 @@ import unittest
 import tempfile
 import shutil
 import sys
+import platform
 
 
 SECUREFS_BINARY = os.path.join(os.path.abspath(os.path.dirname(__file__)), '../securefs')
+
+if platform.system() == 'Darwin':
+    UNMOUNT = ['umount']
+else:
+    UNMOUNT = ['fusermount', '-u']
+
 
 def securefs_mount(data_dir, mount_point, password):
     p = subprocess.Popen([SECUREFS_BINARY, 'mount', '--stdinpass', '--background', data_dir, mount_point],
@@ -19,7 +26,7 @@ def securefs_mount(data_dir, mount_point, password):
 
 
 def securefs_unmount(mount_point):
-    p = subprocess.Popen(['umount', mount_point], stderr=subprocess.PIPE)
+    p = subprocess.Popen(UNMOUNT + [mount_point], stderr=subprocess.PIPE)
     out, err = p.communicate()
     if p.returncode:
         raise RuntimeError(err)

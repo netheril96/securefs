@@ -2,6 +2,7 @@
 #include "catch.hpp"
 #include "files.h"
 #include "file_table.h"
+#include "exceptions.h"
 
 #include <string.h>
 #include <errno.h>
@@ -34,7 +35,14 @@ TEST_CASE("File table")
         dir->add_entry(".", null_id, FileBase::DIRECTORY);
         dir->add_entry("..", null_id, FileBase::DIRECTORY);
         dir->add_entry("hello", file_id, FileBase::REGULAR_FILE);
-        dir->setxattr(xattr_name, xattr_value.data(), xattr_value.size(), 0);
+        try
+        {
+            dir->setxattr(xattr_name, xattr_value.data(), xattr_value.size(), 0);
+        }
+        catch (const securefs::OSException& e)
+        {
+            REQUIRE(e.error_number() == ENOTSUP);
+        }
         table.close(dir);
         ::close(tmp_fd);
     }
@@ -45,8 +53,15 @@ TEST_CASE("File table")
         FileTable table(tmp_fd, master_key, 0);
         auto dir = dynamic_cast<Directory*>(table.open_as(null_id, FileBase::DIRECTORY));
         securefs::PODArray<char, 32> xattr_test_value(0);
-        dir->getxattr(xattr_name, xattr_test_value.data(), xattr_test_value.size());
-        REQUIRE(xattr_value == xattr_test_value);
+        try
+        {
+            dir->getxattr(xattr_name, xattr_test_value.data(), xattr_test_value.size());
+            REQUIRE(xattr_value == xattr_test_value);
+        }
+        catch (const securefs::OSException& e)
+        {
+            REQUIRE(e.error_number() == ENOTSUP);
+        }
 
         std::set<std::string> filenames;
         dir->iterate_over_entries([&](const std::string& fn, const id_type&, int)

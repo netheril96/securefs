@@ -2,6 +2,7 @@
 #include "exceptions.h"
 #include "streams.h"
 #include "operations.h"
+#include "xattr_compat.h"
 
 #include <fuse.h>
 #include <json.hpp>
@@ -21,12 +22,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/file.h>
-
-#ifdef __APPLE__
-#include <sys/xattr.h>
-#else
-#include <attr/xattr.h>
-#endif
 
 namespace
 {

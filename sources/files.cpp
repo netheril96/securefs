@@ -1,5 +1,6 @@
 #include "files.h"
 #include "utils.h"
+#include "xattr_compat.h"
 
 #include <unordered_map>
 #include <utility>
@@ -8,11 +9,6 @@
 #include <cryptopp/secblock.h>
 
 #include <sys/types.h>
-#ifdef __APPLE__
-#include <sys/xattr.h>
-#else
-#include <attr/xattr.h>
-#endif
 
 namespace securefs
 {

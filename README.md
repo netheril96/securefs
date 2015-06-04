@@ -1,2 +1,1 @@
-# securefs
-Work in progress
+docs/README.md

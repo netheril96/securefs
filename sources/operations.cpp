@@ -1,4 +1,5 @@
 #include "operations.h"
+#include "xattr_compat.h"
 
 #include <mutex>
 #include <algorithm>
@@ -12,12 +13,6 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-
-#ifdef __APPLE__
-#include <sys/xattr.h>
-#else
-#include <attr/xattr.h>
-#endif
 
 namespace securefs
 {
