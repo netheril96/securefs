@@ -81,7 +81,7 @@ public:
     explicit FileBase(
         int data_fd, int meta_fd, const key_type& key_, const id_type& id_, bool check);
     virtual ~FileBase();
-    DISABLE_COPY_MOVE(FileBase);
+    DISABLE_COPY_MOVE(FileBase)
 
     // --Begin of getters and setters for stats---
     uint32_t get_mode() const noexcept { return m_flags[0]; }

@@ -5,7 +5,7 @@
 #include "exceptions.h"
 
 #include <memory>
-#include <unordered_map>
+#include <map>
 #include <algorithm>
 #include <utility>
 #include <mutex>
@@ -27,7 +27,7 @@ private:
         size_t operator()(const id_type&) const noexcept;
     };
 
-    typedef std::unordered_map<id_type, std::shared_ptr<FileBase>, id_hash> table_type;
+    typedef std::map<id_type, std::shared_ptr<FileBase>> table_type;
 
 private:
     static const size_t MAX_NUM_CLOSED = 50, NUM_EJECT = 5;

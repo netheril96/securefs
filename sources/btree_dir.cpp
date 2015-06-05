@@ -27,7 +27,6 @@ public:
 template <class T>
 static const byte* read_and_forward(const byte* buffer, const byte* end, T& value)
 {
-    static_assert(std::is_trivially_copyable<T>::value, "");
     dir_check(buffer + sizeof(value) <= end);
     memcpy(&value, buffer, sizeof(value));
     return buffer + sizeof(value);
@@ -36,7 +35,6 @@ static const byte* read_and_forward(const byte* buffer, const byte* end, T& valu
 template <class T>
 static byte* write_and_forward(const T& value, byte* buffer, const byte* end)
 {
-    static_assert(std::is_trivially_copyable<T>::value, "");
     dir_check(buffer + sizeof(value) <= end);
     memcpy(buffer, &value, sizeof(value));
     return buffer + sizeof(value);
@@ -410,9 +408,9 @@ void BtreeDirectory::adjust_children_in_cache(BtreeNode* n, uint32_t parent)
 void BtreeDirectory::insert_and_balance(BtreeNode* n, Entry e, uint32_t additional_child, int depth)
 {
     dir_check(depth < BTREE_MAX_DEPTH);
-    auto iter = std::lower_bound(n->entries().begin(), n->entries().end(), e);
+    auto iter = std::lower_bound(n->mutable_entries().begin(), n->mutable_entries().end(), e);
     if (additional_child != INVALID_PAGE && !n->is_leaf())
-        n->mutable_children().insert(n->children().begin() + (iter - n->entries().begin()) + 1,
+        n->mutable_children().insert(n->mutable_children().begin() + (iter - n->entries().begin()) + 1,
                                      additional_child);
     n->mutable_entries().insert(iter, std::move(e));
     if (n->entries().size() > BTREE_MAX_NUM_ENTRIES)
@@ -453,7 +451,7 @@ BtreeNode* BtreeDirectory::replace_with_sub_entry(BtreeNode* n, ptrdiff_t index,
     dir_check(depth < BTREE_MAX_DEPTH);
     if (n->is_leaf())
     {
-        n->mutable_entries().erase(n->entries().begin() + index);
+        n->mutable_entries().erase(n->mutable_entries().begin() + index);
         return n;
     }
     else
@@ -530,9 +528,9 @@ void BtreeDirectory::merge(BtreeNode* left,
                            ptrdiff_t entry_index)
 {
     left->mutable_entries().push_back(std::move(parent->mutable_entries().at(entry_index)));
-    parent->mutable_entries().erase(parent->entries().begin() + entry_index);
+    parent->mutable_entries().erase(parent->mutable_entries().begin() + entry_index);
     parent->mutable_children().erase(
-        std::find(parent->children().begin(), parent->children().end(), right->page_number()));
+        std::find(parent->mutable_children().begin(), parent->mutable_children().end(), right->page_number()));
     steal(left->mutable_entries(), right->mutable_entries());
     this->adjust_children_in_cache(right, left->page_number());
     steal(left->mutable_children(), right->mutable_children());

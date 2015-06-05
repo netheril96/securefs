@@ -694,7 +694,7 @@ namespace operations
 
             id_type src_id, dst_id;
             int src_type, dst_type;
-            bool src_exists, dst_exists;
+            bool src_exists = false, dst_exists = false;
 
             auto move_entries = [&]() -> void
             {

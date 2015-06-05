@@ -19,7 +19,7 @@ class StreamBase
 public:
     StreamBase() {}
     virtual ~StreamBase() {}
-    DISABLE_COPY_MOVE(StreamBase);
+    DISABLE_COPY_MOVE(StreamBase)
 
     /**
      * Returns the number of bytes actually read into the buffer `output`.
@@ -63,7 +63,7 @@ class HeaderBase
 public:
     HeaderBase() {}
     virtual ~HeaderBase() {}
-    DISABLE_COPY_MOVE(HeaderBase);
+    DISABLE_COPY_MOVE(HeaderBase)
 
     virtual length_type max_header_length() const noexcept = 0;
 

@@ -7,6 +7,8 @@
 #include <vector>
 #include <array>
 #include <stdexcept>
+#include <algorithm>
+#include <string.h>
 
 #include <unistd.h>
 #include <fcntl.h>

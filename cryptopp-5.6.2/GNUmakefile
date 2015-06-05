@@ -1,11 +1,8 @@
-CC := clang
-CXX := clang++
-CXXFLAGS = -DNDEBUG -g -O3 -std=c++11 -march=native -mtune=native -stdlib=libc++ -pthread
 # -O3 fails to link on Cygwin GCC version 4.5.3
 # -fPIC is supported. Please report any breakage of -fPIC as a bug.
 # CXXFLAGS += -fPIC
 # the following options reduce code size, but breaks link or makes link very slow on some systems
-CXXFLAGS += -ffunction-sections -fdata-sections
+CXXFLAGS += -ffunction-sections -fdata-sections -Wno-unused-parameter -Wno-unused-variable
 # LDFLAGS += -Wl,--gc-sections
 ARFLAGS = -cr	# ar needs the dash on OpenBSD
 RANLIB = ranlib
