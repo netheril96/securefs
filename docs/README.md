@@ -11,15 +11,15 @@ Compared to TrueCrypt, Apple's encrypted DMG or EncFS, securefs has the followin
 * Randomized encryption.
 * Authenticated encryption.
 
-The randomization is important because otherwise the same plaintext always maps to the same ciphertext. By observing the frequency of different ciphertext, much information can be obtained about the plaintext. If the attackers knows *a priori* the distribution of the plaintext, he/she can completely defeat the encryption scheme. The [ECB penguin](https://filippo.io/the-ecb-penguin/) is an example of the perils of deterministic encryption (although that example shows spatial patterns while here the issue is temporal patterns).
+The randomization is important because otherwise the same plaintext always maps to the same ciphertext. By observing the frequency of different ciphertext, much information can be obtained about the plaintext. If the attackers knows *a priori* the distribution of the plaintext, he/she can recover the plaintext. The [ECB penguin](https://filippo.io/the-ecb-penguin/) is an example of the perils of deterministic encryption (although that example shows spatial patterns while here the issue is temporal patterns).
 
-Authentication along with encryption prevents tampering of the data, a possible attack by untrusted cloud service providers (read, all cloud service providers). The integrity protection also fends off more advanced attacks such as chosen ciphertext attack.
+Authentication along with encryption prevents tampering of the data, a possible attack by untrusted cloud service providers (read, all cloud service providers). The integrity protection also fends off most active attacks.
 
 ## Build
 
 securefs requires a Unix system, FUSE, and a decent C++ compiler. It is currently only tested on Ubuntu and OS X.
 
-On Ubuntu, you need to install `libfuse-dev`, `clang++` and `libc++` (the default compiler and stdlib do not support many c++11 features). On OS X, you need XCode and `osxfuse`.
+On Ubuntu, you need to install `libfuse-dev`, `clang++` and `libc++` (the default compiler and stdlib do not support many c++11 features). On OS X, you need XCode and [`osxfuse`](https://osxfuse.github.io).
 
 Run `make` to build the program. There is only a single executable `securefs` that will be produced. You can copy or symlink it anywhere.
 
@@ -28,8 +28,12 @@ Run `make` to build the program. There is only a single executable `securefs` th
 ```bash
 securefs create ~/Secret
 securefs chpass ~/Secret
-securefs mount --background ~/Secret ~/Mount
+securefs mount --background --log now.log ~/Secret ~/Mount
 ```
 
 Use `securefs [verb] -h` to get detailed description of options of each command.
+
+## Design and algorithms
+
+See [here](design.md).
 

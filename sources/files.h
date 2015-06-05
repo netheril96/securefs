@@ -19,7 +19,7 @@ private:
     std::shared_ptr<HeaderBase> m_header;
     key_type m_key;
     id_type m_id;
-    uint32_t m_flags[7];
+    uint32_t m_flags[8];
     int m_data_fd, m_meta_fd;
     bool m_dirty, m_check;
 
