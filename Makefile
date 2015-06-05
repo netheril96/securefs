@@ -1,5 +1,5 @@
-CPPFLAGS := -isystem/usr/include -isystem/usr/local/include -I"$(CURDIR)/sources" -isystem"$(CURDIR)/cryptopp/include" -DNDEBUG -D_FILE_OFFSET_BITS=64
-CXXFLAGS := -g -O3 -march=native -mtune=native -std=c++11 -pipe -Wall -Wextra -pedantic -pthread
+CPPFLAGS := -isystem/usr/include -isystem/usr/local/include -I"$(CURDIR)/sources" -isystem"$(CURDIR)/cryptopp/include" -D_FILE_OFFSET_BITS=64
+CXXFLAGS := -g -march=native -mtune=native -std=c++11 -pipe -Wall -Wextra -pedantic -pthread
 LDFLAGS := -L/usr/local/lib -L"$(CURDIR)/cryptopp/lib" -lcryptopp -pthread
 ifeq ($(shell uname), Darwin)
 	LDFLAGS += -losxfuse
@@ -8,6 +8,10 @@ ifeq ($(shell uname), Darwin)
 else
 	LDFLAGS += -lfuse
 	LDFLAGS += -Wl,--gc-sections
+endif
+
+ifndef DEBUG
+	CXXFLAGS += -O3 -DNDEBUG
 endif
 
 export CXXFLAGS
@@ -28,10 +32,8 @@ cryptopp:
 	$(MAKE) -C cryptopp static
 	$(MAKE) -C cryptopp install
 
-securefs: $(OBJECTS)
-	$(CXX) $(CXXFLAGS) $(OBJECTS) $(LDFLAGS) -o securefs
-
-securefs_test: CPPFLAGS += -DUNIT_TEST
+securefs: $(OBJECTS) main.o
+	$(CXX) $(CXXFLAGS) $(OBJECTS) main.o $(LDFLAGS) -o securefs
 
 securefs_test: $(OBJECTS) $(TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(TEST_OBJECTS) $(OBJECTS) $(LDFLAGS) -o securefs_test
@@ -40,7 +42,7 @@ test: securefs_test
 	./securefs_test
 
 clean:
-	$(RM) $(OBJECTS) $(TEST_OBJECTS) securefs securefs_test
+	$(RM) $(OBJECTS) $(TEST_OBJECTS) securefs securefs_test *.o
 
 deepclean: clean
 	$(MAKE) -C cryptopp clean

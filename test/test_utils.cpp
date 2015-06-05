@@ -1,4 +1,3 @@
-#ifdef UNIT_TEST
 #include "catch.hpp"
 #include "utils.h"
 
@@ -88,4 +87,3 @@ TEST_CASE("Test hkdf")
                    sizeof(test_derived));
     REQUIRE(memcmp(test_derived, true_derived_key, sizeof(test_derived)) == 0);
 }
-#endif

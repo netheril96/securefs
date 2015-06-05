@@ -1,4 +1,3 @@
-#ifdef UNIT_TEST
 #include "btree_dir.h"
 #include "utils.h"
 
@@ -138,4 +137,3 @@ TEST_CASE("Test BtreeDirectory")
         ref_dir.flush();
     }
 }
-#endif

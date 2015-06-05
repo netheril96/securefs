@@ -79,19 +79,29 @@ static void steal(Container& c1, const Container& c2)
 }
 
 template <class Container>
-typename Container::iterator get_iter(Container& c, size_t index)
+static typename Container::iterator get_iter(Container& c, ptrdiff_t index)
 {
-    if (index >= c.size())
-        throw std::out_of_range("index out of range");
     return std::next(c.begin(), index);
 }
 
 template <class Container>
-typename Container::const_iterator get_iter(const Container& c, size_t index)
+static typename Container::const_iterator get_iter(const Container& c, ptrdiff_t index)
 {
-    if (index >= c.size())
-        throw std::out_of_range("index out of range");
     return std::next(c.begin(), index);
+}
+
+template <class Container>
+static void erase(Container& c, ptrdiff_t index)
+{
+    dir_check(index >= 0 && static_cast<size_t>(index) < c.size());
+    c.erase(get_iter(c, index));
+}
+
+template <class Container, class T>
+static void insert(Container& c, ptrdiff_t index, T&& value)
+{
+    dir_check(index >= 0 && static_cast<size_t>(index) <= c.size());
+    c.insert(get_iter(c, index), std::move(value));
 }
 
 class BtreeDirectory::FreePage
@@ -251,8 +261,8 @@ bool BtreeDirectory::validate_node(const BtreeNode* n, int depth)
         return false;
     if (!std::is_sorted(n->entries().begin(), n->entries().end()))
         return false;
-    if (n->parent_page_number() != INVALID_PAGE
-        && (n->entries().size() < BTREE_MAX_NUM_ENTRIES / 2 || n->entries().size() > BTREE_MAX_NUM_ENTRIES))
+    if (n->parent_page_number() != INVALID_PAGE && (n->entries().size() < BTREE_MAX_NUM_ENTRIES / 2
+                                                    || n->entries().size() > BTREE_MAX_NUM_ENTRIES))
         return false;
     if (!n->is_leaf())
     {
@@ -410,9 +420,9 @@ void BtreeDirectory::insert_and_balance(BtreeNode* n, Entry e, uint32_t addition
     dir_check(depth < BTREE_MAX_DEPTH);
     auto iter = std::lower_bound(n->mutable_entries().begin(), n->mutable_entries().end(), e);
     if (additional_child != INVALID_PAGE && !n->is_leaf())
-        n->mutable_children().insert(n->mutable_children().begin() + (iter - n->entries().begin()) + 1,
-                                     additional_child);
-    n->mutable_entries().insert(iter, std::move(e));
+        insert(n->mutable_children(), iter - n->entries().begin() + 1, additional_child);
+    insert(n->mutable_entries(), iter - n->entries().begin(), std::move(e));
+
     if (n->entries().size() > BTREE_MAX_NUM_ENTRIES)
     {
         Node* sibling = retrieve_node(n->parent_page_number(), allocate_page());
@@ -451,7 +461,7 @@ BtreeNode* BtreeDirectory::replace_with_sub_entry(BtreeNode* n, ptrdiff_t index,
     dir_check(depth < BTREE_MAX_DEPTH);
     if (n->is_leaf())
     {
-        n->mutable_entries().erase(n->mutable_entries().begin() + index);
+        erase(n->mutable_entries(), index);
         return n;
     }
     else
@@ -528,9 +538,10 @@ void BtreeDirectory::merge(BtreeNode* left,
                            ptrdiff_t entry_index)
 {
     left->mutable_entries().push_back(std::move(parent->mutable_entries().at(entry_index)));
-    parent->mutable_entries().erase(parent->mutable_entries().begin() + entry_index);
-    parent->mutable_children().erase(
-        std::find(parent->mutable_children().begin(), parent->mutable_children().end(), right->page_number()));
+    erase(parent->mutable_entries(), entry_index);
+    parent->mutable_children().erase(std::find(parent->mutable_children().begin(),
+                                               parent->mutable_children().end(),
+                                               right->page_number()));
     steal(left->mutable_entries(), right->mutable_entries());
     this->adjust_children_in_cache(right, left->page_number());
     steal(left->mutable_children(), right->mutable_children());

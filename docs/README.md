@@ -19,7 +19,9 @@ Authentication along with encryption prevents tampering of the data, a possible 
 
 securefs requires a Unix system, FUSE, and a decent C++ compiler. It is currently only tested on Ubuntu and OS X.
 
-On Ubuntu, you need to install `libfuse-dev`, `clang++` and `libc++` (the default compiler and stdlib do not support many c++11 features). On OS X, you need XCode and [`osxfuse`](https://osxfuse.github.io).
+On Debian based Linux distro, you need to install `fuse` and `libfuse-dev`. On RPM based Linux, you need `fuse` and `fuse-devel`. On OS X, you need [`osxfuse`](https://osxfuse.github.io).
+
+Because securefs heavily uses C++11 features, a relatively new compiler and std lib is required. It has been tested with g++ 4.8 and clang++ 3.6.
 
 Run `make` to build the program. There is only a single executable `securefs` that will be produced. You can copy or symlink it anywhere.
 
@@ -28,7 +30,7 @@ Run `make` to build the program. There is only a single executable `securefs` th
 ```bash
 securefs create ~/Secret
 securefs chpass ~/Secret
-securefs mount --background --log now.log ~/Secret ~/Mount
+securefs mount --background --log XXXXXX.log ~/Secret ~/Mount
 ```
 
 Use `securefs [verb] -h` to get detailed description of options of each command.

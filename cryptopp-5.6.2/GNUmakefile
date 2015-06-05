@@ -2,7 +2,7 @@
 # -fPIC is supported. Please report any breakage of -fPIC as a bug.
 # CXXFLAGS += -fPIC
 # the following options reduce code size, but breaks link or makes link very slow on some systems
-CXXFLAGS += -ffunction-sections -fdata-sections -Wno-unused-parameter -Wno-unused-variable
+CXXFLAGS += -ffunction-sections -fdata-sections -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
 # LDFLAGS += -Wl,--gc-sections
 ARFLAGS = -cr	# ar needs the dash on OpenBSD
 RANLIB = ranlib

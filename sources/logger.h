@@ -36,7 +36,7 @@ protected:
 private:
     LoggingLevel m_level;
     std::mutex m_lock;
-    
+
 public:
     explicit Logger(LoggingLevel level) : m_level(level) {}
 
