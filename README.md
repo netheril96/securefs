@@ -23,7 +23,7 @@ On Debian based Linux distro, you need to install `fuse` and `libfuse-dev`. On R
 
 Because securefs heavily uses C++11 features, a relatively new compiler and std lib is required. It has been tested with g++ 4.8 and clang++ 3.6.
 
-Run `make` to build the program. There is only a single executable `securefs` that will be produced. You can copy or symlink it anywhere.
+Run `make securefs` to build the program. There is only a single executable `securefs` that will be produced. You can copy or symlink it anywhere.
 
 ## Basic usage
 
