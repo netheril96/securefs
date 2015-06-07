@@ -732,4 +732,10 @@ void BtreeDirectory::rebuild()
     for (DirEntry& e : entries)
         add_entry(e.filename, e.id, e.type);
 }
+
+bool BtreeDirectory::empty()
+{
+    auto root = get_root_node();
+    return root == nullptr || root->entries().empty();
+}
 }

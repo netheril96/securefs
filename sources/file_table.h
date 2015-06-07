@@ -4,6 +4,7 @@
 #include "utils.h"
 #include "exceptions.h"
 
+#include <chrono>
 #include <memory>
 #include <map>
 #include <algorithm>
@@ -35,7 +36,7 @@ private:
 private:
     key_type m_master_key;
     table_type m_opened, m_closed;
-    std::mutex m_lock;
+    std::timed_mutex m_lock;
     uint64_t m_counter;
     int m_dir_fd;
     uint32_t m_flags;
@@ -57,6 +58,18 @@ public:
     ~FileTable();
     void lock() { m_lock.lock(); }
     void unlock() { m_lock.unlock(); }
+    bool try_lock() { return m_lock.try_lock(); }
+
+    template <class Rep, class Period>
+    bool try_lock_for(const std::chrono::duration<Rep, Period>& d)
+    {
+        return m_lock.try_lock_for(d);
+    }
+    template <class Rep, class Period>
+    bool try_lock_until(const std::chrono::duration<Rep, Period>& d)
+    {
+        return m_lock.try_lock_until(d);
+    }
     FileBase* open_as(const id_type& id, int type);
     FileBase* create_as(const id_type& id, int type);
     void close(FileBase*);

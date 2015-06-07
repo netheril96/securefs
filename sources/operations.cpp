@@ -18,6 +18,8 @@ namespace securefs
 {
 namespace internal
 {
+    static const std::chrono::milliseconds TIME_OUT(500);
+
     inline operations::FileSystem* get_fs(struct fuse_context* ctx)
     {
         return static_cast<operations::FileSystem*>(ctx->private_data);
@@ -25,25 +27,26 @@ namespace internal
 
     inline Logger* get_logger(struct fuse_context* ctx) { return get_fs(ctx)->logger.get(); }
 
-    class FileGuard
+    template <bool LockWhenClose>
+    class GenericFileGuard
     {
     private:
         FileTable* m_ft;
         FileBase* m_fb;
 
     public:
-        explicit FileGuard(FileTable* ft, FileBase* fb) : m_ft(ft), m_fb(fb) {}
+        explicit GenericFileGuard(FileTable* ft, FileBase* fb) : m_ft(ft), m_fb(fb) {}
 
-        FileGuard(const FileGuard&) = delete;
-        FileGuard& operator=(const FileGuard&) = delete;
+        GenericFileGuard(const GenericFileGuard&) = delete;
+        GenericFileGuard& operator=(const GenericFileGuard&) = delete;
 
-        FileGuard(FileGuard&& other) noexcept : m_ft(other.m_ft), m_fb(other.m_fb)
+        GenericFileGuard(GenericFileGuard&& other) noexcept : m_ft(other.m_ft), m_fb(other.m_fb)
         {
             other.m_ft = nullptr;
             other.m_fb = nullptr;
         }
 
-        FileGuard& operator=(FileGuard&& other) noexcept
+        GenericFileGuard& operator=(GenericFileGuard&& other) noexcept
         {
             if (this == &other)
                 return *this;
@@ -51,7 +54,7 @@ namespace internal
             return *this;
         }
 
-        ~FileGuard()
+        ~GenericFileGuard()
         {
             try
             {
@@ -80,17 +83,26 @@ namespace internal
         {
             if (m_ft && m_fb)
             {
-                std::lock_guard<FileTable> lg(*m_ft);
-                m_ft->close(m_fb);
+                if (LockWhenClose)
+                {
+                    std::lock_guard<FileTable> lg(*m_ft);
+                    m_ft->close(m_fb);
+                }
+                else
+                {
+                    m_ft->close(m_fb);
+                }
             }
             m_fb = fb;
         }
-        void swap(FileGuard& other) noexcept
+        void swap(GenericFileGuard& other) noexcept
         {
             std::swap(m_ft, other.m_ft);
             std::swap(m_fb, other.m_fb);
         }
     };
+
+    typedef GenericFileGuard<true> FileGuard;
 
     FileBase* table_open_as(FileTable& t, const id_type& id, int type)
     {
@@ -212,15 +224,39 @@ namespace internal
     void remove(struct fuse_context* ctx, const std::string& path)
     {
         std::string last_component;
-        auto dir = open_base_dir(ctx, path, last_component);
+        auto dir_guard = open_base_dir(ctx, path, last_component);
+        auto dir = dir_guard.get_as<Directory>();
         if (last_component.empty())
             throw OSException(EPERM);
         id_type id;
         int type;
+        while (true)
         {
-            std::lock_guard<FileBase> guard(*dir);
-            if (!dir.get_as<Directory>()->remove_entry(last_component, id, type))
+            std::unique_lock<FileBase> dir_lock(*dir, std::defer_lock);
+            if (!dir_lock.try_lock_for(TIME_OUT))
+                continue;
+
+            if (!dir->get_entry(last_component, id, type))
                 throw OSException(ENOENT);
+
+            if (type == FileBase::DIRECTORY)
+            {
+                auto&& table = get_fs(ctx)->table;
+                std::unique_lock<FileTable> table_lock(table, std::defer_lock);
+                if (!table_lock.try_lock_for(TIME_OUT))
+                    continue;
+
+                GenericFileGuard<false> inner_dir_guard(&table, table.open_as(id, type));
+                auto inner_dir = inner_dir_guard.get_as<Directory>();
+                std::unique_lock<FileBase> inner_lock(*inner_dir, std::defer_lock);
+                if (!inner_lock.try_lock_for(TIME_OUT))
+                    continue;
+
+                if (!inner_dir->empty())
+                    throw OSException(ENOTEMPTY);
+            }
+            dir->remove_entry(last_component, id, type);
+            break;
         }
         remove(ctx, id, type);
     }

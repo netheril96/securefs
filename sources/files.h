@@ -3,6 +3,7 @@
 #include "streams.h"
 
 #include <mutex>
+#include <chrono>
 #include <string>
 #include <memory>
 #include <functional>
@@ -14,7 +15,7 @@ namespace securefs
 class FileBase
 {
 private:
-    std::mutex m_lock;
+    std::timed_mutex m_lock;
     std::atomic<ptrdiff_t> m_refcount;
     std::shared_ptr<HeaderBase> m_header;
     key_type m_key;
@@ -115,6 +116,18 @@ public:
 
     void lock() { m_lock.lock(); }
     void unlock() { m_lock.unlock(); }
+    bool try_lock() { return m_lock.try_lock(); }
+
+    template <class Rep, class Period>
+    bool try_lock_for(const std::chrono::duration<Rep, Period>& d)
+    {
+        return m_lock.try_lock_for(d);
+    }
+    template <class Rep, class Period>
+    bool try_lock_until(const std::chrono::duration<Rep, Period>& d)
+    {
+        return m_lock.try_lock_until(d);
+    }
 
     ptrdiff_t incref() noexcept { return ++m_refcount; }
     ptrdiff_t decref() noexcept { return --m_refcount; }
@@ -232,7 +245,7 @@ public:
      */
     virtual void iterate_over_entries(callback cb) = 0;
 
-    virtual bool empty() const = 0;
+    virtual bool empty() = 0;
     void unlink() override
     {
         if (empty())
@@ -276,7 +289,7 @@ public:
         }
     }
 
-    bool empty() const override { return m_table.empty(); }
+    bool empty() noexcept override { return m_table.empty(); }
 
     ~SimpleDirectory();
 };
