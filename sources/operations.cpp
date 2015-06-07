@@ -16,10 +16,10 @@
 
 namespace securefs
 {
+static const std::chrono::milliseconds TIME_OUT(500);
+
 namespace internal
 {
-    static const std::chrono::milliseconds TIME_OUT(500);
-
     inline operations::FileSystem* get_fs(struct fuse_context* ctx)
     {
         return static_cast<operations::FileSystem*>(ctx->private_data);
@@ -239,23 +239,22 @@ namespace internal
             if (!dir->get_entry(last_component, id, type))
                 throw OSException(ENOENT);
 
-            if (type == FileBase::DIRECTORY)
-            {
-                auto&& table = get_fs(ctx)->table;
-                std::unique_lock<FileTable> table_lock(table, std::defer_lock);
-                if (!table_lock.try_lock_for(TIME_OUT))
-                    continue;
+            auto&& table = get_fs(ctx)->table;
+            std::unique_lock<FileTable> table_lock(table, std::defer_lock);
+            if (!table_lock.try_lock_for(TIME_OUT))
+                continue;
 
-                GenericFileGuard<false> inner_dir_guard(&table, table.open_as(id, type));
-                auto inner_dir = inner_dir_guard.get_as<Directory>();
-                std::unique_lock<FileBase> inner_lock(*inner_dir, std::defer_lock);
-                if (!inner_lock.try_lock_for(TIME_OUT))
-                    continue;
+            GenericFileGuard<false> inner_guard(&table, table.open_as(id, type));
+            auto inner_fb = inner_guard.get();
+            std::unique_lock<FileBase> inner_lock(*inner_fb, std::defer_lock);
+            if (!inner_lock.try_lock_for(TIME_OUT))
+                continue;
 
-                if (!inner_dir->empty())
-                    throw OSException(ENOTEMPTY);
-            }
+            if (inner_fb->type() == FileBase::DIRECTORY
+                && !static_cast<Directory*>(inner_fb)->empty())
+                throw OSException(ENOTEMPTY);
             dir->remove_entry(last_component, id, type);
+            inner_fb->unlink();
             break;
         }
         remove(ctx, id, type);
@@ -756,29 +755,22 @@ namespace operations
                 dst_dir->add_entry(dst_filename, src_id, src_type);
             };
 
-            // For templates greater, less, greater_equal, and less_equal, the specializations for
-            // any pointer type yield a total order, even if the built-in operators <, >, <=, >= do
-            // not.
-            std::less<Directory*> comparator;
-
-            // We use the order of pointers to enforce the order of locking so that deadlock
-            // cannot occur
-            if (comparator(src_dir, dst_dir))
-            {
-                std::lock_guard<FileBase> lg1(*src_dir);
-                std::lock_guard<FileBase> lg2(*dst_dir);
-                move_entries();
-            }
-            else if (comparator(dst_dir, src_dir))
+            if (src_dir == dst_dir)
             {
                 std::lock_guard<FileBase> lg1(*dst_dir);
-                std::lock_guard<FileBase> lg2(*src_dir);
                 move_entries();
             }
             else
             {
-                std::lock_guard<FileBase> lg1(*dst_dir);
-                move_entries();
+                while (true)
+                {
+                    std::unique_lock<FileBase> src_lock(*src_dir, std::defer_lock);
+                    std::unique_lock<FileBase> dst_lock(*dst_dir, std::defer_lock);
+                    if (!src_lock.try_lock_for(TIME_OUT) || !dst_lock.try_lock_for(TIME_OUT))
+                        continue;
+                    move_entries();
+                    break;
+                }
             }
 
             if (!src_exists)
