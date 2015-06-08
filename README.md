@@ -35,6 +35,25 @@ securefs mount --background --log XXXXXX.log ~/Secret ~/Mount
 
 Use `securefs [verb] -h` to get detailed description of options of each command.
 
+For example, the options of `securefs mount` include
+
+```
+   --log <path>
+     Path of the log file (may contain sensitive information
+
+   -x,  --noxattr
+     Disable built-in xattr support
+
+   -i,  --insecure
+     Disable all integrity verification (insecure mode)
+
+   -b,  --background
+     Run securefs in the background
+
+   --stdinpass
+     Read password from stdin directly (useful for piping)
+```
+
 ## Design and algorithms
 
 See [here](docs/design.md).
