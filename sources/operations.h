@@ -83,6 +83,8 @@ namespace operations
 
     int rename(const char*, const char*);
 
+    int link(const char*, const char*);
+
     int fsync(const char* path, int isdatasync, struct fuse_file_info* fi);
 
     int fsyncdir(const char* path, int isdatasync, struct fuse_file_info* fi);

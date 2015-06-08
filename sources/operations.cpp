@@ -257,7 +257,6 @@ namespace internal
             inner_fb->unlink();
             break;
         }
-        remove(ctx, id, type);
     }
 
     inline bool is_readonly(struct fuse_context* ctx) { return get_fs(ctx)->table.is_readonly(); }
@@ -782,6 +781,66 @@ namespace operations
             }
 
             return 0;
+        }
+        COMMON_CATCH_BLOCK
+    }
+
+    int link(const char* src, const char* dst)
+    {
+        auto ctx = fuse_get_context();
+        try
+        {
+            std::string src_filename, dst_filename;
+            auto src_dir_guard = internal::open_base_dir(ctx, src, src_filename);
+            auto dst_dir_guard = internal::open_base_dir(ctx, dst, dst_filename);
+            auto src_dir = src_dir_guard.get_as<Directory>();
+            auto dst_dir = dst_dir_guard.get_as<Directory>();
+
+            id_type src_id, dst_id;
+            int src_type, dst_type;
+            bool src_exists = false, dst_exists = false;
+
+            while (true)
+            {
+                std::unique_lock<FileBase> src_lock(*src_dir, std::defer_lock);
+                std::unique_lock<FileBase> dst_lock(*dst_dir, std::defer_lock);
+
+                if (src_dir == dst_dir)
+                {
+                    if (!src_lock.try_lock_for(TIME_OUT))
+                        continue;
+                }
+                else
+                {
+                    if (!src_lock.try_lock_for(TIME_OUT) || !dst_lock.try_lock_for(TIME_OUT))
+                        continue;
+                }
+
+                src_exists = src_dir->get_entry(src_filename, src_id, src_type);
+                if (!src_exists)
+                    return -ENOENT;
+                dst_exists = dst_dir->get_entry(dst_filename, dst_id, dst_type);
+                if (dst_exists)
+                    return -EEXIST;
+
+                auto&& table = internal::get_fs(ctx)->table;
+
+                std::unique_lock<FileTable> table_lock(table, std::defer_lock);
+                if (!table_lock.try_lock_for(TIME_OUT))
+                    continue;
+
+                internal::GenericFileGuard<false> guard(&table, table.open_as(src_id, src_type));
+                std::unique_lock<FileBase> inner_lock(*guard, std::defer_lock);
+                if (!inner_lock.try_lock_for(TIME_OUT))
+                    continue;
+
+                if (guard->type() != FileBase::REGULAR_FILE)
+                    return -EPERM;
+
+                guard->set_nlink(guard->get_nlink() + 1);
+                dst_dir->add_entry(dst_filename, src_id, src_type);
+                return 0;
+            }
         }
         COMMON_CATCH_BLOCK
     }

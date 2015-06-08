@@ -282,6 +282,7 @@ void init_fuse_operations(const char* underlying_path, struct fuse_operations& o
     opt.symlink = &securefs::operations::symlink;
     opt.readlink = &securefs::operations::readlink;
     opt.rename = &securefs::operations::rename;
+    opt.link = &securefs::operations::link;
     opt.fsync = &securefs::operations::fsync;
     opt.fsyncdir = &securefs::operations::fsyncdir;
     opt.utimens = &securefs::operations::utimens;
