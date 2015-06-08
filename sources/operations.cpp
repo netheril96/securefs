@@ -728,58 +728,36 @@ namespace operations
 
             id_type src_id, dst_id;
             int src_type, dst_type;
-            bool src_exists = false, dst_exists = false;
 
-            auto move_entries = [&]() -> void
+            bool dst_exists = false;
+
+            while (true)
             {
-                // The order of operation is very important.
-                //
-                // When any of this fail, we'd rather let the directory entries vanish than have two
-                // directory entries pointing to the same file without incrementing the nlink field.
-                // The unreferenced file can still be recovered, but dubious reference may get the
-                // actual file deleted when the user tries to remove one of the wrong entry.
-                //
-                // Incrementing and decrementing nlink for the source file will make synchronization
-                // tricky, because then there will be three locking operations interleaving, which
-                // may lead to deadlock or livelock.
-                src_exists = src_dir->get_entry(src_filename, src_id, src_type);
-                if (!src_exists)
-                    return;
-                dst_exists = dst_dir->get_entry(dst_filename, dst_id, dst_type);
-                if (memcmp(src_id.data(), dst_id.data(), ID_LENGTH) == 0)
-                    return;
+                std::unique_lock<FileBase> src_lock(*src_dir, std::defer_lock);
+                std::unique_lock<FileBase> dst_lock(*dst_dir, std::defer_lock);
+                if (!src_lock.try_lock_for(TIME_OUT)
+                    || (src_dir != dst_dir && !dst_lock.try_lock_for(TIME_OUT)))
+                    continue;
+                if (!src_dir->get_entry(src_filename, src_id, src_type))
+                    return -ENOENT;
+                dst_exists = (dst_dir->get_entry(dst_filename, dst_id, dst_type));
+
                 if (dst_exists)
+                {
+                    if (src_id == dst_id)
+                        return 0;
+                    if (src_type != FileBase::DIRECTORY && dst_type == FileBase::DIRECTORY)
+                        return -EISDIR;
+                    if (src_type != dst_type)
+                        return -EINVAL;
                     dst_dir->remove_entry(dst_filename, dst_id, dst_type);
+                }
                 src_dir->remove_entry(src_filename, src_id, src_type);
                 dst_dir->add_entry(dst_filename, src_id, src_type);
-            };
-
-            if (src_dir == dst_dir)
-            {
-                std::lock_guard<FileBase> lg1(*dst_dir);
-                move_entries();
+                break;
             }
-            else
-            {
-                while (true)
-                {
-                    std::unique_lock<FileBase> src_lock(*src_dir, std::defer_lock);
-                    std::unique_lock<FileBase> dst_lock(*dst_dir, std::defer_lock);
-                    if (!src_lock.try_lock_for(TIME_OUT) || !dst_lock.try_lock_for(TIME_OUT))
-                        continue;
-                    move_entries();
-                    break;
-                }
-            }
-
-            if (!src_exists)
-                return -ENOENT;
-
             if (dst_exists)
-            {
                 internal::remove(ctx, dst_id, dst_type);
-            }
-
             return 0;
         }
         COMMON_CATCH_BLOCK
