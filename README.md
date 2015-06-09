@@ -27,6 +27,8 @@ Run `make securefs` to build the program. There is only a single executable `sec
 
 ## Basic usage
 
+*It is recommended to disable or encrypt the swap and hibernation file. Otherwise plaintext and keys stored in the main memory may be written to disk by the OS at any time.*
+
 ```bash
 securefs create ~/Secret
 securefs chpass ~/Secret
