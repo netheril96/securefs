@@ -357,15 +357,17 @@ int mount_filesys(int argc, char** argv)
 
     key_type master_key;
 
-    CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
-    size_t pass_len = 0;
-    if (stdinpass.getValue())
-        pass_len = insecure_read_password(stdin, nullptr, password.data(), password.size());
-    else
-        pass_len = try_read_password(password.data(), password.size());
+    {
+        CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
+        size_t pass_len = 0;
+        if (stdinpass.getValue())
+            pass_len = insecure_read_password(stdin, nullptr, password.data(), password.size());
+        else
+            pass_len = try_read_password(password.data(), password.size());
 
-    if (!parse_config(config_json, password, pass_len, master_key))
-        throw std::runtime_error("Error: wrong password");
+        if (!parse_config(config_json, password, pass_len, master_key))
+            throw std::runtime_error("Error: wrong password");
+    }
 
     std::shared_ptr<Logger> logger;
     if (log.isSet())
