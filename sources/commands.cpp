@@ -198,7 +198,7 @@ int create_filesys(int argc, char** argv)
     using namespace securefs;
     TCLAP::CmdLine cmdline("Create a securefs filesystem");
     TCLAP::SwitchArg stdinpass(
-        "", "stdinpass", "Read password from stdin directly (useful for piping)");
+        "s", "stdinpass", "Read password from stdin directly (useful for piping)");
     TCLAP::ValueArg<unsigned> rounds(
         "r",
         "rounds",
@@ -321,7 +321,7 @@ int mount_filesys(int argc, char** argv)
     using namespace securefs;
     TCLAP::CmdLine cmdline("Mount the filesystem");
     TCLAP::SwitchArg stdinpass(
-        "", "stdinpass", "Read password from stdin directly (useful for piping)");
+        "s", "stdinpass", "Read password from stdin directly (useful for piping)");
     TCLAP::SwitchArg background("b", "background", "Run securefs in the background");
     TCLAP::SwitchArg insecure(
         "i", "insecure", "Disable all integrity verification (insecure mode)");
@@ -401,7 +401,7 @@ int chpass_filesys(int argc, char** argv)
     using namespace securefs;
     TCLAP::CmdLine cmdline("Change the password of a given filesystem");
     TCLAP::SwitchArg stdinpass(
-        "", "stdinpass", "Read password from stdin directly (useful for piping)");
+        "s", "stdinpass", "Read password from stdin directly (useful for piping)");
     TCLAP::ValueArg<unsigned> rounds(
         "r",
         "rounds",
