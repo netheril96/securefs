@@ -14,13 +14,13 @@ Each file, directory or symlink is a stream of bytes. The stream is divided into
 
 The IV as well as the MAC will be stored in the associated meta file. The meta file starts with a HMAC-SHA256 of its rest of contents to protect its integrity.
 
-The two level scheme ensures integrity as well as fast access. A single HMAC over the whole ciphertext stream is also sufficient for integrity protection, but it is too slow on large files.
+The two level scheme ensures integrity as well as fast access. A single HMAC over the whole ciphertext stream would also be sufficient for integrity protection, but that would be too slow on large files.
 
 <img src="https://netheril96.github.io/images/securefs/stream_structure.png"/>
 
 ## Key derivation
 
-The master key of the whole system is derived from user password. Because passwords usually contain low entropy, they must be randomized and stretched before being used as key. Currently the algorithm is PBKDF2-HMAC-SHA256 with configuration rounds. If the user does not specify the rounds, it will be 200,000 or 1 second delay on the current machine, whichever is larger.
+The master key of the whole system is derived from user password. Because passwords usually contain low entropy, they must be randomized and stretched before being used as key. Currently the algorithm is PBKDF2-HMAC-SHA256 with configurable rounds. If the user does not specify the rounds, it will be 200,000 or 1 second delay on the current machine, whichever is larger.
 
 The master key is not directly used to encrypt data. Instead, each file will have three separate keys derived from the master key with HKDF, one for encryption of main data, one for mac of the metadata, and one for encryption of extended attributes.
 
@@ -28,17 +28,17 @@ The master key is not directly used to encrypt data. Instead, each file will hav
 
 `securefs` does not reused the directory structure of the underlying filesystem. This is because it is too inefficient if we enforce randomization of encryption.
 
-For example, to access `foo` in the root directory, one needs to know the encrypted result of `foo`. But given that encryption is randomized, there is no way to know what ciphertext is actually stored in the system. The whole directory would have to be scanned with each entry decrypted to find the corresponding entry. All access to directory will have linear complexity.
+For example, to access `foo` in the root directory, one needs to know the encrypted result of `foo`. But given that encryption is randomized, there is no way to know what ciphertext is actually stored in the system. The whole directory would have to be scanned with each entry decrypted to find `foo`. All access to directory would have linear complexity.
 
-Instead, in `securefs`, a directory is implemented as normal file containing a B-tree. This ensures that encryption is randomized and access is logarithmic with respect to directory size.
+Instead, in `securefs`, a directory is implemented as a normal file containing a B-tree. This ensures that encryption is randomized and access is logarithmic with respect to directory size.
 
 ## Extended attributes
 
-If the underlying filesystem supports xattr, so will `sucurefs`. `securefs` *only* encrypts the contents, not the name of xattr. This is because different systems impose different restrictions on the name of xattr, so it is hard to produce a valid name on a cross-platform manner.
+If the underlying filesystem supports xattr, so will `securefs`. `securefs` *only* encrypts the contents, not the name of xattr. This is because different systems impose different restrictions on the name of xattr, so it is hard to produce a valid name on a cross-platform manner.
 
 On OS X, `securefs` will never set the xattr of `com.apple.FinderInfo` and `com.apple.quarantine`. These are workarounds for bugs.
 
-One can disable xattr processing on mounting.
+One can disable xattr processing upon mounting.
 
 ## Algorithms
 
