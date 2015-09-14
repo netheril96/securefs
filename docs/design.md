@@ -6,7 +6,7 @@ Each file, directory or symlink in the apparent filesystem corresponds to a pair
 
 The ID is used as inode numbers, as well as part of the associated data authenticated in the encryption scheme. An example of underlying filesystem structure:
 
-<img src="https://netheril96.github.io/images/securefs/secret_tree.png" width="50%"/>
+<img src="https://rsy96.github.io/images/securefs/secret_tree.png" width="50%"/>
 
 ## Encryption and authentication
 
@@ -16,7 +16,7 @@ The IV as well as the MAC will be stored in the associated meta file. The meta f
 
 The two level scheme ensures integrity as well as fast access. A single HMAC over the whole ciphertext stream would also be sufficient for integrity protection, but that would be too slow on large files.
 
-<img src="https://netheril96.github.io/images/securefs/stream_structure.png"/>
+<img src="https://rsy96.github.io/images/securefs/stream_structure.png"/>
 
 ## Key derivation
 
