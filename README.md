@@ -11,9 +11,9 @@ Compared to TrueCrypt, Apple's encrypted DMG or EncFS, securefs has the followin
 * __Randomized encryption__
 * __Authenticated encryption__
 
-The randomization is important because otherwise the same plaintext always maps to the same ciphertext. By observing the frequency of different ciphertext, much information can be obtained about the plaintext. If the attackers knows *a priori* the distribution of the plaintext, he/she can recover the plaintext. The [ECB penguin](https://filippo.io/the-ecb-penguin/) is an example of the perils of deterministic encryption (although that example shows spatial patterns while here the issue is temporal patterns).
+Most alternative products employ deterministic encryption. To see why it is not secure, consider a simplified example. A military commander communicates electronically two kinds of orders, encrypted, to his subordinates. They are either "attack at dawn" or "attack at dusk". The enemy intercepts them and cannot decrypt at first. But after observing the patterns several days, where ciphertext A always precedes an attack at dawn, and ciphertext B always comes before attack at dusk, they are able to infer the meaning eventually, effectively defeating the encryption scheme. Had randomization been applied, in contrast, all that the enemy would obtain would look like random noise, leaving them no useful information to correlate with their observation.
 
-Authentication along with encryption prevents tampering of the data, a possible attack by untrusted cloud service providers (read, all cloud service providers). The integrity protection also fends off most active attacks.
+Authentication protects the data from being tampered. Even if you don't care whether your data has been modified, you have to care about ciphertext integrity, ensured by authenticated encryption. Without integrity protection, attackers can feed a victim systematically corrupted ciphertexts and observe the behavior of the victim in handling them. That forms the basis for a family of "error oracle" side channel attacks with which the data can be decrypted. In other words, confidentiality can hardly exist without integrity.
 
 ## Build
 
