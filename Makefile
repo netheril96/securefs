@@ -15,6 +15,7 @@ ifndef DEBUG
 endif
 
 export CXXFLAGS
+export NOASM
 
 SOURCES := $(wildcard sources/*.cpp)
 OBJECTS := $(SOURCES:.cpp=.o)

@@ -21,6 +21,10 @@ ifeq ($(PREFIX),)
 PREFIX = .
 endif
 
+ifeq ($(NOASM), 1)
+CXXFLAGS += -DCRYPTOPP_DISABLE_ASM
+endif
+
 ifeq ($(CXX),gcc)	# for some reason CXX is gcc on cygwin 1.1.4
 CXX = g++
 endif
