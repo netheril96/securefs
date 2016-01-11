@@ -15,7 +15,7 @@ ifndef DEBUG
 endif
 
 export CXXFLAGS
-export NOASM
+PREFIX = "$(CURDIR)/cryptopp"
 
 SOURCES := $(wildcard sources/*.cpp)
 OBJECTS := $(SOURCES:.cpp=.o)
@@ -30,8 +30,8 @@ $(TEST_OBJECTS): $(OBJECTS)
 $(OBJECTS): cryptopp
 
 cryptopp:
-	$(MAKE) -C cryptopp static
-	$(MAKE) -C cryptopp install
+	$(MAKE) -C cryptopp static PREFIX="$(PREFIX)"
+	$(MAKE) -C cryptopp install PREFIX="$(PREFIX)"
 
 securefs: $(OBJECTS) main.o
 	$(CXX) $(CXXFLAGS) $(OBJECTS) main.o $(LDFLAGS) -o securefs
