@@ -182,8 +182,8 @@ void format_error_code(fmt::Writer& out, int error_code, fmt::StringRef message)
     static const char ERR[] = "error ";
     fmt::internal::IntTraits<int>::MainType ec_value = error_code;
     // Subtract 2 to account for terminating null characters in SEP and ERR.
-    std::size_t error_code_size = sizeof(SEP) + sizeof(ERR) + fmt::internal::count_digits(ec_value)
-        - 2;
+    std::size_t error_code_size
+        = sizeof(SEP) + sizeof(ERR) + fmt::internal::count_digits(ec_value) - 2;
     if (message.size() <= fmt::internal::INLINE_BUFFER_SIZE - error_code_size)
         out << message << SEP;
     out << ERR << error_code;
@@ -773,8 +773,8 @@ template <typename Char>
 Arg fmt::internal::PrintfFormatter<Char>::get_arg(const Char* s, unsigned arg_index)
 {
     const char* error = 0;
-    Arg arg = arg_index == UINT_MAX ? next_arg(error)
-                                    : FormatterBase::get_arg(arg_index - 1, error);
+    Arg arg
+        = arg_index == UINT_MAX ? next_arg(error) : FormatterBase::get_arg(arg_index - 1, error);
     if (error)
         FMT_THROW(FormatError(!*s ? "invalid format string" : error));
     return arg;

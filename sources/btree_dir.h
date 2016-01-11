@@ -17,7 +17,8 @@ const int BTREE_MAX_NUM_ENTRIES = 13;
 
 static_assert(BTREE_MAX_NUM_ENTRIES * (Directory::MAX_FILENAME_LENGTH + 1 + ID_LENGTH + 4)
                       + (BTREE_MAX_NUM_ENTRIES + 1) * 4
-                      + 4 + 4
+                      + 4
+                      + 4
                   <= BLOCK_SIZE,
               "A btree node may not fit in a single block");
 

@@ -2,7 +2,6 @@
 #include "utils.h"
 #include "streams.h"
 
-#include <mutex>
 #include <chrono>
 #include <string>
 #include <memory>
@@ -15,7 +14,6 @@ namespace securefs
 class FileBase
 {
 private:
-    std::timed_mutex m_lock;
     std::atomic<ptrdiff_t> m_refcount;
     std::shared_ptr<HeaderBase> m_header;
     key_type m_key;
@@ -113,21 +111,6 @@ public:
 
     const id_type& get_id() const { return m_id; }
     const key_type& get_key() const { return m_key; }
-
-    void lock() { m_lock.lock(); }
-    void unlock() { m_lock.unlock(); }
-    bool try_lock() { return m_lock.try_lock(); }
-
-    template <class Rep, class Period>
-    bool try_lock_for(const std::chrono::duration<Rep, Period>& d)
-    {
-        return m_lock.try_lock_for(d);
-    }
-    template <class Rep, class Period>
-    bool try_lock_until(const std::chrono::duration<Rep, Period>& d)
-    {
-        return m_lock.try_lock_until(d);
-    }
 
     ptrdiff_t incref() noexcept { return ++m_refcount; }
     ptrdiff_t decref() noexcept { return --m_refcount; }

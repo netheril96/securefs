@@ -25,11 +25,11 @@ void calculate_paths(const securefs::id_type& id,
                      std::string& meta_filename)
 {
     first_level_dir = securefs::hexify(id.data(), FIRST_LEVEL);
-    second_level_dir = first_level_dir + '/'
-        + securefs::hexify(id.data() + FIRST_LEVEL, SECOND_LEVEL);
-    full_filename = second_level_dir + '/'
-        + securefs::hexify(id.data() + FIRST_LEVEL + SECOND_LEVEL,
-                           id.size() - FIRST_LEVEL - SECOND_LEVEL);
+    second_level_dir
+        = first_level_dir + '/' + securefs::hexify(id.data() + FIRST_LEVEL, SECOND_LEVEL);
+    full_filename
+        = second_level_dir + '/' + securefs::hexify(id.data() + FIRST_LEVEL + SECOND_LEVEL,
+                                                    id.size() - FIRST_LEVEL - SECOND_LEVEL);
     meta_filename = full_filename + ".meta";
 }
 }
@@ -184,7 +184,6 @@ void FileTable::finalize(FileBase* fb)
     if (!fb)
         return;
 
-    std::lock_guard<FileBase> lg(*fb);
     if (fb->is_unlinked())
     {
         std::string first_level_dir, second_level_dir, filename, metaname;

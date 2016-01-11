@@ -161,10 +161,12 @@ protected:
     // Both encrypt/decrypt should not change the length of the block.
     // input/output may alias.
     virtual void
-    encrypt(offset_type block_number, const void* input, void* output, length_type length) = 0;
+    encrypt(offset_type block_number, const void* input, void* output, length_type length)
+        = 0;
 
     virtual void
-    decrypt(offset_type block_number, const void* input, void* output, length_type length) = 0;
+    decrypt(offset_type block_number, const void* input, void* output, length_type length)
+        = 0;
 
 private:
     length_type read_block(offset_type block_number, void* output);

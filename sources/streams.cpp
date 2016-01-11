@@ -541,8 +541,8 @@ namespace internal
             byte IV[8];
             byte salt[36];
 
-            static const size_t HEADER_LEN = Salsa20Stream::MAGIC_LEN + sizeof(iterations)
-                + sizeof(IV) + sizeof(salt);
+            static const size_t HEADER_LEN
+                = Salsa20Stream::MAGIC_LEN + sizeof(iterations) + sizeof(IV) + sizeof(salt);
 
             void to_bytes(byte buffer[HEADER_LEN])
             {
@@ -665,7 +665,7 @@ namespace internal
             return sz <= HEADER_LEN ? 0 : sz - HEADER_LEN;
         }
         void flush() override { return m_stream->flush(); }
-        void resize(length_type len)
+        void resize(length_type len) override
         {
             zero_fill(len);
             return m_stream->resize(len + HEADER_LEN);

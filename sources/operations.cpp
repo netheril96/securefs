@@ -1,7 +1,6 @@
 #include "operations.h"
 #include "xattr_compat.h"
 
-#include <mutex>
 #include <algorithm>
 #include <utility>
 #include <string>
@@ -83,15 +82,7 @@ namespace internal
         {
             if (m_ft && m_fb)
             {
-                if (LockWhenClose)
-                {
-                    std::lock_guard<FileTable> lg(*m_ft);
-                    m_ft->close(m_fb);
-                }
-                else
-                {
-                    m_ft->close(m_fb);
-                }
+                m_ft->close(m_fb);
             }
             m_fb = fb;
         }
@@ -106,27 +97,23 @@ namespace internal
 
     FileBase* table_open_as(FileTable& t, const id_type& id, int type)
     {
-        std::lock_guard<FileTable> lg(t);
         return t.open_as(id, type);
     }
 
     FileBase* table_create_as(FileTable& t, const id_type& id, int type)
     {
-        std::lock_guard<FileTable> lg(t);
         return t.create_as(id, type);
     }
 
     bool dir_get_entry(Directory* dir, const std::string& name, id_type& id, int& type)
     {
         assert(dir);
-        std::lock_guard<FileBase> lg(*dir);
         return dir->get_entry(name, id, type);
     }
 
     bool dir_add_entry(Directory* dir, const std::string& name, const id_type& id, int type)
     {
         assert(dir);
-        std::lock_guard<FileBase> lg(*dir);
         bool result = dir->add_entry(name, id, type);
         return result;
     }
@@ -186,10 +173,7 @@ namespace internal
         generate_random(id.data(), id.size());
 
         FileGuard result(&fs->table, table_create_as(fs->table, id, type));
-        {
-            std::lock_guard<FileBase> lg(*result);
-            init(result.get());
-        }
+        init(result.get());
 
         try
         {
@@ -211,7 +195,6 @@ namespace internal
         {
             auto fs = get_fs(ctx);
             FileGuard to_be_removed(&fs->table, table_open_as(fs->table, id, type));
-            std::lock_guard<FileBase> guard(*to_be_removed);
             to_be_removed->unlink();
         }
         catch (...)
@@ -232,24 +215,12 @@ namespace internal
         int type;
         while (true)
         {
-            std::unique_lock<FileBase> dir_lock(*dir, std::defer_lock);
-            if (!dir_lock.try_lock_for(TIME_OUT))
-                continue;
-
             if (!dir->get_entry(last_component, id, type))
                 throw OSException(ENOENT);
 
             auto&& table = get_fs(ctx)->table;
-            std::unique_lock<FileTable> table_lock(table, std::defer_lock);
-            if (!table_lock.try_lock_for(TIME_OUT))
-                continue;
-
             GenericFileGuard<false> inner_guard(&table, table.open_as(id, type));
             auto inner_fb = inner_guard.get();
-            std::unique_lock<FileBase> inner_lock(*inner_fb, std::defer_lock);
-            if (!inner_lock.try_lock_for(TIME_OUT))
-                continue;
-
             if (inner_fb->type() == FileBase::DIRECTORY
                 && !static_cast<Directory*>(inner_fb)->empty())
                 throw OSException(ENOTEMPTY);
@@ -320,15 +291,12 @@ namespace operations
         {
             auto wait_status = m_going_down.wait_for(guard, std::chrono::seconds(10));
             std::vector<std::shared_ptr<FileBase>> all_files;
-            {
-                std::lock_guard<FileTable> lg(table);
-                table.all_files().swap(all_files);
-            }
+
+            table.all_files().swap(all_files);
             for (auto&& fp : all_files)
             {
                 try
                 {
-                    std::lock_guard<FileBase> lg(*fp);
                     fp->flush();
                 }
                 catch (const ExceptionBase& e)
@@ -395,7 +363,6 @@ namespace operations
         try
         {
             auto fg = internal::open_all(ctx, path);
-            std::lock_guard<FileBase> lg(*fg);
             fg->stat(st);
             return 0;
         }
@@ -439,7 +406,6 @@ namespace operations
                 st.st_mode = FileBase::mode_for_type(type);
                 return filler(buffer, name.c_str(), &st, 0) == 0;
             };
-            std::lock_guard<FileBase> lg(*fb);
             static_cast<Directory*>(fb)->iterate_over_entries(actions);
             return 0;
         }
@@ -490,7 +456,6 @@ namespace operations
                 return -EPERM;
             if (info->flags & O_TRUNC)
             {
-                std::lock_guard<FileBase> lg(*fg);
                 fg.get_as<RegularFile>()->truncate(0);
             }
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
@@ -507,10 +472,7 @@ namespace operations
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EINVAL;
-            {
-                std::lock_guard<FileBase> lg(*fb);
-                fb->flush();
-            }
+            fb->flush();
             internal::FileGuard fg(&internal::get_fs(ctx)->table, fb);
             fg.reset(nullptr);
             return 0;
@@ -528,7 +490,6 @@ namespace operations
                 return -EINVAL;
             if (fb->type() != FileBase::REGULAR_FILE)
                 return -EPERM;
-            std::lock_guard<FileBase> lg(*fb);
             return static_cast<int>(static_cast<RegularFile*>(fb)->read(buffer, off, len));
         }
         COMMON_CATCH_BLOCK
@@ -544,7 +505,6 @@ namespace operations
                 return -EINVAL;
             if (fb->type() != FileBase::REGULAR_FILE)
                 return -EPERM;
-            std::lock_guard<FileBase> lg(*fb);
             static_cast<RegularFile*>(fb)->write(buffer, off, len);
             return static_cast<int>(len);
         }
@@ -561,7 +521,6 @@ namespace operations
                 return -EINVAL;
             if (fb->type() != FileBase::REGULAR_FILE)
                 return -EPERM;
-            std::lock_guard<FileBase> lg(*fb);
             fb->flush();
             return 0;
         }
@@ -576,7 +535,6 @@ namespace operations
             auto fg = internal::open_all(ctx, path);
             if (fg->type() != FileBase::REGULAR_FILE)
                 return -EINVAL;
-            std::lock_guard<FileBase> lg(*fg);
             fg.get_as<RegularFile>()->truncate(size);
             fg->flush();
             return 0;
@@ -594,7 +552,6 @@ namespace operations
                 return -EINVAL;
             if (fb->type() != FileBase::REGULAR_FILE)
                 return -EINVAL;
-            std::lock_guard<FileBase> lg(*fb);
             static_cast<RegularFile*>(fb)->truncate(size);
             fb->flush();
             return 0;
@@ -647,7 +604,6 @@ namespace operations
         try
         {
             auto fg = internal::open_all(ctx, path);
-            std::lock_guard<FileBase> lg(*fg);
             auto original_mode = fg->get_mode();
             mode &= 0777;
             mode |= original_mode & S_IFMT;
@@ -664,7 +620,6 @@ namespace operations
         try
         {
             auto fg = internal::open_all(ctx, path);
-            std::lock_guard<FileBase> lg(*fg);
             fg->set_uid(uid);
             fg->set_gid(gid);
             fg->flush();
@@ -706,7 +661,6 @@ namespace operations
             auto fg = internal::open_all(ctx, path);
             if (fg->type() != FileBase::SYMLINK)
                 return -EINVAL;
-            std::lock_guard<FileBase> lg(*fg);
             auto destination = fg.get_as<Symlink>()->get();
             memset(buf, 0, size);
             memcpy(buf, destination.data(), std::min(destination.size(), size - 1));
@@ -729,33 +683,23 @@ namespace operations
             id_type src_id, dst_id;
             int src_type, dst_type;
 
-            bool dst_exists = false;
+            if (!src_dir->get_entry(src_filename, src_id, src_type))
+                return -ENOENT;
+            bool dst_exists = (dst_dir->get_entry(dst_filename, dst_id, dst_type));
 
-            while (true)
+            if (dst_exists)
             {
-                std::unique_lock<FileBase> src_lock(*src_dir, std::defer_lock);
-                std::unique_lock<FileBase> dst_lock(*dst_dir, std::defer_lock);
-                if (!src_lock.try_lock_for(TIME_OUT)
-                    || (src_dir != dst_dir && !dst_lock.try_lock_for(TIME_OUT)))
-                    continue;
-                if (!src_dir->get_entry(src_filename, src_id, src_type))
-                    return -ENOENT;
-                dst_exists = (dst_dir->get_entry(dst_filename, dst_id, dst_type));
-
-                if (dst_exists)
-                {
-                    if (src_id == dst_id)
-                        return 0;
-                    if (src_type != FileBase::DIRECTORY && dst_type == FileBase::DIRECTORY)
-                        return -EISDIR;
-                    if (src_type != dst_type)
-                        return -EINVAL;
-                    dst_dir->remove_entry(dst_filename, dst_id, dst_type);
-                }
-                src_dir->remove_entry(src_filename, src_id, src_type);
-                dst_dir->add_entry(dst_filename, src_id, src_type);
-                break;
+                if (src_id == dst_id)
+                    return 0;
+                if (src_type != FileBase::DIRECTORY && dst_type == FileBase::DIRECTORY)
+                    return -EISDIR;
+                if (src_type != dst_type)
+                    return -EINVAL;
+                dst_dir->remove_entry(dst_filename, dst_id, dst_type);
             }
+            src_dir->remove_entry(src_filename, src_id, src_type);
+            dst_dir->add_entry(dst_filename, src_id, src_type);
+
             if (dst_exists)
                 internal::remove(ctx, dst_id, dst_type);
             return 0;
@@ -778,47 +722,22 @@ namespace operations
             int src_type, dst_type;
             bool src_exists = false, dst_exists = false;
 
-            while (true)
-            {
-                std::unique_lock<FileBase> src_lock(*src_dir, std::defer_lock);
-                std::unique_lock<FileBase> dst_lock(*dst_dir, std::defer_lock);
+            src_exists = src_dir->get_entry(src_filename, src_id, src_type);
+            if (!src_exists)
+                return -ENOENT;
+            dst_exists = dst_dir->get_entry(dst_filename, dst_id, dst_type);
+            if (dst_exists)
+                return -EEXIST;
 
-                if (src_dir == dst_dir)
-                {
-                    if (!src_lock.try_lock_for(TIME_OUT))
-                        continue;
-                }
-                else
-                {
-                    if (!src_lock.try_lock_for(TIME_OUT) || !dst_lock.try_lock_for(TIME_OUT))
-                        continue;
-                }
+            auto&& table = internal::get_fs(ctx)->table;
+            internal::GenericFileGuard<false> guard(&table, table.open_as(src_id, src_type));
 
-                src_exists = src_dir->get_entry(src_filename, src_id, src_type);
-                if (!src_exists)
-                    return -ENOENT;
-                dst_exists = dst_dir->get_entry(dst_filename, dst_id, dst_type);
-                if (dst_exists)
-                    return -EEXIST;
+            if (guard->type() != FileBase::REGULAR_FILE)
+                return -EPERM;
 
-                auto&& table = internal::get_fs(ctx)->table;
-
-                std::unique_lock<FileTable> table_lock(table, std::defer_lock);
-                if (!table_lock.try_lock_for(TIME_OUT))
-                    continue;
-
-                internal::GenericFileGuard<false> guard(&table, table.open_as(src_id, src_type));
-                std::unique_lock<FileBase> inner_lock(*guard, std::defer_lock);
-                if (!inner_lock.try_lock_for(TIME_OUT))
-                    continue;
-
-                if (guard->type() != FileBase::REGULAR_FILE)
-                    return -EPERM;
-
-                guard->set_nlink(guard->get_nlink() + 1);
-                dst_dir->add_entry(dst_filename, src_id, src_type);
-                return 0;
-            }
+            guard->set_nlink(guard->get_nlink() + 1);
+            dst_dir->add_entry(dst_filename, src_id, src_type);
+            return 0;
         }
         COMMON_CATCH_BLOCK
     }
@@ -831,7 +750,6 @@ namespace operations
             auto fb = reinterpret_cast<FileBase*>(fi->fh);
             if (!fb)
                 return -EINVAL;
-            std::lock_guard<FileBase> lg(*fb);
             int fd = fb->file_descriptor();
             int rc = ::fsync(fd);
             if (rc < 0)
@@ -853,7 +771,6 @@ namespace operations
         {
             auto fg = internal::open_all(ctx, path);
             int rc = 0;
-            std::lock_guard<FileBase> lg(*fg);
             int fd = fg->file_descriptor();
 
 #if _XOPEN_SOURCE >= 700 || _POSIX_C_SOURCE >= 200809L
@@ -886,7 +803,6 @@ namespace operations
         try
         {
             auto fg = internal::open_all(ctx, path);
-            std::lock_guard<FileBase> lg(*fg);
             return static_cast<int>(fg->listxattr(list, size));
         }
         COMMON_CATCH_BLOCK
@@ -901,7 +817,6 @@ namespace operations
         try
         {
             auto fg = internal::open_all(ctx, path);
-            std::lock_guard<FileBase> lg(*fg);
             return static_cast<int>(fg->getxattr(name, value, size));
         }
         COMMON_CATCH_BLOCK
@@ -927,7 +842,6 @@ namespace operations
         try
         {
             auto fg = internal::open_all(ctx, path);
-            std::lock_guard<FileBase> lg(*fg);
             fg->setxattr(name, value, size, flags);
             return 0;
         }
@@ -941,7 +855,6 @@ namespace operations
         try
         {
             auto fg = internal::open_all(ctx, path);
-            std::lock_guard<FileBase> lg(*fg);
             return static_cast<int>(fg->getxattr(name, value, size));
         }
         COMMON_CATCH_BLOCK
@@ -954,7 +867,6 @@ namespace operations
         try
         {
             auto fg = internal::open_all(ctx, path);
-            std::lock_guard<FileBase> lg(*fg);
             fg->setxattr(name, value, size, flags);
             return 0;
         }
@@ -968,7 +880,6 @@ namespace operations
         try
         {
             auto fg = internal::open_all(ctx, path);
-            std::lock_guard<FileBase> lg(*fg);
             fg->removexattr(name);
             return 0;
         }

@@ -229,8 +229,9 @@ int create_filesys(int argc, char** argv)
         else
             pass_len = try_read_password_with_confirmation(password.data(), password.size());
 
-        auto config = generate_config(
-                          master_key, salt, password.data(), pass_len, rounds.getValue()).dump();
+        auto config
+            = generate_config(master_key, salt, password.data(), pass_len, rounds.getValue())
+                  .dump();
 
         config_fd = ::openat(folder_fd, CONFIG_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
         if (config_fd < 0)
