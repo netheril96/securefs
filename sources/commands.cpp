@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/file.h>
+#include <sys/resource.h>
 
 namespace
 {
@@ -342,6 +343,28 @@ int mount_filesys(int argc, char** argv)
     cmdline.add(&data_dir);
     cmdline.add(&mount_point);
     cmdline.parse(argc, argv);
+
+    {
+        struct rlimit rl;
+        int rc = ::getrlimit(RLIMIT_NOFILE, &rl);
+        if (rc != 0)
+            throw std::runtime_error(securefs::sane_strerror(errno));
+        rl.rlim_cur = 10240 * 16;
+        do
+        {
+            rl.rlim_cur /= 2;
+            rc = ::setrlimit(RLIMIT_NOFILE, &rl);
+        } while (rc < 0 && rl.rlim_cur >= 1024);
+        if (rc != 0)
+            fprintf(stderr,
+                    "Fail to raise the limit of number of file descriptors: %s\nYou may encounter "
+                    "\"Too many opened files\" errors later\n",
+                    sane_strerror(errno).c_str());
+        else
+            fprintf(stderr,
+                    "Setting limit of number of file descriptors to %d\n",
+                    static_cast<int>(rl.rlim_cur));
+    }
 
     int folder_fd = open_and_lock_base_dir(data_dir.getValue());
 

@@ -258,9 +258,8 @@ namespace operations
                     auto start = std::chrono::high_resolution_clock::now();
                     table.gc();
                     auto end = std::chrono::high_resolution_clock::now();
-                    auto time
-                        = std::chrono::duration_cast<std::chrono::microseconds>(end - start)
-                              .count();
+                    auto time = std::chrono::duration_cast<std::chrono::microseconds>(end - start)
+                                    .count();
                     logger->log(LoggingLevel::DEBUG,
                                 fmt::format("Garbage collection takes {} microseconds", time),
                                 __PRETTY_FUNCTION__,

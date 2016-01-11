@@ -1,5 +1,9 @@
 # ChangeLog
 
+## 0.2.1
+
+Fix the critical "Too many opened files" error.
+
 ## 0.2.0
 
 This release improves stability and performance.
