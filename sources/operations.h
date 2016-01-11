@@ -31,9 +31,11 @@ namespace operations
 
         ~FileSystem();
 
+        std::mutex& get_mutex() noexcept { return m_mutex; }
+
     private:
         std::thread m_background_flusher;
-        std::mutex m_background_lock;
+        std::mutex m_mutex;
         std::condition_variable m_going_down;
 
         void flush_in_the_background();

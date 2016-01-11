@@ -13,20 +13,19 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+using securefs::operations::FileSystem;
+
 namespace securefs
 {
 static const std::chrono::milliseconds TIME_OUT(500);
 
 namespace internal
 {
-    inline operations::FileSystem* get_fs(struct fuse_context* ctx)
+    inline FileSystem* get_fs(struct fuse_context* ctx)
     {
-        return static_cast<operations::FileSystem*>(ctx->private_data);
+        return static_cast<FileSystem*>(ctx->private_data);
     }
 
-    inline Logger* get_logger(struct fuse_context* ctx) { return get_fs(ctx)->logger.get(); }
-
-    template <bool LockWhenClose>
     class GenericFileGuard
     {
     private:
@@ -93,38 +92,12 @@ namespace internal
         }
     };
 
-    typedef GenericFileGuard<true> FileGuard;
+    typedef GenericFileGuard FileGuard;
 
-    FileBase* table_open_as(FileTable& t, const id_type& id, int type)
+    FileGuard open_base_dir(FileSystem* fs, const std::string& path, std::string& last_component)
     {
-        return t.open_as(id, type);
-    }
-
-    FileBase* table_create_as(FileTable& t, const id_type& id, int type)
-    {
-        return t.create_as(id, type);
-    }
-
-    bool dir_get_entry(Directory* dir, const std::string& name, id_type& id, int& type)
-    {
-        assert(dir);
-        return dir->get_entry(name, id, type);
-    }
-
-    bool dir_add_entry(Directory* dir, const std::string& name, const id_type& id, int type)
-    {
-        assert(dir);
-        bool result = dir->add_entry(name, id, type);
-        return result;
-    }
-
-    FileGuard
-    open_base_dir(struct fuse_context* ctx, const std::string& path, std::string& last_component)
-    {
-        assert(ctx);
         auto components = split(path, '/');
-        auto fs = get_fs(ctx);
-        FileGuard result(&fs->table, table_open_as(fs->table, fs->root_id, FileBase::DIRECTORY));
+        FileGuard result(&fs->table, fs->table.open_as(fs->root_id, FileBase::DIRECTORY));
         if (components.empty())
         {
             last_component = std::string();
@@ -135,49 +108,46 @@ namespace internal
 
         for (size_t i = 0; i + 1 < components.size(); ++i)
         {
-            bool exists = dir_get_entry(result.get_as<Directory>(), components[i], id, type);
+            bool exists = result.get_as<Directory>()->get_entry(components[i], id, type);
             if (!exists)
                 throw OSException(ENOENT);
             if (type != FileBase::DIRECTORY)
                 throw OSException(ENOTDIR);
-            result.reset(table_open_as(fs->table, id, type));
+            result.reset(fs->table.open_as(id, type));
         }
         last_component = components.back();
         return result;
     }
 
-    FileGuard open_all(struct fuse_context* ctx, const std::string& path)
+    FileGuard open_all(FileSystem* fs, const std::string& path)
     {
-        auto fs = get_fs(ctx);
         std::string last_component;
-        auto fg = open_base_dir(ctx, path, last_component);
+        auto fg = open_base_dir(fs, path, last_component);
         if (last_component.empty())
             return fg;
         id_type id;
         int type;
-        bool exists = dir_get_entry(fg.get_as<Directory>(), last_component, id, type);
+        bool exists = fg.get_as<Directory>()->get_entry(last_component, id, type);
         if (!exists)
             throw OSException(ENOENT);
-        fg.reset(table_open_as(fs->table, id, type));
+        fg.reset(fs->table.open_as(id, type));
         return fg;
     }
 
     template <class Initializer>
-    FileGuard
-    create(struct fuse_context* ctx, const std::string& path, int type, const Initializer& init)
+    FileGuard create(FileSystem* fs, const std::string& path, int type, const Initializer& init)
     {
-        auto fs = get_fs(ctx);
         std::string last_component;
-        auto dir = open_base_dir(ctx, path, last_component);
+        auto dir = open_base_dir(fs, path, last_component);
         id_type id;
         generate_random(id.data(), id.size());
 
-        FileGuard result(&fs->table, table_create_as(fs->table, id, type));
+        FileGuard result(&fs->table, fs->table.create_as(id, type));
         init(result.get());
 
         try
         {
-            bool success = dir_add_entry(dir.get_as<Directory>(), last_component, id, type);
+            bool success = dir.get_as<Directory>()->add_entry(last_component, id, type);
             if (!success)
                 throw OSException(EEXIST);
         }
@@ -189,12 +159,11 @@ namespace internal
         return result;
     }
 
-    void remove(struct fuse_context* ctx, const id_type& id, int type)
+    void remove(FileSystem* fs, const id_type& id, int type)
     {
         try
         {
-            auto fs = get_fs(ctx);
-            FileGuard to_be_removed(&fs->table, table_open_as(fs->table, id, type));
+            FileGuard to_be_removed(&fs->table, fs->table.open_as(id, type));
             to_be_removed->unlink();
         }
         catch (...)
@@ -204,10 +173,10 @@ namespace internal
         }
     }
 
-    void remove(struct fuse_context* ctx, const std::string& path)
+    void remove(FileSystem* fs, const std::string& path)
     {
         std::string last_component;
-        auto dir_guard = open_base_dir(ctx, path, last_component);
+        auto dir_guard = open_base_dir(fs, path, last_component);
         auto dir = dir_guard.get_as<Directory>();
         if (last_component.empty())
             throw OSException(EPERM);
@@ -218,8 +187,8 @@ namespace internal
             if (!dir->get_entry(last_component, id, type))
                 throw OSException(ENOENT);
 
-            auto&& table = get_fs(ctx)->table;
-            GenericFileGuard<false> inner_guard(&table, table.open_as(id, type));
+            auto&& table = fs->table;
+            FileGuard inner_guard(&table, table.open_as(id, type));
             auto inner_fb = inner_guard.get();
             if (inner_fb->type() == FileBase::DIRECTORY
                 && !static_cast<Directory*>(inner_fb)->empty())
@@ -232,26 +201,20 @@ namespace internal
 
     inline bool is_readonly(struct fuse_context* ctx) { return get_fs(ctx)->table.is_readonly(); }
 
-    int log_error(struct fuse_context* ctx,
-                  const ExceptionBase& e,
-                  const char* func,
-                  const char* file,
-                  int line)
+    int
+    log_error(FileSystem* fs, const ExceptionBase& e, const char* func, const char* file, int line)
     {
-        auto logger = get_logger(ctx);
+        auto logger = fs->logger.get();
         if (logger && e.level() >= logger->get_level())
             logger->log(
                 e.level(), fmt::format("{}: {}", e.type_name(), e.message()), func, file, line);
         return -e.error_number();
     }
 
-    int log_general_error(struct fuse_context* ctx,
-                          const std::exception& e,
-                          const char* func,
-                          const char* file,
-                          int line)
+    int log_general_error(
+        FileSystem* fs, const std::exception& e, const char* func, const char* file, int line)
     {
-        auto logger = get_logger(ctx);
+        auto logger = fs->logger.get();
         if (logger && LoggingLevel::ERROR >= logger->get_level())
             logger->log(LoggingLevel::ERROR,
                         fmt::format("An unexcepted exception of type {} occurrs: {}",
@@ -286,7 +249,7 @@ namespace operations
 
     void FileSystem::flush_in_the_background()
     {
-        std::unique_lock<std::mutex> guard(m_background_lock);
+        std::unique_lock<std::mutex> guard(get_mutex());
         while (true)
         {
             auto wait_status = m_going_down.wait_for(guard, std::chrono::seconds(10));
@@ -340,12 +303,17 @@ namespace operations
     catch (const OSException& e) { return -e.error_number(); }                                     \
     catch (const ExceptionBase& e)                                                                 \
     {                                                                                              \
-        return internal::log_error(ctx, e, __PRETTY_FUNCTION__, __FILE__, __LINE__);               \
+        return internal::log_error(fs, e, __PRETTY_FUNCTION__, __FILE__, __LINE__);                \
     }                                                                                              \
     catch (const std::exception& e)                                                                \
     {                                                                                              \
-        return internal::log_general_error(ctx, e, __PRETTY_FUNCTION__, __FILE__, __LINE__);       \
+        return internal::log_general_error(fs, e, __PRETTY_FUNCTION__, __FILE__, __LINE__);        \
     }
+
+#define COMMON_PROLOGUE                                                                            \
+    auto ctx = fuse_get_context();                                                                 \
+    auto fs = internal::get_fs(ctx);                                                               \
+    std::lock_guard<std::mutex> global_guard(fs->get_mutex());
 
     void* init(struct fuse_conn_info*)
     {
@@ -359,10 +327,10 @@ namespace operations
 
     int getattr(const char* path, struct stat* st)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
-            auto fg = internal::open_all(ctx, path);
+            auto fg = internal::open_all(fs, path);
             fg->stat(st);
             return 0;
         }
@@ -371,10 +339,10 @@ namespace operations
 
     int opendir(const char* path, struct fuse_file_info* info)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
-            auto fg = internal::open_all(ctx, path);
+            auto fg = internal::open_all(fs, path);
             if (fg->type() != FileBase::DIRECTORY)
                 return -ENOTDIR;
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
@@ -391,7 +359,7 @@ namespace operations
     int
     readdir(const char*, void* buffer, fuse_fill_dir_t filler, off_t, struct fuse_file_info* info)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
@@ -414,7 +382,8 @@ namespace operations
 
     int create(const char* path, mode_t mode, struct fuse_file_info* info)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
+
         mode &= ~static_cast<uint32_t>(S_IFMT);
         mode |= S_IFREG;
         try
@@ -428,7 +397,7 @@ namespace operations
                 fb->set_nlink(1);
                 fb->set_mode(mode);
             };
-            auto fg = internal::create(ctx, path, FileBase::REGULAR_FILE, init_file);
+            auto fg = internal::create(fs, path, FileBase::REGULAR_FILE, init_file);
             if (fg->type() != FileBase::REGULAR_FILE)
                 return -EPERM;
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
@@ -439,7 +408,8 @@ namespace operations
 
     int open(const char* path, struct fuse_file_info* info)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
+
         // bool rdonly = info->flags & O_RDONLY;
         bool rdwr = info->flags & O_RDWR;
         bool wronly = info->flags & O_WRONLY;
@@ -451,7 +421,7 @@ namespace operations
         {
             if (require_write && internal::is_readonly(ctx))
                 return -EROFS;
-            auto fg = internal::open_all(ctx, path);
+            auto fg = internal::open_all(fs, path);
             if (fg->type() != FileBase::REGULAR_FILE)
                 return -EPERM;
             if (info->flags & O_TRUNC)
@@ -466,7 +436,7 @@ namespace operations
 
     int release(const char*, struct fuse_file_info* info)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
@@ -482,7 +452,7 @@ namespace operations
 
     int read(const char*, char* buffer, size_t len, off_t off, struct fuse_file_info* info)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
@@ -497,7 +467,7 @@ namespace operations
 
     int write(const char*, const char* buffer, size_t len, off_t off, struct fuse_file_info* info)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
@@ -513,7 +483,7 @@ namespace operations
 
     int flush(const char*, struct fuse_file_info* info)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
@@ -529,10 +499,10 @@ namespace operations
 
     int truncate(const char* path, off_t size)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
-            auto fg = internal::open_all(ctx, path);
+            auto fg = internal::open_all(fs, path);
             if (fg->type() != FileBase::REGULAR_FILE)
                 return -EINVAL;
             fg.get_as<RegularFile>()->truncate(size);
@@ -544,7 +514,7 @@ namespace operations
 
     int ftruncate(const char*, off_t size, struct fuse_file_info* info)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
@@ -561,12 +531,12 @@ namespace operations
 
     int unlink(const char* path)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
             if (internal::is_readonly(ctx))
                 return -EROFS;
-            internal::remove(ctx, path);
+            internal::remove(fs, path);
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -574,7 +544,8 @@ namespace operations
 
     int mkdir(const char* path, mode_t mode)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
+
         mode &= ~static_cast<uint32_t>(S_IFMT);
         mode |= S_IFDIR;
         try
@@ -588,7 +559,7 @@ namespace operations
                 fb->set_nlink(1);
                 fb->set_mode(mode);
             };
-            auto fg = internal::create(ctx, path, FileBase::DIRECTORY, init_dir);
+            auto fg = internal::create(fs, path, FileBase::DIRECTORY, init_dir);
             if (fg->type() != FileBase::DIRECTORY)
                 return -ENOTDIR;
             return 0;
@@ -600,10 +571,10 @@ namespace operations
 
     int chmod(const char* path, mode_t mode)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
-            auto fg = internal::open_all(ctx, path);
+            auto fg = internal::open_all(fs, path);
             auto original_mode = fg->get_mode();
             mode &= 0777;
             mode |= original_mode & S_IFMT;
@@ -616,10 +587,10 @@ namespace operations
 
     int chown(const char* path, uid_t uid, gid_t gid)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
-            auto fg = internal::open_all(ctx, path);
+            auto fg = internal::open_all(fs, path);
             fg->set_uid(uid);
             fg->set_gid(gid);
             fg->flush();
@@ -630,7 +601,7 @@ namespace operations
 
     int symlink(const char* to, const char* from)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
             if (internal::is_readonly(ctx))
@@ -643,7 +614,7 @@ namespace operations
                 fb->set_mode(S_IFLNK | 0755);
                 static_cast<Symlink*>(fb)->set(to);
             };
-            auto fg = internal::create(ctx, from, FileBase::SYMLINK, init_symlink);
+            auto fg = internal::create(fs, from, FileBase::SYMLINK, init_symlink);
             if (fg->type() != FileBase::SYMLINK)
                 return -EINVAL;
             return 0;
@@ -655,10 +626,10 @@ namespace operations
     {
         if (size == 0)
             return -EINVAL;
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
-            auto fg = internal::open_all(ctx, path);
+            auto fg = internal::open_all(fs, path);
             if (fg->type() != FileBase::SYMLINK)
                 return -EINVAL;
             auto destination = fg.get_as<Symlink>()->get();
@@ -671,12 +642,12 @@ namespace operations
 
     int rename(const char* src, const char* dst)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
             std::string src_filename, dst_filename;
-            auto src_dir_guard = internal::open_base_dir(ctx, src, src_filename);
-            auto dst_dir_guard = internal::open_base_dir(ctx, dst, dst_filename);
+            auto src_dir_guard = internal::open_base_dir(fs, src, src_filename);
+            auto dst_dir_guard = internal::open_base_dir(fs, dst, dst_filename);
             auto src_dir = src_dir_guard.get_as<Directory>();
             auto dst_dir = dst_dir_guard.get_as<Directory>();
 
@@ -701,7 +672,7 @@ namespace operations
             dst_dir->add_entry(dst_filename, src_id, src_type);
 
             if (dst_exists)
-                internal::remove(ctx, dst_id, dst_type);
+                internal::remove(fs, dst_id, dst_type);
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -709,12 +680,12 @@ namespace operations
 
     int link(const char* src, const char* dst)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
             std::string src_filename, dst_filename;
-            auto src_dir_guard = internal::open_base_dir(ctx, src, src_filename);
-            auto dst_dir_guard = internal::open_base_dir(ctx, dst, dst_filename);
+            auto src_dir_guard = internal::open_base_dir(fs, src, src_filename);
+            auto dst_dir_guard = internal::open_base_dir(fs, dst, dst_filename);
             auto src_dir = src_dir_guard.get_as<Directory>();
             auto dst_dir = dst_dir_guard.get_as<Directory>();
 
@@ -730,7 +701,7 @@ namespace operations
                 return -EEXIST;
 
             auto&& table = internal::get_fs(ctx)->table;
-            internal::GenericFileGuard<false> guard(&table, table.open_as(src_id, src_type));
+            internal::FileGuard guard(&table, table.open_as(src_id, src_type));
 
             if (guard->type() != FileBase::REGULAR_FILE)
                 return -EPERM;
@@ -744,7 +715,7 @@ namespace operations
 
     int fsync(const char*, int, struct fuse_file_info* fi)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
             auto fb = reinterpret_cast<FileBase*>(fi->fh);
@@ -766,10 +737,10 @@ namespace operations
 
     int utimens(const char* path, const struct timespec ts[2])
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
-            auto fg = internal::open_all(ctx, path);
+            auto fg = internal::open_all(fs, path);
             int rc = 0;
             int fd = fg->file_descriptor();
 
@@ -799,10 +770,10 @@ namespace operations
 
     int listxattr(const char* path, char* list, size_t size)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
-            auto fg = internal::open_all(ctx, path);
+            auto fg = internal::open_all(fs, path);
             return static_cast<int>(fg->listxattr(list, size));
         }
         COMMON_CATCH_BLOCK
@@ -813,10 +784,10 @@ namespace operations
     {
         if (position != 0)
             return -EINVAL;
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
-            auto fg = internal::open_all(ctx, path);
+            auto fg = internal::open_all(fs, path);
             return static_cast<int>(fg->getxattr(name, value, size));
         }
         COMMON_CATCH_BLOCK
@@ -837,11 +808,11 @@ namespace operations
             return -EACCES;    // FinderInfo cannot be encrypted, because its format and length is
                                // artificially restricted
 
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         flags &= XATTR_CREATE | XATTR_REPLACE;
         try
         {
-            auto fg = internal::open_all(ctx, path);
+            auto fg = internal::open_all(fs, path);
             fg->setxattr(name, value, size, flags);
             return 0;
         }
@@ -851,10 +822,10 @@ namespace operations
 #else
     int getxattr(const char* path, const char* name, char* value, size_t size)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
-            auto fg = internal::open_all(ctx, path);
+            auto fg = internal::open_all(fs, path);
             return static_cast<int>(fg->getxattr(name, value, size));
         }
         COMMON_CATCH_BLOCK
@@ -862,11 +833,11 @@ namespace operations
 
     int setxattr(const char* path, const char* name, const char* value, size_t size, int flags)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         flags &= XATTR_CREATE | XATTR_REPLACE;
         try
         {
-            auto fg = internal::open_all(ctx, path);
+            auto fg = internal::open_all(fs, path);
             fg->setxattr(name, value, size, flags);
             return 0;
         }
@@ -876,10 +847,10 @@ namespace operations
 
     int removexattr(const char* path, const char* name)
     {
-        auto ctx = fuse_get_context();
+        COMMON_PROLOGUE
         try
         {
-            auto fg = internal::open_all(ctx, path);
+            auto fg = internal::open_all(fs, path);
             fg->removexattr(name);
             return 0;
         }
