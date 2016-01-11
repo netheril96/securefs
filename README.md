@@ -25,7 +25,7 @@ Because securefs heavily uses C++11 features, a relatively new compiler and std 
 
 Run `make securefs` to build the program. There is only a single executable `securefs` that will be produced. You can copy or symlink it anywhere.
 
-If you encounter build problems, try with command `make securefs NOASM=1` to disable the usage of hardware acceleration.
+If you encounter build problems on Linux, try with `clang` instead of `gcc` (`CC=clang CXX=clang++ make securefs`).
 
 ## Basic usage
 
