@@ -39,8 +39,8 @@ securefs: $(OBJECTS) main.o
 securefs_test: $(OBJECTS) $(TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(TEST_OBJECTS) $(OBJECTS) $(LDFLAGS) -o securefs_test
 
-test: securefs_test
-	./securefs_test
+test: securefs securefs_test
+	./securefs_test && ./test/simple_test.py
 
 clean:
 	$(RM) $(OBJECTS) $(TEST_OBJECTS) securefs securefs_test *.o
