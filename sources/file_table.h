@@ -59,6 +59,6 @@ public:
     void close(FileBase*);
     bool is_readonly() const noexcept { return m_flags & READ_ONLY; }
     bool is_auth_enabled() const noexcept { return !(m_flags & NO_AUTHENTICATION); }
-    std::vector<std::shared_ptr<FileBase>> all_files() const;
+    void gc();
 };
 }

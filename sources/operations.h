@@ -38,7 +38,7 @@ namespace operations
         std::mutex m_mutex;
         std::condition_variable m_going_down;
 
-        void flush_in_the_background();
+        void periodic_gc();
     };
 
     void* init(struct fuse_conn_info*);

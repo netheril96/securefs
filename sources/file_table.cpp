@@ -142,6 +142,8 @@ void FileTable::close(FileBase* fb)
     if (!fb)
         NULL_EXCEPT();
 
+    fb->flush();
+
     auto it = m_opened.find(fb->get_id());
     if (it == m_opened.end())
         throw InvalidArgumentException("File handle not in this table");
@@ -199,13 +201,9 @@ void FileTable::finalize(FileBase* fb)
     }
 }
 
-std::vector<std::shared_ptr<FileBase>> FileTable::all_files() const
+void FileTable::gc()
 {
-    std::vector<std::shared_ptr<FileBase>> result;
-    for (auto&& pair : m_opened)
-        result.emplace_back(pair.second);
-    for (auto&& pair : m_closed)
-        result.emplace_back(pair.second);
-    return result;
+    if (m_closed.size() >= NUM_EJECT)
+        eject();
 }
 }

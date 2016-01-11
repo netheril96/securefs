@@ -17,8 +17,6 @@ using securefs::operations::FileSystem;
 
 namespace securefs
 {
-static const std::chrono::milliseconds TIME_OUT(500);
-
 namespace internal
 {
     inline FileSystem* get_fs(struct fuse_context* ctx)
@@ -237,7 +235,7 @@ namespace operations
         : table(dir_fd, master_key, flags)
         , root_id()
         , logger(std::move(logger))
-        , m_background_flusher(&FileSystem::flush_in_the_background, this)
+        , m_background_flusher(&FileSystem::periodic_gc, this)
     {
     }
 
@@ -247,50 +245,61 @@ namespace operations
         m_background_flusher.join();
     }
 
-    void FileSystem::flush_in_the_background()
+    void FileSystem::periodic_gc()
     {
         std::unique_lock<std::mutex> guard(get_mutex());
         while (true)
         {
-            auto wait_status = m_going_down.wait_for(guard, std::chrono::seconds(10));
-            std::vector<std::shared_ptr<FileBase>> all_files;
-
-            table.all_files().swap(all_files);
-            for (auto&& fp : all_files)
+            auto wait_status = m_going_down.wait_for(guard, std::chrono::seconds(60));
+            try
             {
-                try
+                if (logger)
                 {
-                    fp->flush();
+                    auto start = std::chrono::high_resolution_clock::now();
+                    table.gc();
+                    auto end = std::chrono::high_resolution_clock::now();
+                    auto time
+                        = std::chrono::duration_cast<std::chrono::microseconds>(end - start)
+                              .count();
+                    logger->log(LoggingLevel::DEBUG,
+                                fmt::format("Garbage collection takes {} microseconds", time),
+                                __PRETTY_FUNCTION__,
+                                __FILE__,
+                                __LINE__);
                 }
-                catch (const ExceptionBase& e)
+                else
                 {
-                    if (logger && e.level() >= logger->get_level())
-                        logger->log(e.level(),
-                                    fmt::format("{}: {}", e.type_name(), e.message()),
-                                    __PRETTY_FUNCTION__,
-                                    __FILE__,
-                                    __LINE__);
+                    table.gc();
                 }
-                catch (const std::exception& e)
-                {
-                    if (logger && LoggingLevel::ERROR >= logger->get_level())
-                        logger->log(LoggingLevel::ERROR,
-                                    fmt::format("An unexcepted exception of type {} occurrs: {}",
-                                                typeid(e).name(),
-                                                e.what()),
-                                    __PRETTY_FUNCTION__,
-                                    __FILE__,
-                                    __LINE__);
-                }
-                catch (...)
-                {
-                    if (logger && LoggingLevel::ERROR >= logger->get_level())
-                        logger->log(LoggingLevel::ERROR,
-                                    "Exception not a subclass of std::exception",
-                                    __PRETTY_FUNCTION__,
-                                    __FILE__,
-                                    __LINE__);
-                }
+            }
+            catch (const ExceptionBase& e)
+            {
+                if (logger && e.level() >= logger->get_level())
+                    logger->log(e.level(),
+                                fmt::format("{}: {}", e.type_name(), e.message()),
+                                __PRETTY_FUNCTION__,
+                                __FILE__,
+                                __LINE__);
+            }
+            catch (const std::exception& e)
+            {
+                if (logger && LoggingLevel::ERROR >= logger->get_level())
+                    logger->log(LoggingLevel::ERROR,
+                                fmt::format("An unexcepted exception of type {} occurrs: {}",
+                                            typeid(e).name(),
+                                            e.what()),
+                                __PRETTY_FUNCTION__,
+                                __FILE__,
+                                __LINE__);
+            }
+            catch (...)
+            {
+                if (logger && LoggingLevel::ERROR >= logger->get_level())
+                    logger->log(LoggingLevel::ERROR,
+                                "Exception not a subclass of std::exception",
+                                __PRETTY_FUNCTION__,
+                                __FILE__,
+                                __LINE__);
             }
             if (wait_status == std::cv_status::no_timeout)
             {
@@ -691,12 +700,11 @@ namespace operations
 
             id_type src_id, dst_id;
             int src_type, dst_type;
-            bool src_exists = false, dst_exists = false;
 
-            src_exists = src_dir->get_entry(src_filename, src_id, src_type);
+            bool src_exists = src_dir->get_entry(src_filename, src_id, src_type);
             if (!src_exists)
                 return -ENOENT;
-            dst_exists = dst_dir->get_entry(dst_filename, dst_id, dst_type);
+            bool dst_exists = dst_dir->get_entry(dst_filename, dst_id, dst_type);
             if (dst_exists)
                 return -EEXIST;
 
@@ -721,6 +729,7 @@ namespace operations
             auto fb = reinterpret_cast<FileBase*>(fi->fh);
             if (!fb)
                 return -EINVAL;
+            fb->flush();
             int fd = fb->file_descriptor();
             int rc = ::fsync(fd);
             if (rc < 0)
