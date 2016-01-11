@@ -386,6 +386,7 @@ int mount_filesys(int argc, char** argv)
 
     std::vector<const char*> fuse_args;
     fuse_args.push_back("securefs");
+    fuse_args.push_back("-s");
     if (!background.getValue())
         fuse_args.push_back("-f");
     fuse_args.push_back(mount_point.getValue().c_str());
