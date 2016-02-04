@@ -6,7 +6,7 @@
 
 #include <chrono>
 #include <memory>
-#include <map>
+#include <unordered_map>
 #include <algorithm>
 #include <utility>
 #include <string.h>
@@ -27,10 +27,10 @@ private:
         size_t operator()(const id_type&) const noexcept;
     };
 
-    typedef std::map<id_type, std::shared_ptr<FileBase>> table_type;
+    typedef std::unordered_map<id_type, std::shared_ptr<FileBase>, id_hash> table_type;
 
 private:
-    static const size_t MAX_NUM_CLOSED = 50, NUM_EJECT = 5;
+    static const size_t MAX_NUM_CLOSED = 128, NUM_EJECT = 8;
 
 private:
     key_type m_master_key;

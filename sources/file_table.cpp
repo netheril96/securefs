@@ -9,6 +9,7 @@
 #include <utility>
 #include <string>
 #include <string.h>
+#include <queue>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -153,6 +154,9 @@ void FileTable::close(FileBase* fb)
 
     if (fb->decref() <= 0)
     {
+        finalize(fb);
+        if (fb->is_unlinked() || fb->type() != FileBase::DIRECTORY)
+            return;
         if (m_closed.size() >= MAX_NUM_CLOSED)
             eject();
         it->second->setref(
@@ -165,19 +169,29 @@ void FileTable::close(FileBase* fb)
 
 void FileTable::eject()
 {
-    assert(m_closed.size() > NUM_EJECT);
-    std::vector<const id_type*> closed_ids;
-    closed_ids.reserve(m_closed.size());
-    for (auto&& pair : m_closed)
-        closed_ids.push_back(&pair.first);
-    std::shuffle(closed_ids.begin(), closed_ids.end(), m_rng);
+    typedef std::pair<id_type, std::shared_ptr<FileBase>> pair_type;
 
-    for (size_t i = 0; i < NUM_EJECT; ++i)
+    struct compare_refcount
     {
-        auto iter = m_closed.find(*closed_ids[i]);
-        assert(iter != m_closed.end());
-        finalize(iter->second.get());
-        m_closed.erase(iter);
+        bool operator()(const pair_type& p1, const pair_type& p2) const noexcept
+        {
+            return p1.second->getref() > p2.second->getref();
+        }
+    };
+
+    assert(m_closed.size() > NUM_EJECT);
+
+    std::priority_queue<pair_type, std::vector<pair_type>, compare_refcount> queue;
+    for (auto&& pair : m_closed)
+    {
+        queue.push(pair);
+        if (queue.size() > NUM_EJECT)
+            queue.pop();
+    }
+    while (!queue.empty())
+    {
+        m_closed.erase(queue.top().first);
+        queue.pop();
     }
 }
 
