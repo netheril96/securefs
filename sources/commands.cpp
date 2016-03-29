@@ -53,14 +53,17 @@ void lock_base_directory(int dir_fd)
     }
 }
 
-nlohmann::json generate_config(const securefs::key_type& master_key,
+nlohmann::json generate_config(int version,
+                               const securefs::key_type& master_key,
                                const securefs::key_type& salt,
                                const void* password,
                                size_t pass_len,
+                               unsigned block_size,
+                               unsigned iv_size,
                                unsigned rounds = 0)
 {
     nlohmann::json config;
-    config["version"] = 1;
+    config["version"] = version;
     securefs::key_type key_to_encrypt, encrypted_master_key;
     config["iterations"] = securefs::pbkdf_hmac_sha256(password,
                                                        pass_len,
@@ -91,19 +94,40 @@ nlohmann::json generate_config(const securefs::key_type& master_key,
     config["encrypted_key"] = {{"IV", securefs::hexify(iv, sizeof(iv))},
                                {"MAC", securefs::hexify(mac, sizeof(mac))},
                                {"key", securefs::hexify(encrypted_master_key)}};
+    if (version == 2)
+    {
+        config["block_size"] = block_size;
+        config["iv_size"] = iv_size;
+    }
     return config;
 }
 
 bool parse_config(const nlohmann::json& config,
                   const void* password,
                   size_t pass_len,
-                  securefs::key_type& master_key)
+                  securefs::key_type& master_key,
+                  unsigned& block_size,
+                  unsigned& iv_size)
 {
     using namespace securefs;
     unsigned version = config["version"];
-    if (version != 1)
+
+    if (version == 1)
+    {
+        block_size = 4096;
+        iv_size = 32;
+    }
+    else if (version == 2)
+    {
+        block_size = config.at("block_size");
+        iv_size = config.at("iv_size");
+    }
+    else
+    {
         throw InvalidArgumentException(fmt::format("Unsupported version {}", version));
-    unsigned iterations = config["iterations"];
+    }
+
+    unsigned iterations = config.at("iterations");
 
     byte iv[CONFIG_IV_LENGTH];
     byte mac[CONFIG_MAC_LENGTH];
@@ -231,7 +255,8 @@ int create_filesys(int argc, char** argv)
             pass_len = try_read_password_with_confirmation(password.data(), password.size());
 
         auto config
-            = generate_config(master_key, salt, password.data(), pass_len, rounds.getValue())
+            = generate_config(
+                  2, master_key, salt, password.data(), pass_len, 4096, 12, rounds.getValue())
                   .dump();
 
         config_fd = ::openat(folder_fd, CONFIG_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
@@ -246,7 +271,7 @@ int create_filesys(int argc, char** argv)
         opt.master_key = master_key;
         opt.flags = 0;
         opt.block_size = 4096;
-        opt.iv_size = 32;
+        opt.iv_size = 12;
         operations::FileSystem fs(opt);
         auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
         root->set_uid(getuid());
@@ -372,11 +397,12 @@ int mount_filesys(int argc, char** argv)
                     static_cast<int>(rl.rlim_cur));
     }
 
-    int folder_fd = open_and_lock_base_dir(data_dir.getValue());
+    operations::FSOptions fsopt;
+    fsopt.dir_fd = open_and_lock_base_dir(data_dir.getValue());
 
-    auto config_json = read_config(folder_fd);
+    auto config_json = read_config(fsopt.dir_fd);
     auto version = config_json.at("version").get<unsigned>();
-    if (version != 1)
+    if (version != 1 && version != 2)
         throw std::runtime_error(fmt::format("Unkown format version {}", version));
 
     fprintf(stderr,
@@ -384,8 +410,6 @@ int mount_filesys(int argc, char** argv)
             data_dir.getValue().c_str(),
             mount_point.getValue().c_str(),
             version);
-
-    key_type master_key;
 
     {
         CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
@@ -395,20 +419,20 @@ int mount_filesys(int argc, char** argv)
         else
             pass_len = try_read_password(password.data(), password.size());
 
-        if (!parse_config(config_json, password, pass_len, master_key))
+        if (!parse_config(
+                config_json, password, pass_len, fsopt.master_key, fsopt.block_size, fsopt.iv_size))
             throw std::runtime_error("Error: wrong password");
     }
 
-    std::shared_ptr<Logger> logger;
     if (log.isSet())
-        logger = std::make_shared<FileLogger>(LoggingLevel::WARN,
-                                              fopen(log.getValue().c_str(), "w+b"));
+        fsopt.logger = std::make_shared<FileLogger>(LoggingLevel::WARN,
+                                                    fopen(log.getValue().c_str(), "w+b"));
     else
-        logger = std::make_shared<FileLogger>(LoggingLevel::WARN, stderr);
+        fsopt.logger = std::make_shared<FileLogger>(LoggingLevel::WARN, stderr);
 
-    unsigned flags = 0;
+    fsopt.flags = 0;
     if (insecure.getValue())
-        flags |= FileTable::NO_AUTHENTICATION;
+        fsopt.flags |= FileTable::NO_AUTHENTICATION;
 
     struct fuse_operations opt;
     init_fuse_operations(data_dir.getValue().c_str(), opt, !noxattr.getValue());
@@ -419,14 +443,6 @@ int mount_filesys(int argc, char** argv)
     if (!background.getValue())
         fuse_args.push_back("-f");
     fuse_args.push_back(mount_point.getValue().c_str());
-
-    operations::FSOptions fsopt;
-    fsopt.dir_fd = folder_fd;
-    fsopt.master_key = master_key;
-    fsopt.flags = flags;
-    fsopt.logger = logger;
-    fsopt.block_size = 4096;
-    fsopt.iv_size = 32;
 
     return fuse_main(
         static_cast<int>(fuse_args.size()), const_cast<char**>(fuse_args.data()), &opt, &fsopt);
@@ -460,7 +476,8 @@ int chpass_filesys(int argc, char** argv)
     CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
     size_t pass_len = try_read_password(password.data(), password.size());
 
-    if (!parse_config(config_json, password, pass_len, master_key))
+    unsigned block_size, iv_size;
+    if (!parse_config(config_json, password, pass_len, master_key, block_size, iv_size))
         throw std::runtime_error("Error: wrong password");
 
     fprintf(stderr, "Authentication success. Now enter new password.\n");
@@ -468,8 +485,15 @@ int chpass_filesys(int argc, char** argv)
 
     key_type salt;
     generate_random(salt.data(), salt.size());
-    auto config
-        = generate_config(master_key, salt, password.data(), pass_len, rounds.getValue()).dump();
+    auto config = generate_config(config_json.at("version"),
+                                  master_key,
+                                  salt,
+                                  password.data(),
+                                  pass_len,
+                                  block_size,
+                                  iv_size,
+                                  rounds.getValue())
+                      .dump();
 
     int config_fd = ::openat(folder_fd, CONFIG_TMP_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
     if (config_fd < 0)

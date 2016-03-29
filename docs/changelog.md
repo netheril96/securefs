@@ -1,5 +1,8 @@
 # ChangeLog
 
+## 0.3.0
+New format that allows different IV and block size. IV now defaults to 96-bit, with improved performance.
+
 ## 0.2.1
 
 Fix the critical "Too many opened files" error.
