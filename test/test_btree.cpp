@@ -116,9 +116,9 @@ TEST_CASE("Test BtreeDirectory")
     char tmp4[] = "/tmp/securefs.btree4.XXXXXX";
 
     {
-        securefs::BtreeDirectory dir(::mkstemp(tmp1), ::mkstemp(tmp2), null_key, null_id, true);
+        securefs::BtreeDirectory dir(::mkstemp(tmp1), ::mkstemp(tmp2), null_key, null_id, true, 8000, 12);
         securefs::SimpleDirectory ref_dir(
-            ::mkstemp(tmp3), ::mkstemp(tmp4), null_key, null_id, true);
+            ::mkstemp(tmp3), ::mkstemp(tmp4), null_key, null_id, true, 8000, 12);
 
         test(dir, ref_dir, 1000, 0.3, 0.5, 0.1, 1);
         test(dir, ref_dir, 1000, 0.3, 0.1, 0.5, 2);
@@ -129,9 +129,9 @@ TEST_CASE("Test BtreeDirectory")
     {
         // Test if the data persists on the disk
         securefs::BtreeDirectory dir(
-            ::open(tmp1, O_RDWR), ::open(tmp2, O_RDWR), null_key, null_id, true);
+            ::open(tmp1, O_RDWR), ::open(tmp2, O_RDWR), null_key, null_id, true, 8000, 12);
         securefs::SimpleDirectory ref_dir(
-            ::open(tmp3, O_RDWR), ::open(tmp4, O_RDWR), null_key, null_id, true);
+            ::open(tmp3, O_RDWR), ::open(tmp4, O_RDWR), null_key, null_id, true, 8000, 12);
         test(dir, ref_dir, 1000, 0.3, 0.3, 0.3, 4);
         dir.flush();
         ref_dir.flush();

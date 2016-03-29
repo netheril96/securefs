@@ -150,7 +150,7 @@ TEST_CASE("Test streams")
         auto meta_posix_stream
             = std::make_shared<securefs::POSIXFileStream>(mkstemp(temp_template));
         auto aes_gcm_stream = securefs::make_cryptstream_aes_gcm(
-            posix_stream, meta_posix_stream, key, key, id, true);
+            posix_stream, meta_posix_stream, key, key, id, true, 4096, 12);
         std::vector<byte> header(aes_gcm_stream.second->max_header_length() - 1, 5);
         aes_gcm_stream.second->write_header(header.data(), header.size());
         test(*aes_gcm_stream.first, 1000);
