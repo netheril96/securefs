@@ -29,6 +29,12 @@ typedef uint64_t offset_type;
 
 constexpr uint32_t KEY_LENGTH = 32, ID_LENGTH = 32, BLOCK_SIZE = 4096;
 
+template <class T>
+inline std::unique_ptr<T[]> make_unique_array(size_t size)
+    {
+        return std::unique_ptr<T[]>(new T[size]);
+    }
+    
 template <class T, size_t Size>
 class PODArray
 {

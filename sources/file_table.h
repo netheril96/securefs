@@ -25,7 +25,7 @@ private:
     typedef std::unordered_map<id_type, std::shared_ptr<FileBase>, id_hash> table_type;
 
 private:
-    static const size_t MAX_NUM_CLOSED = 128, NUM_EJECT = 8;
+    static const int MAX_NUM_CLOSED = 128, NUM_EJECT = 8;
 
 private:
     key_type m_master_key;

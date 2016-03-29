@@ -310,8 +310,30 @@ namespace internal
     class AESGCMCryptStream final : public CryptStream, public HeaderBase
     {
     public:
-        static const size_t IV_SIZE = 32, MAC_SIZE = 16, HEADER_SIZE = 32;
-        static const size_t ENCRYPTED_HEADER_SIZE = HEADER_SIZE + IV_SIZE + MAC_SIZE;
+        size_t get_iv_size() const noexcept
+        {
+            return 32;
+        }
+
+        size_t get_mac_size() const noexcept
+        {
+            return 16;
+        }
+
+        size_t get_meta_size() const noexcept
+        {
+            return get_iv_size() + get_mac_size();
+        }
+
+        size_t get_header_size() const noexcept
+        {
+            return 32;
+        }
+
+        size_t get_encrypted_header_size() const noexcept
+        {
+            return get_header_size() + get_iv_size() + get_mac_size();
+        }
 
     private:
         HMACStream m_metastream;
@@ -322,7 +344,7 @@ namespace internal
     private:
         length_type meta_position_for_iv(offset_type block_num) const noexcept
         {
-            return ENCRYPTED_HEADER_SIZE + (IV_SIZE + MAC_SIZE) * (block_num);
+            return get_encrypted_header_size() + get_meta_size() * (block_num);
         }
         const id_type& id() const noexcept { return m_id; }
         const key_type& key() const noexcept { return m_key; }
@@ -351,14 +373,14 @@ namespace internal
             if (length == 0)
                 return;
 
-            byte buffer[IV_SIZE + MAC_SIZE];
-            byte* iv = buffer;
-            byte* mac = iv + IV_SIZE;
+            auto buffer = make_unique_array<byte>(get_meta_size());
+            byte* iv = buffer.get();
+            byte* mac = iv + get_iv_size();
 
             do
             {
-                generate_random(iv, IV_SIZE);
-            } while (is_all_zeros(iv, IV_SIZE));    // Null IVs are markers for sparse blocks
+                generate_random(iv, get_iv_size());
+            } while (is_all_zeros(iv, get_iv_size()));    // Null IVs are markers for sparse blocks
             aes_gcm_encrypt(input,
                             length,
                             id().data(),
@@ -366,12 +388,12 @@ namespace internal
                             key().data(),
                             key().size(),
                             iv,
-                            IV_SIZE,
+                            get_iv_size(),
                             mac,
-                            MAC_SIZE,
+                            get_mac_size(),
                             output);
             auto pos = meta_position_for_iv(block_number);
-            m_metastream.write(buffer, pos, sizeof(buffer));
+            m_metastream.write(buffer.get(), pos, get_meta_size());
         }
 
         void decrypt(offset_type block_number,
@@ -382,15 +404,15 @@ namespace internal
             if (length == 0)
                 return;
 
-            byte buffer[IV_SIZE + MAC_SIZE];
+            auto buffer = make_unique_array<byte>(get_meta_size());
             auto pos = meta_position_for_iv(block_number);
-            if (m_metastream.read(buffer, pos, sizeof(buffer)) != sizeof(buffer))
+            if (m_metastream.read(buffer.get(), pos, get_meta_size()) != get_meta_size())
                 throw CorruptedMetaDataException(id(), "MAC/IV not found");
 
-            const byte* iv = buffer;
-            byte* mac = buffer + IV_SIZE;
+            const byte* iv = buffer.get();
+            byte* mac = buffer.get() + get_iv_size();
 
-            if (is_all_zeros(iv, IV_SIZE))
+            if (is_all_zeros(iv, get_iv_size()))
             {
                 memset(output, 0, length);
                 return;
@@ -402,9 +424,9 @@ namespace internal
                                            key().data(),
                                            key().size(),
                                            iv,
-                                           IV_SIZE,
+                                           get_iv_size(),
                                            mac,
-                                           MAC_SIZE,
+                                           get_mac_size(),
                                            output);
             if (m_check && !success)
                 throw MessageVerificationException(id(), block_number * m_block_size);
@@ -420,7 +442,7 @@ namespace internal
         {
             CryptStream::resize(new_size);
             auto num_blocks = (new_size + m_block_size - 1) / m_block_size;
-            m_metastream.resize(ENCRYPTED_HEADER_SIZE + num_blocks * (IV_SIZE + MAC_SIZE));
+            m_metastream.resize(meta_position_for_iv(num_blocks));
         }
 
         void flush() override
@@ -432,77 +454,77 @@ namespace internal
     private:
         length_type unchecked_read_header(void* output)
         {
-            byte buffer[ENCRYPTED_HEADER_SIZE];
-            auto rc = m_metastream.read(buffer, 0, sizeof(buffer));
+            auto buffer = make_unique_array<byte>(get_encrypted_header_size());
+            auto rc = m_metastream.read(buffer.get(), 0, get_encrypted_header_size());
             if (rc == 0)
                 return 0;
-            if (rc != sizeof(buffer))
+            if (rc != get_encrypted_header_size())
                 throw CorruptedMetaDataException(id(), "Not enough header field");
 
-            byte* iv = buffer;
-            byte* mac = iv + IV_SIZE;
-            byte* ciphertext = mac + MAC_SIZE;
+            byte* iv = buffer.get();
+            byte* mac = iv + get_iv_size();
+            byte* ciphertext = mac + get_mac_size();
             aes_gcm_decrypt(ciphertext,
-                            HEADER_SIZE,
+                            get_header_size(),
                             id().data(),
                             id().size(),
                             key().data(),
                             key().size(),
                             iv,
-                            IV_SIZE,
+                            get_iv_size(),
                             mac,
-                            MAC_SIZE,
+                            get_mac_size(),
                             output);
-            return sizeof(buffer);
+            return get_encrypted_header_size();
         }
 
         void unchecked_write_header(const void* input)
         {
-            byte buffer[ENCRYPTED_HEADER_SIZE];
-            byte* iv = buffer;
-            byte* mac = iv + IV_SIZE;
-            byte* ciphertext = mac + MAC_SIZE;
-            generate_random(iv, IV_SIZE);
+            auto buffer = make_unique_array<byte>(get_encrypted_header_size());
+            byte* iv = buffer.get();
+            byte* mac = iv + get_iv_size();
+            byte* ciphertext = mac + get_mac_size();
+            generate_random(iv, get_iv_size());
 
             aes_gcm_encrypt(input,
-                            HEADER_SIZE,
+                            get_header_size(),
                             id().data(),
                             id().size(),
                             key().data(),
                             key().size(),
                             iv,
-                            IV_SIZE,
+                            get_iv_size(),
                             mac,
-                            MAC_SIZE,
+                            get_mac_size(),
                             ciphertext);
-            m_metastream.write(buffer, 0, sizeof(buffer));
+            m_metastream.write(buffer.get(), 0, get_encrypted_header_size());
         }
 
     public:
         bool read_header(void* output, length_type length) override
         {
-            if (length > HEADER_SIZE)
+            if (length > get_header_size())
                 throw InvalidArgumentException("Header too long");
-            if (length == HEADER_SIZE)
+            if (length == get_header_size())
                 return unchecked_read_header(output);
 
-            CryptoPP::AlignedSecByteBlock buffer(HEADER_SIZE);
+            CryptoPP::AlignedSecByteBlock buffer(get_header_size());
             auto rc = unchecked_read_header(buffer.data());
             memcpy(output, buffer.data(), std::min(length, rc));
             return rc != 0;
         }
 
-        length_type max_header_length() const noexcept override { return HEADER_SIZE; }
+        length_type max_header_length() const noexcept override { return get_header_size(); }
 
         void write_header(const void* input, length_type length) override
         {
-            if (length > HEADER_SIZE)
+            if (length > get_header_size())
                 throw InvalidArgumentException("Header too long");
 
-            if (length == HEADER_SIZE)
+            if (length == get_header_size())
                 return unchecked_write_header(input);
 
-            CryptoPP::AlignedSecByteBlock buffer(HEADER_SIZE);
+            CryptoPP::AlignedSecByteBlock buffer(get_header_size());
             memcpy(buffer.data(), input, length);
             memset(buffer.data() + length, 0, buffer.size() - length);
             unchecked_write_header(buffer.data());
