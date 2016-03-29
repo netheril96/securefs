@@ -45,7 +45,7 @@ private:
     static_assert(std::is_pod<T>::value, "Only POD types are supported");
 
 public:
-    explicit PODArray() {}
+    explicit PODArray() { memset(m_data, 0, sizeof(m_data)); }
     explicit PODArray(const T& value) { std::fill(std::begin(m_data), std::end(m_data), value); }
     PODArray(const PODArray& other) { memcpy(m_data, other.m_data, size()); }
     PODArray& operator=(const PODArray& other)

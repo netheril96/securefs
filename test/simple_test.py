@@ -33,7 +33,7 @@ def securefs_unmount(mount_point):
 
 
 def securefs_create(data_dir, password):
-    p = subprocess.Popen([SECUREFS_BINARY, 'create', '--stdinpass', data_dir],
+    p = subprocess.Popen([SECUREFS_BINARY, 'create', '--stdinpass', data_dir, '--rounds', '1'],
                          stdin=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate(input=password+'\n')
     if p.returncode:
