@@ -25,7 +25,6 @@ void Logger::log(LoggingLevel level,
                                     line,
                                     func,
                                     msg);
-        std::lock_guard<std::mutex> guard(m_lock);
         append(full_msg.data(), full_msg.size());
     }
     catch (...)

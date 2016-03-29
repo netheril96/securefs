@@ -5,10 +5,6 @@
 #define FUSE_USE_VERSION 27
 #include <fuse.h>
 
-#include <thread>
-#include <condition_variable>
-#include <mutex>
-
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/time.h>
@@ -30,15 +26,6 @@ namespace operations
                             std::shared_ptr<Logger> logger);
 
         ~FileSystem();
-
-        std::mutex& get_mutex() noexcept { return m_mutex; }
-
-    private:
-        std::thread m_background_flusher;
-        std::mutex m_mutex;
-        std::condition_variable m_going_down;
-
-        void periodic_gc();
     };
 
     void* init(struct fuse_conn_info*);

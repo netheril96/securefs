@@ -253,6 +253,8 @@ void BtreeDirectory::flush_cache()
             n.clear_dirty();
         }
     }
+    if (m_node_cache.size() > 8)
+        m_node_cache.clear();
 }
 
 bool BtreeDirectory::validate_node(const BtreeNode* n, int depth)

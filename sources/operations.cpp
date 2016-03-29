@@ -235,76 +235,11 @@ namespace operations
         : table(dir_fd, master_key, flags)
         , root_id()
         , logger(std::move(logger))
-        , m_background_flusher(&FileSystem::periodic_gc, this)
     {
     }
 
     FileSystem::~FileSystem()
     {
-        m_going_down.notify_all();
-        m_background_flusher.join();
-    }
-
-    void FileSystem::periodic_gc()
-    {
-        std::unique_lock<std::mutex> guard(get_mutex());
-        while (true)
-        {
-            auto wait_status = m_going_down.wait_for(guard, std::chrono::seconds(60));
-            try
-            {
-                if (logger)
-                {
-                    auto start = std::chrono::high_resolution_clock::now();
-                    table.gc();
-                    auto end = std::chrono::high_resolution_clock::now();
-                    auto time = std::chrono::duration_cast<std::chrono::microseconds>(end - start)
-                                    .count();
-                    logger->log(LoggingLevel::DEBUG,
-                                fmt::format("Garbage collection takes {} microseconds", time),
-                                __PRETTY_FUNCTION__,
-                                __FILE__,
-                                __LINE__);
-                }
-                else
-                {
-                    table.gc();
-                }
-            }
-            catch (const ExceptionBase& e)
-            {
-                if (logger && e.level() >= logger->get_level())
-                    logger->log(e.level(),
-                                fmt::format("{}: {}", e.type_name(), e.message()),
-                                __PRETTY_FUNCTION__,
-                                __FILE__,
-                                __LINE__);
-            }
-            catch (const std::exception& e)
-            {
-                if (logger && LoggingLevel::ERROR >= logger->get_level())
-                    logger->log(LoggingLevel::ERROR,
-                                fmt::format("An unexcepted exception of type {} occurrs: {}",
-                                            typeid(e).name(),
-                                            e.what()),
-                                __PRETTY_FUNCTION__,
-                                __FILE__,
-                                __LINE__);
-            }
-            catch (...)
-            {
-                if (logger && LoggingLevel::ERROR >= logger->get_level())
-                    logger->log(LoggingLevel::ERROR,
-                                "Exception not a subclass of std::exception",
-                                __PRETTY_FUNCTION__,
-                                __FILE__,
-                                __LINE__);
-            }
-            if (wait_status == std::cv_status::no_timeout)
-            {
-                return;
-            }
-        }
     }
 
 #define COMMON_CATCH_BLOCK                                                                         \
@@ -320,8 +255,7 @@ namespace operations
 
 #define COMMON_PROLOGUE                                                                            \
     auto ctx = fuse_get_context();                                                                 \
-    auto fs = internal::get_fs(ctx);                                                               \
-    std::lock_guard<std::mutex> global_guard(fs->get_mutex());
+    auto fs = internal::get_fs(ctx);
 
     void* init(struct fuse_conn_info*)
     {
