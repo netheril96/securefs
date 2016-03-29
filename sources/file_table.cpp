@@ -159,39 +159,19 @@ void FileTable::close(FileBase* fb)
             return;
         if (m_closed.size() >= MAX_NUM_CLOSED)
             eject();
-        it->second->setref(
-            static_cast<ptrdiff_t>(m_counter));    // Reuse the refcount field for the timestamp
-        ++m_counter;                               // This acts as a timestamp
         m_closed.emplace(*it);
+        closed_ids.push(it->first);
         m_opened.erase(it);
     }
 }
 
 void FileTable::eject()
 {
-    typedef std::pair<id_type, std::shared_ptr<FileBase>> pair_type;
-
-    struct compare_refcount
-    {
-        bool operator()(const pair_type& p1, const pair_type& p2) const noexcept
-        {
-            return p1.second->getref() > p2.second->getref();
-        }
-    };
-
-    assert(m_closed.size() > NUM_EJECT);
-
-    std::priority_queue<pair_type, std::vector<pair_type>, compare_refcount> queue;
-    for (auto&& pair : m_closed)
-    {
-        queue.push(pair);
-        if (queue.size() > NUM_EJECT)
-            queue.pop();
-    }
-    while (!queue.empty())
-    {
-        m_closed.erase(queue.top().first);
-        queue.pop();
+    for (int i = 0; i < NUM_EJECT; ++i) {
+        if (closed_ids.empty())
+            break;
+        m_closed.erase(closed_ids.front());
+        closed_ids.pop();
     }
 }
 
