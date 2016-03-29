@@ -30,15 +30,15 @@
 
 #include <stdint.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstddef>    // for std::ptrdiff_t
 #include <cstdio>
-#include <algorithm>
 #include <limits>
+#include <sstream>
 #include <stdexcept>
 #include <string>
-#include <sstream>
 
 #if _SECURE_SCL
 #include <iterator>
@@ -802,8 +802,7 @@ namespace internal
             FormatFunc format;
         };
 
-        union
-        {
+        union {
             int int_value;
             unsigned uint_value;
             LongLong long_long_value;
@@ -1511,8 +1510,7 @@ namespace internal
         ArgType() : type(0) {}
 
         template <typename T>
-        ArgType(const T& arg)
-            : type(make_type(arg))
+        ArgType(const T& arg) : type(make_type(arg))
         {
         }
     };
@@ -2443,7 +2441,7 @@ public:
      \endrst
      */
     template <std::size_t SIZE>
-    explicit BasicArrayWriter(Char(&array)[SIZE])
+    explicit BasicArrayWriter(Char (&array)[SIZE])
         : BasicWriter<Char>(buffer_), buffer_(array, SIZE)
     {
     }

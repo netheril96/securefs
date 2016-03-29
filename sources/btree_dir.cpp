@@ -1,13 +1,13 @@
 #include "btree_dir.h"
 
-#include <deque>
-#include <vector>
 #include <algorithm>
-#include <utility>
-#include <type_traits>
 #include <assert.h>
+#include <deque>
 #include <iterator>
 #include <stdio.h>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 static void dir_check(bool condition)
 {
@@ -720,12 +720,7 @@ void BtreeDirectory::rebuild()
 
     std::vector<DirEntry> entries;
     entries.reserve(this->m_stream->size() / BLOCK_SIZE * BTREE_MAX_NUM_ENTRIES);
-    mutable_recursive_iterate(root,
-                              [&](DirEntry&& e)
-                              {
-                                  entries.push_back(std::move(e));
-                              },
-                              0);
+    mutable_recursive_iterate(root, [&](DirEntry&& e) { entries.push_back(std::move(e)); }, 0);
     clear_cache();    // root is invalid after this line
     m_stream->resize(0);
     set_num_free_page(0);

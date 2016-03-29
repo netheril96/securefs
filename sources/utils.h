@@ -1,18 +1,18 @@
 #pragma once
+#include <algorithm>
+#include <array>
 #include <stddef.h>
+#include <stdexcept>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <string>
 #include <type_traits>
 #include <vector>
-#include <array>
-#include <stdexcept>
-#include <algorithm>
-#include <string.h>
 
-#include <unistd.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #define DISABLE_COPY_MOVE(cls)                                                                     \
     cls(const cls&) = delete;                                                                      \
@@ -180,11 +180,7 @@ private:
 public:
     explicit ThreadLocalStorage()
     {
-        int rc = ::pthread_key_create(&m_pkey,
-                                      [](void* ptr)
-                                      {
-                                          delete static_cast<T*>(ptr);
-                                      });
+        int rc = ::pthread_key_create(&m_pkey, [](void* ptr) { delete static_cast<T*>(ptr); });
         if (rc < 0)
             throw std::runtime_error("Fail to initialize pthread TLS");
     }

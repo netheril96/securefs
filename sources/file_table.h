@@ -1,29 +1,24 @@
 #pragma once
+#include "exceptions.h"
 #include "files.h"
 #include "streams.h"
 #include "utils.h"
-#include "exceptions.h"
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
-#include <unordered_map>
-#include <algorithm>
-#include <utility>
-#include <string.h>
 #include <queue>
+#include <string.h>
+#include <unordered_map>
+#include <utility>
 
 namespace securefs
 {
 class FileTable
 {
 private:
-    class id_hash
+    struct id_hash
     {
-    private:
-        size_t m_seed;
-
-    public:
-        id_hash();
         size_t operator()(const id_type&) const noexcept;
     };
 
@@ -47,11 +42,7 @@ public:
     static const uint32_t READ_ONLY = 0x1, NO_AUTHENTICATION = 0x2;
 
 public:
-    explicit FileTable(int dir_fd, const key_type& master_key, uint32_t flags)
-        : m_dir_fd(dir_fd), m_flags(flags)
-    {
-        memcpy(m_master_key.data(), master_key.data(), master_key.size());
-    }
+    explicit FileTable(int dir_fd, const key_type& master_key, uint32_t flags);
     ~FileTable();
     FileBase* open_as(const id_type& id, int type);
     FileBase* create_as(const id_type& id, int type);

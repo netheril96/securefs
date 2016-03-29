@@ -1,16 +1,16 @@
 #include "streams.h"
 
-#include <utility>
 #include <algorithm>
 #include <array>
-#include <string.h>
 #include <assert.h>
 #include <memory>
+#include <string.h>
+#include <utility>
 
 #include <cryptopp/hmac.h>
-#include <cryptopp/sha.h>
-#include <cryptopp/secblock.h>
 #include <cryptopp/salsa.h>
+#include <cryptopp/secblock.h>
+#include <cryptopp/sha.h>
 
 namespace securefs
 {

@@ -1,13 +1,13 @@
 #pragma once
-#include "utils.h"
 #include "streams.h"
+#include "utils.h"
 
-#include <chrono>
-#include <string>
-#include <memory>
-#include <functional>
-#include <unordered_map>
 #include <atomic>
+#include <chrono>
+#include <functional>
+#include <memory>
+#include <string>
+#include <unordered_map>
 
 namespace securefs
 {
@@ -154,8 +154,7 @@ class RegularFile : public FileBase
 {
 public:
     template <class... Args>
-    explicit RegularFile(Args&&... args)
-        : FileBase(std::forward<Args>(args)...)
+    explicit RegularFile(Args&&... args) : FileBase(std::forward<Args>(args)...)
     {
     }
     int type() const noexcept override { return FileBase::REGULAR_FILE; }
@@ -183,8 +182,7 @@ class Symlink : public FileBase
 {
 public:
     template <class... Args>
-    explicit Symlink(Args&&... args)
-        : FileBase(std::forward<Args>(args)...)
+    explicit Symlink(Args&&... args) : FileBase(std::forward<Args>(args)...)
     {
     }
     int type() const noexcept override { return FileBase::SYMLINK; }
@@ -206,8 +204,7 @@ public:
 
 public:
     template <class... Args>
-    explicit Directory(Args&&... args)
-        : FileBase(std::forward<Args>(args)...)
+    explicit Directory(Args&&... args) : FileBase(std::forward<Args>(args)...)
     {
     }
 
@@ -249,8 +246,7 @@ private:
 
 public:
     template <class... Args>
-    explicit SimpleDirectory(Args&&... args)
-        : Directory(std::forward<Args>(args)...)
+    explicit SimpleDirectory(Args&&... args) : Directory(std::forward<Args>(args)...)
     {
         initialize();
     }

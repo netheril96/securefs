@@ -5,8 +5,8 @@
 #include <memory>
 #include <utility>
 
-#include <unistd.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 namespace securefs
 {

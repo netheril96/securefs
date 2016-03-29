@@ -1,15 +1,15 @@
 #include "file_table.h"
-#include "utils.h"
-#include "exceptions.h"
 #include "btree_dir.h"
+#include "exceptions.h"
+#include "utils.h"
 
-#include <vector>
-#include <limits>
 #include <algorithm>
-#include <utility>
-#include <string>
-#include <string.h>
+#include <limits>
 #include <queue>
+#include <string.h>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -37,11 +37,16 @@ void calculate_paths(const securefs::id_type& id,
 
 namespace securefs
 {
-FileTable::id_hash::id_hash() { generate_random(&m_seed, sizeof(m_seed)); }
 
 size_t FileTable::id_hash::operator()(const id_type& id) const noexcept
 {
-    return from_little_endian<size_t>(id.data() + (id.size() - sizeof(size_t))) ^ m_seed;
+    return from_little_endian<size_t>(id.data() + (id.size() - sizeof(size_t)));
+}
+
+FileTable::FileTable(int dir_fd, const key_type& master_key, uint32_t flags)
+    : m_dir_fd(dir_fd), m_flags(flags)
+{
+    memcpy(m_master_key.data(), master_key.data(), master_key.size());
 }
 
 FileTable::~FileTable()
@@ -167,7 +172,8 @@ void FileTable::close(FileBase* fb)
 
 void FileTable::eject()
 {
-    for (int i = 0; i < NUM_EJECT; ++i) {
+    for (int i = 0; i < NUM_EJECT; ++i)
+    {
         if (closed_ids.empty())
             break;
         m_closed.erase(closed_ids.front());

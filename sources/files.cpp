@@ -2,9 +2,9 @@
 #include "utils.h"
 #include "xattr_compat.h"
 
+#include <algorithm>
 #include <unordered_map>
 #include <utility>
-#include <algorithm>
 
 #include <cryptopp/secblock.h>
 

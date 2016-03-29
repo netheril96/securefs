@@ -1,28 +1,28 @@
-#include "utils.h"
 #include "exceptions.h"
-#include "streams.h"
 #include "operations.h"
+#include "streams.h"
+#include "utils.h"
 #include "xattr_compat.h"
 
+#include <cryptopp/secblock.h>
+#include <format.h>
 #include <fuse.h>
 #include <json.hpp>
-#include <format.h>
 #include <tclap/CmdLine.h>
-#include <cryptopp/secblock.h>
 
-#include <typeinfo>
-#include <vector>
-#include <memory>
 #include <algorithm>
+#include <memory>
 #include <stdexcept>
-#include <typeinfo>
 #include <string.h>
+#include <typeinfo>
+#include <typeinfo>
 #include <unordered_map>
+#include <vector>
 
 #include <fcntl.h>
-#include <unistd.h>
 #include <sys/file.h>
 #include <sys/resource.h>
+#include <unistd.h>
 
 namespace
 {

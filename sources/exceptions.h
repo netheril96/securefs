@@ -3,11 +3,11 @@
 #include "format.h"
 #include "utils.h"
 
-#include <string>
-#include <exception>
-#include <utility>
-#include <string.h>
 #include <errno.h>
+#include <exception>
+#include <string.h>
+#include <string>
+#include <utility>
 
 namespace securefs
 {

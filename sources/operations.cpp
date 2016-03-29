@@ -2,16 +2,16 @@
 #include "xattr_compat.h"
 
 #include <algorithm>
-#include <utility>
-#include <string>
-#include <string.h>
-#include <typeinfo>
 #include <chrono>
+#include <string.h>
+#include <string>
+#include <typeinfo>
+#include <utility>
 
-#include <utime.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <utime.h>
 
 using securefs::operations::FileSystem;
 
@@ -232,15 +232,11 @@ namespace operations
                            const key_type& master_key,
                            uint32_t flags,
                            std::shared_ptr<Logger> logger)
-        : table(dir_fd, master_key, flags)
-        , root_id()
-        , logger(std::move(logger))
+        : table(dir_fd, master_key, flags), root_id(), logger(std::move(logger))
     {
     }
 
-    FileSystem::~FileSystem()
-    {
-    }
+    FileSystem::~FileSystem() {}
 
 #define COMMON_CATCH_BLOCK                                                                         \
     catch (const OSException& e) { return -e.error_number(); }                                     \
@@ -311,8 +307,7 @@ namespace operations
                 return -ENOTDIR;
             struct stat st;
             memset(&st, 0, sizeof(st));
-            auto actions = [&](const std::string& name, const id_type&, int type) -> bool
-            {
+            auto actions = [&](const std::string& name, const id_type&, int type) -> bool {
                 st.st_mode = FileBase::mode_for_type(type);
                 return filler(buffer, name.c_str(), &st, 0) == 0;
             };
@@ -332,8 +327,7 @@ namespace operations
         {
             if (internal::is_readonly(ctx))
                 return -EROFS;
-            auto init_file = [=](FileBase* fb)
-            {
+            auto init_file = [=](FileBase* fb) {
                 fb->set_uid(ctx->uid);
                 fb->set_gid(ctx->gid);
                 fb->set_nlink(1);
@@ -494,8 +488,7 @@ namespace operations
         {
             if (internal::is_readonly(ctx))
                 return -EROFS;
-            auto init_dir = [=](FileBase* fb)
-            {
+            auto init_dir = [=](FileBase* fb) {
                 fb->set_uid(ctx->uid);
                 fb->set_gid(ctx->gid);
                 fb->set_nlink(1);
@@ -548,8 +541,7 @@ namespace operations
         {
             if (internal::is_readonly(ctx))
                 return -EROFS;
-            auto init_symlink = [=](FileBase* fb)
-            {
+            auto init_symlink = [=](FileBase* fb) {
                 fb->set_uid(ctx->uid);
                 fb->set_gid(ctx->gid);
                 fb->set_nlink(1);

@@ -1,13 +1,13 @@
 #pragma once
 #include "files.h"
 
-#include <vector>
-#include <utility>
 #include <memory>
-#include <string>
-#include <unordered_map>
-#include <tuple>
 #include <stdio.h>
+#include <string>
+#include <tuple>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace securefs
 {
@@ -163,8 +163,7 @@ protected:
 
 public:
     template <class... Args>
-    explicit BtreeDirectory(Args&&... args)
-        : Directory(std::forward<Args>(args)...)
+    explicit BtreeDirectory(Args&&... args) : Directory(std::forward<Args>(args)...)
     {
     }
     ~BtreeDirectory();
