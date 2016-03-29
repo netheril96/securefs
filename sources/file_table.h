@@ -33,6 +33,7 @@ private:
     std::queue<id_type> closed_ids;
     int m_dir_fd;
     uint32_t m_flags;
+    unsigned m_block_size, m_iv_size;
 
 private:
     void eject();
@@ -42,7 +43,11 @@ public:
     static const uint32_t READ_ONLY = 0x1, NO_AUTHENTICATION = 0x2;
 
 public:
-    explicit FileTable(int dir_fd, const key_type& master_key, uint32_t flags);
+    explicit FileTable(int dir_fd,
+                       const key_type& master_key,
+                       uint32_t flags,
+                       unsigned block_size,
+                       unsigned iv_size);
     ~FileTable();
     FileBase* open_as(const id_type& id, int type);
     FileBase* create_as(const id_type& id, int type);

@@ -13,7 +13,13 @@
 namespace securefs
 {
 
-FileBase::FileBase(int data_fd, int meta_fd, const key_type& key_, const id_type& id_, bool check)
+FileBase::FileBase(int data_fd,
+                   int meta_fd,
+                   const key_type& key_,
+                   const id_type& id_,
+                   bool check,
+                   unsigned block_size,
+                   unsigned iv_size)
     : m_refcount(1)
     , m_header()
     , m_id(id_)
@@ -40,8 +46,14 @@ FileBase::FileBase(int data_fd, int meta_fd, const key_type& key_, const id_type
     memcpy(data_key.data(), generated_keys, KEY_LENGTH);
     memcpy(meta_key.data(), generated_keys + KEY_LENGTH, KEY_LENGTH);
     memcpy(m_key.data(), generated_keys + 2 * KEY_LENGTH, KEY_LENGTH);
-    auto crypt = make_cryptstream_aes_gcm(
-        std::move(data_stream), std::move(meta_stream), data_key, meta_key, id_, check);
+    auto crypt = make_cryptstream_aes_gcm(std::move(data_stream),
+                                          std::move(meta_stream),
+                                          data_key,
+                                          meta_key,
+                                          id_,
+                                          check,
+                                          block_size,
+                                          iv_size);
 
     m_stream = crypt.first;
     m_header = crypt.second;

@@ -241,7 +241,13 @@ int create_filesys(int argc, char** argv)
         POSIXFileStream config_stream(config_fd);
         config_stream.write(config.data(), 0, config.size());
 
-        operations::FileSystem fs(folder_fd, master_key, 0, {});
+        operations::FSOptions opt;
+        opt.dir_fd = folder_fd;
+        opt.master_key = master_key;
+        opt.flags = 0;
+        opt.block_size = 4096;
+        opt.iv_size = 32;
+        operations::FileSystem fs(opt);
         auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
         root->set_uid(getuid());
         root->set_gid(getgid());
@@ -414,11 +420,16 @@ int mount_filesys(int argc, char** argv)
         fuse_args.push_back("-f");
     fuse_args.push_back(mount_point.getValue().c_str());
 
-    auto args = std::tuple<int, key_type, uint32_t, std::shared_ptr<Logger>>(
-        folder_fd, master_key, flags, logger);
+    operations::FSOptions fsopt;
+    fsopt.dir_fd = folder_fd;
+    fsopt.master_key = master_key;
+    fsopt.flags = flags;
+    fsopt.logger = logger;
+    fsopt.block_size = 4096;
+    fsopt.iv_size = 32;
 
     return fuse_main(
-        static_cast<int>(fuse_args.size()), const_cast<char**>(fuse_args.data()), &opt, &args);
+        static_cast<int>(fuse_args.size()), const_cast<char**>(fuse_args.data()), &opt, &fsopt);
 }
 
 int chpass_filesys(int argc, char** argv)

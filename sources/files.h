@@ -77,8 +77,13 @@ public:
     static mode_t mode_for_type(int type) noexcept { return type << 12; }
 
 public:
-    explicit FileBase(
-        int data_fd, int meta_fd, const key_type& key_, const id_type& id_, bool check);
+    explicit FileBase(int data_fd,
+                      int meta_fd,
+                      const key_type& key_,
+                      const id_type& id_,
+                      bool check,
+                      unsigned block_size,
+                      unsigned iv_size);
     virtual ~FileBase();
     DISABLE_COPY_MOVE(FileBase)
 

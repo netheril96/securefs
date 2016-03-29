@@ -310,27 +310,15 @@ namespace internal
     class AESGCMCryptStream final : public CryptStream, public HeaderBase
     {
     public:
-        size_t get_iv_size() const noexcept
-        {
-            return 32;
-        }
+        unsigned get_iv_size() const noexcept { return m_iv_size; }
 
-        size_t get_mac_size() const noexcept
-        {
-            return 16;
-        }
+        unsigned get_mac_size() const noexcept { return 16; }
 
-        size_t get_meta_size() const noexcept
-        {
-            return get_iv_size() + get_mac_size();
-        }
+        unsigned get_meta_size() const noexcept { return get_iv_size() + get_mac_size(); }
 
-        size_t get_header_size() const noexcept
-        {
-            return 32;
-        }
+        unsigned get_header_size() const noexcept { return 32; }
 
-        size_t get_encrypted_header_size() const noexcept
+        unsigned get_encrypted_header_size() const noexcept
         {
             return get_header_size() + get_iv_size() + get_mac_size();
         }
@@ -339,6 +327,7 @@ namespace internal
         HMACStream m_metastream;
         key_type m_key;
         id_type m_id;
+        unsigned m_iv_size;
         bool m_check;
 
     private:
@@ -355,11 +344,14 @@ namespace internal
                                    const key_type& data_key,
                                    const key_type& meta_key,
                                    const id_type& id_,
-                                   bool check)
-            : CryptStream(data_stream, BLOCK_SIZE)
+                                   bool check,
+                                   unsigned block_size,
+                                   unsigned iv_size)
+            : CryptStream(data_stream, block_size)
             , m_metastream(meta_key, id_, meta_stream, check)
             , m_key(data_key)
             , m_id(id_)
+            , m_iv_size(iv_size)
             , m_check(check)
         {
         }
@@ -540,10 +532,18 @@ make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
                          const key_type& data_key,
                          const key_type& meta_key,
                          const id_type& id_,
-                         bool check)
+                         bool check,
+                         unsigned block_size,
+                         unsigned iv_size)
 {
-    auto stream = std::make_shared<internal::AESGCMCryptStream>(
-        std::move(data_stream), std::move(meta_stream), data_key, meta_key, id_, check);
+    auto stream = std::make_shared<internal::AESGCMCryptStream>(std::move(data_stream),
+                                                                std::move(meta_stream),
+                                                                data_key,
+                                                                meta_key,
+                                                                id_,
+                                                                check,
+                                                                block_size,
+                                                                iv_size);
     return {stream, stream};
 }
 

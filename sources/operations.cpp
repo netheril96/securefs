@@ -228,11 +228,10 @@ namespace internal
 namespace operations
 {
 
-    FileSystem::FileSystem(int dir_fd,
-                           const key_type& master_key,
-                           uint32_t flags,
-                           std::shared_ptr<Logger> logger)
-        : table(dir_fd, master_key, flags), root_id(), logger(std::move(logger))
+    FileSystem::FileSystem(const FSOptions& opt)
+        : table(opt.dir_fd, opt.master_key, opt.flags, opt.block_size, opt.iv_size)
+        , root_id()
+        , logger(opt.logger)
     {
     }
 
@@ -255,10 +254,8 @@ namespace operations
 
     void* init(struct fuse_conn_info*)
     {
-        auto args = static_cast<std::tuple<int, key_type, uint32_t, std::shared_ptr<Logger>>*>(
-            fuse_get_context()->private_data);
-        return new FileSystem(
-            std::get<0>(*args), std::get<1>(*args), std::get<2>(*args), std::get<3>(*args));
+        auto args = static_cast<FSOptions*>(fuse_get_context()->private_data);
+        return new FileSystem(*args);
     }
 
     void destroy(void* data) { delete static_cast<FileSystem*>(data); }

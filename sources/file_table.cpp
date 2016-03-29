@@ -43,8 +43,9 @@ size_t FileTable::id_hash::operator()(const id_type& id) const noexcept
     return from_little_endian<size_t>(id.data() + (id.size() - sizeof(size_t)));
 }
 
-FileTable::FileTable(int dir_fd, const key_type& master_key, uint32_t flags)
-    : m_dir_fd(dir_fd), m_flags(flags)
+FileTable::FileTable(
+    int dir_fd, const key_type& master_key, uint32_t flags, unsigned block_size, unsigned iv_size)
+    : m_dir_fd(dir_fd), m_flags(flags), m_block_size(block_size), m_iv_size(iv_size)
 {
     memcpy(m_master_key.data(), master_key.data(), master_key.size());
 }
@@ -91,8 +92,8 @@ FileBase* FileTable::open_as(const id_type& id, int type)
         ::close(data_fd);
         throw OSException(errno);
     }
-    auto fb
-        = btree_make_file_from_type(type, data_fd, meta_fd, m_master_key, id, is_auth_enabled());
+    auto fb = btree_make_file_from_type(
+        type, data_fd, meta_fd, m_master_key, id, is_auth_enabled(), m_block_size, m_iv_size);
     m_opened.emplace(id, fb);
     fb->setref(1);
     return fb.get();
@@ -120,7 +121,7 @@ FileBase* FileTable::create_as(const id_type& id, int type)
             throw OSException(errno);
 
         auto fb = btree_make_file_from_type(
-            type, data_fd, meta_fd, m_master_key, id, is_auth_enabled());
+            type, data_fd, meta_fd, m_master_key, id, is_auth_enabled(), m_block_size, m_iv_size);
         m_opened.emplace(id, fb);
         fb->setref(1);
         return fb.get();

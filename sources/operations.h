@@ -13,6 +13,16 @@ namespace securefs
 {
 namespace operations
 {
+    struct FSOptions
+    {
+        int dir_fd;
+        key_type master_key;
+        uint32_t flags;
+        unsigned block_size;
+        unsigned iv_size;
+        std::shared_ptr<Logger> logger;
+    };
+
     struct FileSystem
     {
     public:
@@ -20,10 +30,7 @@ namespace operations
         id_type root_id;
         std::shared_ptr<Logger> logger;
 
-        explicit FileSystem(int dir_fd,
-                            const key_type& master_key,
-                            uint32_t flags,
-                            std::shared_ptr<Logger> logger);
+        explicit FileSystem(const FSOptions& opt);
 
         ~FileSystem();
     };
