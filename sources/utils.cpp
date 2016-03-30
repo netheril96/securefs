@@ -238,9 +238,12 @@ void aes_gcm_encrypt(const void* plaintext,
                      size_t mac_len,
                      void* ciphertext)
 {
-    static ThreadLocalStorage<CryptoPP::GCM<CryptoPP::AES>::Encryption> encryptor;
-    static ThreadLocalStorage<std::vector<byte>> last_key;
+    static ThreadLocalStorage<CryptoPP::GCM<CryptoPP::AES>::Encryption> tls_encryptor;
+    static ThreadLocalStorage<std::vector<byte>> tls_last_key;
     // Avoid expensive table computation by SetKey()
+
+    auto encryptor = tls_encryptor.get();
+    auto last_key = tls_last_key.get();
 
     if (last_key->size() == key_len && memcmp(last_key->data(), key, key_len) == 0)
     {
@@ -272,9 +275,12 @@ bool aes_gcm_decrypt(const void* ciphertext,
                      size_t mac_len,
                      void* plaintext)
 {
-    static ThreadLocalStorage<CryptoPP::GCM<CryptoPP::AES>::Decryption> decryptor;
-    static ThreadLocalStorage<std::vector<byte>> last_key;
+    static ThreadLocalStorage<CryptoPP::GCM<CryptoPP::AES>::Decryption> tls_decryptor;
+    static ThreadLocalStorage<std::vector<byte>> tls_last_key;
     // Avoid expensive table computation by SetKey()
+
+    auto decryptor = tls_decryptor.get();
+    auto last_key = tls_last_key.get();
 
     if (last_key->size() == key_len && memcmp(last_key->data(), key, key_len) == 0)
     {

@@ -43,7 +43,7 @@ test: securefs securefs_test
 	./securefs_test && ./test/simple_test.py
 
 clean:
-	$(RM) $(OBJECTS) $(TEST_OBJECTS) securefs securefs_test *.o
+	$(RM) $(OBJECTS) $(TEST_OBJECTS) securefs securefs_test *.o test.log
 
 deepclean: clean
 	$(MAKE) -C cryptopp clean

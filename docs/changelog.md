@@ -1,7 +1,10 @@
 # ChangeLog
 
 ## 0.3.0
-New format that allows different IV and block size. IV now defaults to 96-bit, with improved performance.
+New format
+
+* Allows different IV and block size. IV now defaults to 96-bit, with improved performance.
+* Single level of directory instead of two levels for the underlying filesystem structure. Improve performance.
 
 ## 0.2.1
 
