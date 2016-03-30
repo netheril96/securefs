@@ -267,6 +267,7 @@ int create_filesys(int argc, char** argv)
         config_stream.write(config.data(), 0, config.size());
 
         operations::FSOptions opt;
+        opt.version = 2;
         opt.dir_fd = folder_fd;
         opt.master_key = master_key;
         opt.flags = 0;
@@ -401,7 +402,8 @@ int mount_filesys(int argc, char** argv)
     fsopt.dir_fd = open_and_lock_base_dir(data_dir.getValue());
 
     auto config_json = read_config(fsopt.dir_fd);
-    auto version = config_json.at("version").get<unsigned>();
+    auto version = config_json.at("version").get<int>();
+    fsopt.version = version;
     if (version != 1 && version != 2)
         throw std::runtime_error(fmt::format("Unkown format version {}", version));
 

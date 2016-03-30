@@ -123,17 +123,110 @@ public:
     }
 };
 
+class FileTableIOVersion2 : public FileTableIO
+{
+private:
+    int m_dir_fd;
+    bool m_readonly;
+
+    static void calculate_paths(const securefs::id_type& id,
+                                std::string& dir,
+                                std::string& full_filename,
+                                std::string& meta_filename)
+    {
+        dir = securefs::hexify(id.data(), 1);
+        full_filename = dir + '/' + securefs::hexify(id.data() + 1, id.size() - 1);
+        meta_filename = full_filename + ".meta";
+    }
+
+public:
+    explicit FileTableIOVersion2(int dir_fd, bool readonly) : m_dir_fd(dir_fd), m_readonly(readonly)
+    {
+    }
+
+    std::pair<int, int> open(const id_type& id) override
+    {
+        std::string dir, filename, metaname;
+        calculate_paths(id, dir, filename, metaname);
+
+        int open_flags = m_readonly ? O_RDONLY : O_RDWR;
+        int data_fd = ::openat(m_dir_fd, filename.c_str(), open_flags);
+        if (data_fd < 0)
+            throw OSException(errno);
+        int meta_fd = ::openat(m_dir_fd, metaname.c_str(), open_flags);
+        if (meta_fd < 0)
+        {
+            ::close(data_fd);
+            throw OSException(errno);
+        }
+        return std::make_pair(data_fd, meta_fd);
+    }
+
+    std::pair<int, int> create(const id_type& id) override
+    {
+        std::string dir, filename, metaname;
+        calculate_paths(id, dir, filename, metaname);
+        int data_fd = -1, meta_fd = -1;
+
+        try
+        {
+            ensure_directory(m_dir_fd, dir.c_str(), 0755);
+            data_fd = ::openat(m_dir_fd, filename.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
+            if (data_fd < 0)
+                throw OSException(errno);
+            meta_fd = ::openat(m_dir_fd, metaname.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
+            if (meta_fd < 0)
+                throw OSException(errno);
+
+            return std::make_pair(data_fd, meta_fd);
+        }
+        catch (...)
+        {
+            if (data_fd >= 0)
+            {
+                ::close(data_fd);
+                ::unlinkat(m_dir_fd, filename.c_str(), 0);
+            }
+            if (meta_fd >= 0)
+            {
+                ::close(meta_fd);
+                ::unlinkat(m_dir_fd, metaname.c_str(), 0);
+            }
+            ::unlinkat(m_dir_fd, dir.c_str(), AT_REMOVEDIR);
+            throw;
+        }
+    }
+
+    void unlink(const id_type& id) noexcept override
+    {
+        std::string dir, filename, metaname;
+        calculate_paths(id, dir, filename, metaname);
+        ::unlinkat(m_dir_fd, filename.c_str(), 0);
+        ::unlinkat(m_dir_fd, metaname.c_str(), 0);
+        ::unlinkat(m_dir_fd, dir.c_str(), AT_REMOVEDIR);
+    }
+};
+
 size_t FileTable::id_hash::operator()(const id_type& id) const noexcept
 {
     return from_little_endian<size_t>(id.data() + (id.size() - sizeof(size_t)));
 }
 
-FileTable::FileTable(
+FileTable::FileTable(int version,
     int dir_fd, const key_type& master_key, uint32_t flags, unsigned block_size, unsigned iv_size)
     : m_flags(flags), m_block_size(block_size), m_iv_size(iv_size)
 {
     memcpy(m_master_key.data(), master_key.data(), master_key.size());
-    m_fio.reset(new FileTableIOVersion1(dir_fd, is_readonly()));
+    switch (version) {
+        case 1:
+            m_fio.reset(new FileTableIOVersion1(dir_fd, is_readonly()));
+            break;
+        case 2:
+            m_fio.reset(new FileTableIOVersion2(dir_fd, is_readonly()));
+            break;
+        default:
+            throw InvalidArgumentException("Unknown version");
+    }
 }
 
 FileTable::~FileTable()

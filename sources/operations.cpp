@@ -229,7 +229,7 @@ namespace operations
 {
 
     FileSystem::FileSystem(const FSOptions& opt)
-        : table(opt.dir_fd, opt.master_key, opt.flags, opt.block_size, opt.iv_size)
+        : table(opt.version, opt.dir_fd, opt.master_key, opt.flags, opt.block_size, opt.iv_size)
         , root_id()
         , logger(opt.logger)
     {

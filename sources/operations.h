@@ -15,6 +15,7 @@ namespace operations
 {
     struct FSOptions
     {
+        int version;
         int dir_fd;
         key_type master_key;
         uint32_t flags;
