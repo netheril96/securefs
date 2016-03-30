@@ -14,8 +14,12 @@
 
 namespace securefs
 {
+class FileTableIO;
+
 class FileTable
 {
+    DISABLE_COPY_MOVE(FileTable);
+
 private:
     struct id_hash
     {
@@ -30,8 +34,8 @@ private:
 private:
     key_type m_master_key;
     table_type m_opened, m_closed;
-    std::queue<id_type> closed_ids;
-    int m_dir_fd;
+    std::queue<id_type> m_closed_ids;
+    std::unique_ptr<FileTableIO> m_fio;
     uint32_t m_flags;
     unsigned m_block_size, m_iv_size;
 

@@ -14,29 +14,114 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-namespace
-{
-
-const size_t FIRST_LEVEL = 1, SECOND_LEVEL = 5;
-
-void calculate_paths(const securefs::id_type& id,
-                     std::string& first_level_dir,
-                     std::string& second_level_dir,
-                     std::string& full_filename,
-                     std::string& meta_filename)
-{
-    first_level_dir = securefs::hexify(id.data(), FIRST_LEVEL);
-    second_level_dir
-        = first_level_dir + '/' + securefs::hexify(id.data() + FIRST_LEVEL, SECOND_LEVEL);
-    full_filename
-        = second_level_dir + '/' + securefs::hexify(id.data() + FIRST_LEVEL + SECOND_LEVEL,
-                                                    id.size() - FIRST_LEVEL - SECOND_LEVEL);
-    meta_filename = full_filename + ".meta";
-}
-}
-
 namespace securefs
 {
+
+class FileTableIO
+{
+    DISABLE_COPY_MOVE(FileTableIO);
+
+public:
+    explicit FileTableIO() {}
+    virtual ~FileTableIO() {}
+
+    virtual std::pair<int, int> open(const id_type& id) = 0;
+    virtual std::pair<int, int> create(const id_type& id) = 0;
+    virtual void unlink(const id_type& id) noexcept = 0;
+};
+
+class FileTableIOVersion1 : public FileTableIO
+{
+private:
+    int m_dir_fd;
+    bool m_readonly;
+
+    static const size_t FIRST_LEVEL = 1, SECOND_LEVEL = 5;
+
+    static void calculate_paths(const securefs::id_type& id,
+                                std::string& first_level_dir,
+                                std::string& second_level_dir,
+                                std::string& full_filename,
+                                std::string& meta_filename)
+    {
+        first_level_dir = securefs::hexify(id.data(), FIRST_LEVEL);
+        second_level_dir
+            = first_level_dir + '/' + securefs::hexify(id.data() + FIRST_LEVEL, SECOND_LEVEL);
+        full_filename
+            = second_level_dir + '/' + securefs::hexify(id.data() + FIRST_LEVEL + SECOND_LEVEL,
+                                                        id.size() - FIRST_LEVEL - SECOND_LEVEL);
+        meta_filename = full_filename + ".meta";
+    }
+
+public:
+    explicit FileTableIOVersion1(int dir_fd, bool readonly) : m_dir_fd(dir_fd), m_readonly(readonly)
+    {
+    }
+
+    std::pair<int, int> open(const id_type& id) override
+    {
+        std::string first_level_dir, second_level_dir, filename, metaname;
+        calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
+
+        int open_flags = m_readonly ? O_RDONLY : O_RDWR;
+        int data_fd = ::openat(m_dir_fd, filename.c_str(), open_flags);
+        if (data_fd < 0)
+            throw OSException(errno);
+        int meta_fd = ::openat(m_dir_fd, metaname.c_str(), open_flags);
+        if (meta_fd < 0)
+        {
+            ::close(data_fd);
+            throw OSException(errno);
+        }
+        return std::make_pair(data_fd, meta_fd);
+    }
+
+    std::pair<int, int> create(const id_type& id) override
+    {
+        std::string first_level_dir, second_level_dir, filename, metaname;
+        calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
+        int data_fd = -1, meta_fd = -1;
+        try
+        {
+            ensure_directory(m_dir_fd, first_level_dir.c_str(), 0755);
+            ensure_directory(m_dir_fd, second_level_dir.c_str(), 0755);
+            data_fd = ::openat(m_dir_fd, filename.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
+            if (data_fd < 0)
+                throw OSException(errno);
+            meta_fd = ::openat(m_dir_fd, metaname.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
+            if (meta_fd < 0)
+                throw OSException(errno);
+
+            return std::make_pair(data_fd, meta_fd);
+        }
+        catch (...)
+        {
+            if (data_fd >= 0)
+            {
+                ::close(data_fd);
+                ::unlinkat(m_dir_fd, filename.c_str(), 0);
+            }
+            if (meta_fd >= 0)
+            {
+                ::close(meta_fd);
+                ::unlinkat(m_dir_fd, metaname.c_str(), 0);
+            }
+            ::unlinkat(m_dir_fd, second_level_dir.c_str(), AT_REMOVEDIR);
+            ::unlinkat(m_dir_fd, first_level_dir.c_str(), AT_REMOVEDIR);
+            throw;
+        }
+    }
+
+    void unlink(const id_type& id) noexcept override
+    {
+        std::string first_level_dir, second_level_dir, filename, metaname;
+        calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
+        ::unlinkat(m_dir_fd, filename.c_str(), 0);
+        ::unlinkat(m_dir_fd, metaname.c_str(), 0);
+        ::unlinkat(m_dir_fd, second_level_dir.c_str(), AT_REMOVEDIR);
+        ::unlinkat(m_dir_fd, first_level_dir.c_str(), AT_REMOVEDIR);
+    }
+};
 
 size_t FileTable::id_hash::operator()(const id_type& id) const noexcept
 {
@@ -45,9 +130,10 @@ size_t FileTable::id_hash::operator()(const id_type& id) const noexcept
 
 FileTable::FileTable(
     int dir_fd, const key_type& master_key, uint32_t flags, unsigned block_size, unsigned iv_size)
-    : m_dir_fd(dir_fd), m_flags(flags), m_block_size(block_size), m_iv_size(iv_size)
+    : m_flags(flags), m_block_size(block_size), m_iv_size(iv_size)
 {
     memcpy(m_master_key.data(), master_key.data(), master_key.size());
+    m_fio.reset(new FileTableIOVersion1(dir_fd, is_readonly()));
 }
 
 FileTable::~FileTable()
@@ -80,18 +166,8 @@ FileBase* FileTable::open_as(const id_type& id, int type)
         return fb.get();
     }
 
-    std::string first_level_dir, second_level_dir, filename, metaname;
-    calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
-    int open_flags = is_readonly() ? O_RDONLY : O_RDWR;
-    int data_fd = ::openat(m_dir_fd, filename.c_str(), open_flags);
-    if (data_fd < 0)
-        throw OSException(errno);
-    int meta_fd = ::openat(m_dir_fd, metaname.c_str(), open_flags);
-    if (meta_fd < 0)
-    {
-        ::close(data_fd);
-        throw OSException(errno);
-    }
+    int data_fd, meta_fd;
+    std::tie(data_fd, meta_fd) = m_fio->open(id);
     auto fb = btree_make_file_from_type(
         type, data_fd, meta_fd, m_master_key, id, is_auth_enabled(), m_block_size, m_iv_size);
     m_opened.emplace(id, fb);
@@ -106,42 +182,13 @@ FileBase* FileTable::create_as(const id_type& id, int type)
     if (m_opened.find(id) != m_opened.end() || m_closed.find(id) != m_closed.end())
         throw OSException(EEXIST);
 
-    std::string first_level_dir, second_level_dir, filename, metaname;
-    calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
-    int data_fd = -1, meta_fd = -1;
-    try
-    {
-        ensure_directory(m_dir_fd, first_level_dir.c_str(), 0755);
-        ensure_directory(m_dir_fd, second_level_dir.c_str(), 0755);
-        data_fd = ::openat(m_dir_fd, filename.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
-        if (data_fd < 0)
-            throw OSException(errno);
-        meta_fd = ::openat(m_dir_fd, metaname.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
-        if (meta_fd < 0)
-            throw OSException(errno);
-
-        auto fb = btree_make_file_from_type(
-            type, data_fd, meta_fd, m_master_key, id, is_auth_enabled(), m_block_size, m_iv_size);
-        m_opened.emplace(id, fb);
-        fb->setref(1);
-        return fb.get();
-    }
-    catch (...)
-    {
-        if (data_fd >= 0)
-        {
-            ::close(data_fd);
-            ::unlinkat(m_dir_fd, filename.c_str(), 0);
-        }
-        if (meta_fd >= 0)
-        {
-            ::close(meta_fd);
-            ::unlinkat(m_dir_fd, metaname.c_str(), 0);
-        }
-        ::unlinkat(m_dir_fd, second_level_dir.c_str(), AT_REMOVEDIR);
-        ::unlinkat(m_dir_fd, first_level_dir.c_str(), AT_REMOVEDIR);
-        throw;
-    }
+    int data_fd, meta_fd;
+    std::tie(data_fd, meta_fd) = m_fio->create(id);
+    auto fb = btree_make_file_from_type(
+        type, data_fd, meta_fd, m_master_key, id, is_auth_enabled(), m_block_size, m_iv_size);
+    m_opened.emplace(id, fb);
+    fb->setref(1);
+    return fb.get();
 }
 
 void FileTable::close(FileBase* fb)
@@ -166,7 +213,7 @@ void FileTable::close(FileBase* fb)
         if (m_closed.size() >= MAX_NUM_CLOSED)
             eject();
         m_closed.emplace(*it);
-        closed_ids.push(it->first);
+        m_closed_ids.push(it->first);
         m_opened.erase(it);
     }
 }
@@ -175,10 +222,10 @@ void FileTable::eject()
 {
     for (int i = 0; i < NUM_EJECT; ++i)
     {
-        if (closed_ids.empty())
+        if (m_closed_ids.empty())
             break;
-        m_closed.erase(closed_ids.front());
-        closed_ids.pop();
+        m_closed.erase(m_closed_ids.front());
+        m_closed_ids.pop();
     }
 }
 
@@ -189,12 +236,7 @@ void FileTable::finalize(FileBase* fb)
 
     if (fb->is_unlinked())
     {
-        std::string first_level_dir, second_level_dir, filename, metaname;
-        calculate_paths(fb->get_id(), first_level_dir, second_level_dir, filename, metaname);
-        ::unlinkat(m_dir_fd, filename.c_str(), 0);
-        ::unlinkat(m_dir_fd, metaname.c_str(), 0);
-        ::unlinkat(m_dir_fd, second_level_dir.c_str(), AT_REMOVEDIR);
-        ::unlinkat(m_dir_fd, first_level_dir.c_str(), AT_REMOVEDIR);
+        m_fio->unlink(fb->get_id());
     }
     else
     {

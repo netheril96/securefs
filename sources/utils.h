@@ -36,6 +36,31 @@ inline std::unique_ptr<T[]> make_unique_array(size_t size)
     return std::unique_ptr<T[]>(new T[size]);
 }
 
+template <class T>
+class optional
+{
+private:
+    T value;
+    bool inited;
+
+public:
+    explicit optional() : value(), inited(false) {}
+    explicit optional(T value) : value(std::move(value)), inited(true) {}
+    bool is_inited() const noexcept { return inited; }
+    T& get()
+    {
+        if (!is_inited())
+            throw std::invalid_argument("Optional not inited");
+        return value;
+    }
+    const T& get() const
+    {
+        if (!is_inited())
+            throw std::invalid_argument("Optional not inited");
+        return value;
+    }
+};
+
 template <class T, size_t Size>
 class PODArray
 {
