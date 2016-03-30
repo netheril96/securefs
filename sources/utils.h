@@ -59,6 +59,15 @@ public:
             throw std::invalid_argument("Optional not inited");
         return value;
     }
+
+    optional& operator=(T value)
+    {
+        this->value = std::move(value);
+        inited = true;
+        return *this;
+    }
+
+    void set_init(bool inited) noexcept { this->inited = inited; }
 };
 
 template <class T, size_t Size>

@@ -213,19 +213,24 @@ size_t FileTable::id_hash::operator()(const id_type& id) const noexcept
 }
 
 FileTable::FileTable(int version,
-    int dir_fd, const key_type& master_key, uint32_t flags, unsigned block_size, unsigned iv_size)
+                     int dir_fd,
+                     const key_type& master_key,
+                     uint32_t flags,
+                     unsigned block_size,
+                     unsigned iv_size)
     : m_flags(flags), m_block_size(block_size), m_iv_size(iv_size)
 {
     memcpy(m_master_key.data(), master_key.data(), master_key.size());
-    switch (version) {
-        case 1:
-            m_fio.reset(new FileTableIOVersion1(dir_fd, is_readonly()));
-            break;
-        case 2:
-            m_fio.reset(new FileTableIOVersion2(dir_fd, is_readonly()));
-            break;
-        default:
-            throw InvalidArgumentException("Unknown version");
+    switch (version)
+    {
+    case 1:
+        m_fio.reset(new FileTableIOVersion1(dir_fd, is_readonly()));
+        break;
+    case 2:
+        m_fio.reset(new FileTableIOVersion2(dir_fd, is_readonly()));
+        break;
+    default:
+        throw InvalidArgumentException("Unknown version");
     }
 }
 

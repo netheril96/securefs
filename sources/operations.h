@@ -1,6 +1,7 @@
 #pragma once
 #include "file_table.h"
 #include "logger.h"
+#include "utils.h"
 
 #define FUSE_USE_VERSION 27
 #include <fuse.h>
@@ -15,12 +16,12 @@ namespace operations
 {
     struct FSOptions
     {
-        int version;
-        int dir_fd;
-        key_type master_key;
-        uint32_t flags;
-        unsigned block_size;
-        unsigned iv_size;
+        optional<int> version;
+        optional<int> dir_fd;
+        optional<key_type> master_key;
+        optional<uint32_t> flags;
+        optional<unsigned> block_size;
+        optional<unsigned> iv_size;
         std::shared_ptr<Logger> logger;
     };
 

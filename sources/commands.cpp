@@ -401,7 +401,7 @@ int mount_filesys(int argc, char** argv)
     operations::FSOptions fsopt;
     fsopt.dir_fd = open_and_lock_base_dir(data_dir.getValue());
 
-    auto config_json = read_config(fsopt.dir_fd);
+    auto config_json = read_config(fsopt.dir_fd.get());
     auto version = config_json.at("version").get<int>();
     fsopt.version = version;
     if (version != 1 && version != 2)
@@ -421,8 +421,15 @@ int mount_filesys(int argc, char** argv)
         else
             pass_len = try_read_password(password.data(), password.size());
 
-        if (!parse_config(
-                config_json, password, pass_len, fsopt.master_key, fsopt.block_size, fsopt.iv_size))
+        fsopt.master_key.set_init(true);
+        fsopt.block_size.set_init(true);
+        fsopt.iv_size.set_init(true);
+        if (!parse_config(config_json,
+                          password,
+                          pass_len,
+                          fsopt.master_key.get(),
+                          fsopt.block_size.get(),
+                          fsopt.iv_size.get()))
             throw std::runtime_error("Error: wrong password");
     }
 
@@ -434,7 +441,7 @@ int mount_filesys(int argc, char** argv)
 
     fsopt.flags = 0;
     if (insecure.getValue())
-        fsopt.flags |= FileTable::NO_AUTHENTICATION;
+        fsopt.flags.get() |= FileTable::NO_AUTHENTICATION;
 
     struct fuse_operations opt;
     init_fuse_operations(data_dir.getValue().c_str(), opt, !noxattr.getValue());

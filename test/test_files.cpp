@@ -29,7 +29,7 @@ TEST_CASE("File table")
     {
         int tmp_fd = ::open(dir_template, O_RDONLY);
         REQUIRE(tmp_fd >= 0);
-        FileTable table(tmp_fd, master_key, 0, 3000, 16);
+        FileTable table(2, tmp_fd, master_key, 0, 3000, 16);
         auto dir = dynamic_cast<Directory*>(table.create_as(null_id, FileBase::DIRECTORY));
         dir->add_entry(".", null_id, FileBase::DIRECTORY);
         dir->add_entry("..", null_id, FileBase::DIRECTORY);
@@ -49,7 +49,7 @@ TEST_CASE("File table")
     {
         int tmp_fd = ::open(dir_template, O_RDONLY);
         REQUIRE(tmp_fd >= 0);
-        FileTable table(tmp_fd, master_key, 0, 3000, 16);
+        FileTable table(2, tmp_fd, master_key, 0, 3000, 16);
         auto dir = dynamic_cast<Directory*>(table.open_as(null_id, FileBase::DIRECTORY));
         securefs::PODArray<char, 32> xattr_test_value(0);
         try
