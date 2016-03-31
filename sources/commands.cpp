@@ -361,7 +361,7 @@ int mount_filesys(int argc, char** argv)
         "i", "insecure", "Disable all integrity verification (insecure mode)");
     TCLAP::SwitchArg noxattr("x", "noxattr", "Disable built-in xattr support");
     TCLAP::ValueArg<std::string> log(
-        "", "log", "Path of the log file (may contain sensitive information", false, "", "path");
+        "", "log", "Path of the log file (may contain sensitive information)", false, "", "path");
 
     TCLAP::UnlabeledValueArg<std::string> data_dir(
         "data_dir", "Directory where the data are stored", true, "", "directory");

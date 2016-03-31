@@ -1,4 +1,4 @@
-# securefs 0.2.1-beta
+# securefs 0.3.0-beta
 
 securefs is a filesystem in userspace (FUSE) that transparently encrypts and authenticates data stored. It is particularly designed to secure data stored in the cloud.
 
@@ -17,7 +17,7 @@ Authentication protects the data from being tampered. Even if you don't care whe
 
 ## Build
 
-[![Build Status](https://travis-ci.org/netheril96/securefs.svg)](https://travis-ci.org/netheril96/securefs)
+[![Build Status](https://api.travis-ci.org/netheril96/securefs.svg?branch=master)](https://travis-ci.org/netheril96/securefs)
 
 securefs requires a Unix system, FUSE, and a recent C++ compiler. It is currently only tested on Ubuntu, Fedora and OS X.
 
