@@ -38,7 +38,7 @@ TEST_CASE("File table")
         {
             dir->setxattr(xattr_name, xattr_value.data(), xattr_value.size(), 0);
         }
-        catch (const securefs::OSException& e)
+        catch (const securefs::ExceptionBase& e)
         {
             REQUIRE(e.error_number() == ENOTSUP);
         }
@@ -57,7 +57,7 @@ TEST_CASE("File table")
             dir->getxattr(xattr_name, xattr_test_value.data(), xattr_test_value.size());
             REQUIRE(xattr_value == xattr_test_value);
         }
-        catch (const securefs::OSException& e)
+        catch (const securefs::ExceptionBase& e)
         {
             REQUIRE(e.error_number() == ENOTSUP);
         }

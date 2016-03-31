@@ -133,7 +133,7 @@ public:
             throw OSException(EFAULT);
         int rc = ::fstat(file_descriptor(), st);
         if (rc < 0)
-            throw OSException(errno);
+            throw UnderlyingOSException(errno, "stat");
 
         st->st_uid = get_uid();
         st->st_gid = get_gid();

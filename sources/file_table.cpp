@@ -66,12 +66,12 @@ public:
         int open_flags = m_readonly ? O_RDONLY : O_RDWR;
         int data_fd = ::openat(m_dir_fd, filename.c_str(), open_flags);
         if (data_fd < 0)
-            throw OSException(errno);
+            throw UnderlyingOSException(errno, fmt::format("Error opening {}", filename));
         int meta_fd = ::openat(m_dir_fd, metaname.c_str(), open_flags);
         if (meta_fd < 0)
         {
             ::close(data_fd);
-            throw OSException(errno);
+            throw UnderlyingOSException(errno, fmt::format("Error opening {}", metaname));
         }
         return std::make_pair(data_fd, meta_fd);
     }
@@ -87,10 +87,10 @@ public:
             ensure_directory(m_dir_fd, second_level_dir.c_str(), 0755);
             data_fd = ::openat(m_dir_fd, filename.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
             if (data_fd < 0)
-                throw OSException(errno);
+                throw UnderlyingOSException(errno, fmt::format("Error creating {}", filename));
             meta_fd = ::openat(m_dir_fd, metaname.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
             if (meta_fd < 0)
-                throw OSException(errno);
+                throw UnderlyingOSException(errno, fmt::format("Error creating {}", metaname));
 
             return std::make_pair(data_fd, meta_fd);
         }
@@ -152,12 +152,12 @@ public:
         int open_flags = m_readonly ? O_RDONLY : O_RDWR;
         int data_fd = ::openat(m_dir_fd, filename.c_str(), open_flags);
         if (data_fd < 0)
-            throw OSException(errno);
+            throw UnderlyingOSException(errno, fmt::format("Error opening {}", filename));
         int meta_fd = ::openat(m_dir_fd, metaname.c_str(), open_flags);
         if (meta_fd < 0)
         {
             ::close(data_fd);
-            throw OSException(errno);
+            throw UnderlyingOSException(errno, fmt::format("Error opening {}", metaname));
         }
         return std::make_pair(data_fd, meta_fd);
     }
@@ -173,10 +173,10 @@ public:
             ensure_directory(m_dir_fd, dir.c_str(), 0755);
             data_fd = ::openat(m_dir_fd, filename.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
             if (data_fd < 0)
-                throw OSException(errno);
+                throw UnderlyingOSException(errno, fmt::format("Error creating {}", filename));
             meta_fd = ::openat(m_dir_fd, metaname.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
             if (meta_fd < 0)
-                throw OSException(errno);
+                throw UnderlyingOSException(errno, fmt::format("Error creating {}", metaname));
 
             return std::make_pair(data_fd, meta_fd);
         }
@@ -252,6 +252,7 @@ FileBase* FileTable::open_as(const id_type& id, int type)
         it->second->incref();
         return it->second.get();
     }
+
     it = m_closed.find(id);
     if (it != m_closed.end())
     {
@@ -294,25 +295,20 @@ void FileTable::close(FileBase* fb)
     if (!fb)
         NULL_EXCEPT();
 
-    fb->flush();
-
-    auto it = m_opened.find(fb->get_id());
-    if (it == m_opened.end())
-        throw InvalidArgumentException("File handle not in this table");
-
-    if (fb != it->second.get())
-        throw InvalidArgumentException("File handle not a match with its ID");
+    auto fb_shared = m_opened.at(fb->get_id());
+    if (fb_shared.get() != fb)
+        throw InvalidArgumentException("ID does not match the table");
 
     if (fb->decref() <= 0)
     {
+        m_opened.erase(fb->get_id());
         finalize(fb);
+
         if (fb->is_unlinked() || fb->type() != FileBase::DIRECTORY)
             return;
-        if (m_closed.size() >= MAX_NUM_CLOSED)
-            eject();
-        m_closed.emplace(*it);
-        m_closed_ids.push(it->first);
-        m_opened.erase(it);
+        m_closed.emplace(fb->get_id(), fb_shared);
+        m_closed_ids.push(fb->get_id());
+        gc();
     }
 }
 
