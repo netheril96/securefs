@@ -233,10 +233,17 @@ int create_filesys(int argc, char** argv)
         "integer");
     TCLAP::UnlabeledValueArg<std::string> dir(
         "dir", "Directory where the data are stored", true, "", "directory");
+    TCLAP::ValueArg<int> version("", "ver", "The format version (1 or 2)", false, 2, "integer");
     cmdline.add(&stdinpass);
     cmdline.add(&rounds);
     cmdline.add(&dir);
+    cmdline.add(&version);
     cmdline.parse(argc, argv);
+
+    if (version.getValue() != 1 && version.getValue() != 2)
+    {
+        throw std::runtime_error("Unknown format version");
+    }
 
     int folder_fd = open_and_lock_base_dir(dir.getValue());
 
@@ -254,10 +261,15 @@ int create_filesys(int argc, char** argv)
         else
             pass_len = try_read_password_with_confirmation(password.data(), password.size());
 
-        auto config
-            = generate_config(
-                  2, master_key, salt, password.data(), pass_len, 4096, 12, rounds.getValue())
-                  .dump();
+        auto config = generate_config(version.getValue(),
+                                      master_key,
+                                      salt,
+                                      password.data(),
+                                      pass_len,
+                                      4096,
+                                      12,
+                                      rounds.getValue())
+                          .dump();
 
         config_fd = ::openat(folder_fd, CONFIG_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
         if (config_fd < 0)
@@ -267,12 +279,12 @@ int create_filesys(int argc, char** argv)
         config_stream.write(config.data(), 0, config.size());
 
         operations::FSOptions opt;
-        opt.version = 2;
+        opt.version = version.getValue();
         opt.dir_fd = folder_fd;
         opt.master_key = master_key;
         opt.flags = 0;
         opt.block_size = 4096;
-        opt.iv_size = 12;
+        opt.iv_size = version.getValue() == 1 ? 32 : 12;
         operations::FileSystem fs(opt);
         auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
         root->set_uid(getuid());

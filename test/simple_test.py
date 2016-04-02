@@ -32,20 +32,20 @@ def securefs_unmount(mount_point):
         raise RuntimeError(err)
 
 
-def securefs_create(data_dir, password):
-    p = subprocess.Popen([SECUREFS_BINARY, 'create', '--stdinpass', data_dir, '--rounds', '1'],
+def securefs_create(data_dir, password, version):
+    p = subprocess.Popen([SECUREFS_BINARY, 'create', '--stdinpass', '--ver', str(version), data_dir, '--rounds', '1'],
                          stdin=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate(input=password+'\n')
     if p.returncode:
         raise RuntimeError(err)
 
 
-class SimpleSecureFSTest(unittest.TestCase):
+class SimpleSecureFSTestBase(object):
     def setUp(self):
         self.data_dir = tempfile.mkdtemp(prefix='securefs.data_dir')
         self.mount_point = tempfile.mkdtemp(prefix='securefs.mount_point')
         self.password = 'madoka'
-        securefs_create(self.data_dir, self.password)
+        securefs_create(self.data_dir, self.password, self.version)
         
     def tearDown(self):
         try:
@@ -88,6 +88,18 @@ class SimpleSecureFSTest(unittest.TestCase):
         self.assertEqual(set(os.listdir(os.path.join(self.mount_point, '0', '1'))), dir_names)
         self.unmount()
 
+
+class TestVersion1(unittest.TestCase, SimpleSecureFSTestBase):
+    def setUp(self):
+        self.version = 1
+        SimpleSecureFSTestBase.setUp(self)
+
+
+class TestVersion2(unittest.TestCase, SimpleSecureFSTestBase):
+    def setUp(self):
+        self.version = 2
+        SimpleSecureFSTestBase.setUp(self)
+        
 
 if __name__ == '__main__':
 	unittest.main()
