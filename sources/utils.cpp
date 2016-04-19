@@ -473,4 +473,26 @@ void ensure_directory(int base_fd, const char* dir_name, mode_t mode)
     if (rc < 0 && errno != EEXIST)
         throw securefs::OSException(errno);
 }
+
+std::vector<std::string> split(const char* str, size_t length, char separator)
+{
+    const char* end = str + length;
+    const char* start = str;
+    std::vector<std::string> result;
+
+    while (str < end)
+    {
+        if (*str == separator)
+        {
+            if (start < str)
+                result.emplace_back(start, str);
+            start = str + 1;
+        }
+        ++str;
+    }
+
+    if (start < end)
+        result.emplace_back(start, end);
+    return result;
+}
 }

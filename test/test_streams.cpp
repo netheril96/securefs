@@ -2,13 +2,13 @@
 
 #include "streams.h"
 
-#include <vector>
-#include <random>
 #include <algorithm>
+#include <random>
 #include <string.h>
+#include <vector>
 
-#include <unistd.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 static void test(securefs::StreamBase& stream, unsigned times)
 {

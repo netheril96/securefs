@@ -1,13 +1,13 @@
 #include "catch.hpp"
-#include "files.h"
-#include "file_table.h"
 #include "exceptions.h"
+#include "file_table.h"
+#include "files.h"
 
-#include <string.h>
-#include <errno.h>
-#include <vector>
 #include <algorithm>
+#include <errno.h>
 #include <set>
+#include <string.h>
+#include <vector>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -63,11 +63,10 @@ TEST_CASE("File table")
         }
 
         std::set<std::string> filenames;
-        dir->iterate_over_entries([&](const std::string& fn, const id_type&, int)
-                                  {
-                                      filenames.insert(fn);
-                                      return true;
-                                  });
+        dir->iterate_over_entries([&](const std::string& fn, const id_type&, int) {
+            filenames.insert(fn);
+            return true;
+        });
         REQUIRE((filenames == decltype(filenames){".", "..", "hello"}));
         id_type id;
         int type;

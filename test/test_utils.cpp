@@ -19,6 +19,8 @@ TEST_CASE("Test split")
 {
     REQUIRE((securefs::split("/tmp//abcde/123/", '/')
              == std::vector<std::string>{"tmp", "abcde", "123"}));
+    REQUIRE((securefs::split("bal/dd9", '/') == std::vector<std::string>{"bal", "dd9"}));
+    REQUIRE((securefs::split("cdafadfm", ' ') == std::vector<std::string>{"cdafadfm"}));
     REQUIRE((securefs::split("", 'a')).empty());
     REQUIRE((securefs::split("//////", '/')).empty());
 }

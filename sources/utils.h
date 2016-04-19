@@ -166,31 +166,16 @@ inline typename std::remove_reference<T>::type from_little_endian(const void* in
     return value;
 }
 
-template <class Iterator>
-inline std::vector<std::string> split(Iterator begin, Iterator end, char separator)
-{
-    std::vector<std::string> result;
-    while (true)
-    {
-        auto it = std::find(begin, end, separator);
-        if (begin != it)
-            result.emplace_back(begin, it);
-        if (it == end)
-            break;
-        begin = it;
-        ++begin;
-    }
-    return result;
-}
+std::vector<std::string> split(const char* str, size_t length, char separator);
 
 inline std::vector<std::string> split(const std::string& str, char separator)
 {
-    return split(str.cbegin(), str.cend(), separator);
+    return split(str.data(), str.size(), separator);
 }
 
 inline std::vector<std::string> split(const char* str, char separator)
 {
-    return split(str, str + strlen(str), separator);
+    return split(str, strlen(str), separator);
 }
 
 std::string sane_strerror(int error_number);

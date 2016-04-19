@@ -4,15 +4,15 @@
 #include <catch.hpp>
 #include <format.h>
 
-#include <vector>
-#include <string>
-#include <random>
 #include <algorithm>
-#include <unordered_set>
 #include <limits>
+#include <random>
+#include <string>
+#include <unordered_set>
+#include <vector>
 
-#include <unistd.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 static void test(securefs::BtreeDirectory& dir,
                  securefs::Directory& reference,
@@ -32,16 +32,14 @@ static void test(securefs::BtreeDirectory& dir,
     std::uniform_int_distribution<unsigned> name_dist(0, std::numeric_limits<unsigned>::max());
     std::vector<std::string> filenames, filenames_prime;
 
-    securefs::Directory::callback inserter =
-        [&](const std::string& name, const securefs::id_type&, int) -> bool
-    {
+    securefs::Directory::callback inserter
+        = [&](const std::string& name, const securefs::id_type&, int) -> bool {
         filenames.push_back(name);
         return true;
     };
 
-    securefs::Directory::callback inserter_prime =
-        [&](const std::string& name, const securefs::id_type&, int) -> bool
-    {
+    securefs::Directory::callback inserter_prime
+        = [&](const std::string& name, const securefs::id_type&, int) -> bool {
         filenames_prime.push_back(name);
         return true;
     };
@@ -116,7 +114,8 @@ TEST_CASE("Test BtreeDirectory")
     char tmp4[] = "/tmp/securefs.btree4.XXXXXX";
 
     {
-        securefs::BtreeDirectory dir(::mkstemp(tmp1), ::mkstemp(tmp2), null_key, null_id, true, 8000, 12);
+        securefs::BtreeDirectory dir(
+            ::mkstemp(tmp1), ::mkstemp(tmp2), null_key, null_id, true, 8000, 12);
         securefs::SimpleDirectory ref_dir(
             ::mkstemp(tmp3), ::mkstemp(tmp4), null_key, null_id, true, 8000, 12);
 
