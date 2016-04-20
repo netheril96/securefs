@@ -105,24 +105,32 @@ public:
     uint32_t get_mode() const noexcept { return m_flags[0]; }
     void set_mode(uint32_t value) noexcept
     {
+        if (get_mode() == value)
+            return;
         m_flags[0] = value;
         m_dirty = true;
     }
     uint32_t get_uid() const noexcept { return m_flags[1]; }
     void set_uid(uint32_t value) noexcept
     {
+        if (get_uid() == value)
+            return;
         m_flags[1] = value;
         m_dirty = true;
     }
     uint32_t get_gid() const noexcept { return m_flags[2]; }
     void set_gid(uint32_t value) noexcept
     {
+        if (get_gid() == value)
+            return;
         m_flags[2] = value;
         m_dirty = true;
     }
     uint32_t get_nlink() const noexcept { return m_flags[3]; }
     void set_nlink(uint32_t value) noexcept
     {
+        if (get_nlink() == value)
+            return;
         m_flags[3] = value;
         m_dirty = true;
     }
