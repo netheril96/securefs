@@ -14,7 +14,7 @@ namespace securefs
 class FileBase
 {
 private:
-    std::atomic<ptrdiff_t> m_refcount;
+    ptrdiff_t m_refcount;
     std::shared_ptr<HeaderBase> m_header;
     key_type m_key;
     id_type m_id;
@@ -27,7 +27,6 @@ private:
 
 protected:
     std::shared_ptr<StreamBase> m_stream;
-    bool m_removed;
 
     uint32_t get_root_page() const noexcept { return m_flags[4]; }
     void set_root_page(uint32_t value) noexcept
@@ -138,10 +137,15 @@ public:
     void setref(ptrdiff_t value) noexcept { m_refcount = value; }
 
     virtual int type() const noexcept { return FileBase::BASE; }
-    int get_stat_type();
+    int get_real_type();
 
-    bool is_unlinked() const noexcept { return m_removed; }
-    virtual void unlink() { throw NotImplementedException(__PRETTY_FUNCTION__); }
+    bool is_unlinked() const noexcept { return get_nlink() <= 0; }
+    void unlink()
+    {
+        auto nlink = get_nlink();
+        --nlink;
+        set_nlink(nlink);
+    }
 
     void flush();
     void stat(struct stat* st);
@@ -172,14 +176,6 @@ public:
     }
     length_type size() const noexcept { return m_stream->size(); }
     void truncate(length_type new_size) { return m_stream->resize(new_size); }
-    void unlink() override
-    {
-        auto nlink = get_nlink();
-        --nlink;
-        set_nlink(nlink);
-        if (nlink == 0)
-            m_removed = true;
-    }
 };
 
 class Symlink : public FileBase
@@ -198,7 +194,6 @@ public:
         return result;
     }
     void set(const std::string& path) { m_stream->write(path.data(), 0, path.size()); }
-    void unlink() override { m_removed = true; }
 };
 
 class Directory : public FileBase
@@ -230,13 +225,6 @@ public:
     virtual void iterate_over_entries(callback cb) = 0;
 
     virtual bool empty() = 0;
-    void unlink() override
-    {
-        if (empty())
-            m_removed = true;
-        else
-            throw OSException(ENOTEMPTY);
-    }
 };
 
 class SimpleDirectory : public Directory

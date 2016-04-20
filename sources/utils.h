@@ -9,6 +9,7 @@
 #include <string.h>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -319,4 +320,7 @@ struct id_hash
 std::unordered_set<id_type, id_hash> find_all_ids(const std::string& basedir);
 
 std::string get_user_input_until_enter();
+
+void respond_to_user_action(
+    const std::unordered_map<std::string, std::function<void(void)>>& actionMap);
 }

@@ -583,19 +583,45 @@ std::string get_user_input_until_enter()
     std::string result;
     while (true)
     {
-        unsigned char ch = getchar();
+        int ch = getchar();
+        if (ch == EOF)
+        {
+            return result;
+        }
         if (ch == '\r' || ch == '\n')
         {
-            while (!result.empty() && isspace(result.back()))
+            while (!result.empty() && isspace(static_cast<unsigned char>(result.back())))
                 result.pop_back();
             result.push_back('\n');
             return result;
         }
         else if (!result.empty() || !isspace(ch))
         {
-            result.push_back(ch);
+            result.push_back(static_cast<unsigned char>(ch));
         }
     }
     return result;
+}
+
+void respond_to_user_action(
+    const std::unordered_map<std::string, std::function<void(void)>>& actionMap)
+{
+    while (true)
+    {
+        std::string cmd = get_user_input_until_enter();
+        if (cmd.empty() || cmd.back() != '\n')
+        {
+            // EOF
+            return;
+        }
+        auto it = actionMap.find(cmd);
+        if (it == actionMap.end())
+        {
+            puts("Invalid command");
+            continue;
+        }
+        it->second();
+        break;
+    }
 }
 }

@@ -28,7 +28,6 @@ FileBase::FileBase(int data_fd,
     , m_dirty(false)
     , m_check(check)
     , m_stream()
-    , m_removed(false)
 {
     auto data_stream = std::make_shared<POSIXFileStream>(data_fd);
     auto meta_stream = std::make_shared<POSIXFileStream>(meta_fd);
@@ -80,12 +79,7 @@ void FileBase::read_header()
     }
 }
 
-int FileBase::get_stat_type()
-{
-    struct stat st;
-    this->stat(&st);
-    return type_for_mode(st.st_mode & S_IFMT);
-}
+int FileBase::get_real_type() { return type_for_mode(get_mode() & S_IFMT); }
 
 void FileBase::stat(struct stat* st)
 {

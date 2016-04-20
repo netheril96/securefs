@@ -14,6 +14,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string.h>
+#include <strings.h>
 #include <typeinfo>
 #include <typeinfo>
 #include <unordered_map>
@@ -55,16 +56,57 @@ void lock_base_directory(int dir_fd)
     }
 }
 
-static const int INVALID = 0, YES = 1, NO = 2;
-int get_yes()
+enum class NLinkFixPhase
 {
-    auto cmd = get_user_input_until_enter();
-    if (strcmp(cmd.c_str(), "\n") == 0 || strcasecmp(cmd.c_str(), "y\n") == 0
-        || strcasecmp(cmd.c_str(), "yes\n") == 0)
-        return YES;
-    if (strcasecmp(cmd.c_str(), "n\n") == 0 || strcasecmp(cmd.c_str(), "no\n") == 0)
-        return NO;
-    return INVALID;
+    CollectingNLink,
+    FixingNLink
+};
+
+void fix_hardlink_count(operations::FileSystem* fs,
+                        Directory* dir,
+                        std::unordered_map<id_type, int, id_hash>* nlink_map,
+                        NLinkFixPhase phase)
+{
+    std::vector<std::pair<id_type, int>> listings;
+    dir->iterate_over_entries([&listings](const std::string&, const id_type& id, int type) {
+        listings.emplace_back(id, type);
+        return true;
+    });
+
+    for (auto&& entry : listings)
+    {
+        id_type& id = std::get<0>(entry);
+        int type = std::get<1>(entry);
+
+        AutoClosedFileBase base(nullptr, nullptr);
+        try
+        {
+            base = open_as(fs->table, id, FileBase::BASE);
+        }
+        catch (...)
+        {
+            continue;
+        }
+        switch (phase)
+        {
+        case NLinkFixPhase::FixingNLink:
+            base->set_nlink(nlink_map->at(id));
+            break;
+
+        case NLinkFixPhase::CollectingNLink:
+            nlink_map->operator[](id)++;
+            break;
+
+        default:
+            UNREACHABLE();
+        }
+        base.reset(nullptr);
+        if (type == FileBase::DIRECTORY)
+        {
+            fix_hardlink_count(
+                fs, open_as(fs->table, id, type).get_as<Directory>(), nlink_map, phase);
+        }
+    }
 }
 
 void fix_helper(operations::FileSystem* fs,
@@ -92,13 +134,21 @@ void fix_helper(operations::FileSystem* fs,
         catch (const std::exception& e)
         {
             fprintf(stderr,
-                    "Encounter exception when opening %s: %s\n\n",
+                    "Encounter exception when opening %s: %s\nDo you want to remove the entry? "
+                    "(Yes/No, default: no)\n",
                     (dir_name + '/' + name).c_str(),
                     e.what());
+            auto remove = [&]() { dir->remove_entry(name, id, type); };
+            auto ignore = []() {};
+            respond_to_user_action({{"\n", ignore},
+                                    {"y\n", remove},
+                                    {"yes\n", remove},
+                                    {"n\n", ignore},
+                                    {"no\n", ignore}});
             continue;
         }
 
-        int real_type = base->get_stat_type();
+        int real_type = base->get_real_type();
         if (type != real_type)
         {
             printf("Mismatch type for %s (inode has type %s, directory entry has type %s). Do you "
@@ -108,21 +158,18 @@ void fix_helper(operations::FileSystem* fs,
                    FileBase::type_name(type));
             fflush(stdout);
 
-            while (true)
-            {
-                int yes = get_yes();
-                if (yes == INVALID)
-                {
-                    puts("Invalid command");
-                    continue;
-                }
-                if (yes == YES)
-                {
-                    dir->remove_entry(name, id, type);
-                    dir->add_entry(name, id, real_type);
-                }
-                break;
-            }
+            auto fix_type = [&]() {
+                dir->remove_entry(name, id, type);
+                dir->add_entry(name, id, real_type);
+            };
+
+            auto ignore = []() {};
+
+            respond_to_user_action({{"\n", fix_type},
+                                    {"y\n", fix_type},
+                                    {"yes\n", fix_type},
+                                    {"n\n", ignore},
+                                    {"no\n", ignore}});
         }
         all_ids->insert(id);
         base.reset(nullptr);
@@ -141,7 +188,7 @@ void fix(const char* basedir, operations::FileSystem* fs)
 {
     std::unordered_set<id_type, id_hash> all_ids{fs->root_id};
     AutoClosedFileBase root_dir = open_as(fs->table, fs->root_id, FileBase::DIRECTORY);
-    fix_helper(fs, root_dir.get_as<Directory>(), "/", &all_ids);
+    fix_helper(fs, root_dir.get_as<Directory>(), "", &all_ids);
     auto all_underlying_ids = find_all_ids(basedir);
 
     for (const id_type& id : all_underlying_ids)
@@ -149,29 +196,41 @@ void fix(const char* basedir, operations::FileSystem* fs)
         if (all_ids.find(id) == all_ids.end())
         {
             printf("%s is not referenced anywhere in the filesystem, do you want to recover it? "
-                   "(Yes/No default: yes)\n",
+                   "([r]ecover/[d]elete/[i]gnore default: recover)\n",
                    hexify(id).c_str());
             fflush(stdout);
-            while (true)
-            {
-                int yes = get_yes();
-                if (yes == INVALID)
-                {
-                    puts("Invalid command");
-                    continue;
-                }
-                if (yes == YES)
-                {
-                    auto base = open_as(fs->table, id, FileBase::BASE);
-                    struct stat st;
-                    base->stat(&st);
-                    root_dir.get_as<Directory>()->add_entry(
-                        hexify(id), id, FileBase::type_for_mode(st.st_mode));
-                }
-                break;
-            }
+
+            auto recover = [&]() {
+                auto base = open_as(fs->table, id, FileBase::BASE);
+                root_dir.get_as<Directory>()->add_entry(hexify(id), id, base->get_real_type());
+            };
+
+            auto remove = [&]() {
+                FileBase* base = fs->table.open_as(id, FileBase::BASE);
+                int real_type = base->get_real_type();
+                fs->table.close(base);
+                auto real_file_handle = open_as(fs->table, id, real_type);
+                real_file_handle->unlink();
+            };
+
+            auto ignore = []() {};
+
+            respond_to_user_action({{"\n", recover},
+                                    {"r\n", recover},
+                                    {"recover\n", recover},
+                                    {"i\n", ignore},
+                                    {"ignore\n", ignore},
+                                    {"d\n", remove},
+                                    {"delete\n", remove}});
         }
     }
+
+    std::unordered_map<id_type, int, id_hash> nlink_map;
+    puts("Fixing hardlink count ...");
+    fix_hardlink_count(
+        fs, root_dir.get_as<Directory>(), &nlink_map, NLinkFixPhase::CollectingNLink);
+    fix_hardlink_count(fs, root_dir.get_as<Directory>(), &nlink_map, NLinkFixPhase::FixingNLink);
+    puts("Fix complete");
 }
 
 nlohmann::json generate_config(int version,
