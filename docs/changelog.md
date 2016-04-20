@@ -1,5 +1,8 @@
 # ChangeLog
 
+## 0.3.1
+* `fix` verb to recover from corruption of directory structure and data loss.
+
 ## 0.3.0
 New format
 

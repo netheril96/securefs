@@ -1,4 +1,4 @@
-# securefs 0.3.0-beta
+# securefs 0.3.1-beta
 
 `securefs` is a filesystem in userspace (FUSE) that transparently encrypts and authenticates data stored. It is particularly designed to secure data stored in the cloud.
 
