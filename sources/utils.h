@@ -317,4 +317,6 @@ struct id_hash
 };
 
 std::unordered_set<id_type, id_hash> find_all_ids(const std::string& basedir);
+
+std::string get_user_input_until_enter();
 }

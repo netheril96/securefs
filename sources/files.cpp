@@ -80,6 +80,34 @@ void FileBase::read_header()
     }
 }
 
+int FileBase::get_stat_type()
+{
+    struct stat st;
+    this->stat(&st);
+    return type_for_mode(st.st_mode & S_IFMT);
+}
+
+void FileBase::stat(struct stat* st)
+{
+    if (!st)
+        throw OSException(EFAULT);
+    int rc = ::fstat(file_descriptor(), st);
+    if (rc < 0)
+        throw UnderlyingOSException(errno, "stat");
+
+    st->st_uid = get_uid();
+    st->st_gid = get_gid();
+    st->st_nlink = get_nlink();
+    st->st_mode = get_mode();
+    st->st_size = m_stream->size();
+    auto blk_sz = m_stream->optimal_block_size();
+    if (blk_sz > 1 && blk_sz < std::numeric_limits<decltype(st->st_blksize)>::max())
+    {
+        st->st_blksize = static_cast<decltype(st->st_blksize)>(blk_sz);
+        st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
+    }
+}
+
 FileBase::~FileBase() {}
 
 void FileBase::flush()

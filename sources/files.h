@@ -55,7 +55,7 @@ protected:
 
 public:
     static const byte REGULAR_FILE = S_IFREG >> 12, SYMLINK = S_IFLNK >> 12,
-                      DIRECTORY = S_IFDIR >> 12;
+                      DIRECTORY = S_IFDIR >> 12, BASE = 255;
 
     static_assert(REGULAR_FILE != SYMLINK && SYMLINK != DIRECTORY,
                   "The value assigned are indistinguishable");
@@ -75,6 +75,21 @@ public:
     }
 
     static mode_t mode_for_type(int type) noexcept { return type << 12; }
+    static int type_for_mode(mode_t mode) noexcept { return mode >> 12; }
+
+    static const char* type_name(int type) noexcept
+    {
+        switch (type)
+        {
+        case REGULAR_FILE:
+            return "regular_file";
+        case SYMLINK:
+            return "symbolic_link";
+        case DIRECTORY:
+            return "directory";
+        }
+        return "unknown";
+    }
 
 public:
     explicit FileBase(int data_fd,
@@ -122,31 +137,15 @@ public:
     ptrdiff_t getref() const noexcept { return m_refcount; }
     void setref(ptrdiff_t value) noexcept { m_refcount = value; }
 
-    virtual int type() const noexcept = 0;
+    virtual int type() const noexcept { return FileBase::BASE; }
+    int get_stat_type();
+
     bool is_unlinked() const noexcept { return m_removed; }
-    virtual void unlink() = 0;
+    virtual void unlink() { throw NotImplementedException(__PRETTY_FUNCTION__); }
 
     void flush();
-    void stat(struct stat* st)
-    {
-        if (!st)
-            throw OSException(EFAULT);
-        int rc = ::fstat(file_descriptor(), st);
-        if (rc < 0)
-            throw UnderlyingOSException(errno, "stat");
+    void stat(struct stat* st);
 
-        st->st_uid = get_uid();
-        st->st_gid = get_gid();
-        st->st_nlink = get_nlink();
-        st->st_mode = get_mode();
-        st->st_size = m_stream->size();
-        auto blk_sz = m_stream->optimal_block_size();
-        if (blk_sz > 1 && blk_sz < std::numeric_limits<decltype(st->st_blksize)>::max())
-        {
-            st->st_blksize = static_cast<decltype(st->st_blksize)>(blk_sz);
-            st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
-        }
-    }
     int file_descriptor() const { return m_data_fd; }
     ssize_t listxattr(char* buffer, size_t size);
 

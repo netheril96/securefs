@@ -191,6 +191,8 @@ inline std::shared_ptr<FileBase> btree_make_file_from_type(int type, Args&&... a
         return std::make_shared<Symlink>(std::forward<Args>(args)...);
     case FileBase::DIRECTORY:
         return std::make_shared<BtreeDirectory>(std::forward<Args>(args)...);
+    case FileBase::BASE:
+        return std::make_shared<FileBase>(std::forward<Args>(args)...);
     }
     throw InvalidArgumentException("Unrecognized file type");
 }

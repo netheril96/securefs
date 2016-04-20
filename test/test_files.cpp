@@ -22,7 +22,7 @@ TEST_CASE("File table")
     id_type null_id, file_id;
     memset(master_key.data(), 0xFF, master_key.size());
     memset(null_id.data(), 0, null_id.size());
-    memset(file_id.data(), 0xEE, file_id.size());
+    securefs::generate_random(file_id.data(), file_id.size());
     const char* xattr_name = "com.apple.FinderInfo...";
     const securefs::PODArray<char, 32> xattr_value(0x11);
 
@@ -50,8 +50,8 @@ TEST_CASE("File table")
     {
         auto all_ids = find_all_ids(dir_template);
         REQUIRE(all_ids.size() == 2);
-	REQUIRE(all_ids.find(null_id) != all_ids.end());
-	REQUIRE(all_ids.find(file_id) != all_ids.end());
+        REQUIRE(all_ids.find(null_id) != all_ids.end());
+        REQUIRE(all_ids.find(file_id) != all_ids.end());
     }
 
     {
@@ -69,7 +69,6 @@ TEST_CASE("File table")
         {
             REQUIRE(e.error_number() == ENOTSUP);
         }
-
 
         std::set<std::string> filenames;
         dir->iterate_over_entries([&](const std::string& fn, const id_type&, int) {

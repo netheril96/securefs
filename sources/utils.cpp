@@ -577,4 +577,25 @@ bool ends_with(const char* str, size_t size, const char* suffix, size_t suffix_l
 {
     return size >= suffix_len && memcmp(str + size - suffix_len, suffix, suffix_len) == 0;
 }
+
+std::string get_user_input_until_enter()
+{
+    std::string result;
+    while (true)
+    {
+        unsigned char ch = getchar();
+        if (ch == '\r' || ch == '\n')
+        {
+            while (!result.empty() && isspace(result.back()))
+                result.pop_back();
+            result.push_back('\n');
+            return result;
+        }
+        else if (!result.empty() || !isspace(ch))
+        {
+            result.push_back(ch);
+        }
+    }
+    return result;
+}
 }
