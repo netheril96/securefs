@@ -2,17 +2,17 @@
 
 #include "streams.h"
 
-#include <vector>
-#include <random>
 #include <algorithm>
+#include <random>
 #include <string.h>
+#include <vector>
 
-#include <unistd.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 static void test(securefs::StreamBase& stream, unsigned times)
 {
-    char temp_template[] = "/tmp/test_streams.XXXXXX";
+    char temp_template[] = "/tmp/securefs.stream.XXXXXX";
     securefs::POSIXFileStream posix_stream(mkstemp(temp_template));
     posix_stream.resize(0);
     stream.resize(0);
@@ -119,7 +119,7 @@ void dump_contents(const std::vector<byte>& bytes, const char* filename, size_t 
 
 TEST_CASE("Test streams")
 {
-    char temp_template[] = "/tmp/C6AD402F-B5FD-430A-BB2E-90006B22A1B8.XXXXXX";
+    char temp_template[] = "/tmp/securefs.stream.XXXXXX";
 
     securefs::key_type key;
     securefs::id_type id;
@@ -146,7 +146,7 @@ TEST_CASE("Test streams")
         test(*salsa20stream, 2000);
     }
     {
-        char temp_template[] = "/tmp/42127B9D-4F88-4489-956C-05BE32340B77.XXXXXX";
+        char temp_template[] = "/tmp/securefs.stream.XXXXXX";
         auto meta_posix_stream
             = std::make_shared<securefs::POSIXFileStream>(mkstemp(temp_template));
         auto aes_gcm_stream = securefs::make_cryptstream_aes_gcm(

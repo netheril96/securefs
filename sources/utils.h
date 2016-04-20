@@ -9,6 +9,8 @@
 #include <string.h>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <fcntl.h>
@@ -166,31 +168,22 @@ inline typename std::remove_reference<T>::type from_little_endian(const void* in
     return value;
 }
 
-template <class Iterator>
-inline std::vector<std::string> split(Iterator begin, Iterator end, char separator)
+bool ends_with(const char* str, size_t size, const char* suffix, size_t suffix_len);
+inline bool ends_with(const std::string& str, const std::string& suffix)
 {
-    std::vector<std::string> result;
-    while (true)
-    {
-        auto it = std::find(begin, end, separator);
-        if (begin != it)
-            result.emplace_back(begin, it);
-        if (it == end)
-            break;
-        begin = it;
-        ++begin;
-    }
-    return result;
+    return ends_with(str.data(), str.size(), suffix.data(), suffix.size());
 }
+
+std::vector<std::string> split(const char* str, size_t length, char separator);
 
 inline std::vector<std::string> split(const std::string& str, char separator)
 {
-    return split(str.cbegin(), str.cend(), separator);
+    return split(str.data(), str.size(), separator);
 }
 
 inline std::vector<std::string> split(const char* str, char separator)
 {
-    return split(str, str + strlen(str), separator);
+    return split(str, strlen(str), separator);
 }
 
 std::string sane_strerror(int error_number);
@@ -315,4 +308,19 @@ size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size
 size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length);
 
 std::string format_current_time();
+
+struct id_hash
+{
+    size_t operator()(const id_type& id) const noexcept
+    {
+        return from_little_endian<size_t>(id.data() + (id.size() - sizeof(size_t)));
+    }
+};
+
+std::unordered_set<id_type, id_hash> find_all_ids(const std::string& basedir);
+
+std::string get_user_input_until_enter();
+
+void respond_to_user_action(
+    const std::unordered_map<std::string, std::function<void(void)>>& actionMap);
 }

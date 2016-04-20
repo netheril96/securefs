@@ -13,9 +13,11 @@
 #include <time.h>
 #include <vector>
 
+#include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/types.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -472,5 +474,154 @@ void ensure_directory(int base_fd, const char* dir_name, mode_t mode)
     int rc = ::mkdirat(base_fd, dir_name, mode);
     if (rc < 0 && errno != EEXIST)
         throw securefs::OSException(errno);
+}
+
+std::vector<std::string> split(const char* str, size_t length, char separator)
+{
+    const char* end = str + length;
+    const char* start = str;
+    std::vector<std::string> result;
+
+    while (str < end)
+    {
+        if (*str == separator)
+        {
+            if (start < str)
+                result.emplace_back(start, str);
+            start = str + 1;
+        }
+        ++str;
+    }
+
+    if (start < end)
+        result.emplace_back(start, end);
+    return result;
+}
+
+static void find_ids_helper(const std::string& current_dir,
+                            std::unordered_set<id_type, id_hash>& result)
+{
+    struct DirGuard
+    {
+        DIR* dp = nullptr;
+
+        DirGuard() {}
+        ~DirGuard() { ::closedir(dp); }
+    };
+
+    DIR* dp = ::opendir(current_dir.c_str());
+    if (!dp)
+    {
+        if (errno == ENOTDIR)
+            return;
+        throw UnderlyingOSException(errno, fmt::format("Opening dir {}", current_dir));
+    }
+
+    DirGuard guard;
+    guard.dp = dp;
+    id_type id;
+    std::string hex(id_type::size() * 2, 0);
+
+    while (true)
+    {
+        errno = 0;
+        dirent* dr = ::readdir(dp);
+        if (!dr && errno)
+            throw UnderlyingOSException(errno, fmt::format("Reading dir {}", current_dir));
+        if (!dr)
+            break;
+        std::string name(dr->d_name);
+        if (name == "." || name == "..")
+            continue;
+        if (dr->d_type == DT_REG && ends_with(name.data(), name.size(), ".meta", strlen(".meta")))
+        {
+            std::string total_name
+                = current_dir + '/' + name.substr(0, name.size() - strlen(".meta"));
+            hex.assign(hex.size(), 0);
+            ptrdiff_t i = hex.size() - 1, j = total_name.size() - 1;
+            while (i >= 0 && j >= 0)
+            {
+                char namechar = total_name[j];
+                if ((namechar >= '0' && namechar <= '9') || (namechar >= 'a' && namechar <= 'f'))
+                {
+                    hex[i] = namechar;
+                    --i;
+                }
+                else if (namechar != '/')
+                {
+                    throw std::runtime_error(
+                        fmt::format("File \"{}\" has extension .meta, but not a valid securefs "
+                                    "meta filename. Please cleanup the underlying storage first.",
+                                    total_name));
+                }
+                --j;
+            }
+            parse_hex(hex, id.data(), id.size());
+            result.insert(id);
+        }
+        else if (dr->d_type == DT_DIR)
+        {
+            find_ids_helper(current_dir + '/' + name, result);
+        }
+    }
+}
+
+std::unordered_set<id_type, id_hash> find_all_ids(const std::string& basedir)
+{
+    std::unordered_set<id_type, id_hash> result;
+    find_ids_helper(basedir, result);
+    return result;
+}
+
+bool ends_with(const char* str, size_t size, const char* suffix, size_t suffix_len)
+{
+    return size >= suffix_len && memcmp(str + size - suffix_len, suffix, suffix_len) == 0;
+}
+
+std::string get_user_input_until_enter()
+{
+    std::string result;
+    while (true)
+    {
+        int ch = getchar();
+        if (ch == EOF)
+        {
+            return result;
+        }
+        if (ch == '\r' || ch == '\n')
+        {
+            while (!result.empty() && isspace(static_cast<unsigned char>(result.back())))
+                result.pop_back();
+            result.push_back('\n');
+            return result;
+        }
+        else if (!result.empty() || !isspace(ch))
+        {
+            result.push_back(static_cast<unsigned char>(ch));
+        }
+    }
+    return result;
+}
+
+void respond_to_user_action(
+    const std::unordered_map<std::string, std::function<void(void)>>& actionMap)
+{
+    while (true)
+    {
+        std::string cmd = get_user_input_until_enter();
+        if (cmd.empty() || cmd.back() != '\n')
+        {
+            // EOF
+            return;
+        }
+        auto it = actionMap.find(cmd);
+        if (it == actionMap.end())
+        {
+            puts("Invalid command");
+            continue;
+        }
+        it->second();
+        break;
+    }
 }
 }

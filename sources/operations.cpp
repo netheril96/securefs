@@ -24,73 +24,7 @@ namespace internal
         return static_cast<FileSystem*>(ctx->private_data);
     }
 
-    class GenericFileGuard
-    {
-    private:
-        FileTable* m_ft;
-        FileBase* m_fb;
-
-    public:
-        explicit GenericFileGuard(FileTable* ft, FileBase* fb) : m_ft(ft), m_fb(fb) {}
-
-        GenericFileGuard(const GenericFileGuard&) = delete;
-        GenericFileGuard& operator=(const GenericFileGuard&) = delete;
-
-        GenericFileGuard(GenericFileGuard&& other) noexcept : m_ft(other.m_ft), m_fb(other.m_fb)
-        {
-            other.m_ft = nullptr;
-            other.m_fb = nullptr;
-        }
-
-        GenericFileGuard& operator=(GenericFileGuard&& other) noexcept
-        {
-            if (this == &other)
-                return *this;
-            swap(other);
-            return *this;
-        }
-
-        ~GenericFileGuard()
-        {
-            try
-            {
-                reset(nullptr);
-            }
-            catch (...)
-            {
-            }
-        }
-
-        FileBase* get() noexcept { return m_fb; }
-        template <class T>
-        T* get_as() noexcept
-        {
-            return static_cast<T*>(m_fb);
-        }
-        FileBase& operator*() noexcept { return *m_fb; }
-        FileBase* operator->() noexcept { return m_fb; }
-        FileBase* release() noexcept
-        {
-            auto rt = m_fb;
-            m_fb = nullptr;
-            return rt;
-        }
-        void reset(FileBase* fb)
-        {
-            if (m_ft && m_fb)
-            {
-                m_ft->close(m_fb);
-            }
-            m_fb = fb;
-        }
-        void swap(GenericFileGuard& other) noexcept
-        {
-            std::swap(m_ft, other.m_ft);
-            std::swap(m_fb, other.m_fb);
-        }
-    };
-
-    typedef GenericFileGuard FileGuard;
+    typedef AutoClosedFileBase FileGuard;
 
     FileGuard open_base_dir(FileSystem* fs, const std::string& path, std::string& last_component)
     {

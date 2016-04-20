@@ -28,7 +28,6 @@ FileBase::FileBase(int data_fd,
     , m_dirty(false)
     , m_check(check)
     , m_stream()
-    , m_removed(false)
 {
     auto data_stream = std::make_shared<POSIXFileStream>(data_fd);
     auto meta_stream = std::make_shared<POSIXFileStream>(meta_fd);
@@ -77,6 +76,29 @@ void FileBase::read_header()
             f = from_little_endian<decltype(f)>(ptr);
             ptr += sizeof(f);
         }
+    }
+}
+
+int FileBase::get_real_type() { return type_for_mode(get_mode() & S_IFMT); }
+
+void FileBase::stat(struct stat* st)
+{
+    if (!st)
+        throw OSException(EFAULT);
+    int rc = ::fstat(file_descriptor(), st);
+    if (rc < 0)
+        throw UnderlyingOSException(errno, "stat");
+
+    st->st_uid = get_uid();
+    st->st_gid = get_gid();
+    st->st_nlink = get_nlink();
+    st->st_mode = get_mode();
+    st->st_size = m_stream->size();
+    auto blk_sz = m_stream->optimal_block_size();
+    if (blk_sz > 1 && blk_sz < std::numeric_limits<decltype(st->st_blksize)>::max())
+    {
+        st->st_blksize = static_cast<decltype(st->st_blksize)>(blk_sz);
+        st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
     }
 }
 
