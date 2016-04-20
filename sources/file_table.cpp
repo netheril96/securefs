@@ -207,11 +207,6 @@ public:
     }
 };
 
-size_t FileTable::id_hash::operator()(const id_type& id) const noexcept
-{
-    return from_little_endian<size_t>(id.data() + (id.size() - sizeof(size_t)));
-}
-
 FileTable::FileTable(int version,
                      int dir_fd,
                      const key_type& master_key,

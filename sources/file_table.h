@@ -16,16 +16,13 @@ namespace securefs
 {
 class FileTableIO;
 
+class AutoClosedFileBase;
+
 class FileTable
 {
     DISABLE_COPY_MOVE(FileTable);
 
 private:
-    struct id_hash
-    {
-        size_t operator()(const id_type&) const noexcept;
-    };
-
     typedef std::unordered_map<id_type, std::shared_ptr<FileBase>, id_hash> table_type;
 
 private:
@@ -61,4 +58,80 @@ public:
     bool is_auth_enabled() const noexcept { return !(m_flags & NO_AUTHENTICATION); }
     void gc();
 };
+
+class AutoClosedFileBase
+{
+private:
+    FileTable* m_ft;
+    FileBase* m_fb;
+
+public:
+    explicit AutoClosedFileBase(FileTable* ft, FileBase* fb) : m_ft(ft), m_fb(fb) {}
+
+    AutoClosedFileBase(const AutoClosedFileBase&) = delete;
+    AutoClosedFileBase& operator=(const AutoClosedFileBase&) = delete;
+
+    AutoClosedFileBase(AutoClosedFileBase&& other) noexcept : m_ft(other.m_ft), m_fb(other.m_fb)
+    {
+        other.m_ft = nullptr;
+        other.m_fb = nullptr;
+    }
+
+    AutoClosedFileBase& operator=(AutoClosedFileBase&& other) noexcept
+    {
+        if (this == &other)
+            return *this;
+        swap(other);
+        return *this;
+    }
+
+    ~AutoClosedFileBase()
+    {
+        try
+        {
+            reset(nullptr);
+        }
+        catch (...)
+        {
+        }
+    }
+
+    FileBase* get() noexcept { return m_fb; }
+    template <class T>
+    T* get_as() noexcept
+    {
+        return static_cast<T*>(m_fb);
+    }
+    FileBase& operator*() noexcept { return *m_fb; }
+    FileBase* operator->() noexcept { return m_fb; }
+    FileBase* release() noexcept
+    {
+        auto rt = m_fb;
+        m_fb = nullptr;
+        return rt;
+    }
+    void reset(FileBase* fb)
+    {
+        if (m_ft && m_fb)
+        {
+            m_ft->close(m_fb);
+        }
+        m_fb = fb;
+    }
+    void swap(AutoClosedFileBase& other) noexcept
+    {
+        std::swap(m_ft, other.m_ft);
+        std::swap(m_fb, other.m_fb);
+    }
+};
+
+inline AutoClosedFileBase open_as(FileTable& table, const id_type& id, int type)
+{
+    return AutoClosedFileBase(&table, table.open_as(id, type));
+}
+
+inline AutoClosedFileBase create_as(FileTable& table, const id_type& id, int type)
+{
+    return AutoClosedFileBase(&table, table.create_as(id, type));
+}
 }

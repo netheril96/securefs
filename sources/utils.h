@@ -9,6 +9,7 @@
 #include <string.h>
 #include <string>
 #include <type_traits>
+#include <unordered_set>
 #include <vector>
 
 #include <fcntl.h>
@@ -166,6 +167,12 @@ inline typename std::remove_reference<T>::type from_little_endian(const void* in
     return value;
 }
 
+bool ends_with(const char* str, size_t size, const char* suffix, size_t suffix_len);
+inline bool ends_with(const std::string& str, const std::string& suffix)
+{
+    return ends_with(str.data(), str.size(), suffix.data(), suffix.size());
+}
+
 std::vector<std::string> split(const char* str, size_t length, char separator);
 
 inline std::vector<std::string> split(const std::string& str, char separator)
@@ -300,4 +307,14 @@ size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size
 size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length);
 
 std::string format_current_time();
+
+struct id_hash
+{
+    size_t operator()(const id_type& id) const noexcept
+    {
+        return from_little_endian<size_t>(id.data() + (id.size() - sizeof(size_t)));
+    }
+};
+
+std::unordered_set<id_type, id_hash> find_all_ids(const std::string& basedir);
 }

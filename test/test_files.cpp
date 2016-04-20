@@ -16,7 +16,7 @@ TEST_CASE("File table")
 {
     using namespace securefs;
     char dir_template[] = "/tmp/securefs_file_table.XXXXXXX";
-    mkdtemp(dir_template);
+    REQUIRE(mkdtemp(dir_template) != nullptr);
 
     key_type master_key;
     id_type null_id, file_id;
@@ -31,6 +31,7 @@ TEST_CASE("File table")
         REQUIRE(tmp_fd >= 0);
         FileTable table(2, tmp_fd, master_key, 0, 3000, 16);
         auto dir = dynamic_cast<Directory*>(table.create_as(null_id, FileBase::DIRECTORY));
+        table.create_as(file_id, FileBase::REGULAR_FILE);
         dir->add_entry(".", null_id, FileBase::DIRECTORY);
         dir->add_entry("..", null_id, FileBase::DIRECTORY);
         dir->add_entry("hello", file_id, FileBase::REGULAR_FILE);
@@ -44,6 +45,13 @@ TEST_CASE("File table")
         }
         table.close(dir);
         ::close(tmp_fd);
+    }
+
+    {
+        auto all_ids = find_all_ids(dir_template);
+        REQUIRE(all_ids.size() == 2);
+	REQUIRE(all_ids.find(null_id) != all_ids.end());
+	REQUIRE(all_ids.find(file_id) != all_ids.end());
     }
 
     {
@@ -61,6 +69,7 @@ TEST_CASE("File table")
         {
             REQUIRE(e.error_number() == ENOTSUP);
         }
+
 
         std::set<std::string> filenames;
         dir->iterate_over_entries([&](const std::string& fn, const id_type&, int) {
