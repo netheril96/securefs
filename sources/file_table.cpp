@@ -299,7 +299,7 @@ void FileTable::close(FileBase* fb)
         m_opened.erase(fb->get_id());
         finalize(fb);
 
-        if (fb->is_unlinked() || fb->type() != FileBase::DIRECTORY)
+        if (fb->is_unlinked())
             return;
         m_closed.emplace(fb->get_id(), fb_shared);
         m_closed_ids.push(fb->get_id());
