@@ -252,12 +252,17 @@ FileBase* FileTable::open_as(const id_type& id, int type)
     if (it != m_closed.end())
     {
         if (it->second->type() != type)
-            throw OSException(FileBase::error_number_for_not(type));
-        auto fb = it->second;
-        m_opened.emplace(*it);
-        m_closed.erase(it);
-        fb->setref(1);
-        return fb.get();
+        {
+            m_closed.erase(it);
+        }
+        else
+        {
+            auto fb = it->second;
+            m_opened.emplace(*it);
+            m_closed.erase(it);
+            fb->setref(1);
+            return fb.get();
+        }
     }
 
     int data_fd, meta_fd;
