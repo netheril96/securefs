@@ -20,9 +20,10 @@ Security, however, is often at odds with convenience, and people easily grow tir
 
 On Debian based Linux distro, you need to install `fuse` and `libfuse-dev`. On RPM based Linux, you need `fuse` and `fuse-devel`. On OS X, you need [`osxfuse`](https://osxfuse.github.io).
 
-Because `securefs` heavily uses C++11 features, a relatively modern compiler and standard library is required. It has been tested with g++ 4.8 and clang++ 3.6.  If you encounter build problems on Linux, try with `clang` instead of `gcc` (`CC=clang CXX=clang++ make securefs`).
+Because `securefs` heavily uses C++11 features, a relatively modern compiler and standard library is required. It has been tested with g++ 4.8 and clang++ 3.6.  
 
-Run `make securefs` to build the program. Only a single executable `securefs` will be produced. You can copy or symlink it anywhere. You can also call `strip` on it to remove debugging symbols and reduce its size.
+Run `make securefs` to build the program. Only a single executable `securefs` will be produced. If you encounter build problems on Linux, try with `clang` instead of `gcc` (`CC=clang CXX=clang++ make securefs`). Further, you could try disabling inline assembly by `make NOASM=1`.
+
 ## Basic usage
 
 *It is recommended to disable or encrypt the swap and hibernation file. Otherwise plaintext and keys stored in the main memory may be written to disk by the OS at any time.*
