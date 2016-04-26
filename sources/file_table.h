@@ -35,6 +35,7 @@ private:
     std::unique_ptr<FileTableIO> m_fio;
     uint32_t m_flags;
     unsigned m_block_size, m_iv_size;
+    int m_dir_fd;
 
 private:
     void eject();
@@ -57,6 +58,7 @@ public:
     bool is_readonly() const noexcept { return m_flags & READ_ONLY; }
     bool is_auth_enabled() const noexcept { return !(m_flags & NO_AUTHENTICATION); }
     void gc();
+    int get_dir_fd() noexcept { return m_dir_fd; }
 };
 
 class AutoClosedFileBase

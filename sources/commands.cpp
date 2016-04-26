@@ -512,6 +512,7 @@ void init_fuse_operations(const char* underlying_path, struct fuse_operations& o
     opt.fsync = &securefs::operations::fsync;
     opt.fsyncdir = &securefs::operations::fsyncdir;
     opt.utimens = &securefs::operations::utimens;
+    opt.statfs = &securefs::operations::statfs;
     if (!xattr)
         return;
 

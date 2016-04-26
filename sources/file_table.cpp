@@ -213,7 +213,7 @@ FileTable::FileTable(int version,
                      uint32_t flags,
                      unsigned block_size,
                      unsigned iv_size)
-    : m_flags(flags), m_block_size(block_size), m_iv_size(iv_size)
+    : m_flags(flags), m_block_size(block_size), m_iv_size(iv_size), m_dir_fd(dir_fd)
 {
     memcpy(m_master_key.data(), master_key.data(), master_key.size());
     switch (version)

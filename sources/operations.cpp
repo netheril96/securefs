@@ -172,6 +172,7 @@ namespace operations
         , root_id()
         , logger(opt.logger)
     {
+        block_size = opt.block_size.get();
     }
 
     FileSystem::~FileSystem() {}
@@ -212,6 +213,20 @@ namespace operations
             fs->logger->log(
                 LoggingLevel::DEBUG, "destroy", __PRETTY_FUNCTION__, __FILE__, __LINE__);
         delete fs;
+    }
+
+    int statfs(const char* path, struct statvfs* fs_info)
+    {
+        COMMON_PROLOGUE
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={}", path),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+        int rc = ::fstatvfs(fs->table.get_dir_fd(), fs_info);
+        fs_info->f_namemax = 255;
+        return rc;
     }
 
     int getattr(const char* path, struct stat* st)
@@ -972,7 +987,7 @@ namespace operations
     int removexattr(const char* path, const char* name)
     {
         COMMON_PROLOGUE
-        
+
         if (should_debug_log(fs))
             fs->logger->log(LoggingLevel::DEBUG,
                             fmt::format("path={} name={}", path, name),

@@ -31,11 +31,14 @@ namespace operations
         FileTable table;
         id_type root_id;
         std::shared_ptr<Logger> logger;
+        unsigned block_size;
 
         explicit FileSystem(const FSOptions& opt);
 
         ~FileSystem();
     };
+
+    int statfs(const char*, struct statvfs*);
 
     void* init(struct fuse_conn_info*);
 
