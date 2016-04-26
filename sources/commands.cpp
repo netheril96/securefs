@@ -596,6 +596,7 @@ int mount_filesys(int argc, char** argv)
     TCLAP::SwitchArg insecure(
         "i", "insecure", "Disable all integrity verification (insecure mode)");
     TCLAP::SwitchArg noxattr("x", "noxattr", "Disable built-in xattr support");
+    TCLAP::SwitchArg trace("", "trace", "Trace all calls into `securefs`");
     TCLAP::ValueArg<std::string> log(
         "", "log", "Path of the log file (may contain sensitive information)", false, "", "path");
 
@@ -607,6 +608,7 @@ int mount_filesys(int argc, char** argv)
     cmdline.add(&background);
     cmdline.add(&insecure);
     cmdline.add(&noxattr);
+    cmdline.add(&trace);
     cmdline.add(&log);
     cmdline.add(&data_dir);
     cmdline.add(&mount_point);
@@ -636,6 +638,9 @@ int mount_filesys(int argc, char** argv)
 
     operations::FSOptions fsopt = get_options(
         data_dir.getValue(), stdinpass.getValue(), insecure.getValue(), log.getValue());
+
+    if (trace.getValue() && fsopt.logger)
+        fsopt.logger->set_level(LoggingLevel::DEBUG);
 
     fprintf(stderr,
             "Mounting filesystem stored at %s onto %s\nFormat version: %u\n",

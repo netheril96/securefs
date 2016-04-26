@@ -13,7 +13,7 @@ endif
 ifndef DEBUG
 	CXXFLAGS += -O3 -DNDEBUG
 else
-	CXXFLAGS += -DDEBUG -O0 -g
+	CXXFLAGS += -O0 -g
 endif
 
 ifdef NOASM

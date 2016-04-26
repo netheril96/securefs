@@ -191,17 +191,39 @@ namespace operations
     auto ctx = fuse_get_context();                                                                 \
     auto fs = internal::get_fs(ctx);
 
+    static bool should_debug_log(FileSystem* fs)
+    {
+        return fs->logger && fs->logger->get_level() <= LoggingLevel::DEBUG;
+    }
+
     void* init(struct fuse_conn_info*)
     {
         auto args = static_cast<FSOptions*>(fuse_get_context()->private_data);
-        return new FileSystem(*args);
+        auto fs = new FileSystem(*args);
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG, "init", __PRETTY_FUNCTION__, __FILE__, __LINE__);
+        return fs;
     }
 
-    void destroy(void* data) { delete static_cast<FileSystem*>(data); }
+    void destroy(void* data)
+    {
+        auto fs = static_cast<FileSystem*>(data);
+        if (should_debug_log(fs))
+            fs->logger->log(
+                LoggingLevel::DEBUG, "destroy", __PRETTY_FUNCTION__, __FILE__, __LINE__);
+        delete fs;
+    }
 
     int getattr(const char* path, struct stat* st)
     {
         COMMON_PROLOGUE
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={}", path),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         try
         {
             auto fg = internal::open_all(fs, path);
@@ -214,12 +236,27 @@ namespace operations
     int opendir(const char* path, struct fuse_file_info* info)
     {
         COMMON_PROLOGUE
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={}", path),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         try
         {
             auto fg = internal::open_all(fs, path);
             if (fg->type() != FileBase::DIRECTORY)
                 return -ENOTDIR;
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
+
+            if (should_debug_log(fs))
+                fs->logger->log(LoggingLevel::DEBUG,
+                                fmt::format("path={} handle=0x{:x}", path, info->fh),
+                                __PRETTY_FUNCTION__,
+                                __FILE__,
+                                __LINE__);
+
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -230,10 +267,16 @@ namespace operations
         return ::securefs::operations::release(path, info);
     }
 
-    int
-    readdir(const char*, void* buffer, fuse_fill_dir_t filler, off_t, struct fuse_file_info* info)
+    int readdir(
+        const char* path, void* buffer, fuse_fill_dir_t filler, off_t, struct fuse_file_info* info)
     {
         COMMON_PROLOGUE
+        if (fs->logger && fs->logger->get_level() <= LoggingLevel::DEBUG)
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={} handle=0x{:x}", path, info->fh),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
         try
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
@@ -257,6 +300,13 @@ namespace operations
     {
         COMMON_PROLOGUE
 
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={}", path),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         mode &= ~static_cast<uint32_t>(S_IFMT);
         mode |= S_IFREG;
         try
@@ -273,6 +323,14 @@ namespace operations
             if (fg->type() != FileBase::REGULAR_FILE)
                 return -EPERM;
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
+
+            if (should_debug_log(fs))
+                fs->logger->log(LoggingLevel::DEBUG,
+                                fmt::format("path={} handle=0x{:x}", path, info->fh),
+                                __PRETTY_FUNCTION__,
+                                __FILE__,
+                                __LINE__);
+
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -281,6 +339,13 @@ namespace operations
     int open(const char* path, struct fuse_file_info* info)
     {
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={}", path),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
 
         // bool rdonly = info->flags & O_RDONLY;
         bool rdwr = info->flags & O_RDWR;
@@ -301,14 +366,29 @@ namespace operations
                 fg.get_as<RegularFile>()->truncate(0);
             }
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
+
+            if (should_debug_log(fs))
+                fs->logger->log(LoggingLevel::DEBUG,
+                                fmt::format("path={} handle=0x{:x}", path, info->fh),
+                                __PRETTY_FUNCTION__,
+                                __FILE__,
+                                __LINE__);
+
             return 0;
         }
         COMMON_CATCH_BLOCK
     }
 
-    int release(const char*, struct fuse_file_info* info)
+    int release(const char* path, struct fuse_file_info* info)
     {
         COMMON_PROLOGUE
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={} handle=0x{:x}", path, info->fh),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         try
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
@@ -322,9 +402,18 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-    int read(const char*, char* buffer, size_t len, off_t off, struct fuse_file_info* info)
+    int read(const char* path, char* buffer, size_t len, off_t off, struct fuse_file_info* info)
     {
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(
+                LoggingLevel::DEBUG,
+                fmt::format("path={} handle=0x{:x} length={} offset={}", path, info->fh, len, off),
+                __PRETTY_FUNCTION__,
+                __FILE__,
+                __LINE__);
+
         try
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
@@ -337,9 +426,19 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-    int write(const char*, const char* buffer, size_t len, off_t off, struct fuse_file_info* info)
+    int
+    write(const char* path, const char* buffer, size_t len, off_t off, struct fuse_file_info* info)
     {
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(
+                LoggingLevel::DEBUG,
+                fmt::format("path={} handle=0x{:x} length={} offset={}", path, info->fh, len, off),
+                __PRETTY_FUNCTION__,
+                __FILE__,
+                __LINE__);
+
         try
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
@@ -353,9 +452,17 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-    int flush(const char*, struct fuse_file_info* info)
+    int flush(const char* path, struct fuse_file_info* info)
     {
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={} handle=0x{:x}", path, info->fh),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         try
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
@@ -372,6 +479,14 @@ namespace operations
     int truncate(const char* path, off_t size)
     {
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={} size={}", path, size),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         try
         {
             auto fg = internal::open_all(fs, path);
@@ -384,9 +499,16 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-    int ftruncate(const char*, off_t size, struct fuse_file_info* info)
+    int ftruncate(const char* path, off_t size, struct fuse_file_info* info)
     {
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={} size={} handle=0x{:x}", path, size, info->fh),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
         try
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
@@ -404,6 +526,14 @@ namespace operations
     int unlink(const char* path)
     {
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={}", path),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         try
         {
             if (internal::is_readonly(ctx))
@@ -417,6 +547,13 @@ namespace operations
     int mkdir(const char* path, mode_t mode)
     {
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={} mode={}", path, mode),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
 
         mode &= ~static_cast<uint32_t>(S_IFMT);
         mode |= S_IFDIR;
@@ -443,6 +580,14 @@ namespace operations
     int chmod(const char* path, mode_t mode)
     {
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={} mode={}", path, mode),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         try
         {
             auto fg = internal::open_all(fs, path);
@@ -459,6 +604,14 @@ namespace operations
     int chown(const char* path, uid_t uid, gid_t gid)
     {
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={} uid={} gid={}", path, uid, gid),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         try
         {
             auto fg = internal::open_all(fs, path);
@@ -473,6 +626,14 @@ namespace operations
     int symlink(const char* to, const char* from)
     {
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("to={} from={}", to, from),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         try
         {
             if (internal::is_readonly(ctx))
@@ -497,6 +658,14 @@ namespace operations
         if (size == 0)
             return -EINVAL;
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={}", path),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         try
         {
             auto fg = internal::open_all(fs, path);
@@ -513,6 +682,14 @@ namespace operations
     int rename(const char* src, const char* dst)
     {
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("src={} dst={}", src, dst),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         try
         {
             std::string src_filename, dst_filename;
@@ -551,6 +728,14 @@ namespace operations
     int link(const char* src, const char* dst)
     {
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("src={} dst={}", src, dst),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         try
         {
             std::string src_filename, dst_filename;
@@ -582,9 +767,17 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-    int fsync(const char*, int, struct fuse_file_info* fi)
+    int fsync(const char* path, int, struct fuse_file_info* fi)
     {
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={} handle=0x{:x}", path, fi->fh),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         try
         {
             auto fb = reinterpret_cast<FileBase*>(fi->fh);
@@ -608,6 +801,19 @@ namespace operations
     int utimens(const char* path, const struct timespec ts[2])
     {
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={} access_time={}({}) modification_time={}({})",
+                                        path,
+                                        ts[0].tv_sec,
+                                        ts[0].tv_nsec,
+                                        ts[1].tv_sec,
+                                        ts[1].tv_nsec),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         try
         {
             auto fg = internal::open_all(fs, path);
@@ -641,6 +847,14 @@ namespace operations
     int listxattr(const char* path, char* list, size_t size)
     {
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={}", path),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         try
         {
             auto fg = internal::open_all(fs, path);
@@ -650,11 +864,26 @@ namespace operations
     }
 
 #ifdef __APPLE__
+
+    static const char* APPLE_FINDER_INFO = "com.apple.FinderInfo";
+    static const char* APPLE_FINDER_INFO_WORKAROUND = "com.apple.FinderInfo.__workaround__";
+
     int getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position)
     {
+        COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={} name={}", path, name),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         if (position != 0)
             return -EINVAL;
-        COMMON_PROLOGUE
+        if (strcmp(name, APPLE_FINDER_INFO) == 0)
+            name = APPLE_FINDER_INFO_WORKAROUND;
+
         try
         {
             auto fg = internal::open_all(fs, path);
@@ -670,15 +899,23 @@ namespace operations
                  int flags,
                  uint32_t position)
     {
+        COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(
+                LoggingLevel::DEBUG,
+                fmt::format("path={} name={} value={}", path, name, std::string(value, size)),
+                __PRETTY_FUNCTION__,
+                __FILE__,
+                __LINE__);
+
         if (position != 0)
             return -EINVAL;
         if (strcmp(name, "com.apple.quarantine") == 0)
             return 0;    // workaround for the "XXX is damaged" bug on OS X
-        if (strcmp(name, "com.apple.FinderInfo") == 0)
-            return -EACCES;    // FinderInfo cannot be encrypted, because its format and length is
-                               // artificially restricted
+        if (strcmp(name, APPLE_FINDER_INFO) == 0)
+            name = APPLE_FINDER_INFO_WORKAROUND;
 
-        COMMON_PROLOGUE
         flags &= XATTR_CREATE | XATTR_REPLACE;
         try
         {
@@ -693,6 +930,14 @@ namespace operations
     int getxattr(const char* path, const char* name, char* value, size_t size)
     {
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={} name={}", path, name),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         try
         {
             auto fg = internal::open_all(fs, path);
@@ -704,6 +949,15 @@ namespace operations
     int setxattr(const char* path, const char* name, const char* value, size_t size, int flags)
     {
         COMMON_PROLOGUE
+
+        if (should_debug_log(fs))
+            fs->logger->log(
+                LoggingLevel::DEBUG,
+                fmt::format("path={} name={} value={}", path, name, std::string(value, size)),
+                __PRETTY_FUNCTION__,
+                __FILE__,
+                __LINE__);
+
         flags &= XATTR_CREATE | XATTR_REPLACE;
         try
         {
@@ -718,6 +972,14 @@ namespace operations
     int removexattr(const char* path, const char* name)
     {
         COMMON_PROLOGUE
+        
+        if (should_debug_log(fs))
+            fs->logger->log(LoggingLevel::DEBUG,
+                            fmt::format("path={} name={}", path, name),
+                            __PRETTY_FUNCTION__,
+                            __FILE__,
+                            __LINE__);
+
         try
         {
             auto fg = internal::open_all(fs, path);

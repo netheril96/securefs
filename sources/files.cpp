@@ -123,8 +123,7 @@ void FileBase::flush()
     m_stream->flush();
 }
 
-// These values cannot be changed, because OS X has a peculiar restriction where the xattr value for
-// com.apple.FinderInfo is fixed at 32 bytes.
+// The IV size is for historical reasons. Doesn't really matter.
 static const ssize_t XATTR_IV_LENGTH = 16, XATTR_MAC_LENGTH = 16;
 
 ssize_t FileBase::listxattr(char* buffer, size_t size)
