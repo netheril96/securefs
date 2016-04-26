@@ -881,7 +881,6 @@ namespace operations
 #ifdef __APPLE__
 
     static const char* APPLE_FINDER_INFO = "com.apple.FinderInfo";
-    static const char* APPLE_FINDER_INFO_WORKAROUND = "com.apple.FinderInfo.__workaround__";
 
     int getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position)
     {
@@ -896,8 +895,6 @@ namespace operations
 
         if (position != 0)
             return -EINVAL;
-        if (strcmp(name, APPLE_FINDER_INFO) == 0)
-            name = APPLE_FINDER_INFO_WORKAROUND;
 
         try
         {
@@ -929,7 +926,7 @@ namespace operations
         if (strcmp(name, "com.apple.quarantine") == 0)
             return 0;    // workaround for the "XXX is damaged" bug on OS X
         if (strcmp(name, APPLE_FINDER_INFO) == 0)
-            name = APPLE_FINDER_INFO_WORKAROUND;
+            return -EACCES;
 
         flags &= XATTR_CREATE | XATTR_REPLACE;
         try
