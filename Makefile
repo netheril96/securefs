@@ -30,7 +30,9 @@ OBJECTS := $(SOURCES:.cpp=.o)
 TEST_SOURCES := $(wildcard test/*.cpp)
 TEST_OBJECTS := $(TEST_SOURCES:.cpp=.o)
 
-.PHONY: all clean cryptopp test deepclean
+.PHONY: all clean cryptopp test deepclean format
+
+all: securefs
 
 securefs: $(OBJECTS) main.o
 	$(CXX) $(CXXFLAGS) $(OBJECTS) main.o $(CRYPTOPP_LIB) $(LDFLAGS) -o securefs
@@ -54,3 +56,6 @@ clean:
 
 deepclean: clean
 	$(MAKE) -C cryptopp clean
+
+format:
+	clang-format -i --style=File sources/{*.h,*.cpp} test/*.cpp

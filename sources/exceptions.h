@@ -5,6 +5,7 @@
 
 #include <errno.h>
 #include <exception>
+#include <stdint.h>
 #include <string.h>
 #include <string>
 #include <utility>
@@ -41,7 +42,7 @@ public:
             }
             catch (...)
             {
-                m_cached_msg = "Mysterious error";
+                return type_name();
             }
         }
         return m_cached_msg.c_str();
@@ -247,5 +248,26 @@ public:
                            hexify(m_id.data(), m_id.size()),
                            m_name);
     }
+};
+
+class StreamTooLongException : public SeriousException
+{
+private:
+    int64_t m_max_size;
+    int64_t m_size;
+
+public:
+    explicit StreamTooLongException(int64_t max_size, int64_t size)
+        : m_max_size(max_size), m_size(size)
+    {
+    }
+    const char* type_name() const noexcept override { return "StreamTooLongException"; }
+    std::string message() const override
+    {
+        return fmt::format("Operation on stream at point {}, which exceeds its maximum size {}",
+                           m_size,
+                           m_max_size);
+    }
+    int error_number() const noexcept override { return EFBIG; }
 };
 }

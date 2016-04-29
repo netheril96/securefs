@@ -414,6 +414,10 @@ int create_filesys(int argc, char** argv)
     TCLAP::UnlabeledValueArg<std::string> dir(
         "dir", "Directory where the data are stored", true, "", "directory");
     TCLAP::ValueArg<int> version("", "ver", "The format version (1 or 2)", false, 2, "integer");
+    TCLAP::ValueArg<int> iv_size(
+        "", "iv-size", "The IV size (ignored for fs format 1)", false, 12, "integer");
+
+    cmdline.add(&iv_size);
     cmdline.add(&stdinpass);
     cmdline.add(&rounds);
     cmdline.add(&dir);
@@ -424,6 +428,9 @@ int create_filesys(int argc, char** argv)
     {
         throw std::runtime_error("Unknown format version");
     }
+
+    if (iv_size.getValue() < 12 || iv_size.getValue() > 64)
+        throw std::runtime_error("Invalid IV size");
 
     int folder_fd = open_and_lock_base_dir(dir.getValue());
 
@@ -447,7 +454,7 @@ int create_filesys(int argc, char** argv)
                                       password.data(),
                                       pass_len,
                                       4096,
-                                      12,
+                                      iv_size.getValue(),
                                       rounds.getValue())
                           .dump();
 

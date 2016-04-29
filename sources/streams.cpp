@@ -323,6 +323,8 @@ namespace internal
             return get_header_size() + get_iv_size() + get_mac_size();
         }
 
+        static const int64_t max_block_number = 1 << 30;
+
     private:
         HMACStream m_metastream;
         key_type m_key;
@@ -335,6 +337,14 @@ namespace internal
         {
             return get_encrypted_header_size() + get_meta_size() * (block_num);
         }
+
+        void check_block_number(offset_type block_number)
+        {
+            if (block_number > max_block_number)
+                throw StreamTooLongException(max_block_number * this->m_block_size,
+                                             block_number * this->m_block_size);
+        }
+
         const id_type& id() const noexcept { return m_id; }
         const key_type& key() const noexcept { return m_key; }
 
@@ -364,6 +374,7 @@ namespace internal
         {
             if (length == 0)
                 return;
+            check_block_number(block_number);
 
             auto buffer = make_unique_array<byte>(get_meta_size());
             byte* iv = buffer.get();
@@ -395,6 +406,7 @@ namespace internal
         {
             if (length == 0)
                 return;
+            check_block_number(block_number);
 
             auto buffer = make_unique_array<byte>(get_meta_size());
             auto pos = meta_position_for_iv(block_number);
