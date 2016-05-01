@@ -30,7 +30,9 @@ OBJECTS := $(SOURCES:.cpp=.o)
 TEST_SOURCES := $(wildcard test/*.cpp)
 TEST_OBJECTS := $(TEST_SOURCES:.cpp=.o)
 
-.PHONY: all clean cryptopp test deepclean format
+INSTALL_PREFIX := /usr/local
+
+.PHONY: all clean cryptopp test deepclean format install
 
 all: securefs
 
@@ -59,3 +61,9 @@ deepclean: clean
 
 format:
 	clang-format -i --style=File sources/{*.h,*.cpp} test/*.cpp
+
+install: 
+	test -d $(INSTALL_PREFIX) || mkdir $(INSTALL_PREFIX)
+	test -d $(INSTALL_PREFIX)/bin || mkdir $(INSTALL_PREFIX)/bin
+	test -e ./securefs || $(MAKE) securefs
+	install -m 0755 ./securefs $(INSTALL_PREFIX)/bin
