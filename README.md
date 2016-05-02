@@ -12,17 +12,25 @@ Security, however, is often at odds with convenience, and people easily grow tir
 
 `securefs` is intended to make the experience as smooth as possible so that the security and convenience do not conflict. After mounting the virtual filesystem, everything just works&#8482;.
 
-## Build
+## Build and test
 
 [![Build Status](https://api.travis-ci.org/netheril96/securefs.svg?branch=master)](https://travis-ci.org/netheril96/securefs)
 
-`securefs` requires a Unix system, FUSE, and a recent C++ compiler. It is currently only tested on Ubuntu, Fedora and OS X. Windows is not currently supported.
+On Debian based Linux distro, you need to install `fuse` and `libfuse-dev`. On RPM based Linux, you need `fuse` and `fuse-devel`. On OS X, you need [`osxfuse`](https://osxfuse.github.io). Operating systems other than OS X and Linux are not supported for now.
 
-On Debian based Linux distro, you need to install `fuse` and `libfuse-dev`. On RPM based Linux, you need `fuse` and `fuse-devel`. On OS X, you need [`osxfuse`](https://osxfuse.github.io).
+You also need a recent C++ compiler and CMake.
 
-Because `securefs` heavily uses C++11 features, a relatively modern compiler and standard library is required. It has been tested with g++ 4.8 and clang++ 3.6.  
+```bash
+mkdir build
+cd build
+cmake ..
+make -j8
+sudo make install
+```
 
-Run `make securefs` to build the program. Only a single executable `securefs` will be produced. If you encounter build problems on Linux, try with `clang` instead of `gcc` (`CC=clang CXX=clang++ make securefs`). Further, you could try disabling inline assembly by `make NOASM=1`.
+If you encounter your build errors, you could try `cmake -DDISABLE_ASM=1 ..` instead. Or your compiler/std-lib is out of date.
+
+Run `ctest` to test the program. `ctest -V` for a full output.
 
 ## Basic usage
 
