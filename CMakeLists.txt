@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 2.6)
 project (securefs)
 
-set (CMAKE_CXX_FLAGS "-O3 -std=c++11 -Wall -Wextra -pedantic -D_FILE_OFFSET_BITS=64")
+set (CMAKE_CXX_FLAGS "-O3 -std=c++11 -Wall -Wextra -pedantic -D_FILE_OFFSET_BITS=64 -pthread")
 
 set (CRYPTOPP_DIR "${PROJECT_SOURCE_DIR}/cryptopp")
 include_directories("${PROJECT_SOURCE_DIR}/sources")
