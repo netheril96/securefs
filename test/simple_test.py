@@ -9,7 +9,7 @@ import sys
 import platform
 
 
-SECUREFS_BINARY = os.path.join(os.path.abspath(os.path.dirname(__file__)), '../securefs')
+SECUREFS_BINARY = './securefs'
 
 if platform.system() == 'Darwin':
     UNMOUNT = ['umount']
