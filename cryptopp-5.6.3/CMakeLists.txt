@@ -154,32 +154,3 @@ if(BUILD_DOCUMENTATION)
 	endif()
 endif()
 
-#============================================================================
-# Install
-#============================================================================
-set(export_name "cryptopp-targets")
-
-# Runtime package
-
-# Development package
-install(TARGETS cryptopp-static EXPORT ${export_name} DESTINATION ${CMAKE_INSTALL_LIBDIR})
-install(FILES ${cryptopp_HEADERS} DESTINATION include/cryptopp)
-
-# CMake Package
-include(CMakePackageConfigHelpers)
-write_basic_package_version_file("${PROJECT_BINARY_DIR}/cryptopp-config-version.cmake" VERSION ${cryptopp_VERSION_MAJOR}.${cryptopp_VERSION_MINOR}.${cryptopp_VERSION_PATCH} COMPATIBILITY SameMajorVersion)
-install(FILES cryptopp-config.cmake ${PROJECT_BINARY_DIR}/cryptopp-config-version.cmake DESTINATION "lib/cmake/cryptopp")
-install(EXPORT ${export_name} DESTINATION "lib/cmake/cryptopp")
-
-# Tests
-if(BUILD_TESTING)
-	install(TARGETS cryptest DESTINATION ${CMAKE_INSTALL_BINDIR})
-	install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/TestData DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/cryptopp)
-	install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/TestVectors DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/cryptopp)
-endif()
-
-
-# Documentation
-if(BUILD_DOCUMENTATION)
-	install(DIRECTORY "${out_source_DOCS_DIR}" DESTINATION ${CMAKE_INSTALL_DOCDIR})
-endif()

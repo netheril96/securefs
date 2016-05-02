@@ -1,7 +1,15 @@
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required(VERSION 2.8.5 FATAL_ERROR)
 project (securefs)
 
-set (CMAKE_CXX_FLAGS "-O3 -std=c++11 -Wall -Wextra -pedantic -D_FILE_OFFSET_BITS=64 -pthread")
+set (CMAKE_CXX_FLAGS "-std=c++11 -Wall -Wextra -pedantic -D_FILE_OFFSET_BITS=64")
+set (CMAKE_BUILD_TYPE Release)
+
+if (APPLE)
+	set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-dead_strip")
+else()
+	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections -pthread")
+	set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections -pthread")
+endif()
 
 set (CRYPTOPP_DIR "${PROJECT_SOURCE_DIR}/cryptopp")
 include_directories("${PROJECT_SOURCE_DIR}/sources")
@@ -25,3 +33,5 @@ target_link_libraries(securefs_test cryptopp-static)
 enable_testing()
 add_test(NAME sec_test COMMAND securefs_test)
 add_test(NAME simple_test COMMAND "${PROJECT_SOURCE_DIR}/test/simple_test.py")
+
+install(TARGETS securefs DESTINATION bin)
