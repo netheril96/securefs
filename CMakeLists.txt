@@ -17,3 +17,4 @@ target_link_libraries(securefs "${FUSE_LIBRARIES}")
 
 add_subdirectory("${PROJECT_SOURCE_DIR}/cryptopp")
 target_link_libraries(securefs cryptopp-static)
+add_dependencies(securefs cryptopp-static)
