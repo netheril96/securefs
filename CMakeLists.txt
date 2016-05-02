@@ -5,7 +5,7 @@ set (CMAKE_CXX_FLAGS "-O3 -std=c++11 -Wall -Wextra -pedantic -D_FILE_OFFSET_BITS
 
 set (CRYPTOPP_DIR "${PROJECT_SOURCE_DIR}/cryptopp")
 include_directories("${PROJECT_SOURCE_DIR}/sources")
-include_directories("${CRYPTOPP_DIR}/include")
+include_directories("${PROJECT_SOURCE_DIR}")
 
 file (GLOB SOURCES "${PROJECT_SOURCE_DIR}/sources/*.cpp")
 add_executable(securefs ${SOURCES} main.cpp)

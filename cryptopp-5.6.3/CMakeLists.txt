@@ -93,9 +93,7 @@ if(CMAKE_SIZEOF_VOID_P EQUAL 8)
 endif()
 
 add_library(cryptopp-static STATIC $<TARGET_OBJECTS:cryptopp-object>)
-add_library(cryptopp-shared SHARED $<TARGET_OBJECTS:cryptopp-object>)
 
-target_include_directories(cryptopp-shared PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}> $<INSTALL_INTERFACE:include/cryptopp>)
 target_include_directories(cryptopp-static PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}> $<INSTALL_INTERFACE:include/cryptopp>)
 
 if(NOT MSVC)
@@ -104,10 +102,6 @@ if(NOT MSVC)
 	set_target_properties(cryptopp-static
 			PROPERTIES
 			OUTPUT_NAME cryptopp)
-	set_target_properties(cryptopp-shared
-			PROPERTIES
-			SOVERSION ${COMPAT_VERSION}
-			OUTPUT_NAME cryptopp)
 endif()
 
 #============================================================================
@@ -115,12 +109,10 @@ endif()
 #============================================================================
 if(WIN32)
 	target_link_libraries(cryptopp-static ws2_32)
-	target_link_libraries(cryptopp-shared ws2_32)
 endif()
 
 find_package(Threads)
 target_link_libraries(cryptopp-static ${CMAKE_THREAD_LIBS_INIT})
-target_link_libraries(cryptopp-shared ${CMAKE_THREAD_LIBS_INIT})
 
 #============================================================================
 # Tests
@@ -168,7 +160,6 @@ endif()
 set(export_name "cryptopp-targets")
 
 # Runtime package
-install(TARGETS cryptopp-shared EXPORT ${export_name} DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # Development package
 install(TARGETS cryptopp-static EXPORT ${export_name} DESTINATION ${CMAKE_INSTALL_LIBDIR})
