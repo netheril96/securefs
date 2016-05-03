@@ -28,9 +28,13 @@ make -j8
 sudo make install
 ```
 
-If you encounter your build errors, you could try `cmake -DDISABLE_ASM=1 ..` instead. Or your compiler/std-lib is out of date.
+If you encounter build errors, you could try `cmake -DDISABLE_ASM=1 ..` instead. Or perhaps your compiler is too old.
+
+By default, it builds for your current machine's CPU type, taking advantage for hardware acceleration if possible. To compile for the general architecture, turn on option `GENERAL_ARCH`.
 
 Run `ctest` to test the program. `ctest -V` for a full output.
+
+To uninstall the program, just remove `/usr/local/bin/securefs`.
 
 ## Basic usage
 

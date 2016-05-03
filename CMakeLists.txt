@@ -4,6 +4,13 @@ project (securefs)
 set (CMAKE_CXX_FLAGS "-std=c++11 -Wall -Wextra -pedantic -D_FILE_OFFSET_BITS=64")
 set (CMAKE_BUILD_TYPE Release)
 
+option(GENERAL_ARCH "Build for the general architecture instead of this cpu" OFF)
+
+if (GENERAL_ARCH)
+else()
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -mtune=native")
+endif()
+
 if (APPLE)
 	set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-dead_strip")
 else()
