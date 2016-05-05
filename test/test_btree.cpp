@@ -108,10 +108,10 @@ TEST_CASE("Test BtreeDirectory")
     securefs::key_type null_key{};
     securefs::id_type null_id{};
 
-    char tmp1[] = "/tmp/securefs.btree1.XXXXXX";
-    char tmp2[] = "/tmp/securefs.btree2.XXXXXX";
-    char tmp3[] = "/tmp/securefs.btree3.XXXXXX";
-    char tmp4[] = "/tmp/securefs.btree4.XXXXXX";
+    char tmp1[] = "tmp/securefs.btree1.XXXXXX";
+    char tmp2[] = "tmp/securefs.btree2.XXXXXX";
+    char tmp3[] = "tmp/securefs.btree3.XXXXXX";
+    char tmp4[] = "tmp/securefs.btree4.XXXXXX";
 
     {
         securefs::BtreeDirectory dir(

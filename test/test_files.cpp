@@ -15,7 +15,7 @@
 TEST_CASE("File table")
 {
     using namespace securefs;
-    char dir_template[] = "/tmp/securefs_file_table.XXXXXXX";
+    char dir_template[] = "tmp/securefs_file_table.XXXXXXX";
     REQUIRE(mkdtemp(dir_template) != nullptr);
 
     key_type master_key;

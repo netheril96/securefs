@@ -42,8 +42,12 @@ def securefs_create(data_dir, password, version):
 
 class SimpleSecureFSTestBase(object):
     def setUp(self):
-        self.data_dir = tempfile.mkdtemp(prefix='securefs.data_dir')
-        self.mount_point = tempfile.mkdtemp(prefix='securefs.mount_point')
+        try:
+            os.mkdir('tmp')
+        except:
+            pass
+        self.data_dir = tempfile.mkdtemp(prefix='securefs.data_dir', dir='tmp')
+        self.mount_point = tempfile.mkdtemp(prefix='securefs.mount_point', dir='tmp')
         self.password = 'madoka'
         securefs_create(self.data_dir, self.password, self.version)
         

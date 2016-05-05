@@ -5,6 +5,11 @@ set (CMAKE_CXX_FLAGS "-std=c++11 -Wall -Wextra -pedantic -D_FILE_OFFSET_BITS=64"
 set (CMAKE_BUILD_TYPE Release)
 
 option(GENERAL_ARCH "Build for the general architecture instead of this cpu" OFF)
+option(SANITIZE "Turn on sanitization" OFF)
+
+if (SANITIZE)
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
+endif()
 
 if (GENERAL_ARCH)
 else()
