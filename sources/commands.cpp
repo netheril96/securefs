@@ -565,7 +565,7 @@ get_options(const std::string& data_dir, bool stdinpass, bool insecure, const st
     {
         CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
         size_t pass_len = 0;
-        if (stdinpass)
+        if (stdinpass || !isatty(STDIN_FILENO))
             pass_len = insecure_read_password(stdin, nullptr, password.data(), password.size());
         else
             pass_len = try_read_password(password.data(), password.size());
