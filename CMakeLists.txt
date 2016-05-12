@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 2.8.5 FATAL_ERROR)
 project (securefs)
 
+list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+find_package(FUSE REQUIRED)
+include_directories(${FUSE_INCLUDE_DIR})
+link_libraries(${FUSE_LIBRARIES})
+
 set (CMAKE_CXX_FLAGS "-std=c++11 -Wall -Wextra -pedantic -D_FILE_OFFSET_BITS=64")
 set (CMAKE_BUILD_TYPE Release)
 
@@ -15,14 +20,7 @@ if (NOT ${GENERAL_ARCH})
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -mtune=native")
 endif()
 
-include(CheckCXXSourceCompiles)
-if (UNIX)
-    set (CMAKE_REQUIRED_FLAGS "-std=c++11")
-endif()
-CHECK_CXX_SOURCE_COMPILES("int main() { thread_local int a = 0; return a; }" HAS_THREAD_LOCAL)
-if (${HAS_THREAD_LOCAL})
-    add_definitions(-DHAS_THREAD_LOCAL)
-endif()
+include(FeatureDetection)
 
 if (APPLE)
 	set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-dead_strip")
@@ -43,11 +41,6 @@ file (GLOB SOURCES ${PROJECT_SOURCE_DIR}/sources/*.cpp ${PROJECT_SOURCE_DIR}/sou
 file (GLOB TEST_SOURCES ${PROJECT_SOURCE_DIR}/test/*.cpp)
 add_library(securefs-static STATIC ${SOURCES})
 link_libraries(securefs-static)
-
-list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-find_package(FUSE REQUIRED)
-include_directories(${FUSE_INCLUDE_DIR})
-link_libraries(${FUSE_LIBRARIES})
 
 add_executable(securefs ${PROJECT_SOURCE_DIR}/main.cpp)
 add_executable(securefs_test ${TEST_SOURCES})

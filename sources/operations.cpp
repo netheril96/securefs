@@ -859,6 +859,8 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
+
+#ifdef HAS_XATTR
     int listxattr(const char* path, char* list, size_t size)
     {
         COMMON_PROLOGUE
@@ -1000,5 +1002,6 @@ namespace operations
         }
         COMMON_CATCH_BLOCK
     }
+#endif
 }
 }

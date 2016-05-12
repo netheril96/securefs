@@ -123,6 +123,7 @@ void FileBase::flush()
     m_stream->flush();
 }
 
+#ifdef HAS_XATTR
 // The IV size is for historical reasons. Doesn't really matter.
 static const ssize_t XATTR_IV_LENGTH = 16, XATTR_MAC_LENGTH = 16;
 
@@ -249,6 +250,8 @@ void FileBase::removexattr(const char* name)
     if (rc < 0)
         throw OSException(errno);
 }
+    
+#endif
 
 void SimpleDirectory::initialize()
 {

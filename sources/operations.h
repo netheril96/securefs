@@ -92,6 +92,7 @@ namespace operations
 
     int utimens(const char* path, const struct timespec ts[2]);
 
+#ifdef HAS_XATTR
     int listxattr(const char* path, char* list, size_t size);
 
 #ifdef __APPLE__
@@ -110,5 +111,6 @@ namespace operations
 #endif
 
     int removexattr(const char* path, const char* name);
+#endif
 }
 }
