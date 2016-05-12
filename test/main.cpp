@@ -1,10 +1,10 @@
 #define CATCH_CONFIG_RUNNER 1
 #include "catch.hpp"
 
-#include <unistd.h>
 #include <stdio.h>
-#include <sys/stat.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 int main(int argc, char** argv)
 {

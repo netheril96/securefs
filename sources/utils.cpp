@@ -10,12 +10,13 @@
 
 #include <algorithm>
 #include <string.h>
+#include <system_error>
 #include <time.h>
 #include <vector>
-#include <system_error>
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -25,10 +26,7 @@
 namespace securefs
 {
 
-std::string sane_strerror(int error_number)
-{
-    return std::system_category().message(error_number);
-}
+std::string sane_strerror(int error_number) { return std::system_category().message(error_number); }
 
 void parse_hex(const std::string& hex, byte* output, size_t len)
 {
@@ -147,11 +145,51 @@ void parse_hex(const std::string& hex, byte* output, size_t len)
         }
     }
 }
+#ifndef HAS_THREAD_LOCAL
+template <class T>
+class ThreadLocalStorage
+{
+private:
+    pthread_key_t m_pkey;
+
+public:
+    explicit ThreadLocalStorage()
+    {
+        int rc = ::pthread_key_create(&m_pkey, [](void* ptr) { delete static_cast<T*>(ptr); });
+        if (rc < 0)
+            throw std::runtime_error("Fail to initialize pthread TLS");
+    }
+
+    ~ThreadLocalStorage() { pthread_key_delete(m_pkey); }
+
+    T* get()
+    {
+        auto ptr = pthread_getspecific(m_pkey);
+        if (!ptr)
+        {
+            ptr = new T();
+
+            int rc = pthread_setspecific(m_pkey, ptr);
+            if (rc < 0)
+                throw std::runtime_error("Fail to set TLS value");
+        }
+        return static_cast<T*>(ptr);
+    }
+
+    T* operator->() { return get(); }
+    T& operator*() { return *get(); }
+};
+#endif
 
 void generate_random(void* data, size_t size)
 {
+#ifndef HAS_THREAD_LOCAL
     static ThreadLocalStorage<CryptoPP::AutoSeededRandomPool> pool;
     pool->GenerateBlock(static_cast<byte*>(data), size);
+#else
+    thread_local CryptoPP::AutoSeededRandomPool pool;
+    pool.GenerateBlock(static_cast<byte*>(data), size);
+#endif
 }
 
 void aes_gcm_encrypt(const void* plaintext,
@@ -166,12 +204,20 @@ void aes_gcm_encrypt(const void* plaintext,
                      size_t mac_len,
                      void* ciphertext)
 {
+#ifndef HAS_THREAD_LOCAL
     static ThreadLocalStorage<CryptoPP::GCM<CryptoPP::AES>::Encryption> tls_encryptor;
     static ThreadLocalStorage<std::vector<byte>> tls_last_key;
     // Avoid expensive table computation by SetKey()
 
     auto encryptor = tls_encryptor.get();
     auto last_key = tls_last_key.get();
+#else
+    thread_local CryptoPP::GCM<CryptoPP::AES>::Encryption tls_encryptor;
+    thread_local std::vector<byte> tls_last_key;
+
+    auto encryptor = &tls_encryptor;
+    auto last_key = &tls_last_key;
+#endif
 
     if (last_key->size() == key_len && memcmp(last_key->data(), key, key_len) == 0)
     {
@@ -203,12 +249,20 @@ bool aes_gcm_decrypt(const void* ciphertext,
                      size_t mac_len,
                      void* plaintext)
 {
+#ifndef HAS_THREAD_LOCAL
     static ThreadLocalStorage<CryptoPP::GCM<CryptoPP::AES>::Decryption> tls_decryptor;
     static ThreadLocalStorage<std::vector<byte>> tls_last_key;
     // Avoid expensive table computation by SetKey()
 
     auto decryptor = tls_decryptor.get();
     auto last_key = tls_last_key.get();
+#else
+    thread_local CryptoPP::GCM<CryptoPP::AES>::Decryption tls_decryptor;
+    thread_local std::vector<byte> tls_last_key;
+
+    auto decryptor = &tls_decryptor;
+    auto last_key = &tls_last_key;
+#endif
 
     if (last_key->size() == key_len && memcmp(last_key->data(), key, key_len) == 0)
     {
