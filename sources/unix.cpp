@@ -9,12 +9,13 @@
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 namespace securefs
 {
-class UnixFileStream final : public StreamBase
+class UnixFileStream final : public FileStream
 {
 private:
     int m_fd;
@@ -34,11 +35,20 @@ public:
 
     ~UnixFileStream() { ::close(m_fd); }
 
+    int get_native_handle() noexcept override { return m_fd; }
+
+    void fsync() override
+    {
+        int rc = ::fsync(m_fd);
+        if (rc < 0)
+            throw UnderlyingOSException(errno, "fsync");
+    }
+
     length_type read(void* output, offset_type offset, length_type length) override
     {
         auto rc = ::pread(m_fd, output, length, offset);
         if (rc < 0)
-            throw OSException(errno);
+            throw UnderlyingOSException(errno, "pread");
         return rc;
     }
 
@@ -46,7 +56,7 @@ public:
     {
         auto rc = ::pwrite(m_fd, input, length, offset);
         if (rc < 0)
-            throw OSException(errno);
+            throw UnderlyingOSException(errno, "pwrite");
         if (static_cast<length_type>(rc) != length)
             throw OSException(EIO);
         if (offset + length > m_size)
@@ -59,13 +69,37 @@ public:
     {
         auto rc = ::ftruncate(m_fd, new_length);
         if (rc < 0)
-            throw OSException(errno);
+            UnderlyingOSException(errno, "truncate");
         m_size = new_length;
     }
 
     length_type size() const override { return m_size; }
 
     bool is_sparse() const noexcept override { return true; }
+
+    void utimens(const struct timespec ts[2]) override
+    {
+        int rc;
+#if _XOPEN_SOURCE >= 700 || _POSIX_C_SOURCE >= 200809L
+        rc = ::futimens(m_fd, ts);
+#else
+        if (!ts)
+            rc = ::futimes(m_fd, nullptr);
+        else
+        {
+            struct timeval time_values[2];
+            for (size_t i = 0; i < 2; ++i)
+            {
+                time_values[i].tv_sec = ts[i].tv_sec;
+                time_values[i].tv_usec
+                    = static_cast<decltype(time_values[i].tv_usec)>(ts[i].tv_nsec / 1000);
+            }
+            rc = ::futimes(m_fd, time_values);
+        }
+#endif
+        if (rc < 0)
+            throw UnderlyingOSException(errno, "utimens");
+    }
 };
 
 class RootDirectory::Impl
@@ -86,7 +120,7 @@ RootDirectory::RootDirectory(const std::string& path, bool readonly) : impl(new 
     impl->dir_fd = dir_fd;
 }
 
-std::shared_ptr<StreamBase>
+std::shared_ptr<FileStream>
 RootDirectory::open_file_stream(const std::string& path, int flags, unsigned mode)
 {
     int fd = ::openat(impl->dir_fd, path.c_str(), flags, mode);

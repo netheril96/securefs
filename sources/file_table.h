@@ -59,6 +59,7 @@ public:
     bool is_readonly() const noexcept { return m_flags & READ_ONLY; }
     bool is_auth_enabled() const noexcept { return !(m_flags & NO_AUTHENTICATION); }
     void gc();
+    void statfs(struct statvfs* fs_info) { m_root->statfs(fs_info); }
 };
 
 class AutoClosedFileBase

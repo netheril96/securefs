@@ -13,8 +13,8 @@
 namespace securefs
 {
 
-FileBase::FileBase(int data_fd,
-                   int meta_fd,
+FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
+                   std::shared_ptr<FileStream> meta_stream,
                    const key_type& key_,
                    const id_type& id_,
                    bool check,
@@ -23,15 +23,12 @@ FileBase::FileBase(int data_fd,
     : m_refcount(1)
     , m_header()
     , m_id(id_)
-    , m_data_fd(data_fd)
-    , m_meta_fd(meta_fd)
+    , m_data_stream(data_stream)
+    , m_meta_stream(meta_stream)
     , m_dirty(false)
     , m_check(check)
     , m_stream()
 {
-    auto data_stream = std::make_shared<POSIXFileStream>(data_fd);
-    auto meta_stream = std::make_shared<POSIXFileStream>(meta_fd);
-
     key_type data_key, meta_key;
     byte generated_keys[KEY_LENGTH * 3];
     hkdf(key_.data(),
@@ -45,8 +42,8 @@ FileBase::FileBase(int data_fd,
     memcpy(data_key.data(), generated_keys, KEY_LENGTH);
     memcpy(meta_key.data(), generated_keys + KEY_LENGTH, KEY_LENGTH);
     memcpy(m_key.data(), generated_keys + 2 * KEY_LENGTH, KEY_LENGTH);
-    auto crypt = make_cryptstream_aes_gcm(std::move(data_stream),
-                                          std::move(meta_stream),
+    auto crypt = make_cryptstream_aes_gcm(std::static_pointer_cast<StreamBase>(data_stream),
+                                          std::static_pointer_cast<StreamBase>(meta_stream),
                                           data_key,
                                           meta_key,
                                           id_,
@@ -85,7 +82,7 @@ void FileBase::stat(struct stat* st)
 {
     if (!st)
         throw OSException(EFAULT);
-    int rc = ::fstat(file_descriptor(), st);
+    int rc = ::fstat(get_data_fd(), st);
     if (rc < 0)
         throw UnderlyingOSException(errno, "stat");
 
@@ -130,9 +127,9 @@ static const ssize_t XATTR_IV_LENGTH = 16, XATTR_MAC_LENGTH = 16;
 ssize_t FileBase::listxattr(char* buffer, size_t size)
 {
 #ifdef __APPLE__
-    auto rc = ::flistxattr(file_descriptor(), buffer, size, 0);
+    auto rc = ::flistxattr(get_data_fd(), buffer, size, 0);
 #else
-    auto rc = ::flistxattr(file_descriptor(), buffer, size);
+    auto rc = ::flistxattr(get_data_fd(), buffer, size);
 #endif
     if (rc < 0)
         throw OSException(errno);
@@ -153,14 +150,14 @@ ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
     if (!name)
         throw OSException(EFAULT);
 
-    auto true_size = fgetxattr_wrapper(file_descriptor(), name, value, size);
+    auto true_size = fgetxattr_wrapper(get_data_fd(), name, value, size);
     if (true_size < 0)
         throw OSException(errno);
     if (!value)
         return true_size;
 
     byte meta[XATTR_IV_LENGTH + XATTR_MAC_LENGTH];
-    auto true_meta_size = fgetxattr_wrapper(m_meta_fd, name, meta, sizeof(meta));
+    auto true_meta_size = fgetxattr_wrapper(get_meta_fd(), name, meta, sizeof(meta));
     if (true_meta_size < 0)
     {
         if (errno == ERANGE)
@@ -232,10 +229,10 @@ void FileBase::setxattr(const char* name, const char* value, size_t size, int fl
                     XATTR_MAC_LENGTH,
                     ciphertext);
 
-    auto rc = fsetxattr_wrapper(file_descriptor(), name, ciphertext, size, flags);
+    auto rc = fsetxattr_wrapper(get_data_fd(), name, ciphertext, size, flags);
     if (rc < 0)
         throw OSException(errno);
-    rc = fsetxattr_wrapper(m_meta_fd, name, meta, sizeof(meta), flags);
+    rc = fsetxattr_wrapper(get_meta_fd(), name, meta, sizeof(meta), flags);
     if (rc < 0)
         throw OSException(errno);
 }
@@ -243,9 +240,9 @@ void FileBase::setxattr(const char* name, const char* value, size_t size, int fl
 void FileBase::removexattr(const char* name)
 {
 #ifdef __APPLE__
-    auto rc = ::fremovexattr(file_descriptor(), name, 0);
+    auto rc = ::fremovexattr(get_data_fd(), name, 0);
 #else
-    auto rc = ::fremovexattr(file_descriptor(), name);
+    auto rc = ::fremovexattr(get_data_fd(), name);
 #endif
     if (rc < 0)
         throw OSException(errno);

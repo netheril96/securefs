@@ -17,6 +17,7 @@
 namespace securefs
 {
 
+typedef std::pair<std::shared_ptr<FileStream>, std::shared_ptr<FileStream>> FileStreamPtrPair;
 class FileTableIO
 {
     DISABLE_COPY_MOVE(FileTableIO)
@@ -25,10 +26,8 @@ public:
     explicit FileTableIO() {}
     virtual ~FileTableIO() {}
 
-    virtual std::pair<std::shared_ptr<StreamBase>, std::shared_ptr<StreamBase>>
-    open(const id_type& id) = 0;
-    virtual std::pair<std::shared_ptr<StreamBase>, std::shared_ptr<StreamBase>>
-    create(const id_type& id) = 0;
+    virtual FileStreamPtrPair open(const id_type& id) = 0;
+    virtual FileStreamPtrPair create(const id_type& id) = 0;
     virtual void unlink(const id_type& id) noexcept = 0;
 };
 
@@ -61,8 +60,7 @@ public:
     {
     }
 
-    std::pair<std::shared_ptr<StreamBase>, std::shared_ptr<StreamBase>>
-    open(const id_type& id) override
+    FileStreamPtrPair open(const id_type& id) override
     {
         std::string first_level_dir, second_level_dir, filename, metaname;
         calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
@@ -72,8 +70,7 @@ public:
                               m_root->open_file_stream(metaname, open_flags, 0));
     }
 
-    std::pair<std::shared_ptr<StreamBase>, std::shared_ptr<StreamBase>>
-    create(const id_type& id) override
+    FileStreamPtrPair create(const id_type& id) override
     {
         std::string first_level_dir, second_level_dir, filename, metaname;
         calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
@@ -117,8 +114,7 @@ public:
     {
     }
 
-    std::pair<std::shared_ptr<StreamBase>, std::shared_ptr<StreamBase>>
-    open(const id_type& id) override
+    FileStreamPtrPair open(const id_type& id) override
     {
         std::string dir, filename, metaname;
         calculate_paths(id, dir, filename, metaname);
@@ -128,8 +124,7 @@ public:
                               m_root->open_file_stream(metaname, open_flags, 0));
     }
 
-    std::pair<std::shared_ptr<StreamBase>, std::shared_ptr<StreamBase>>
-    create(const id_type& id) override
+    FileStreamPtrPair create(const id_type& id) override
     {
         std::string dir, filename, metaname;
         calculate_paths(id, dir, filename, metaname);
@@ -207,7 +202,7 @@ FileBase* FileTable::open_as(const id_type& id, int type)
         }
     }
 
-    int data_fd, meta_fd;
+    std::shared_ptr<FileStream> data_fd, meta_fd;
     std::tie(data_fd, meta_fd) = m_fio->open(id);
     auto fb = btree_make_file_from_type(
         type, data_fd, meta_fd, m_master_key, id, is_auth_enabled(), m_block_size, m_iv_size);
@@ -223,7 +218,7 @@ FileBase* FileTable::create_as(const id_type& id, int type)
     if (m_opened.find(id) != m_opened.end() || m_closed.find(id) != m_closed.end())
         throw OSException(EEXIST);
 
-    int data_fd, meta_fd;
+    std::shared_ptr<FileStream> data_fd, meta_fd;
     std::tie(data_fd, meta_fd) = m_fio->create(id);
     auto fb = btree_make_file_from_type(
         type, data_fd, meta_fd, m_master_key, id, is_auth_enabled(), m_block_size, m_iv_size);

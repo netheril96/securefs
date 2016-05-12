@@ -164,7 +164,7 @@ namespace operations
 
     FileSystem::FileSystem(const FSOptions& opt)
         : table(opt.version.get(),
-                opt.dir_fd.get(),
+                opt.root,
                 opt.master_key.get(),
                 opt.flags.get(),
                 opt.block_size.get(),
@@ -224,9 +224,12 @@ namespace operations
                             __PRETTY_FUNCTION__,
                             __FILE__,
                             __LINE__);
-        int rc = ::fstatvfs(fs->table.get_dir_fd(), fs_info);
-        fs_info->f_namemax = 255;
-        return rc;
+        try
+        {
+            fs->table.statfs(fs_info);
+            return 0;
+        }
+        COMMON_CATCH_BLOCK
     }
 
     int getattr(const char* path, struct stat* st)
@@ -799,10 +802,7 @@ namespace operations
             if (!fb)
                 return -EINVAL;
             fb->flush();
-            int fd = fb->file_descriptor();
-            int rc = ::fsync(fd);
-            if (rc < 0)
-                return -errno;
+            fb->fsync();
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -832,28 +832,7 @@ namespace operations
         try
         {
             auto fg = internal::open_all(fs, path);
-            int rc = 0;
-            int fd = fg->file_descriptor();
-
-#if _XOPEN_SOURCE >= 700 || _POSIX_C_SOURCE >= 200809L
-            rc = ::futimens(fd, ts);
-#else
-            if (!ts)
-                rc = ::futimes(fd, nullptr);
-            else
-            {
-                struct timeval time_values[2];
-                for (size_t i = 0; i < 2; ++i)
-                {
-                    time_values[i].tv_sec = ts[i].tv_sec;
-                    time_values[i].tv_usec
-                        = static_cast<decltype(time_values[i].tv_usec)>(ts[i].tv_nsec / 1000);
-                }
-                rc = ::futimes(fd, time_values);
-            }
-#endif
-            if (rc < 0)
-                return -errno;
+            fg->utimens(ts);
             return 0;
         }
         COMMON_CATCH_BLOCK
