@@ -1,7 +1,7 @@
 #pragma once
 #include "platform.h"
 #include "streams.h"
-#include "utils.h"
+#include "myutils.h"
 
 #include <fuse.h>
 

@@ -1,5 +1,5 @@
 #include "catch.hpp"
-#include "utils.h"
+#include "myutils.h"
 
 TEST_CASE("Test endian")
 {

@@ -1,5 +1,5 @@
 #include "btree_dir.h"
-#include "utils.h"
+#include "myutils.h"
 
 #include <catch.hpp>
 #include <format.h>
@@ -26,7 +26,7 @@ static void test(securefs::BtreeDirectory& dir,
 
     std::mt19937 engine{std::random_device{}()};
     std::uniform_real_distribution<> prob_dist(0, 1);
-    std::uniform_int_distribution<unsigned> name_dist(0, std::numeric_limits<unsigned>::max());
+    std::uniform_int_distribution<int> name_dist(0, 65535);
     std::vector<std::string> filenames, filenames_prime;
 
     securefs::Directory::callback inserter

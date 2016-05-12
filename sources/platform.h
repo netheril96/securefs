@@ -1,7 +1,7 @@
 #pragma once
 
 #include "streams.h"
-#include "utils.h"
+#include "myutils.h"
 
 #include <memory>
 #include <stddef.h>
@@ -30,7 +30,9 @@ typedef long long ssize_t;
 #endif
 
 #ifdef _WIN32
-#define real_stat_type FUSE_STAT
+#include <fuse_win.h>
+#define off_t long long
+typedef struct FUSE_STAT real_stat_type;
 #else
 typedef struct stat real_stat_type;
 #endif

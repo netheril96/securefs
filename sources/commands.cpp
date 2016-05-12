@@ -2,7 +2,7 @@
 #include "operations.h"
 #include "platform.h"
 #include "streams.h"
-#include "utils.h"
+#include "myutils.h"
 #include "xattr_compat.h"
 
 #include <cryptopp/secblock.h>

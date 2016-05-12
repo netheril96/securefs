@@ -1,5 +1,5 @@
 #include "files.h"
-#include "utils.h"
+#include "myutils.h"
 #include "xattr_compat.h"
 
 #include <algorithm>
@@ -80,6 +80,7 @@ int FileBase::get_real_type() { return type_for_mode(get_mode() & S_IFMT); }
 
 void FileBase::stat(real_stat_type* st)
 {
+#ifndef _WIN32
     if (!st)
         throw OSException(EFAULT);
     int rc = ::fstat(get_data_fd(), st);
@@ -97,6 +98,7 @@ void FileBase::stat(real_stat_type* st)
         st->st_blksize = static_cast<decltype(st->st_blksize)>(blk_sz);
         st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
     }
+#endif
 }
 
 FileBase::~FileBase() {}

@@ -28,6 +28,10 @@ if (UNIX)
 
 else()
     add_definitions(-DNOMINMAX)
+    set (DOKAN_PREFIX "C:/Program Files/Dokan/DokanLibrary")
+    include_directories(${DOKAN_PREFIX}/include/fuse)
+    link_libraries(${DOKAN_PREFIX}/lib/dokan.lib)
+    link_libraries(${DOKAN_PREFIX}/lib/dokanfuse.lib)
 endif()
 
 set (CMAKE_BUILD_TYPE Release)

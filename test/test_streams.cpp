@@ -7,6 +7,7 @@
 #include <random>
 #include <string.h>
 #include <vector>
+#include <stdint.h>
 
 static void test(securefs::StreamBase& stream, unsigned times)
 {
@@ -24,13 +25,13 @@ static void test(securefs::StreamBase& stream, unsigned times)
     std::mt19937 mt{std::random_device{}()};
 
     {
-        std::uniform_int_distribution<byte> dist;
+        std::uniform_int_distribution<unsigned> dist;
         for (auto&& b : data)
-            b = dist(mt);
+            b = static_cast<byte>(dist(mt));
     }
 
     std::uniform_int_distribution<int> flags_dist(0, 4);
-    std::uniform_int_distribution<size_t> length_dist(0, 7 * 4096 + 1);
+    std::uniform_int_distribution<int> length_dist(0, 7 * 4096 + 1);
     for (size_t i = 0; i < times; ++i)
     {
         auto a = length_dist(mt);
