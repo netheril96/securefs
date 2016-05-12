@@ -1,7 +1,6 @@
 #include "file_table.h"
 #include "btree_dir.h"
 #include "exceptions.h"
-#include "syscalls.h"
 #include "utils.h"
 
 #include <algorithm>
@@ -12,7 +11,8 @@
 #include <utility>
 #include <vector>
 
-using securefs::syscalls::FileDescriptorGuard;
+#include <fcntl.h>
+#include <unistd.h>
 
 namespace securefs
 {
@@ -64,42 +64,50 @@ public:
         calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
 
         int open_flags = m_readonly ? O_RDONLY : O_RDWR;
-        FileDescriptorGuard data_fd(syscalls::openat(m_dir_fd, filename.c_str(), open_flags, 0));
-        FileDescriptorGuard meta_fd(syscalls::openat(m_dir_fd, metaname.c_str(), open_flags, 0));
-        return std::make_pair(data_fd.release(), meta_fd.release());
+        int data_fd = ::openat(m_dir_fd, filename.c_str(), open_flags);
+        if (data_fd < 0)
+            throw UnderlyingOSException(errno, fmt::format("Error opening {}", filename));
+        int meta_fd = ::openat(m_dir_fd, metaname.c_str(), open_flags);
+        if (meta_fd < 0)
+        {
+            ::close(data_fd);
+            throw UnderlyingOSException(errno, fmt::format("Error opening {}", metaname));
+        }
+        return std::make_pair(data_fd, meta_fd);
     }
 
     std::pair<int, int> create(const id_type& id) override
     {
         std::string first_level_dir, second_level_dir, filename, metaname;
         calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
-
-        FileDescriptorGuard data_fd(-1), meta_fd(-1);
+        int data_fd = -1, meta_fd = -1;
         try
         {
             ensure_directory(m_dir_fd, first_level_dir.c_str(), 0755);
             ensure_directory(m_dir_fd, second_level_dir.c_str(), 0755);
-            data_fd.reset(
-                syscalls::openat(m_dir_fd, filename.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644));
-            meta_fd.reset(
-                syscalls::openat(m_dir_fd, metaname.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644));
+            data_fd = ::openat(m_dir_fd, filename.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
+            if (data_fd < 0)
+                throw UnderlyingOSException(errno, fmt::format("Error creating {}", filename));
+            meta_fd = ::openat(m_dir_fd, metaname.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
+            if (meta_fd < 0)
+                throw UnderlyingOSException(errno, fmt::format("Error creating {}", metaname));
 
-            return std::make_pair(data_fd.release(), meta_fd.release());
+            return std::make_pair(data_fd, meta_fd);
         }
         catch (...)
         {
-            if (data_fd.get() >= 0)
+            if (data_fd >= 0)
             {
-                data_fd.reset(-1);
-                syscalls::unlinkat(m_dir_fd, filename.c_str(), 0);
+                ::close(data_fd);
+                ::unlinkat(m_dir_fd, filename.c_str(), 0);
             }
-            if (meta_fd.get() >= 0)
+            if (meta_fd >= 0)
             {
-                meta_fd.reset(-1);
-                syscalls::unlinkat(m_dir_fd, metaname.c_str(), 0);
+                ::close(meta_fd);
+                ::unlinkat(m_dir_fd, metaname.c_str(), 0);
             }
-            syscalls::unlinkat(m_dir_fd, second_level_dir.c_str(), AT_REMOVEDIR);
-            syscalls::unlinkat(m_dir_fd, first_level_dir.c_str(), AT_REMOVEDIR);
+            ::unlinkat(m_dir_fd, second_level_dir.c_str(), AT_REMOVEDIR);
+            ::unlinkat(m_dir_fd, first_level_dir.c_str(), AT_REMOVEDIR);
             throw;
         }
     }
@@ -108,10 +116,10 @@ public:
     {
         std::string first_level_dir, second_level_dir, filename, metaname;
         calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
-        syscalls::unlinkat(m_dir_fd, filename.c_str(), 0);
-        syscalls::unlinkat(m_dir_fd, metaname.c_str(), 0);
-        syscalls::unlinkat(m_dir_fd, second_level_dir.c_str(), AT_REMOVEDIR);
-        syscalls::unlinkat(m_dir_fd, first_level_dir.c_str(), AT_REMOVEDIR);
+        ::unlinkat(m_dir_fd, filename.c_str(), 0);
+        ::unlinkat(m_dir_fd, metaname.c_str(), 0);
+        ::unlinkat(m_dir_fd, second_level_dir.c_str(), AT_REMOVEDIR);
+        ::unlinkat(m_dir_fd, first_level_dir.c_str(), AT_REMOVEDIR);
     }
 };
 
@@ -142,40 +150,49 @@ public:
         calculate_paths(id, dir, filename, metaname);
 
         int open_flags = m_readonly ? O_RDONLY : O_RDWR;
-        FileDescriptorGuard data_fd(syscalls::openat(m_dir_fd, filename.c_str(), open_flags, 0));
-        FileDescriptorGuard meta_fd(syscalls::openat(m_dir_fd, metaname.c_str(), open_flags, 0));
-        return std::make_pair(data_fd.release(), meta_fd.release());
+        int data_fd = ::openat(m_dir_fd, filename.c_str(), open_flags);
+        if (data_fd < 0)
+            throw UnderlyingOSException(errno, fmt::format("Error opening {}", filename));
+        int meta_fd = ::openat(m_dir_fd, metaname.c_str(), open_flags);
+        if (meta_fd < 0)
+        {
+            ::close(data_fd);
+            throw UnderlyingOSException(errno, fmt::format("Error opening {}", metaname));
+        }
+        return std::make_pair(data_fd, meta_fd);
     }
 
     std::pair<int, int> create(const id_type& id) override
     {
         std::string dir, filename, metaname;
         calculate_paths(id, dir, filename, metaname);
+        int data_fd = -1, meta_fd = -1;
 
-        FileDescriptorGuard data_fd(-1), meta_fd(-1);
         try
         {
             ensure_directory(m_dir_fd, dir.c_str(), 0755);
-            data_fd.reset(
-                syscalls::openat(m_dir_fd, filename.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644));
-            meta_fd.reset(
-                syscalls::openat(m_dir_fd, metaname.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644));
+            data_fd = ::openat(m_dir_fd, filename.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
+            if (data_fd < 0)
+                throw UnderlyingOSException(errno, fmt::format("Error creating {}", filename));
+            meta_fd = ::openat(m_dir_fd, metaname.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
+            if (meta_fd < 0)
+                throw UnderlyingOSException(errno, fmt::format("Error creating {}", metaname));
 
-            return std::make_pair(data_fd.release(), meta_fd.release());
+            return std::make_pair(data_fd, meta_fd);
         }
         catch (...)
         {
-            if (data_fd.get() >= 0)
+            if (data_fd >= 0)
             {
-                data_fd.reset(-1);
-                syscalls::unlinkat(m_dir_fd, filename.c_str(), 0);
+                ::close(data_fd);
+                ::unlinkat(m_dir_fd, filename.c_str(), 0);
             }
-            if (meta_fd.get() >= 0)
+            if (meta_fd >= 0)
             {
-                meta_fd.reset(-1);
-                syscalls::unlinkat(m_dir_fd, metaname.c_str(), 0);
+                ::close(meta_fd);
+                ::unlinkat(m_dir_fd, metaname.c_str(), 0);
             }
-            syscalls::unlinkat(m_dir_fd, dir.c_str(), AT_REMOVEDIR);
+            ::unlinkat(m_dir_fd, dir.c_str(), AT_REMOVEDIR);
             throw;
         }
     }
@@ -184,9 +201,9 @@ public:
     {
         std::string dir, filename, metaname;
         calculate_paths(id, dir, filename, metaname);
-        syscalls::unlinkat(m_dir_fd, filename.c_str(), 0);
-        syscalls::unlinkat(m_dir_fd, metaname.c_str(), 0);
-        syscalls::unlinkat(m_dir_fd, dir.c_str(), AT_REMOVEDIR);
+        ::unlinkat(m_dir_fd, filename.c_str(), 0);
+        ::unlinkat(m_dir_fd, metaname.c_str(), 0);
+        ::unlinkat(m_dir_fd, dir.c_str(), AT_REMOVEDIR);
     }
 };
 
