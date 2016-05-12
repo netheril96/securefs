@@ -17,10 +17,9 @@ void Logger::log(LoggingLevel level,
 {
     try
     {
-        auto full_msg = fmt::format("[{}] [{}] [thread={}] [{}:{}] [{}]      {}\n",
+        auto full_msg = fmt::format("[{}] [{}] [{}:{}] [{}]      {}\n",
                                     stringify(level),
                                     format_current_time(),
-                                    std::this_thread::get_id(),
                                     file,
                                     line,
                                     func,
