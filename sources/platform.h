@@ -8,6 +8,10 @@
 #include <stdint.h>
 #include <string>
 
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
 struct statvfs;
 struct timespec;
 
@@ -22,7 +26,6 @@ typedef long long ssize_t;
 #define O_RDONLY _O_RDONLY
 #define O_RDWR _O_RDWR
 #define O_EXCL _O_EXCL
-#endif
 
 #define S_IFMT 00170000
 #define S_IFSOCK 0140000
@@ -36,12 +39,11 @@ typedef long long ssize_t;
 #define S_ISGID 0002000
 #define S_ISVTX 0001000
 
+#endif
+
 #ifdef _WIN32
 typedef FUSE_STAT real_stat_type;
 #else
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 typedef struct stat real_stat_type;
 #endif
 
