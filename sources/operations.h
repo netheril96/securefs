@@ -6,6 +6,10 @@
 #define FUSE_USE_VERSION 27
 #include <fuse.h>
 
+#ifdef _WIN32
+#define off_t long long
+#endif
+
 namespace securefs
 {
 namespace operations

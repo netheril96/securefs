@@ -562,9 +562,9 @@ get_options(const std::string& data_dir, bool stdinpass, bool insecure, const st
 
     if (!logfile.empty())
         fsopt.logger
-            = std::make_shared<FileLogger>(LoggingLevel::WARN, fopen(logfile.c_str(), "w+b"));
+            = std::make_shared<FileLogger>(LoggingLevel::Warn, fopen(logfile.c_str(), "w+b"));
     else
-        fsopt.logger = std::make_shared<FileLogger>(LoggingLevel::WARN, stderr);
+        fsopt.logger = std::make_shared<FileLogger>(LoggingLevel::Warn, stderr);
 
     fsopt.flags = 0;
     if (insecure)
@@ -609,7 +609,7 @@ int mount_filesys(int argc, char** argv)
         data_dir.getValue(), stdinpass.getValue(), insecure.getValue(), log.getValue());
 
     if (trace.getValue() && fsopt.logger)
-        fsopt.logger->set_level(LoggingLevel::DEBUG);
+        fsopt.logger->set_level(LoggingLevel::Debug);
 
     fprintf(stderr,
             "Mounting filesystem stored at %s onto %s\nFormat version: %u\n",

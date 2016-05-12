@@ -26,6 +26,8 @@ if (UNIX)
     	set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections -pthread")
     endif()
 
+else()
+    add_definitions(-DNOMINMAX)
 endif()
 
 set (CMAKE_BUILD_TYPE Release)

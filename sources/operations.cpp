@@ -143,8 +143,8 @@ namespace internal
         FileSystem* fs, const std::exception& e, const char* func, const char* file, int line)
     {
         auto logger = fs->logger.get();
-        if (logger && LoggingLevel::ERROR >= logger->get_level())
-            logger->log(LoggingLevel::ERROR,
+        if (logger && LoggingLevel::Error >= logger->get_level())
+            logger->log(LoggingLevel::Error,
                         fmt::format("An unexcepted exception of type {} occurrs: {}",
                                     typeid(e).name(),
                                     e.what()),
@@ -190,7 +190,7 @@ namespace operations
 
     static bool should_debug_log(FileSystem* fs)
     {
-        return fs->logger && fs->logger->get_level() <= LoggingLevel::DEBUG;
+        return fs->logger && fs->logger->get_level() <= LoggingLevel::Debug;
     }
 
     void* init(struct fuse_conn_info*)
@@ -198,7 +198,7 @@ namespace operations
         auto args = static_cast<FSOptions*>(fuse_get_context()->private_data);
         auto fs = new FileSystem(*args);
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG, "init", __PRETTY_FUNCTION__, __FILE__, __LINE__);
+            fs->logger->log(LoggingLevel::Debug, "init", __PRETTY_FUNCTION__, __FILE__, __LINE__);
         return fs;
     }
 
@@ -207,7 +207,7 @@ namespace operations
         auto fs = static_cast<FileSystem*>(data);
         if (should_debug_log(fs))
             fs->logger->log(
-                LoggingLevel::DEBUG, "destroy", __PRETTY_FUNCTION__, __FILE__, __LINE__);
+                LoggingLevel::Debug, "destroy", __PRETTY_FUNCTION__, __FILE__, __LINE__);
         delete fs;
     }
 
@@ -215,7 +215,7 @@ namespace operations
     {
         COMMON_PROLOGUE
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={}", path),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -232,7 +232,7 @@ namespace operations
     {
         COMMON_PROLOGUE
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={}", path),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -251,7 +251,7 @@ namespace operations
     {
         COMMON_PROLOGUE
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={}", path),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -265,7 +265,7 @@ namespace operations
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
 
             if (should_debug_log(fs))
-                fs->logger->log(LoggingLevel::DEBUG,
+                fs->logger->log(LoggingLevel::Debug,
                                 fmt::format("path={} handle=0x{:x}", path, info->fh),
                                 __PRETTY_FUNCTION__,
                                 __FILE__,
@@ -285,8 +285,8 @@ namespace operations
         const char* path, void* buffer, fuse_fill_dir_t filler, off_t, struct fuse_file_info* info)
     {
         COMMON_PROLOGUE
-        if (fs->logger && fs->logger->get_level() <= LoggingLevel::DEBUG)
-            fs->logger->log(LoggingLevel::DEBUG,
+        if (fs->logger && fs->logger->get_level() <= LoggingLevel::Debug)
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={} handle=0x{:x}", path, info->fh),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -315,7 +315,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={}", path),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -339,7 +339,7 @@ namespace operations
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
 
             if (should_debug_log(fs))
-                fs->logger->log(LoggingLevel::DEBUG,
+                fs->logger->log(LoggingLevel::Debug,
                                 fmt::format("path={} handle=0x{:x}", path, info->fh),
                                 __PRETTY_FUNCTION__,
                                 __FILE__,
@@ -355,7 +355,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={}", path),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -382,7 +382,7 @@ namespace operations
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
 
             if (should_debug_log(fs))
-                fs->logger->log(LoggingLevel::DEBUG,
+                fs->logger->log(LoggingLevel::Debug,
                                 fmt::format("path={} handle=0x{:x}", path, info->fh),
                                 __PRETTY_FUNCTION__,
                                 __FILE__,
@@ -397,7 +397,7 @@ namespace operations
     {
         COMMON_PROLOGUE
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={} handle=0x{:x}", path, info->fh),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -422,7 +422,7 @@ namespace operations
 
         if (should_debug_log(fs))
             fs->logger->log(
-                LoggingLevel::DEBUG,
+                LoggingLevel::Debug,
                 fmt::format("path={} handle=0x{:x} length={} offset={}", path, info->fh, len, off),
                 __PRETTY_FUNCTION__,
                 __FILE__,
@@ -447,7 +447,7 @@ namespace operations
 
         if (should_debug_log(fs))
             fs->logger->log(
-                LoggingLevel::DEBUG,
+                LoggingLevel::Debug,
                 fmt::format("path={} handle=0x{:x} length={} offset={}", path, info->fh, len, off),
                 __PRETTY_FUNCTION__,
                 __FILE__,
@@ -471,7 +471,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={} handle=0x{:x}", path, info->fh),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -495,7 +495,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={} size={}", path, size),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -518,7 +518,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={} size={} handle=0x{:x}", path, size, info->fh),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -542,7 +542,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={}", path),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -563,7 +563,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={} mode={}", path, mode),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -596,7 +596,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={} mode={}", path, mode),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -620,7 +620,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={} uid={} gid={}", path, uid, gid),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -642,7 +642,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("to={} from={}", to, from),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -674,7 +674,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={}", path),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -698,7 +698,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("src={} dst={}", src, dst),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -744,7 +744,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("src={} dst={}", src, dst),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -786,7 +786,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={} handle=0x{:x}", path, fi->fh),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -814,7 +814,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={} access_time={}({}) modification_time={}({})",
                                         path,
                                         ts[0].tv_sec,
@@ -840,7 +840,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={}", path),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -863,7 +863,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={} name={}", path, name),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -891,7 +891,7 @@ namespace operations
 
         if (should_debug_log(fs))
             fs->logger->log(
-                LoggingLevel::DEBUG,
+                LoggingLevel::Debug,
                 fmt::format("path={} name={} value={}", path, name, std::string(value, size)),
                 __PRETTY_FUNCTION__,
                 __FILE__,
@@ -920,7 +920,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={} name={}", path, name),
                             __PRETTY_FUNCTION__,
                             __FILE__,
@@ -940,7 +940,7 @@ namespace operations
 
         if (should_debug_log(fs))
             fs->logger->log(
-                LoggingLevel::DEBUG,
+                LoggingLevel::Debug,
                 fmt::format("path={} name={} value={}", path, name, std::string(value, size)),
                 __PRETTY_FUNCTION__,
                 __FILE__,
@@ -962,7 +962,7 @@ namespace operations
         COMMON_PROLOGUE
 
         if (should_debug_log(fs))
-            fs->logger->log(LoggingLevel::DEBUG,
+            fs->logger->log(LoggingLevel::Debug,
                             fmt::format("path={} name={}", path, name),
                             __PRETTY_FUNCTION__,
                             __FILE__,

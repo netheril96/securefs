@@ -3,6 +3,8 @@
 #include "streams.h"
 #include "utils.h"
 
+#include <fuse.h>
+
 #include <atomic>
 #include <chrono>
 #include <functional>

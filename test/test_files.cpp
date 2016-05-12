@@ -9,9 +9,6 @@
 #include <string.h>
 #include <vector>
 
-#include <fcntl.h>
-#include <unistd.h>
-
 TEST_CASE("File table")
 {
     using namespace securefs;

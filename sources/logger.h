@@ -14,13 +14,13 @@ inline const char* stringify(LoggingLevel lvl)
 {
     switch (lvl)
     {
-    case LoggingLevel::DEBUG:
+    case LoggingLevel::Debug:
         return "DEBUG";
-    case LoggingLevel::WARN:
+    case LoggingLevel::Warn:
         return "WARN";
-    case LoggingLevel::ERROR:
+    case LoggingLevel::Error:
         return "ERROR";
-    case LoggingLevel::FATAL:
+    case LoggingLevel::Fatal:
         return "FATAL";
     default:
         return "UNKNOWN";

@@ -8,9 +8,6 @@
 #include <string.h>
 #include <vector>
 
-#include <fcntl.h>
-#include <unistd.h>
-
 static void test(securefs::StreamBase& stream, unsigned times)
 {
     securefs::FileSystemService service;

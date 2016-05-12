@@ -11,9 +11,6 @@
 #include <unordered_set>
 #include <vector>
 
-#include <fcntl.h>
-#include <unistd.h>
-
 static void test(securefs::BtreeDirectory& dir,
                  securefs::Directory& reference,
                  unsigned rounds,

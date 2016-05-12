@@ -14,10 +14,10 @@ namespace securefs
 {
 enum class ExceptionLevel
 {
-    DEBUG = 0,
-    WARN = 1,
-    ERROR = 2,
-    FATAL = 3
+    Debug = 0,
+    Warn = 1,
+    Error = 2,
+    Fatal = 3
 };
 
 class ExceptionBase : public std::exception
@@ -51,17 +51,17 @@ public:
 
 class CommonException : public ExceptionBase
 {
-    ExceptionLevel level() const noexcept override { return ExceptionLevel::WARN; }
+    ExceptionLevel level() const noexcept override { return ExceptionLevel::Warn; }
 };
 
 class SeriousException : public ExceptionBase
 {
-    ExceptionLevel level() const noexcept override { return ExceptionLevel::ERROR; }
+    ExceptionLevel level() const noexcept override { return ExceptionLevel::Error; }
 };
 
 class FatalException : public ExceptionBase
 {
-    ExceptionLevel level() const noexcept override { return ExceptionLevel::FATAL; }
+    ExceptionLevel level() const noexcept override { return ExceptionLevel::Fatal; }
 };
 
 class NotImplementedException : public SeriousException
