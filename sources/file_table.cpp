@@ -2,6 +2,7 @@
 #include "btree_dir.h"
 #include "exceptions.h"
 #include "utils.h"
+#include "platform.h"
 
 #include <algorithm>
 #include <limits>

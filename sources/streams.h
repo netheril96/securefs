@@ -5,9 +5,6 @@
 #include <memory>
 #include <utility>
 
-#include <sys/stat.h>
-#include <unistd.h>
-
 namespace securefs
 {
 
@@ -80,67 +77,10 @@ public:
     virtual void flush_header() = 0;
 };
 
-class POSIXFileStream final : public StreamBase
-{
-private:
-    int m_fd;
-    length_type m_size;
-
-public:
-    explicit POSIXFileStream(int fd) : m_fd(fd)
-    {
-        if (fd < 0)
-            throw OSException(EBADF);
-        struct stat st;
-        int rc = ::fstat(m_fd, &st);
-        if (rc < 0)
-            throw OSException(errno);
-        m_size = st.st_size;
-    }
-
-    ~POSIXFileStream() { ::close(m_fd); }
-
-    length_type read(void* output, offset_type offset, length_type length) override
-    {
-        auto rc = ::pread(m_fd, output, length, offset);
-        if (rc < 0)
-            throw OSException(errno);
-        return rc;
-    }
-
-    void write(const void* input, offset_type offset, length_type length) override
-    {
-        auto rc = ::pwrite(m_fd, input, length, offset);
-        if (rc < 0)
-            throw OSException(errno);
-        if (static_cast<length_type>(rc) != length)
-            throw OSException(EIO);
-        if (offset + length > m_size)
-            m_size = offset + length;
-    }
-
-    void flush() override {}
-
-    void resize(length_type new_length) override
-    {
-        auto rc = ::ftruncate(m_fd, new_length);
-        if (rc < 0)
-            throw OSException(errno);
-        m_size = new_length;
-    }
-
-    length_type size() const override { return m_size; }
-
-    bool is_sparse() const noexcept override { return true; }
-};
-
 std::shared_ptr<StreamBase> make_stream_hmac(const key_type& key_,
                                              const id_type& id_,
                                              std::shared_ptr<StreamBase> stream,
                                              bool check);
-
-std::shared_ptr<StreamBase>
-make_stream_salsa20(std::shared_ptr<StreamBase> stream, const void* password, size_t pass_len);
 
 /**
  * Base classes for streams that encrypt and decrypt data transparently

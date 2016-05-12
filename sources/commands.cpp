@@ -15,7 +15,6 @@
 #include <memory>
 #include <stdexcept>
 #include <string.h>
-#include <strings.h>
 #include <typeinfo>
 #include <typeinfo>
 #include <unordered_map>
@@ -33,24 +32,6 @@ static const unsigned MIN_ITERATIONS = 20000;
 static const unsigned MIN_DERIVE_SECONDS = 1;
 static const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
 static const size_t MAX_PASS_LEN = 4000;
-
-void lock_base_directory(int dir_fd)
-{
-    auto rc = ::flock(dir_fd, LOCK_EX | LOCK_NB);
-    if (rc < 0)
-    {
-        if (errno == EWOULDBLOCK)
-        {
-            throw std::runtime_error(
-                "Error: another process is holding the lock on the underlying directory\n");
-        }
-        else
-        {
-            throw std::runtime_error(
-                fmt::format("Error locking base directory: {}", securefs::sane_strerror(errno)));
-        }
-    }
-}
 
 #ifndef _WIN32
 
@@ -382,16 +363,6 @@ size_t try_read_password_with_confirmation(void* password, size_t length)
     return len1;
 }
 
-int open_and_lock_base_dir(const std::string& path)
-{
-    int folder_fd = ::open(path.c_str(), O_RDONLY);
-    if (folder_fd < 0)
-        throw std::runtime_error(
-            fmt::format("Error opening directory {}: {}", path, securefs::sane_strerror(errno)));
-    lock_base_directory(folder_fd);
-    return folder_fd;
-}
-
 int create_filesys(int argc, char** argv)
 {
     using namespace securefs;
@@ -563,7 +534,7 @@ get_options(const std::string& data_dir, bool stdinpass, bool insecure, const st
     {
         CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
         size_t pass_len = 0;
-        if (stdinpass || !isatty(STDIN_FILENO))
+        if (stdinpass)
             pass_len = insecure_read_password(stdin, nullptr, password.data(), password.size());
         else
             pass_len = try_read_password(password.data(), password.size());
@@ -620,6 +591,7 @@ int mount_filesys(int argc, char** argv)
     cmdline.add(&mount_point);
     cmdline.parse(argc, argv);
 
+#ifndef _WIN32
     {
         struct rlimit rl;
         int rc = ::getrlimit(RLIMIT_NOFILE, &rl);
@@ -641,6 +613,7 @@ int mount_filesys(int argc, char** argv)
                     "Setting limit of number of file descriptors to %d\n",
                     static_cast<int>(rl.rlim_cur));
     }
+#endif
 
     operations::FSOptions fsopt = get_options(
         data_dir.getValue(), stdinpass.getValue(), insecure.getValue(), log.getValue());

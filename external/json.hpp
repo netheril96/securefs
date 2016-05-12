@@ -26,6 +26,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <ciso646>
 
 /*!
 @brief namespace for Niels Lohmann

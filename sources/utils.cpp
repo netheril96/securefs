@@ -14,6 +14,7 @@
 #include <time.h>
 #include <vector>
 
+#ifndef _WIN32
 #include <dirent.h>
 #include <fcntl.h>
 
@@ -22,6 +23,7 @@
 #include <sys/types.h>
 #include <termios.h>
 #include <unistd.h>
+#endif
 
 namespace securefs
 {
@@ -414,6 +416,7 @@ size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size
 
 size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length)
 {
+#ifndef _WIN32
     if (!fp || !password)
         NULL_EXCEPT();
 
@@ -434,8 +437,12 @@ size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t
     auto retval = insecure_read_password(fp, prompt, password, max_length);
     (void)::tcsetattr(fd, TCSAFLUSH, &old_termios);
     return retval;
+#else
+	return insecure_read_password(fp, prompt, password, max_length);
+#endif
 }
 
+#ifndef _WIN32
 std::string format_current_time()
 {
     struct timeval now;
@@ -451,13 +458,7 @@ std::string format_current_time()
                        tm.tm_sec,
                        now.tv_usec);
 }
-
-void ensure_directory(int base_fd, const char* dir_name, mode_t mode)
-{
-    int rc = ::mkdirat(base_fd, dir_name, mode);
-    if (rc < 0 && errno != EEXIST)
-        throw securefs::OSException(errno);
-}
+#endif
 
 std::vector<std::string> split(const char* str, size_t length, char separator)
 {

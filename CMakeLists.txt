@@ -2,12 +2,11 @@ cmake_minimum_required(VERSION 2.8.5 FATAL_ERROR)
 project (securefs)
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+if (UNIX)
 find_package(FUSE REQUIRED)
 include_directories(${FUSE_INCLUDE_DIR})
 link_libraries(${FUSE_LIBRARIES})
-
 set (CMAKE_CXX_FLAGS "-std=c++11 -Wall -Wextra -pedantic -D_FILE_OFFSET_BITS=64")
-set (CMAKE_BUILD_TYPE Release)
 
 option(GENERAL_ARCH "Build for the general architecture instead of this cpu" OFF)
 option(SANITIZE "Turn on sanitization" OFF)
@@ -20,14 +19,18 @@ if (NOT ${GENERAL_ARCH})
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -mtune=native")
 endif()
 
-include(FeatureDetection)
-
 if (APPLE)
 	set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-dead_strip")
 else()
 	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections -pthread")
 	set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections -pthread")
 endif()
+
+endif()
+
+set (CMAKE_BUILD_TYPE Release)
+
+include(FeatureDetection)
 
 include_directories(${PROJECT_SOURCE_DIR}/sources)
 set (EXTERNAL_DIR ${PROJECT_SOURCE_DIR}/external)

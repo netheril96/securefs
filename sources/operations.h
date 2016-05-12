@@ -6,10 +6,6 @@
 #define FUSE_USE_VERSION 27
 #include <fuse.h>
 
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <sys/types.h>
-
 namespace securefs
 {
 namespace operations
