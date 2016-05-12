@@ -19,7 +19,7 @@ namespace securefs
 
 class FileTableIO
 {
-    DISABLE_COPY_MOVE(FileTableIO);
+    DISABLE_COPY_MOVE(FileTableIO)
 
 public:
     explicit FileTableIO() {}

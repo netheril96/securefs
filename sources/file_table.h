@@ -20,7 +20,7 @@ class AutoClosedFileBase;
 
 class FileTable
 {
-    DISABLE_COPY_MOVE(FileTable);
+    DISABLE_COPY_MOVE(FileTable)
 
 private:
     typedef std::unordered_map<id_type, std::shared_ptr<FileBase>, id_hash> table_type;
