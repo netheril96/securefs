@@ -8,7 +8,7 @@
 #include <cryptopp/secblock.h>
 #include <format.h>
 #include <fuse.h>
-#include <json.hpp>
+#include <json/json.h>
 #include <tclap/CmdLine.h>
 
 #include <algorithm>
@@ -213,16 +213,16 @@ void fix(const std::string& basedir, operations::FileSystem* fs)
 }
 #endif
 
-nlohmann::json generate_config(int version,
-                               const securefs::key_type& master_key,
-                               const securefs::key_type& salt,
-                               const void* password,
-                               size_t pass_len,
-                               unsigned block_size,
-                               unsigned iv_size,
-                               unsigned rounds = 0)
+Json::Value generate_config(int version,
+                            const securefs::key_type& master_key,
+                            const securefs::key_type& salt,
+                            const void* password,
+                            size_t pass_len,
+                            unsigned block_size,
+                            unsigned iv_size,
+                            unsigned rounds = 0)
 {
-    nlohmann::json config;
+    Json::Value config;
     config["version"] = version;
     securefs::key_type key_to_encrypt, encrypted_master_key;
     config["iterations"] = securefs::pbkdf_hmac_sha256(password,
@@ -251,9 +251,13 @@ nlohmann::json generate_config(int version,
                               sizeof(mac),
                               encrypted_master_key.data());
 
-    config["encrypted_key"] = {{"IV", securefs::hexify(iv, sizeof(iv))},
-                               {"MAC", securefs::hexify(mac, sizeof(mac))},
-                               {"key", securefs::hexify(encrypted_master_key)}};
+    Json::Value encrypted_key;
+    encrypted_key["IV"] = securefs::hexify(iv, sizeof(iv));
+    encrypted_key["MAC"] = securefs::hexify(mac, sizeof(mac));
+    encrypted_key["key"] = securefs::hexify(encrypted_master_key);
+
+    config["encrypted_key"] = std::move(encrypted_key);
+
     if (version == 2)
     {
         config["block_size"] = block_size;
@@ -262,7 +266,7 @@ nlohmann::json generate_config(int version,
     return config;
 }
 
-bool parse_config(const nlohmann::json& config,
+bool parse_config(const Json::Value& config,
                   const void* password,
                   size_t pass_len,
                   securefs::key_type& master_key,
@@ -270,7 +274,7 @@ bool parse_config(const nlohmann::json& config,
                   unsigned& iv_size)
 {
     using namespace securefs;
-    unsigned version = config["version"];
+    unsigned version = config["version"].asUInt();
 
     if (version == 1)
     {
@@ -279,25 +283,25 @@ bool parse_config(const nlohmann::json& config,
     }
     else if (version == 2)
     {
-        block_size = config.at("block_size");
-        iv_size = config.at("iv_size");
+        block_size = config["block_size"].asUInt();
+        iv_size = config["iv_size"].asUInt();
     }
     else
     {
         throw InvalidArgumentException(fmt::format("Unsupported version {}", version));
     }
 
-    unsigned iterations = config.at("iterations");
+    unsigned iterations = config["iterations"].asUInt();
 
     byte iv[CONFIG_IV_LENGTH];
     byte mac[CONFIG_MAC_LENGTH];
     key_type salt, encrypted_key, key_to_encrypt_master_key;
 
-    std::string salt_hex = config.at("salt");
-    auto&& encrypted_key_json_value = config.at("encrypted_key");
-    std::string iv_hex = encrypted_key_json_value.at("IV");
-    std::string mac_hex = encrypted_key_json_value.at("MAC");
-    std::string ekey_hex = encrypted_key_json_value.at("key");
+    std::string salt_hex = config["salt"].asString();
+    auto&& encrypted_key_json_value = config["encrypted_key"];
+    std::string iv_hex = encrypted_key_json_value["IV"].asString();
+    std::string mac_hex = encrypted_key_json_value["MAC"].asString();
+    std::string ekey_hex = encrypted_key_json_value["key"].asString();
 
     parse_hex(salt_hex, salt.data(), salt.size());
     parse_hex(iv_hex, iv, sizeof(iv));
@@ -326,7 +330,7 @@ bool parse_config(const nlohmann::json& config,
                            master_key.data());
 }
 
-nlohmann::json read_config(RootDirectory& dir)
+Json::Value read_config(RootDirectory& dir)
 {
     using namespace securefs;
     auto config_stream = dir.open_file_stream(CONFIG_FILE_NAME, O_RDONLY, 0);
@@ -335,7 +339,12 @@ nlohmann::json read_config(RootDirectory& dir)
         throw std::runtime_error("Error parsing config file: file is empty");
 
     config_stream->read(&config_str[0], 0, config_str.size());
-    return nlohmann::json::parse(config_str);
+    Json::Reader reader;
+    Json::Value result;
+    if (!reader.parse(config_str, result))
+        throw std::runtime_error(
+            fmt::format("Failure to parse the config file: {}", reader.getFormattedErrorMessages()));
+    return result;
 }
 
 size_t try_read_password_with_confirmation(void* password, size_t length)
@@ -423,7 +432,7 @@ int create_filesys(int argc, char** argv)
                                       4096,
                                       iv_size.getValue(),
                                       rounds.getValue())
-                          .dump();
+                          .toStyledString();
 
         config_stream = root->open_file_stream(CONFIG_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
         config_stream->write(config.data(), 0, config.size());
@@ -526,7 +535,7 @@ get_options(const std::string& data_dir, bool stdinpass, bool insecure, const st
     fsopt.root->lock();
 
     auto config_json = read_config(*fsopt.root);
-    auto version = config_json.at("version").get<int>();
+    auto version = config_json["version"].asUInt();
     fsopt.version = version;
     if (version != 1 && version != 2)
         throw std::runtime_error(fmt::format("Unkown format version {}", version));
@@ -697,7 +706,7 @@ int chpass_filesys(int argc, char** argv)
 
     key_type salt;
     generate_random(salt.data(), salt.size());
-    auto config = generate_config(config_json.at("version"),
+    auto config = generate_config(config_json["version"].asUInt(),
                                   master_key,
                                   salt,
                                   password.data(),
@@ -705,7 +714,7 @@ int chpass_filesys(int argc, char** argv)
                                   block_size,
                                   iv_size,
                                   rounds.getValue())
-                      .dump();
+                      .toStyledString();
 
     auto config_stream
         = root.open_file_stream(CONFIG_TMP_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
