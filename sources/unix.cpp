@@ -5,6 +5,7 @@
 #include "platform.h"
 
 #include <fcntl.h>
+#include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -65,12 +66,55 @@ public:
     bool is_sparse() const noexcept override { return true; }
 };
 
-std::shared_ptr<StreamBase> open_file_stream(const char* path, int flags, mode_t mode)
+class UnixRootDirectory : public RootDirectory
 {
-    int fd = ::open(path, flags, mode);
-    if (fd < 0)
-        throw UnderlyingOSException(errno, fmt::format("Opening {} with flags {}", path, flags));
-    return std::make_shared<UnixFileStream>(fd);
-}
+private:
+    std::string dir_name;
+    int dir_fd;
+
+public:
+    explicit UnixRootDirectory(const char* path, bool readonly) : dir_name(path)
+    {
+        dir_fd = ::open(path, readonly ? O_RDONLY : O_RDWR);
+        if (dir_fd < 0)
+            throw UnderlyingOSException(errno, fmt::format("Opening directory {}", path));
+    }
+
+    std::shared_ptr<StreamBase>
+    open_file_stream(const char* path, int flags, unsigned mode) override
+    {
+        int fd = ::openat(dir_fd, path, flags, mode);
+        if (fd < 0)
+            throw UnderlyingOSException(
+                errno, fmt::format("Opening {}/{} with flags {}", dir_name, path, flags));
+        return std::make_shared<UnixFileStream>(fd);
+    }
+
+    bool remove_file(const char* path) noexcept override
+    {
+        return ::unlinkat(dir_fd, path, 0) == 0;
+    }
+
+    bool remove_directory(const char* path) noexcept override
+    {
+        return ::unlinkat(dir_fd, path, AT_REMOVEDIR);
+    }
+
+    void lock() override
+    {
+        int rc = ::flock(dir_fd, LOCK_NB | LOCK_EX);
+        if (rc < 0)
+            throw UnderlyingOSException(
+                errno, fmt::format("Fail to obtain exclusive lock on {}", dir_name));
+    }
+
+    void ensure_directory(const char* path, unsigned mode) override
+    {
+        int rc = ::mkdirat(dir_fd, path, mode);
+        if (rc < 0 && errno != EEXIST)
+            throw UnderlyingOSException(
+                errno, fmt::format("Fail to create directory {}/{}", dir_name, path));
+    }
+};
 }
 #endif

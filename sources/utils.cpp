@@ -1,6 +1,5 @@
 #include "utils.h"
 #include "exceptions.h"
-#include "syscalls.h"
 
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>

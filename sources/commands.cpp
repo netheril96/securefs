@@ -1,7 +1,6 @@
 #include "exceptions.h"
 #include "operations.h"
 #include "streams.h"
-#include "syscalls.h"
 #include "utils.h"
 #include "xattr_compat.h"
 
