@@ -342,8 +342,8 @@ Json::Value read_config(RootDirectory& dir)
     Json::Reader reader;
     Json::Value result;
     if (!reader.parse(config_str, result))
-        throw std::runtime_error(
-            fmt::format("Failure to parse the config file: {}", reader.getFormattedErrorMessages()));
+        throw std::runtime_error(fmt::format("Failure to parse the config file: {}",
+                                             reader.getFormattedErrorMessages()));
     return result;
 }
 
@@ -600,29 +600,10 @@ int mount_filesys(int argc, char** argv)
     cmdline.add(&mount_point);
     cmdline.parse(argc, argv);
 
-#ifndef _WIN32
+    if (!raise_fd_limit())
     {
-        struct rlimit rl;
-        int rc = ::getrlimit(RLIMIT_NOFILE, &rl);
-        if (rc != 0)
-            throw std::runtime_error(securefs::sane_strerror(errno));
-        rl.rlim_cur = 10240 * 16;
-        do
-        {
-            rl.rlim_cur /= 2;
-            rc = ::setrlimit(RLIMIT_NOFILE, &rl);
-        } while (rc < 0 && rl.rlim_cur >= 1024);
-        if (rc != 0)
-            fprintf(stderr,
-                    "Fail to raise the limit of number of file descriptors: %s\nYou may encounter "
-                    "\"Too many opened files\" errors later\n",
-                    sane_strerror(errno).c_str());
-        else
-            fprintf(stderr,
-                    "Setting limit of number of file descriptors to %d\n",
-                    static_cast<int>(rl.rlim_cur));
+        fputs("Warning: failure to raise the maximum file descriptor limit\n", stderr);
     }
-#endif
 
     operations::FSOptions fsopt = get_options(
         data_dir.getValue(), stdinpass.getValue(), insecure.getValue(), log.getValue());

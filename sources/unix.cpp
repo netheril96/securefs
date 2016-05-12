@@ -7,6 +7,7 @@
 
 #include <fcntl.h>
 #include <sys/file.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <sys/time.h>
@@ -175,5 +176,20 @@ void RootDirectory::rename(const std::string& a, const std::string& b)
 
 uint32_t getuid() noexcept { return ::getuid(); }
 uint32_t getgid() noexcept { return ::getgid(); }
+
+bool raise_fd_limit() noexcept
+{
+    struct rlimit rl;
+    int rc = ::getrlimit(RLIMIT_NOFILE, &rl);
+    if (rc != 0)
+        return false;
+    rl.rlim_cur = 10240 * 16;
+    do
+    {
+        rl.rlim_cur /= 2;
+        rc = ::setrlimit(RLIMIT_NOFILE, &rl);
+    } while (rc < 0 && rl.rlim_cur >= 1024);
+    return rc == 0;
+}
 }
 #endif

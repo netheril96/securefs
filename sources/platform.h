@@ -75,4 +75,5 @@ public:
 
 uint32_t getuid() noexcept;
 uint32_t getgid() noexcept;
+bool raise_fd_limit() noexcept;
 }
