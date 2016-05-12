@@ -250,7 +250,7 @@ void FileBase::removexattr(const char* name)
     if (rc < 0)
         throw OSException(errno);
 }
-    
+
 #endif
 
 void SimpleDirectory::initialize()

@@ -10,7 +10,7 @@ endif()
 
 CHECK_CXX_SOURCE_COMPILES(
 "#include <sys/xattr.h>
-int main() { return ::listxattr(0, 0, 0, 0); }" 
+int main() {return 0;}" 
 HAS_XATTR)
 
 if (${HAS_XATTR})

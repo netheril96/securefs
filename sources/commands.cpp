@@ -1,6 +1,7 @@
 #include "exceptions.h"
 #include "operations.h"
 #include "streams.h"
+#include "syscalls.h"
 #include "utils.h"
 #include "xattr_compat.h"
 
@@ -19,11 +20,6 @@
 #include <typeinfo>
 #include <unordered_map>
 #include <vector>
-
-#include <fcntl.h>
-#include <sys/file.h>
-#include <sys/resource.h>
-#include <unistd.h>
 
 using namespace securefs;
 
@@ -55,6 +51,8 @@ void lock_base_directory(int dir_fd)
         }
     }
 }
+
+#ifndef _WIN32
 
 enum class NLinkFixPhase
 {
@@ -232,6 +230,7 @@ void fix(const std::string& basedir, operations::FileSystem* fs)
     fix_hardlink_count(fs, root_dir.get_as<Directory>(), &nlink_map, NLinkFixPhase::FixingNLink);
     puts("Fix complete");
 }
+#endif
 
 nlohmann::json generate_config(int version,
                                const securefs::key_type& master_key,
@@ -680,9 +679,14 @@ int fix_filesys(int argc, char** argv)
     cmdline.add(&dir);
     cmdline.parse(argc, argv);
 
+#ifndef _WIN32
     operations::FileSystem fs(get_options(dir.getValue(), false, false, ""));
     fix(dir.getValue(), &fs);
     return 0;
+#else
+    fprintf(stderr, "Sorry, this functionality is not implemented on Windows for now");
+    return 9;
+#endif
 }
 
 int chpass_filesys(int argc, char** argv)

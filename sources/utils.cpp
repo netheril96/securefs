@@ -1,5 +1,6 @@
 #include "utils.h"
 #include "exceptions.h"
+#include "syscalls.h"
 
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
@@ -16,7 +17,7 @@
 
 #include <dirent.h>
 #include <fcntl.h>
-#include <pthread.h>
+
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -146,6 +147,9 @@ void parse_hex(const std::string& hex, byte* output, size_t len)
     }
 }
 #ifndef HAS_THREAD_LOCAL
+
+#include <pthread.h>
+
 template <class T>
 class ThreadLocalStorage
 {
@@ -155,7 +159,7 @@ private:
 public:
     explicit ThreadLocalStorage()
     {
-        int rc = ::pthread_key_create(&m_pkey, [](void* ptr) { delete static_cast<T*>(ptr); });
+        int rc = pthread_key_create(&m_pkey, [](void* ptr) { delete static_cast<T*>(ptr); });
         if (rc < 0)
             throw std::runtime_error("Fail to initialize pthread TLS");
     }
@@ -478,6 +482,7 @@ std::vector<std::string> split(const char* str, size_t length, char separator)
     return result;
 }
 
+#ifndef _WIN32
 static void find_ids_helper(const std::string& current_dir,
                             std::unordered_set<id_type, id_hash>& result)
 {
@@ -552,6 +557,7 @@ std::unordered_set<id_type, id_hash> find_all_ids(const std::string& basedir)
     find_ids_helper(basedir, result);
     return result;
 }
+#endif
 
 bool ends_with(const char* str, size_t size, const char* suffix, size_t suffix_len)
 {
