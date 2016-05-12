@@ -25,15 +25,17 @@ public:
     explicit FileTableIO() {}
     virtual ~FileTableIO() {}
 
-    virtual std::pair<int, int> open(const id_type& id) = 0;
-    virtual std::pair<int, int> create(const id_type& id) = 0;
+    virtual std::pair<std::shared_ptr<StreamBase>, std::shared_ptr<StreamBase>>
+    open(const id_type& id) = 0;
+    virtual std::pair<std::shared_ptr<StreamBase>, std::shared_ptr<StreamBase>>
+    create(const id_type& id) = 0;
     virtual void unlink(const id_type& id) noexcept = 0;
 };
 
 class FileTableIOVersion1 : public FileTableIO
 {
 private:
-    int m_dir_fd;
+    std::shared_ptr<RootDirectory> m_root;
     bool m_readonly;
 
     static const size_t FIRST_LEVEL = 1, SECOND_LEVEL = 5;
@@ -54,79 +56,49 @@ private:
     }
 
 public:
-    explicit FileTableIOVersion1(int dir_fd, bool readonly) : m_dir_fd(dir_fd), m_readonly(readonly)
+    explicit FileTableIOVersion1(std::shared_ptr<RootDirectory> root, bool readonly)
+        : m_root(root), m_readonly(readonly)
     {
     }
 
-    std::pair<int, int> open(const id_type& id) override
+    std::pair<std::shared_ptr<StreamBase>, std::shared_ptr<StreamBase>>
+    open(const id_type& id) override
     {
         std::string first_level_dir, second_level_dir, filename, metaname;
         calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
 
         int open_flags = m_readonly ? O_RDONLY : O_RDWR;
-        int data_fd = ::openat(m_dir_fd, filename.c_str(), open_flags);
-        if (data_fd < 0)
-            throw UnderlyingOSException(errno, fmt::format("Error opening {}", filename));
-        int meta_fd = ::openat(m_dir_fd, metaname.c_str(), open_flags);
-        if (meta_fd < 0)
-        {
-            ::close(data_fd);
-            throw UnderlyingOSException(errno, fmt::format("Error opening {}", metaname));
-        }
-        return std::make_pair(data_fd, meta_fd);
+        return std::make_pair(m_root->open_file_stream(filename, open_flags, 0),
+                              m_root->open_file_stream(metaname, open_flags, 0));
     }
 
-    std::pair<int, int> create(const id_type& id) override
+    std::pair<std::shared_ptr<StreamBase>, std::shared_ptr<StreamBase>>
+    create(const id_type& id) override
     {
         std::string first_level_dir, second_level_dir, filename, metaname;
         calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
-        int data_fd = -1, meta_fd = -1;
-        try
-        {
-            ensure_directory(m_dir_fd, first_level_dir.c_str(), 0755);
-            ensure_directory(m_dir_fd, second_level_dir.c_str(), 0755);
-            data_fd = ::openat(m_dir_fd, filename.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
-            if (data_fd < 0)
-                throw UnderlyingOSException(errno, fmt::format("Error creating {}", filename));
-            meta_fd = ::openat(m_dir_fd, metaname.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
-            if (meta_fd < 0)
-                throw UnderlyingOSException(errno, fmt::format("Error creating {}", metaname));
-
-            return std::make_pair(data_fd, meta_fd);
-        }
-        catch (...)
-        {
-            if (data_fd >= 0)
-            {
-                ::close(data_fd);
-                ::unlinkat(m_dir_fd, filename.c_str(), 0);
-            }
-            if (meta_fd >= 0)
-            {
-                ::close(meta_fd);
-                ::unlinkat(m_dir_fd, metaname.c_str(), 0);
-            }
-            ::unlinkat(m_dir_fd, second_level_dir.c_str(), AT_REMOVEDIR);
-            ::unlinkat(m_dir_fd, first_level_dir.c_str(), AT_REMOVEDIR);
-            throw;
-        }
+        m_root->ensure_directory(first_level_dir.c_str(), 0755);
+        m_root->ensure_directory(second_level_dir.c_str(), 0755);
+        int open_flags = O_RDWR | O_CREAT | O_EXCL;
+        return std::make_pair(m_root->open_file_stream(filename, open_flags, 0644),
+                              m_root->open_file_stream(metaname, open_flags, 0644));
     }
 
     void unlink(const id_type& id) noexcept override
     {
         std::string first_level_dir, second_level_dir, filename, metaname;
         calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
-        ::unlinkat(m_dir_fd, filename.c_str(), 0);
-        ::unlinkat(m_dir_fd, metaname.c_str(), 0);
-        ::unlinkat(m_dir_fd, second_level_dir.c_str(), AT_REMOVEDIR);
-        ::unlinkat(m_dir_fd, first_level_dir.c_str(), AT_REMOVEDIR);
+        m_root->remove_file(filename);
+        m_root->remove_file(metaname);
+        m_root->remove_directory(second_level_dir);
+        m_root->remove_directory(second_level_dir);
     }
 };
 
 class FileTableIOVersion2 : public FileTableIO
 {
 private:
-    int m_dir_fd;
+    std::shared_ptr<RootDirectory> m_root;
     bool m_readonly;
 
     static void calculate_paths(const securefs::id_type& id,
@@ -140,89 +112,59 @@ private:
     }
 
 public:
-    explicit FileTableIOVersion2(int dir_fd, bool readonly) : m_dir_fd(dir_fd), m_readonly(readonly)
+    explicit FileTableIOVersion2(std::shared_ptr<RootDirectory> root, bool readonly)
+        : m_root(root), m_readonly(readonly)
     {
     }
 
-    std::pair<int, int> open(const id_type& id) override
+    std::pair<std::shared_ptr<StreamBase>, std::shared_ptr<StreamBase>>
+    open(const id_type& id) override
     {
         std::string dir, filename, metaname;
         calculate_paths(id, dir, filename, metaname);
 
         int open_flags = m_readonly ? O_RDONLY : O_RDWR;
-        int data_fd = ::openat(m_dir_fd, filename.c_str(), open_flags);
-        if (data_fd < 0)
-            throw UnderlyingOSException(errno, fmt::format("Error opening {}", filename));
-        int meta_fd = ::openat(m_dir_fd, metaname.c_str(), open_flags);
-        if (meta_fd < 0)
-        {
-            ::close(data_fd);
-            throw UnderlyingOSException(errno, fmt::format("Error opening {}", metaname));
-        }
-        return std::make_pair(data_fd, meta_fd);
+        return std::make_pair(m_root->open_file_stream(filename, open_flags, 0),
+                              m_root->open_file_stream(metaname, open_flags, 0));
     }
 
-    std::pair<int, int> create(const id_type& id) override
+    std::pair<std::shared_ptr<StreamBase>, std::shared_ptr<StreamBase>>
+    create(const id_type& id) override
     {
         std::string dir, filename, metaname;
         calculate_paths(id, dir, filename, metaname);
-        int data_fd = -1, meta_fd = -1;
-
-        try
-        {
-            ensure_directory(m_dir_fd, dir.c_str(), 0755);
-            data_fd = ::openat(m_dir_fd, filename.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
-            if (data_fd < 0)
-                throw UnderlyingOSException(errno, fmt::format("Error creating {}", filename));
-            meta_fd = ::openat(m_dir_fd, metaname.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
-            if (meta_fd < 0)
-                throw UnderlyingOSException(errno, fmt::format("Error creating {}", metaname));
-
-            return std::make_pair(data_fd, meta_fd);
-        }
-        catch (...)
-        {
-            if (data_fd >= 0)
-            {
-                ::close(data_fd);
-                ::unlinkat(m_dir_fd, filename.c_str(), 0);
-            }
-            if (meta_fd >= 0)
-            {
-                ::close(meta_fd);
-                ::unlinkat(m_dir_fd, metaname.c_str(), 0);
-            }
-            ::unlinkat(m_dir_fd, dir.c_str(), AT_REMOVEDIR);
-            throw;
-        }
+        m_root->ensure_directory(dir, 0755);
+        int open_flags = O_RDWR | O_CREAT | O_EXCL;
+        return std::make_pair(m_root->open_file_stream(filename, open_flags, 0644),
+                              m_root->open_file_stream(metaname, open_flags, 0644));
     }
 
     void unlink(const id_type& id) noexcept override
     {
         std::string dir, filename, metaname;
         calculate_paths(id, dir, filename, metaname);
-        ::unlinkat(m_dir_fd, filename.c_str(), 0);
-        ::unlinkat(m_dir_fd, metaname.c_str(), 0);
-        ::unlinkat(m_dir_fd, dir.c_str(), AT_REMOVEDIR);
+        m_root->remove_file(filename);
+        m_root->remove_file(metaname);
+        m_root->remove_directory(dir);
     }
 };
 
 FileTable::FileTable(int version,
-                     int dir_fd,
+                     std::shared_ptr<RootDirectory> root,
                      const key_type& master_key,
                      uint32_t flags,
                      unsigned block_size,
                      unsigned iv_size)
-    : m_flags(flags), m_block_size(block_size), m_iv_size(iv_size), m_dir_fd(dir_fd)
+    : m_flags(flags), m_block_size(block_size), m_iv_size(iv_size), m_root(root)
 {
     memcpy(m_master_key.data(), master_key.data(), master_key.size());
     switch (version)
     {
     case 1:
-        m_fio.reset(new FileTableIOVersion1(dir_fd, is_readonly()));
+        m_fio.reset(new FileTableIOVersion1(root, is_readonly()));
         break;
     case 2:
-        m_fio.reset(new FileTableIOVersion2(dir_fd, is_readonly()));
+        m_fio.reset(new FileTableIOVersion2(root, is_readonly()));
         break;
     default:
         throw InvalidArgumentException("Unknown version");

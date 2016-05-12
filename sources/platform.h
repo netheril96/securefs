@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <stddef.h>
+#include <string>
 
 struct statvfs;
 
@@ -11,19 +12,18 @@ class StreamBase;
 
 class RootDirectory
 {
-    DISABLE_COPY_MOVE(RootDirectory)
+private:
+    class Impl;
+    std::unique_ptr<Impl> impl;
 
 public:
-    RootDirectory() {}
-    virtual ~RootDirectory() {}
-    virtual std::shared_ptr<StreamBase> open_file_stream(const char* path, int flags, unsigned mode)
-        = 0;
-    virtual bool remove_file(const char* path) noexcept = 0;
-    virtual bool remove_directory(const char* path) noexcept = 0;
-    virtual void lock() = 0;
-    virtual void ensure_directory(const char* path, unsigned mode) = 0;
-    virtual void statfs(struct statvfs*) = 0;
+    RootDirectory(const std::string& path, bool readonly);
+    ~RootDirectory();
+    std::shared_ptr<StreamBase> open_file_stream(const std::string& path, int flags, unsigned mode);
+    bool remove_file(const std::string& path) noexcept;
+    bool remove_directory(const std::string& path) noexcept;
+    void lock();
+    void ensure_directory(const std::string& path, unsigned mode);
+    void statfs(struct statvfs*);
 };
-
-std::shared_ptr<RootDirectory> open_root(const char* path, bool readonly);
 }

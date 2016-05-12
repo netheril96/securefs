@@ -1,6 +1,7 @@
 #pragma once
 #include "exceptions.h"
 #include "files.h"
+#include "platform.h"
 #include "streams.h"
 #include "utils.h"
 
@@ -35,7 +36,7 @@ private:
     std::unique_ptr<FileTableIO> m_fio;
     uint32_t m_flags;
     unsigned m_block_size, m_iv_size;
-    int m_dir_fd;
+    std::shared_ptr<RootDirectory> m_root;
 
 private:
     void eject();
@@ -46,7 +47,7 @@ public:
 
 public:
     explicit FileTable(int version,
-                       int dir_fd,
+                       std::shared_ptr<RootDirectory> root,
                        const key_type& master_key,
                        uint32_t flags,
                        unsigned block_size,
