@@ -249,7 +249,26 @@ void FileBase::removexattr(const char* name)
     if (rc < 0)
         throw OSException(errno);
 }
+#else
+ssize_t FileBase::listxattr(char* buffer, size_t size)
+{
+	throw OSException(ENOTSUP);
+}
 
+ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
+{
+	throw OSException(ENOTSUP);
+}
+
+void FileBase::setxattr(const char* name, const char* value, size_t size, int flags)
+{
+	throw OSException(ENOTSUP);
+}
+
+void FileBase::removexattr(const char* name)
+{
+	throw OSException(ENOTSUP);
+}
 #endif
 
 void SimpleDirectory::initialize()

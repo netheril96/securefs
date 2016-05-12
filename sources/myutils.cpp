@@ -442,24 +442,6 @@ size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t
 #endif
 }
 
-#ifndef _WIN32
-std::string format_current_time()
-{
-    struct timeval now;
-    (void)gettimeofday(&now, nullptr);
-    struct tm tm;
-    gmtime_r(&now.tv_sec, &tm);
-    return fmt::format("{}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}.{:06d}Z",
-                       tm.tm_year + 1900,
-                       tm.tm_mon + 1,
-                       tm.tm_mday,
-                       tm.tm_hour,
-                       tm.tm_min,
-                       tm.tm_sec,
-                       now.tv_usec);
-}
-#endif
-
 std::vector<std::string> split(const char* str, size_t length, char separator)
 {
     const char* end = str + length;

@@ -1,6 +1,11 @@
 #ifdef _WIN32
 #include "platform.h"
 
+#include <codecvt>
+
+#include <utils.h>
+#include <Windows.h>
+
 namespace securefs {
 	class FileSystemService::Impl
 	{
@@ -69,6 +74,15 @@ namespace securefs {
 	bool FileSystemService::raise_fd_limit() noexcept
 	{
 		return false;
+	}
+
+	std::string format_current_time()
+	{
+		wchar_t buffer[256];
+		if (GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_FORCE24HOURFORMAT, nullptr, nullptr, buffer, 256) == 0)
+			return "UNKNOWN TIME";
+		std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
+		return converter.to_bytes(buffer);
 	}
 }
 #endif

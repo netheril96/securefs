@@ -43,12 +43,14 @@ TEST_CASE("File table")
         table.close(dir);
     }
 
+#ifndef _WIN32
     {
         auto all_ids = find_all_ids(base_dir.c_str());
         REQUIRE(all_ids.size() == 2);
         REQUIRE(all_ids.find(null_id) != all_ids.end());
         REQUIRE(all_ids.find(file_id) != all_ids.end());
     }
+#endif
 
     {
         auto root = std::make_shared<FileSystemService>(base_dir);

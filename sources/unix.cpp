@@ -206,5 +206,21 @@ bool FileSystemService::raise_fd_limit() noexcept
     } while (rc < 0 && rl.rlim_cur >= 1024);
     return rc == 0;
 }
+
+std::string format_current_time()
+{
+	struct timeval now;
+	(void)gettimeofday(&now, nullptr);
+	struct tm tm;
+	gmtime_r(&now.tv_sec, &tm);
+	return fmt::format("{}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}.{:06d}Z",
+		tm.tm_year + 1900,
+		tm.tm_mon + 1,
+		tm.tm_mday,
+		tm.tm_hour,
+		tm.tm_min,
+		tm.tm_sec,
+		now.tv_usec);
+}
 }
 #endif
