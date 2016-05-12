@@ -189,26 +189,6 @@ std::string sane_strerror(int error_number);
 
 void ensure_directory(int base_fd, const char* dir_name, mode_t mode);
 
-class FileDescriptorGuard
-{
-private:
-    int m_fd;
-
-public:
-    explicit FileDescriptorGuard(int fd) : m_fd(fd) {}
-    FileDescriptorGuard(FileDescriptorGuard&& other) noexcept : m_fd(other.m_fd)
-    {
-        other.m_fd = -1;
-    }
-    FileDescriptorGuard& operator=(FileDescriptorGuard&& other) noexcept
-    {
-        std::swap(m_fd, other.m_fd);
-        return *this;
-    }
-    ~FileDescriptorGuard() { ::close(m_fd); }
-    int get() const noexcept { return m_fd; }
-};
-
 void generate_random(void* data, size_t size);
 
 void aes_gcm_encrypt(const void* plaintext,
