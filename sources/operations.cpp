@@ -1,4 +1,5 @@
 #include "operations.h"
+#include "platform.h"
 #include "xattr_compat.h"
 
 #include <algorithm>
@@ -227,7 +228,7 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-    int getattr(const char* path, struct stat* st)
+    int getattr(const char* path, real_stat_type* st)
     {
         COMMON_PROLOGUE
         if (should_debug_log(fs))
@@ -297,7 +298,7 @@ namespace operations
                 return -EINVAL;
             if (fb->type() != FileBase::DIRECTORY)
                 return -ENOTDIR;
-            struct stat st;
+            real_stat_type st;
             memset(&st, 0, sizeof(st));
             auto actions = [&](const std::string& name, const id_type&, int type) -> bool {
                 st.st_mode = FileBase::mode_for_type(type);

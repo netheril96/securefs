@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <stddef.h>
+#include <stdint.h>
 #include <string>
 
 struct statvfs;
@@ -20,18 +21,27 @@ typedef long long ssize_t;
 #define O_RDONLY _O_RDONLY
 #define O_RDWR _O_RDWR
 #define O_EXCL _O_EXCL
+#endif
 
-#define S_IFMT  00170000
+#define S_IFMT 00170000
 #define S_IFSOCK 0140000
- #define S_IFLNK  0120000
- #define S_IFREG  0100000
- #define S_IFBLK  0060000
- #define S_IFDIR  0040000
- #define S_IFCHR  0020000
- #define S_IFIFO  0010000
- #define S_ISUID  0004000
- #define S_ISGID  0002000
- #define S_ISVTX  0001000
+#define S_IFLNK 0120000
+#define S_IFREG 0100000
+#define S_IFBLK 0060000
+#define S_IFDIR 0040000
+#define S_IFCHR 0020000
+#define S_IFIFO 0010000
+#define S_ISUID 0004000
+#define S_ISGID 0002000
+#define S_ISVTX 0001000
+
+#ifdef _WIN32
+typedef FUSE_STAT real_stat_type;
+#else
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+typedef struct stat real_stat_type;
 #endif
 
 namespace securefs
@@ -62,4 +72,7 @@ public:
     void ensure_directory(const std::string& path, unsigned mode);
     void statfs(struct statvfs*);
 };
+
+uint32_t getuid() noexcept;
+uint32_t getgid() noexcept;
 }

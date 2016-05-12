@@ -1,6 +1,7 @@
 #pragma once
 #include <algorithm>
 #include <array>
+#include <functional>
 #include <memory>
 #include <stddef.h>
 #include <stdexcept>
@@ -12,12 +13,10 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include <functional>
 
 #ifdef _WIN32
 #define __PRETTY_FUNCTION__ __FUNCTION__
 #endif
-
 
 #define DISABLE_COPY_MOVE(cls)                                                                     \
     cls(const cls&) = delete;                                                                      \

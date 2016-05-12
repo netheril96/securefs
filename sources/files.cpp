@@ -78,7 +78,7 @@ void FileBase::read_header()
 
 int FileBase::get_real_type() { return type_for_mode(get_mode() & S_IFMT); }
 
-void FileBase::stat(struct stat* st)
+void FileBase::stat(real_stat_type* st)
 {
     if (!st)
         throw OSException(EFAULT);

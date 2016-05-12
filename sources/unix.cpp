@@ -172,5 +172,8 @@ void RootDirectory::rename(const std::string& a, const std::string& b)
             errno,
             fmt::format("Renaming from {}/{} to {}/{}", impl->dir_name, a, impl->dir_name, b));
 }
+
+uint32_t getuid() noexcept { return ::getuid(); }
+uint32_t getgid() noexcept { return ::getgid(); }
 }
 #endif

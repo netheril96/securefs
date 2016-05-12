@@ -40,7 +40,7 @@ namespace operations
 
     void destroy(void* ptr);
 
-    int getattr(const char*, struct stat*);
+    int getattr(const char*, real_stat_type*);
 
     int opendir(const char*, struct fuse_file_info*);
 

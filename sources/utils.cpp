@@ -438,7 +438,7 @@ size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t
     (void)::tcsetattr(fd, TCSAFLUSH, &old_termios);
     return retval;
 #else
-	return insecure_read_password(fp, prompt, password, max_length);
+    return insecure_read_password(fp, prompt, password, max_length);
 #endif
 }
 

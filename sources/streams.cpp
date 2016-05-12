@@ -4,9 +4,9 @@
 #include <array>
 #include <assert.h>
 #include <memory>
+#include <stdint.h>
 #include <string.h>
 #include <utility>
-#include <stdint.h>
 
 #include <cryptopp/hmac.h>
 #include <cryptopp/salsa.h>

@@ -3,28 +3,28 @@ project (securefs)
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 if (UNIX)
-find_package(FUSE REQUIRED)
-include_directories(${FUSE_INCLUDE_DIR})
-link_libraries(${FUSE_LIBRARIES})
-set (CMAKE_CXX_FLAGS "-std=c++11 -Wall -Wextra -pedantic -D_FILE_OFFSET_BITS=64")
-
-option(GENERAL_ARCH "Build for the general architecture instead of this cpu" OFF)
-option(SANITIZE "Turn on sanitization" OFF)
-
-if (${SANITIZE})
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
-endif()
-
-if (NOT ${GENERAL_ARCH})
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -mtune=native")
-endif()
-
-if (APPLE)
-	set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-dead_strip")
-else()
-	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections -pthread")
-	set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections -pthread")
-endif()
+    find_package(FUSE REQUIRED)
+    include_directories(${FUSE_INCLUDE_DIR})
+    link_libraries(${FUSE_LIBRARIES})
+    set (CMAKE_CXX_FLAGS "-std=c++11 -Wall -Wextra -pedantic -D_FILE_OFFSET_BITS=64")
+    
+    option(GENERAL_ARCH "Build for the general architecture instead of this cpu" OFF)
+    option(SANITIZE "Turn on sanitization" OFF)
+    
+    if (${SANITIZE})
+        set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
+    endif()
+    
+    if (NOT ${GENERAL_ARCH})
+        set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -mtune=native")
+    endif()
+    
+    if (APPLE)
+    	set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-dead_strip")
+    else()
+    	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections -pthread")
+    	set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections -pthread")
+    endif()
 
 endif()
 
