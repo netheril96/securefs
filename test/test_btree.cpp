@@ -108,16 +108,29 @@ TEST_CASE("Test BtreeDirectory")
     securefs::key_type null_key{};
     securefs::id_type null_id{};
 
-    char tmp1[] = "tmp/securefs.btree1.XXXXXX";
-    char tmp2[] = "tmp/securefs.btree2.XXXXXX";
-    char tmp3[] = "tmp/securefs.btree3.XXXXXX";
-    char tmp4[] = "tmp/securefs.btree4.XXXXXX";
+    securefs::FileSystemService service("tmp");
+    auto tmp1 = service.temp_name("btree", "1");
+    auto tmp2 = service.temp_name("btree", "2");
+    auto tmp3 = service.temp_name("btree", "3");
+    auto tmp4 = service.temp_name("btree", "4");
+
+    int flags = O_RDWR | O_EXCL | O_CREAT;
 
     {
-        securefs::BtreeDirectory dir(
-            ::mkstemp(tmp1), ::mkstemp(tmp2), null_key, null_id, true, 8000, 12);
-        securefs::SimpleDirectory ref_dir(
-            ::mkstemp(tmp3), ::mkstemp(tmp4), null_key, null_id, true, 8000, 12);
+        securefs::BtreeDirectory dir(service.open_file_stream(tmp1, flags, 0644),
+                                     service.open_file_stream(tmp2, flags, 0644),
+                                     null_key,
+                                     null_id,
+                                     true,
+                                     8000,
+                                     12);
+        securefs::SimpleDirectory ref_dir(service.open_file_stream(tmp3, flags, 0644),
+                                          service.open_file_stream(tmp4, flags, 0644),
+                                          null_key,
+                                          null_id,
+                                          true,
+                                          8000,
+                                          12);
 
         test(dir, ref_dir, 1000, 0.3, 0.5, 0.1, 1);
         test(dir, ref_dir, 1000, 0.3, 0.1, 0.5, 2);
@@ -127,10 +140,20 @@ TEST_CASE("Test BtreeDirectory")
     }
     {
         // Test if the data persists on the disk
-        securefs::BtreeDirectory dir(
-            ::open(tmp1, O_RDWR), ::open(tmp2, O_RDWR), null_key, null_id, true, 8000, 12);
-        securefs::SimpleDirectory ref_dir(
-            ::open(tmp3, O_RDWR), ::open(tmp4, O_RDWR), null_key, null_id, true, 8000, 12);
+        securefs::BtreeDirectory dir(service.open_file_stream(tmp1, O_RDWR, 0),
+                                     service.open_file_stream(tmp2, O_RDWR, 0),
+                                     null_key,
+                                     null_id,
+                                     true,
+                                     8000,
+                                     12);
+        securefs::SimpleDirectory ref_dir(service.open_file_stream(tmp3, O_RDWR, 0),
+                                          service.open_file_stream(tmp4, O_RDWR, 0),
+                                          null_key,
+                                          null_id,
+                                          true,
+                                          8000,
+                                          12);
         test(dir, ref_dir, 1000, 0.3, 0.3, 0.3, 4);
         dir.flush();
         ref_dir.flush();

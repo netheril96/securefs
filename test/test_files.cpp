@@ -15,8 +15,9 @@
 TEST_CASE("File table")
 {
     using namespace securefs;
-    char dir_template[] = "tmp/securefs_file_table.XXXXXXX";
-    REQUIRE(mkdtemp(dir_template) != nullptr);
+    FileSystemService service;
+    auto base_dir = FileSystemService::temp_name("tmp/file_table", ".dir");
+    service.ensure_directory(base_dir, 0755);
 
     key_type master_key;
     id_type null_id, file_id;
@@ -27,9 +28,8 @@ TEST_CASE("File table")
     const securefs::PODArray<char, 32> xattr_value(0x11);
 
     {
-        int tmp_fd = ::open(dir_template, O_RDONLY);
-        REQUIRE(tmp_fd >= 0);
-        FileTable table(2, tmp_fd, master_key, 0, 3000, 16);
+        auto root = std::make_shared<FileSystemService>(base_dir);
+        FileTable table(2, root, master_key, 0, 3000, 16);
         auto dir = dynamic_cast<Directory*>(table.create_as(null_id, FileBase::DIRECTORY));
         table.create_as(file_id, FileBase::REGULAR_FILE);
         dir->add_entry(".", null_id, FileBase::DIRECTORY);
@@ -44,20 +44,18 @@ TEST_CASE("File table")
             REQUIRE(e.error_number() == ENOTSUP);
         }
         table.close(dir);
-        ::close(tmp_fd);
     }
 
     {
-        auto all_ids = find_all_ids(dir_template);
+        auto all_ids = find_all_ids(base_dir.c_str());
         REQUIRE(all_ids.size() == 2);
         REQUIRE(all_ids.find(null_id) != all_ids.end());
         REQUIRE(all_ids.find(file_id) != all_ids.end());
     }
 
     {
-        int tmp_fd = ::open(dir_template, O_RDONLY);
-        REQUIRE(tmp_fd >= 0);
-        FileTable table(2, tmp_fd, master_key, 0, 3000, 16);
+        auto root = std::make_shared<FileSystemService>(base_dir);
+        FileTable table(2, root, master_key, 0, 3000, 16);
         auto dir = dynamic_cast<Directory*>(table.open_as(null_id, FileBase::DIRECTORY));
         securefs::PODArray<char, 32> xattr_test_value(0);
         try
@@ -83,6 +81,5 @@ TEST_CASE("File table")
         bool is_regular_file = type == FileBase::REGULAR_FILE;
         REQUIRE(is_regular_file);
         table.close(dir);
-        ::close(tmp_fd);
     }
 }

@@ -191,6 +191,13 @@ std::string sane_strerror(int error_number);
 
 void generate_random(void* data, size_t size);
 
+inline std::string random_hex_string(size_t size)
+{
+    auto buffer = make_unique_array<byte>(size);
+    generate_random(buffer.get(), size);
+    return hexify(buffer.get(), size);
+}
+
 void aes_gcm_encrypt(const void* plaintext,
                      size_t text_len,
                      const void* header,

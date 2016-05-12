@@ -13,7 +13,7 @@ namespace operations
     struct FSOptions
     {
         optional<int> version;
-        std::shared_ptr<RootDirectory> root;
+        std::shared_ptr<FileSystemService> root;
         optional<key_type> master_key;
         optional<uint32_t> flags;
         optional<unsigned> block_size;

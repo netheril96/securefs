@@ -103,26 +103,41 @@ public:
     }
 };
 
-class RootDirectory::Impl
+class FileSystemService::Impl
 {
 public:
     std::string dir_name;
     int dir_fd;
 };
 
-RootDirectory::~RootDirectory() {}
+FileSystemService::FileSystemService() : impl(new Impl())
+{
+    impl->dir_fd = AT_FDCWD;
+    char* cwd = getcwd(nullptr, 0);
+    if (!cwd)
+        impl->dir_name = "####UNKNOWN_DIRECTORY####";
+    else
+        impl->dir_name = cwd;
+    free(cwd);
+}
 
-RootDirectory::RootDirectory(const std::string& path, bool readonly) : impl(new Impl())
+FileSystemService::~FileSystemService()
+{
+    if (impl->dir_fd != AT_FDCWD)
+        ::close(impl->dir_fd);
+}
+
+FileSystemService::FileSystemService(const std::string& path) : impl(new Impl())
 {
     impl->dir_name = path;
-    int dir_fd = ::open(path.c_str(), readonly ? O_RDONLY : O_RDWR);
+    int dir_fd = ::open(path.c_str(), O_RDONLY);
     if (dir_fd < 0)
         throw UnderlyingOSException(errno, fmt::format("Opening directory {}", path));
     impl->dir_fd = dir_fd;
 }
 
 std::shared_ptr<FileStream>
-RootDirectory::open_file_stream(const std::string& path, int flags, unsigned mode)
+FileSystemService::open_file_stream(const std::string& path, int flags, unsigned mode)
 {
     int fd = ::openat(impl->dir_fd, path.c_str(), flags, mode);
     if (fd < 0)
@@ -131,17 +146,17 @@ RootDirectory::open_file_stream(const std::string& path, int flags, unsigned mod
     return std::make_shared<UnixFileStream>(fd);
 }
 
-bool RootDirectory::remove_file(const std::string& path) noexcept
+bool FileSystemService::remove_file(const std::string& path) noexcept
 {
     return ::unlinkat(impl->dir_fd, path.c_str(), 0) == 0;
 }
 
-bool RootDirectory::remove_directory(const std::string& path) noexcept
+bool FileSystemService::remove_directory(const std::string& path) noexcept
 {
     return ::unlinkat(impl->dir_fd, path.c_str(), AT_REMOVEDIR);
 }
 
-void RootDirectory::lock()
+void FileSystemService::lock()
 {
     int rc = ::flock(impl->dir_fd, LOCK_NB | LOCK_EX);
     if (rc < 0)
@@ -149,7 +164,7 @@ void RootDirectory::lock()
             errno, fmt::format("Fail to obtain exclusive lock on {}", impl->dir_name));
 }
 
-void RootDirectory::ensure_directory(const std::string& path, unsigned mode)
+void FileSystemService::ensure_directory(const std::string& path, unsigned mode)
 {
     int rc = ::mkdirat(impl->dir_fd, path.c_str(), mode);
     if (rc < 0 && errno != EEXIST)
@@ -157,7 +172,7 @@ void RootDirectory::ensure_directory(const std::string& path, unsigned mode)
             errno, fmt::format("Fail to create directory {}/{}", impl->dir_name, path));
 }
 
-void RootDirectory::statfs(struct statvfs* fs_info)
+void FileSystemService::statfs(struct statvfs* fs_info)
 {
     int rc = ::fstatvfs(impl->dir_fd, fs_info);
     if (rc < 0)
@@ -165,7 +180,7 @@ void RootDirectory::statfs(struct statvfs* fs_info)
     fs_info->f_namemax = 255;
 }
 
-void RootDirectory::rename(const std::string& a, const std::string& b)
+void FileSystemService::rename(const std::string& a, const std::string& b)
 {
     int rc = ::rename(a.c_str(), b.c_str());
     if (rc < 0)
@@ -174,10 +189,10 @@ void RootDirectory::rename(const std::string& a, const std::string& b)
             fmt::format("Renaming from {}/{} to {}/{}", impl->dir_name, a, impl->dir_name, b));
 }
 
-uint32_t getuid() noexcept { return ::getuid(); }
-uint32_t getgid() noexcept { return ::getgid(); }
+uint32_t FileSystemService::getuid() noexcept { return ::getuid(); }
+uint32_t FileSystemService::getgid() noexcept { return ::getgid(); }
 
-bool raise_fd_limit() noexcept
+bool FileSystemService::raise_fd_limit() noexcept
 {
     struct rlimit rl;
     int rc = ::getrlimit(RLIMIT_NOFILE, &rl);

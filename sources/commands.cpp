@@ -330,7 +330,7 @@ bool parse_config(const Json::Value& config,
                            master_key.data());
 }
 
-Json::Value read_config(RootDirectory& dir)
+Json::Value read_config(FileSystemService& dir)
 {
     using namespace securefs;
     auto config_stream = dir.open_file_stream(CONFIG_FILE_NAME, O_RDONLY, 0);
@@ -406,7 +406,7 @@ int create_filesys(int argc, char** argv)
     if (iv_size.getValue() < 12 || iv_size.getValue() > 64)
         throw std::runtime_error("Invalid IV size");
 
-    auto root = std::make_shared<RootDirectory>(dir.getValue(), false);
+    auto root = std::make_shared<FileSystemService>(dir.getValue());
     root->lock();
 
     std::shared_ptr<FileStream> config_stream;
@@ -446,8 +446,8 @@ int create_filesys(int argc, char** argv)
         opt.iv_size = version.getValue() == 1 ? 32 : 12;
         operations::FileSystem fs(opt);
         auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
-        root->set_uid(getuid());
-        root->set_gid(getgid());
+        root->set_uid(securefs::FileSystemService::getuid());
+        root->set_gid(securefs::FileSystemService::getgid());
         root->set_mode(S_IFDIR | 0755);
         root->set_nlink(1);
         root->flush();
@@ -531,7 +531,7 @@ operations::FSOptions
 get_options(const std::string& data_dir, bool stdinpass, bool insecure, const std::string& logfile)
 {
     operations::FSOptions fsopt;
-    fsopt.root = std::make_shared<RootDirectory>(data_dir, false);
+    fsopt.root = std::make_shared<FileSystemService>(data_dir);
     fsopt.root->lock();
 
     auto config_json = read_config(*fsopt.root);
@@ -600,7 +600,7 @@ int mount_filesys(int argc, char** argv)
     cmdline.add(&mount_point);
     cmdline.parse(argc, argv);
 
-    if (!raise_fd_limit())
+    if (!securefs::FileSystemService::raise_fd_limit())
     {
         fputs("Warning: failure to raise the maximum file descriptor limit\n", stderr);
     }
@@ -669,7 +669,7 @@ int chpass_filesys(int argc, char** argv)
     cmdline.add(&dir);
     cmdline.parse(argc, argv);
 
-    RootDirectory root(dir.getValue(), false);
+    FileSystemService root(dir.getValue());
     root.lock();
 
     auto config_json = read_config(root);

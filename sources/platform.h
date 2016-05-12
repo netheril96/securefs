@@ -1,6 +1,7 @@
 #pragma once
 
 #include "streams.h"
+#include "utils.h"
 
 #include <memory>
 #include <stddef.h>
@@ -55,15 +56,16 @@ public:
     virtual void utimens(const struct timespec ts[2]) = 0;
 };
 
-class RootDirectory
+class FileSystemService
 {
 private:
     class Impl;
     std::unique_ptr<Impl> impl;
 
 public:
-    RootDirectory(const std::string& path, bool readonly);
-    ~RootDirectory();
+    FileSystemService();
+    FileSystemService(const std::string& path);
+    ~FileSystemService();
     std::shared_ptr<FileStream> open_file_stream(const std::string& path, int flags, unsigned mode);
     bool remove_file(const std::string& path) noexcept;
     bool remove_directory(const std::string& path) noexcept;
@@ -71,9 +73,15 @@ public:
     void lock();
     void ensure_directory(const std::string& path, unsigned mode);
     void statfs(struct statvfs*);
-};
 
-uint32_t getuid() noexcept;
-uint32_t getgid() noexcept;
-bool raise_fd_limit() noexcept;
+public:
+    static uint32_t getuid() noexcept;
+    static uint32_t getgid() noexcept;
+    static bool raise_fd_limit() noexcept;
+
+    static std::string temp_name(const std::string& prefix, const std::string& suffix)
+    {
+        return prefix + random_hex_string(16) + suffix;
+    }
+};
 }

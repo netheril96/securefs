@@ -1,5 +1,6 @@
 #include "catch.hpp"
 
+#include "platform.h"
 #include "streams.h"
 
 #include <algorithm>
@@ -12,8 +13,12 @@
 
 static void test(securefs::StreamBase& stream, unsigned times)
 {
-    char temp_template[] = "tmp/securefs.stream.XXXXXX";
-    securefs::POSIXFileStream posix_stream(mkstemp(temp_template));
+    securefs::FileSystemService service;
+
+    auto posix_stream_impl = service.open_file_stream(
+        service.temp_name("tmp/", "stream"), O_RDWR | O_CREAT | O_EXCL, 0644);
+    auto&& posix_stream = *posix_stream_impl;
+
     posix_stream.resize(0);
     stream.resize(0);
 
@@ -113,19 +118,23 @@ namespace dummy
 // Used for debugging
 void dump_contents(const std::vector<byte>& bytes, const char* filename, size_t max_size)
 {
-    securefs::POSIXFileStream fs(::open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0600));
-    fs.write(bytes.data(), 0, max_size);
+    securefs::FileSystemService service;
+    auto fs = service.open_file_stream(filename, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    fs->write(bytes.data(), 0, max_size);
 }
 
 TEST_CASE("Test streams")
 {
-    char temp_template[] = "tmp/securefs.stream.XXXXXX";
+    securefs::FileSystemService service;
+
+    auto filename = service.temp_name("tmp/", ".stream");
 
     securefs::key_type key;
     securefs::id_type id;
     memset(key.data(), 0xff, key.size());
     memset(id.data(), 0xee, id.size());
-    auto posix_stream = std::make_shared<securefs::POSIXFileStream>(mkstemp(temp_template));
+    auto posix_stream = service.open_file_stream(filename, O_RDWR | O_CREAT | O_EXCL, 0644);
+
     {
         auto hmac_stream = securefs::make_stream_hmac(key, id, posix_stream, true);
         test(*hmac_stream, 5000);
@@ -136,19 +145,8 @@ TEST_CASE("Test streams")
         test(ds, 5000);
     }
     {
-        posix_stream->resize(0);
-        byte password[20];
-        securefs::generate_random(password, sizeof(password));
-        auto salsa20stream
-            = securefs::make_stream_salsa20(posix_stream, password, sizeof(password));
-        test(*salsa20stream, 2000);
-        salsa20stream = securefs::make_stream_salsa20(posix_stream, password, sizeof(password));
-        test(*salsa20stream, 2000);
-    }
-    {
-        char temp_template[] = "tmp/securefs.stream.XXXXXX";
-        auto meta_posix_stream
-            = std::make_shared<securefs::POSIXFileStream>(mkstemp(temp_template));
+        auto meta_posix_stream = service.open_file_stream(
+            service.temp_name("tmp/", "metastream"), O_RDWR | O_CREAT | O_EXCL, 0644);
         auto aes_gcm_stream = securefs::make_cryptstream_aes_gcm(
             posix_stream, meta_posix_stream, key, key, id, true, 4096, 12);
         std::vector<byte> header(aes_gcm_stream.second->max_header_length() - 1, 5);
