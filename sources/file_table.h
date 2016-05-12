@@ -58,7 +58,6 @@ public:
     bool is_readonly() const noexcept { return m_flags & READ_ONLY; }
     bool is_auth_enabled() const noexcept { return !(m_flags & NO_AUTHENTICATION); }
     void gc();
-    int get_dir_fd() noexcept { return m_dir_fd; }
 };
 
 class AutoClosedFileBase

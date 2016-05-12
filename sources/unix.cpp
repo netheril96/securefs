@@ -3,10 +3,12 @@
 #include "exceptions.h"
 #include "format.h"
 #include "platform.h"
+#include "streams.h"
 
 #include <fcntl.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -114,6 +116,14 @@ public:
         if (rc < 0 && errno != EEXIST)
             throw UnderlyingOSException(
                 errno, fmt::format("Fail to create directory {}/{}", dir_name, path));
+    }
+
+    void statfs(struct statvfs* fs_info) override
+    {
+        int rc = ::fstatvfs(dir_fd, fs_info);
+        if (rc < 0)
+            throw UnderlyingOSException(errno, "statvfs");
+        fs_info->f_namemax = 255;
     }
 };
 }
