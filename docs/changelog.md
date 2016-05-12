@@ -1,5 +1,11 @@
 # ChangeLog
 
+## 0.3.2
+
+* Change build system to CMake.
+* Update dependency `fmt` and `catch`.
+* Remove all custom modifications to `crypto++`. Use vanilla sources instead.
+
 ## 0.3.1
 * `fix` verb to recover from corruption of directory structure and data loss.
 
