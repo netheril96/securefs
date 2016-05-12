@@ -2,4 +2,4 @@ language: cpp
 sudo: required
 dist: trusty
 install: "sudo apt-get update && sudo apt-get install -y cmake fuse libfuse-dev"
-script: "cmake . && make && make test"
+script: "cmake . && make && ctest -V"

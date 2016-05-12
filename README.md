@@ -1,4 +1,4 @@
-# securefs 0.3.1-beta
+# securefs 0.3.2-beta
 
 `securefs` is a filesystem in userspace (FUSE) that transparently encrypts and authenticates data stored. It is particularly designed to secure data stored in the cloud.
 
@@ -18,7 +18,7 @@ Security, however, is often at odds with convenience, and people easily grow tir
 
 On Debian based Linux distro, you need to install `fuse` and `libfuse-dev`. On RPM based Linux, you need `fuse` and `fuse-devel`. On OS X, you need [`osxfuse`](https://osxfuse.github.io). Operating systems other than OS X and Linux are not supported for now.
 
-You also need a recent C++ compiler and CMake.
+You also need a recent C++ compiler (g++ >= 4.8, clang++ >= 3.3) and CMake.
 
 ```bash
 mkdir build
@@ -28,9 +28,9 @@ make -j8
 sudo make install
 ```
 
-If you encounter build errors, you could try `cmake -DDISABLE_ASM=1 ..` instead. Or perhaps your compiler is too old.
+If you encounter build errors, you could try `cmake -DDISABLE_ASM=1 ..` instead.
 
-By default, it builds for your current machine's CPU type, taking advantage for hardware acceleration if possible. To compile for the general architecture, turn on option `GENERAL_ARCH`.
+By default, it builds for your current machine's CPU type, taking advantage of hardware acceleration if possible. To compile for the general architecture, turn on option `GENERAL_ARCH`.
 
 Run `ctest` to test the program. `ctest -V` for a full output.
 
@@ -62,9 +62,6 @@ For example, the options of `securefs mount` include
 
    -b,  --background
      Run securefs in the background
-
-   --stdinpass
-     Read password from stdin directly (useful for piping)
 ```
 
 ## Design and algorithms
@@ -73,7 +70,7 @@ See [here](docs/design.md).
 
 ## Comparison with alternatives
 
-Compared to TrueCrypt, Apple's encrypted DMG, Microsoft's BitLocker and EncFS, `securefs` has the following advantages:
+Compared to TrueCrypt, eCryptfs, Apple's encrypted DMG, Microsoft's BitLocker and EncFS, `securefs` has the following advantages:
 
 ### Enhanced security
 
@@ -89,7 +86,7 @@ If you don't care whether your data have been modified, you still have to care a
 
 ### Efficient cloud sync
 
-(This feature is also available on EncFS, but not only other alternatives)
+(This feature is also available on eCryptfs and EncFS, but not other alternatives)
 
 Unlike alternatives, `securefs` does not preallocate the underlying storage. So you don't need to sync a, say, 4GiB disk file just in case your encrypted data will grow to that amount. If you have only 4MiB of data, then you only need to sync 4MiB (plus a small fraction of overhead).
 
