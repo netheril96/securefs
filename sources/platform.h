@@ -32,6 +32,7 @@ public:
     std::shared_ptr<FileStream> open_file_stream(const std::string& path, int flags, unsigned mode);
     bool remove_file(const std::string& path) noexcept;
     bool remove_directory(const std::string& path) noexcept;
+    void rename(const std::string& a, const std::string& b);
     void lock();
     void ensure_directory(const std::string& path, unsigned mode);
     void statfs(struct statvfs*);

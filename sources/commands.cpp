@@ -1,5 +1,6 @@
 #include "exceptions.h"
 #include "operations.h"
+#include "platform.h"
 #include "streams.h"
 #include "utils.h"
 #include "xattr_compat.h"
@@ -26,8 +27,8 @@ namespace
 {
 
 static const char* VERSION_HEADER = "version=1";
-static const char* CONFIG_FILE_NAME = ".securefs.json";
-static const char* CONFIG_TMP_FILE_NAME = ".securefs.json.tmp";
+static const std::string CONFIG_FILE_NAME = ".securefs.json";
+static const std::string CONFIG_TMP_FILE_NAME = ".securefs.json.tmp";
 static const unsigned MIN_ITERATIONS = 20000;
 static const unsigned MIN_DERIVE_SECONDS = 1;
 static const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
@@ -344,20 +345,15 @@ bool parse_config(const nlohmann::json& config,
                            master_key.data());
 }
 
-nlohmann::json read_config(int dir_fd)
+nlohmann::json read_config(RootDirectory& dir)
 {
     using namespace securefs;
-    int config_fd = ::openat(dir_fd, CONFIG_FILE_NAME, O_RDONLY);
-    if (config_fd < 0)
-        throw std::runtime_error(
-            fmt::format("Error opening {}: {}", CONFIG_FILE_NAME, sane_strerror(errno)));
-
-    POSIXFileStream config_stream(config_fd);
-    std::string config_str(config_stream.size(), 0);
+    auto config_stream = dir.open_file_stream(CONFIG_FILE_NAME, O_RDONLY, 0);
+    std::string config_str(config_stream->size(), 0);
     if (config_str.empty())
         throw std::runtime_error("Error parsing config file: file is empty");
 
-    config_stream.read(&config_str[0], 0, config_str.size());
+    config_stream->read(&config_str[0], 0, config_str.size());
     return nlohmann::json::parse(config_str);
 }
 
@@ -430,9 +426,11 @@ int create_filesys(int argc, char** argv)
     if (iv_size.getValue() < 12 || iv_size.getValue() > 64)
         throw std::runtime_error("Invalid IV size");
 
-    int folder_fd = open_and_lock_base_dir(dir.getValue());
+    auto root = std::make_shared<RootDirectory>(dir.getValue(), false);
+    root->lock();
 
-    int config_fd = -1;
+    std::shared_ptr<FileStream> config_stream;
+
     try
     {
         key_type master_key, salt;
@@ -456,16 +454,12 @@ int create_filesys(int argc, char** argv)
                                       rounds.getValue())
                           .dump();
 
-        config_fd = ::openat(folder_fd, CONFIG_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
-        if (config_fd < 0)
-            throw std::runtime_error(fmt::format(
-                "Error creating {} for writing: {}", CONFIG_FILE_NAME, sane_strerror(errno)));
-        POSIXFileStream config_stream(config_fd);
-        config_stream.write(config.data(), 0, config.size());
+        config_stream = root->open_file_stream(CONFIG_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
+        config_stream->write(config.data(), 0, config.size());
 
         operations::FSOptions opt;
         opt.version = version.getValue();
-        opt.dir_fd = folder_fd;
+        opt.root = root;
         opt.master_key = master_key;
         opt.flags = 0;
         opt.block_size = 4096;
@@ -482,8 +476,11 @@ int create_filesys(int argc, char** argv)
     }
     catch (...)
     {
-        if (config_fd >= 0)
-            ::unlinkat(folder_fd, CONFIG_FILE_NAME, 0);
+        if (config_stream)
+        {
+            config_stream.reset();
+            root->remove_file(CONFIG_FILE_NAME);
+        }
         throw;
     }
 }
@@ -554,9 +551,10 @@ operations::FSOptions
 get_options(const std::string& data_dir, bool stdinpass, bool insecure, const std::string& logfile)
 {
     operations::FSOptions fsopt;
-    fsopt.dir_fd = open_and_lock_base_dir(data_dir);
+    fsopt.root = std::make_shared<RootDirectory>(data_dir, false);
+    fsopt.root->lock();
 
-    auto config_json = read_config(fsopt.dir_fd.get());
+    auto config_json = read_config(*fsopt.root);
     auto version = config_json.at("version").get<int>();
     fsopt.version = version;
     if (version != 1 && version != 2)
@@ -708,9 +706,10 @@ int chpass_filesys(int argc, char** argv)
     cmdline.add(&dir);
     cmdline.parse(argc, argv);
 
-    int folder_fd = open_and_lock_base_dir(dir.getValue());
+    RootDirectory root(dir.getValue(), false);
+    root.lock();
 
-    auto config_json = read_config(folder_fd);
+    auto config_json = read_config(root);
     key_type master_key;
 
     CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
@@ -735,19 +734,12 @@ int chpass_filesys(int argc, char** argv)
                                   rounds.getValue())
                       .dump();
 
-    int config_fd = ::openat(folder_fd, CONFIG_TMP_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
-    if (config_fd < 0)
-        throw std::runtime_error(fmt::format(
-            "Error creating {} for writing: {}", CONFIG_TMP_FILE_NAME, sane_strerror(errno)));
-    POSIXFileStream config_stream(config_fd);
-    config_stream.write(config.data(), 0, config.size());
+    auto config_stream
+        = root.open_file_stream(CONFIG_TMP_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
+    config_stream->write(config.data(), 0, config.size());
+    config_stream.reset();
 
-    int rc = ::renameat(folder_fd, CONFIG_TMP_FILE_NAME, folder_fd, CONFIG_FILE_NAME);
-    if (rc < 0)
-        throw std::runtime_error(fmt::format("Error moving {} to {}: {}",
-                                             CONFIG_TMP_FILE_NAME,
-                                             CONFIG_FILE_NAME,
-                                             sane_strerror(errno)));
+    root.rename(CONFIG_TMP_FILE_NAME, CONFIG_FILE_NAME);
     fputs("Password change success\n", stderr);
     return 0;
 }

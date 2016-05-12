@@ -11,9 +11,6 @@
 #include <utility>
 #include <vector>
 
-#include <fcntl.h>
-#include <unistd.h>
-
 namespace securefs
 {
 

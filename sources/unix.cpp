@@ -163,5 +163,14 @@ void RootDirectory::statfs(struct statvfs* fs_info)
         throw UnderlyingOSException(errno, "statvfs");
     fs_info->f_namemax = 255;
 }
+
+void RootDirectory::rename(const std::string& a, const std::string& b)
+{
+    int rc = ::rename(a.c_str(), b.c_str());
+    if (rc < 0)
+        throw UnderlyingOSException(
+            errno,
+            fmt::format("Renaming from {}/{} to {}/{}", impl->dir_name, a, impl->dir_name, b));
+}
 }
 #endif

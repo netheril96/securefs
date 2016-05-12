@@ -8,11 +8,6 @@
 #include <typeinfo>
 #include <utility>
 
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <utime.h>
-
 using securefs::operations::FileSystem;
 
 namespace securefs

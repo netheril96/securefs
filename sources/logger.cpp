@@ -5,8 +5,6 @@
 
 #include <thread>
 
-#include <sys/time.h>
-
 namespace securefs
 {
 void Logger::log(LoggingLevel level,
