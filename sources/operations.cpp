@@ -8,6 +8,7 @@
 #include <string>
 #include <typeinfo>
 #include <utility>
+#include <mutex>
 
 using securefs::operations::FileSystem;
 
@@ -24,7 +25,13 @@ namespace internal
 
     FileGuard open_base_dir(FileSystem* fs, const std::string& path, std::string& last_component)
     {
-        auto components = split(path, '/');
+
+#ifdef _WIN32
+		auto components = split(to_lower(path), '/'); // Stupid WIN32 API messes up cases
+#else
+		auto components = split(path, '/');
+#endif
+        
         FileGuard result(&fs->table, fs->table.open_as(fs->root_id, FileBase::DIRECTORY));
         if (components.empty())
         {
@@ -184,9 +191,17 @@ namespace operations
         return internal::log_general_error(fs, e, __PRETTY_FUNCTION__, __FILE__, __LINE__);        \
     }
 
+#ifdef _WIN32
+	static std::mutex global_mutex; // Stupid Dokany does not respect the "single threaded" flag
 #define COMMON_PROLOGUE                                                                            \
     auto ctx = fuse_get_context();                                                                 \
-    auto fs = internal::get_fs(ctx);
+    auto fs = internal::get_fs(ctx);																\
+    std::lock_guard<std::mutex> global_guard(global_mutex);
+#else
+#define COMMON_PROLOGUE                                                                            \
+    auto ctx = fuse_get_context();                                                                 \
+    auto fs = internal::get_fs(ctx);																
+#endif
 
     static bool should_debug_log(FileSystem* fs)
     {

@@ -275,4 +275,7 @@ std::string get_user_input_until_enter();
 
 void respond_to_user_action(
     const std::unordered_map<std::string, std::function<void(void)>>& actionMap);
+
+std::string to_lower(const std::string&);
 }
+
