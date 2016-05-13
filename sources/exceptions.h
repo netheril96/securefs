@@ -144,18 +144,16 @@ public:
     std::string message() const override { return sane_strerror(m_errno); }
 };
 
-class UnderlyingOSException : public SeriousException
+class POSIXException : public SeriousException
 {
 private:
     int m_errno;
     std::string m_msg;
 
 public:
-    explicit UnderlyingOSException(int errc, std::string msg) : m_errno(errc), m_msg(std::move(msg))
-    {
-    }
+    explicit POSIXException(int errc, std::string msg) : m_errno(errc), m_msg(std::move(msg)) {}
 
-    const char* type_name() const noexcept override { return "OSException"; }
+    const char* type_name() const noexcept override { return "POSIXException"; }
 
     int error_number() const noexcept override { return m_errno; }
 

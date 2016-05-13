@@ -493,7 +493,7 @@ static void find_ids_helper(const std::string& current_dir,
     {
         if (errno == ENOTDIR)
             return;
-        throw UnderlyingOSException(errno, fmt::format("Opening dir {}", current_dir));
+        throw POSIXException(errno, fmt::format("Opening dir {}", current_dir));
     }
 
     DirGuard guard;
@@ -506,7 +506,7 @@ static void find_ids_helper(const std::string& current_dir,
         errno = 0;
         dirent* dr = ::readdir(dp);
         if (!dr && errno)
-            throw UnderlyingOSException(errno, fmt::format("Reading dir {}", current_dir));
+            throw POSIXException(errno, fmt::format("Reading dir {}", current_dir));
         if (!dr)
             break;
         std::string name(dr->d_name);

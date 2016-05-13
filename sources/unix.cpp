@@ -43,7 +43,7 @@ public:
     {
         int rc = ::fsync(m_fd);
         if (rc < 0)
-            throw UnderlyingOSException(errno, "fsync");
+            throw POSIXException(errno, "fsync");
     }
 
     void fstat(real_stat_type* out) override
@@ -52,14 +52,14 @@ public:
             throw OSException(EFAULT);
 
         if (::fstat(m_fd, out) < 0)
-            throw UnderlyingOSException(errno, "fstat");
+            throw POSIXException(errno, "fstat");
     }
 
     length_type read(void* output, offset_type offset, length_type length) override
     {
         auto rc = ::pread(m_fd, output, length, offset);
         if (rc < 0)
-            throw UnderlyingOSException(errno, "pread");
+            throw POSIXException(errno, "pread");
         return rc;
     }
 
@@ -67,7 +67,7 @@ public:
     {
         auto rc = ::pwrite(m_fd, input, length, offset);
         if (rc < 0)
-            throw UnderlyingOSException(errno, "pwrite");
+            throw POSIXException(errno, "pwrite");
         if (static_cast<length_type>(rc) != length)
             throw OSException(EIO);
         if (offset + length > m_size)
@@ -80,7 +80,7 @@ public:
     {
         auto rc = ::ftruncate(m_fd, new_length);
         if (rc < 0)
-            UnderlyingOSException(errno, "truncate");
+            POSIXException(errno, "truncate");
         m_size = new_length;
     }
 
@@ -109,7 +109,7 @@ public:
         }
 #endif
         if (rc < 0)
-            throw UnderlyingOSException(errno, "utimens");
+            throw POSIXException(errno, "utimens");
     }
 
 #ifdef HAS_XATTR
@@ -122,7 +122,7 @@ public:
         auto rc = ::fremovexattr(m_fd, name);
 #endif
         if (rc < 0)
-            throw UnderlyingOSException(errno, "fremovexattr");
+            throw POSIXException(errno, "fremovexattr");
     }
 
     ssize_t getxattr(const char* name, void* value, size_t size) override
@@ -133,7 +133,12 @@ public:
         ssize_t rc = ::fgetxattr(m_fd, name, value, size);
 #endif
         if (rc < 0)
-            throw UnderlyingOSException(errno, "fgetxattr");
+        {
+            if (errno != ENOATTR)
+                throw POSIXException(errno, "fgetxattr");
+            else
+                throw OSException(ENOATTR);
+        }
         return rc;
     }
 
@@ -145,7 +150,7 @@ public:
         auto rc = ::flistxattr(m_fd, buffer, size);
 #endif
         if (rc < 0)
-            throw UnderlyingOSException(errno, "flistxattr");
+            throw POSIXException(errno, "flistxattr");
         return rc;
     }
 
@@ -157,7 +162,7 @@ public:
         auto rc = ::fsetxattr(m_fd, name, value, size, flags);
 #endif
         if (rc < 0)
-            throw UnderlyingOSException(errno, "fsetxattr");
+            throw POSIXException(errno, "fsetxattr");
     }
 
 #endif
@@ -192,7 +197,7 @@ FileSystemService::FileSystemService(const std::string& path) : impl(new Impl())
     impl->dir_name = path;
     int dir_fd = ::open(path.c_str(), O_RDONLY);
     if (dir_fd < 0)
-        throw UnderlyingOSException(errno, fmt::format("Opening directory {}", path));
+        throw POSIXException(errno, fmt::format("Opening directory {}", path));
     impl->dir_fd = dir_fd;
 }
 
@@ -201,7 +206,7 @@ FileSystemService::open_file_stream(const std::string& path, int flags, unsigned
 {
     int fd = ::openat(impl->dir_fd, path.c_str(), flags, mode);
     if (fd < 0)
-        throw UnderlyingOSException(
+        throw POSIXException(
             errno, fmt::format("Opening {}/{} with flags {}", impl->dir_name, path, flags));
     return std::make_shared<UnixFileStream>(fd);
 }
@@ -220,23 +225,23 @@ void FileSystemService::lock()
 {
     int rc = ::flock(impl->dir_fd, LOCK_NB | LOCK_EX);
     if (rc < 0)
-        throw UnderlyingOSException(
-            errno, fmt::format("Fail to obtain exclusive lock on {}", impl->dir_name));
+        throw POSIXException(errno,
+                             fmt::format("Fail to obtain exclusive lock on {}", impl->dir_name));
 }
 
 void FileSystemService::ensure_directory(const std::string& path, unsigned mode)
 {
     int rc = ::mkdirat(impl->dir_fd, path.c_str(), mode);
     if (rc < 0 && errno != EEXIST)
-        throw UnderlyingOSException(
-            errno, fmt::format("Fail to create directory {}/{}", impl->dir_name, path));
+        throw POSIXException(errno,
+                             fmt::format("Fail to create directory {}/{}", impl->dir_name, path));
 }
 
 void FileSystemService::statfs(struct statvfs* fs_info)
 {
     int rc = ::fstatvfs(impl->dir_fd, fs_info);
     if (rc < 0)
-        throw UnderlyingOSException(errno, "statvfs");
+        throw POSIXException(errno, "statvfs");
     fs_info->f_namemax = 255;
 }
 
@@ -244,7 +249,7 @@ void FileSystemService::rename(const std::string& a, const std::string& b)
 {
     int rc = ::rename(a.c_str(), b.c_str());
     if (rc < 0)
-        throw UnderlyingOSException(
+        throw POSIXException(
             errno,
             fmt::format("Renaming from {}/{} to {}/{}", impl->dir_name, a, impl->dir_name, b));
 }
