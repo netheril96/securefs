@@ -205,12 +205,12 @@ public:
     }
     void utimens(const struct timespec ts[2]) override
     {
-		if (!ts)
-			return;
-		auto access_time = unix_time_to_filetime(ts + 0);
-		auto mod_time = unix_time_to_filetime(ts + 1);
-		if (SetFileTime(m_handle, nullptr, &access_time, &mod_time) == 0)
-			throw WindowsException(GetLastError(), "SetFileTime");
+        if (!ts)
+            return;
+        auto access_time = unix_time_to_filetime(ts + 0);
+        auto mod_time = unix_time_to_filetime(ts + 1);
+        if (SetFileTime(m_handle, nullptr, &access_time, &mod_time) == 0)
+            throw WindowsException(GetLastError(), "SetFileTime");
     }
     void fstat(real_stat_type* st) override
     {
@@ -219,9 +219,9 @@ public:
         if (GetFileInformationByHandle(m_handle, &info) == 0)
             throw WindowsException(GetLastError(), "GetFileInformationByHandle");
         st->st_atim.tv_sec = filetime_to_unix_time(&info.ftLastAccessTime);
-		st->st_mtim.tv_nsec = filetime_to_unix_time(&info.ftLastWriteTime);
-		st->st_birthtim.tv_sec = filetime_to_unix_time(&info.ftCreationTime);
-		st->st_ctim.tv_sec = filetime_to_unix_time(&info.ftLastWriteTime);
+        st->st_mtim.tv_nsec = filetime_to_unix_time(&info.ftLastWriteTime);
+        st->st_birthtim.tv_sec = filetime_to_unix_time(&info.ftCreationTime);
+        st->st_ctim.tv_sec = filetime_to_unix_time(&info.ftLastWriteTime);
     }
 };
 
@@ -311,10 +311,10 @@ void FileSystemService::rename(const std::string& a, const std::string& b)
         throw WindowsException(GetLastError(), "MoveFileW");
 }
 
-bool FileSystemService::raise_fd_limit() noexcept 
-{ 
-	return true; 
-	// The handle limit on Windows is high enough that no adjustments are necessary 
+bool FileSystemService::raise_fd_limit() noexcept
+{
+    return true;
+    // The handle limit on Windows is high enough that no adjustments are necessary
 }
 
 std::string format_current_time()
@@ -324,7 +324,7 @@ std::string format_current_time()
             LOCALE_NAME_USER_DEFAULT, TIME_FORCE24HOURFORMAT, nullptr, nullptr, buffer, 256)
         == 0)
         return "UNKNOWN TIME";
-	return from_utf16(buffer);
+    return from_utf16(buffer);
 }
 
 uint32_t FileSystemService::getuid() noexcept { return 0; }
