@@ -184,7 +184,10 @@ namespace securefs
 		}
 
 		int get_native_handle() noexcept override { std::terminate(); }
-		void fsync() override {}
+		void fsync() override {
+			if (FlushFileBuffers(m_handle)==0)
+				throw WindowsException(GetLastError(), "FlushFileBuffers");
+		}
 		void utimens(const struct timespec ts[2]) override
 		{
 			// Do nothing for now
@@ -209,7 +212,12 @@ static std::wstring full_path(FileSystemServiceImpl* impl, const std::string& pa
 {
 	if (impl->dir_name.empty())
 		return from_utf8(path);
-	return impl->dir_name + L"\\" + from_utf8(path);
+	auto result = impl->dir_name + L"\\" + from_utf8(path);
+	for (wchar_t& c : result) {
+		if (c == L'/')
+			c = L'\\'; 
+	}
+	return result;
 }
 
 FileSystemService::FileSystemService() : impl(new Impl()) {}
@@ -217,7 +225,7 @@ FileSystemService::FileSystemService() : impl(new Impl()) {}
 FileSystemService::~FileSystemService() {}
 
 FileSystemService::FileSystemService(const std::string& path) : impl(new Impl()) {
-	impl->dir_name = from_utf8(path);
+	impl->dir_name = L"//?/" + from_utf8(path);
 }
 
 std::shared_ptr<FileStream>
@@ -258,11 +266,11 @@ void FileSystemService::statfs(struct statvfs* fs_info) {
 
 void FileSystemService::rename(const std::string& a, const std::string& b)
 {
-    int rc = ::rename(a.c_str(), b.c_str());
-    if (rc < 0)
-        throw UnderlyingOSException(
-            errno,
-            fmt::format("Renaming from {} to {}", a, b));
+	auto wa = full_path(impl.get(), a);
+	auto wb = full_path(impl.get(), b);
+	DeleteFileW(wb.c_str());
+	if (MoveFileW(wa.c_str(), wb.c_str()) == 0)
+		throw WindowsException(GetLastError(), "MoveFileW");
 }
 
 bool FileSystemService::raise_fd_limit() noexcept { return false; }
