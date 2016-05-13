@@ -26,6 +26,19 @@ static std::wstring from_utf8(const std::string& str)
     return converter.from_bytes(str);
 }
 
+static long long filetime_to_unix_time(const FILETIME *ft) {
+    long long ll = (long long(ft->dwHighDateTime) << 32) + ft->dwLowDateTime;
+    return (ll - 116444736000000000LL) / 10000000LL;
+}
+
+static FILETIME unix_time_to_filetime(long long t) {
+    long long ll = t * 10000000L + 116444736000000000LL;
+    FILETIME res;
+    res.dwLowDateTime = (DWORD)ll;
+    res.dwHighDateTime = (DWORD)(ll >> 32);
+    return res;
+}
+
 static const int MAX_SINGLE_BLOCK = 1 << 30;
 
 namespace securefs
@@ -182,6 +195,7 @@ public:
     length_type optimal_block_size() const noexcept override { return 4096; }
 
     int get_native_handle() noexcept override { std::terminate(); }
+    
     void fsync() override
     {
         if (FlushFileBuffers(m_handle) == 0)
@@ -194,10 +208,10 @@ public:
     void fstat(real_stat_type* st) override
     {
         memset(st, 0, sizeof(*st));
-        time_t cur_time = time(nullptr) - 1;
-        st->st_atim.tv_sec = cur_time;
-        st->st_birthtim.tv_sec = cur_time;
-        st->st_ctim.tv_sec = cur_time;
+        BY_HANDLE_FILE_INFORMATION info;
+       if(GetFileInformationByHandle(m_handle, &info)==0)
+           throw WindowsException(GetLastError(), "GetFileInformationByHandle");
+           st->st_atime = filetime_to_unix_time(&info.ftLastAccessTime);
     }
 };
 
@@ -299,126 +313,16 @@ std::string format_current_time()
     std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
     return converter.to_bytes(buffer);
 }
-}
 
-namespace
-{
-struct heap_delete
-{
-    typedef LPVOID pointer;
-    void operator()(LPVOID p) { ::HeapFree(::GetProcessHeap(), 0, p); }
-};
-typedef std::unique_ptr<LPVOID, heap_delete> heap_unique_ptr;
-
-struct handle_delete
-{
-    typedef HANDLE pointer;
-    void operator()(HANDLE p) { ::CloseHandle(p); }
-};
-typedef std::unique_ptr<HANDLE, handle_delete> handle_unique_ptr;
-
-typedef uint32_t uid_t;
-
-BOOL GetUserSID(HANDLE token, PSID* sid)
-{
-    if (token == nullptr || token == INVALID_HANDLE_VALUE || sid == nullptr)
-    {
-        SetLastError(ERROR_INVALID_PARAMETER);
-        return FALSE;
-    }
-    DWORD tokenInformationLength = 0;
-    ::GetTokenInformation(token, TokenUser, nullptr, 0, &tokenInformationLength);
-    if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-    {
-        return FALSE;
-    }
-    heap_unique_ptr data(::HeapAlloc(::GetProcessHeap(), HEAP_ZERO_MEMORY, tokenInformationLength));
-    if (data.get() == nullptr)
-    {
-        return FALSE;
-    }
-    BOOL getTokenInfo = ::GetTokenInformation(
-        token, TokenUser, data.get(), tokenInformationLength, &tokenInformationLength);
-    if (!getTokenInfo)
-    {
-        return FALSE;
-    }
-    PTOKEN_USER pTokenUser = (PTOKEN_USER)(data.get());
-    DWORD sidLength = ::GetLengthSid(pTokenUser->User.Sid);
-    heap_unique_ptr sidPtr(::HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sidLength));
-    PSID sidL = (PSID)(sidPtr.get());
-    if (sidL == nullptr)
-    {
-        return FALSE;
-    }
-    BOOL copySid = ::CopySid(sidLength, sidL, pTokenUser->User.Sid);
-    if (!copySid)
-    {
-        return FALSE;
-    }
-    if (!IsValidSid(sidL))
-    {
-        return FALSE;
-    }
-    *sid = sidL;
-    sidPtr.release();
-    return TRUE;
-}
-
-uid_t GetUID(HANDLE token)
-{
-    PSID sid = nullptr;
-    BOOL getSID = GetUserSID(token, &sid);
-    if (!getSID || !sid)
-    {
-        return -1;
-    }
-    heap_unique_ptr sidPtr((LPVOID)(sid));
-    LPWSTR stringSid = nullptr;
-    BOOL convertSid = ::ConvertSidToStringSidW(sid, &stringSid);
-    if (!convertSid)
-    {
-        return -1;
-    }
-    uid_t ret = -1;
-    LPCWSTR p = ::wcsrchr(stringSid, L'-');
-    if (p && ::iswdigit(p[1]))
-    {
-        ++p;
-        ret = ::_wtoi(p);
-    }
-    ::LocalFree(stringSid);
-    return ret;
-}
-
-// Courtesy of Ben Key at https://stackoverflow.com/questions/1594746/win32-equivalent-of-getuid
-uid_t getuid()
-{
-    HANDLE process = ::GetCurrentProcess();
-    handle_unique_ptr processPtr(process);
-    HANDLE token = nullptr;
-    BOOL openToken = ::OpenProcessToken(process, TOKEN_READ | TOKEN_QUERY_SOURCE, &token);
-    if (!openToken)
-    {
-        return -1;
-    }
-    handle_unique_ptr tokenPtr(token);
-    uid_t ret = GetUID(token);
-    return ret;
-}
-}
-
-namespace securefs
-{
 uint32_t FileSystemService::getuid() noexcept
 {
-    static uint32_t uid = getuid();
-    return uid;
+    return 0;
 }
+
 uint32_t FileSystemService::getgid() noexcept
 {
-    static uint32_t gid = getuid();
-    return gid;
+    return 0;
 }
+
 }
 #endif
