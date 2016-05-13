@@ -45,6 +45,15 @@ public:
             throw UnderlyingOSException(errno, "fsync");
     }
 
+    void fstat(real_stat_type* out) override
+    {
+        if (!out)
+            throw OSException(EFAULT);
+
+        if (::fstat(m_fd, out) < 0)
+            throw UnderlyingOSException(errno, "fstat");
+    }
+
     length_type read(void* output, offset_type offset, length_type length) override
     {
         auto rc = ::pread(m_fd, output, length, offset);
@@ -209,18 +218,18 @@ bool FileSystemService::raise_fd_limit() noexcept
 
 std::string format_current_time()
 {
-	struct timeval now;
-	(void)gettimeofday(&now, nullptr);
-	struct tm tm;
-	gmtime_r(&now.tv_sec, &tm);
-	return fmt::format("{}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}.{:06d}Z",
-		tm.tm_year + 1900,
-		tm.tm_mon + 1,
-		tm.tm_mday,
-		tm.tm_hour,
-		tm.tm_min,
-		tm.tm_sec,
-		now.tv_usec);
+    struct timeval now;
+    (void)gettimeofday(&now, nullptr);
+    struct tm tm;
+    gmtime_r(&now.tv_sec, &tm);
+    return fmt::format("{}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}.{:06d}Z",
+                       tm.tm_year + 1900,
+                       tm.tm_mon + 1,
+                       tm.tm_mday,
+                       tm.tm_hour,
+                       tm.tm_min,
+                       tm.tm_sec,
+                       now.tv_usec);
 }
 }
 #endif

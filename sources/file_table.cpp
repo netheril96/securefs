@@ -1,8 +1,8 @@
 #include "file_table.h"
 #include "btree_dir.h"
 #include "exceptions.h"
-#include "platform.h"
 #include "myutils.h"
+#include "platform.h"
 
 #include <algorithm>
 #include <limits>

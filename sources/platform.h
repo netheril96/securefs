@@ -1,7 +1,7 @@
 #pragma once
 
-#include "streams.h"
 #include "myutils.h"
+#include "streams.h"
 
 #include <memory>
 #include <stddef.h>
@@ -46,6 +46,7 @@ public:
     virtual int get_native_handle() noexcept = 0;
     virtual void fsync() = 0;
     virtual void utimens(const struct timespec ts[2]) = 0;
+    virtual void fstat(real_stat_type*) = 0;
 };
 
 class FileSystemService

@@ -5,9 +5,9 @@
 
 #include <algorithm>
 #include <random>
+#include <stdint.h>
 #include <string.h>
 #include <vector>
-#include <stdint.h>
 
 static void test(securefs::StreamBase& stream, unsigned times)
 {

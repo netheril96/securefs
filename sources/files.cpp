@@ -80,12 +80,7 @@ int FileBase::get_real_type() { return type_for_mode(get_mode() & S_IFMT); }
 
 void FileBase::stat(real_stat_type* st)
 {
-#ifndef _WIN32
-    if (!st)
-        throw OSException(EFAULT);
-    int rc = ::fstat(get_data_fd(), st);
-    if (rc < 0)
-        throw UnderlyingOSException(errno, "stat");
+    m_data_stream->fstat(st);
 
     st->st_uid = get_uid();
     st->st_gid = get_gid();
@@ -98,7 +93,6 @@ void FileBase::stat(real_stat_type* st)
         st->st_blksize = static_cast<decltype(st->st_blksize)>(blk_sz);
         st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
     }
-#endif
 }
 
 FileBase::~FileBase() {}
@@ -250,25 +244,19 @@ void FileBase::removexattr(const char* name)
         throw OSException(errno);
 }
 #else
-ssize_t FileBase::listxattr(char* buffer, size_t size)
-{
-	throw OSException(ENOTSUP);
-}
+ssize_t FileBase::listxattr(char* buffer, size_t size) { throw OSException(ENOTSUP); }
 
 ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
 {
-	throw OSException(ENOTSUP);
+    throw OSException(ENOTSUP);
 }
 
 void FileBase::setxattr(const char* name, const char* value, size_t size, int flags)
 {
-	throw OSException(ENOTSUP);
+    throw OSException(ENOTSUP);
 }
 
-void FileBase::removexattr(const char* name)
-{
-	throw OSException(ENOTSUP);
-}
+void FileBase::removexattr(const char* name) { throw OSException(ENOTSUP); }
 #endif
 
 void SimpleDirectory::initialize()

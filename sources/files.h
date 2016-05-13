@@ -1,9 +1,7 @@
 #pragma once
+#include "myutils.h"
 #include "platform.h"
 #include "streams.h"
-#include "myutils.h"
-
-#include <fuse.h>
 
 #include <atomic>
 #include <chrono>

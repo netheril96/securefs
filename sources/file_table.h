@@ -1,9 +1,9 @@
 #pragma once
 #include "exceptions.h"
 #include "files.h"
+#include "myutils.h"
 #include "platform.h"
 #include "streams.h"
-#include "myutils.h"
 
 #include <algorithm>
 #include <chrono>
