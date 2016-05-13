@@ -69,6 +69,25 @@ namespace internal
         return fg;
     }
 
+    // Specialization of `open_all` since `OSException(ENOENT)` occurs too frequently
+    bool open_all(FileSystem* fs, const std::string& path, FileGuard& fg)
+    {
+        std::string last_component;
+        fg = open_base_dir(fs, path, last_component);
+        if (last_component.empty())
+            return true;
+        id_type id;
+        int type;
+        bool exists = fg.get_as<Directory>()->get_entry(last_component, id, type);
+        if (!exists)
+        {
+            fg.reset(nullptr);
+            return false;
+        }
+        fg.reset(fs->table.open_as(id, type));
+        return true;
+    }
+
     template <class Initializer>
     FileGuard create(FileSystem* fs, const std::string& path, int type, const Initializer& init)
     {
@@ -246,7 +265,13 @@ namespace operations
 
         try
         {
-            auto fg = internal::open_all(fs, path);
+            if (!st)
+                return -EINVAL;
+
+            internal::FileGuard fg(nullptr, nullptr);
+            if (!internal::open_all(fs, path, fg))
+                return -ENOENT;
+
             fg->stat(st);
 
 #ifdef _WIN32
