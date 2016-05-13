@@ -4,8 +4,16 @@
 #include <codecvt>
 #include <cerrno>
 #include <limits>
+#include <iostream>
+#include <iomanip>
+#include <memory>
+#include <stdint.h>
+#include <stdlib.h>
+#include <time.h>
 
 #include <Windows.h>
+#include <sddl.h>
+
 
 static std::string from_utf16(const std::wstring& str)
 {
@@ -184,7 +192,10 @@ namespace securefs
 		void fstat(real_stat_type* st) override
 		{
 			memset(st, 0, sizeof(*st));
-			// Do nothing for now
+			time_t cur_time = time(nullptr) - 1;
+			st->st_atim.tv_sec = cur_time;
+			st->st_birthtim.tv_sec = cur_time;
+			st->st_ctim.tv_sec = cur_time;
 		}
 	};
 
@@ -254,9 +265,6 @@ void FileSystemService::rename(const std::string& a, const std::string& b)
             fmt::format("Renaming from {} to {}", a, b));
 }
 
-uint32_t FileSystemService::getuid() noexcept { return 0; }
-uint32_t FileSystemService::getgid() noexcept { return 0; }
-
 bool FileSystemService::raise_fd_limit() noexcept { return false; }
 
 std::string format_current_time()
@@ -269,5 +277,135 @@ std::string format_current_time()
     std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
     return converter.to_bytes(buffer);
 }
+}
+
+namespace {
+	struct heap_delete
+	{
+		typedef LPVOID pointer;
+		void operator()(LPVOID p)
+		{
+			::HeapFree(::GetProcessHeap(), 0, p);
+		}
+	};
+	typedef std::unique_ptr<LPVOID, heap_delete> heap_unique_ptr;
+
+	struct handle_delete
+	{
+		typedef HANDLE pointer;
+		void operator()(HANDLE p)
+		{
+			::CloseHandle(p);
+		}
+	};
+	typedef std::unique_ptr<HANDLE, handle_delete> handle_unique_ptr;
+
+	typedef uint32_t uid_t;
+
+	BOOL GetUserSID(HANDLE token, PSID* sid)
+	{
+		if (
+			token == nullptr || token == INVALID_HANDLE_VALUE
+			|| sid == nullptr
+			)
+		{
+			SetLastError(ERROR_INVALID_PARAMETER);
+			return FALSE;
+		}
+		DWORD tokenInformationLength = 0;
+		::GetTokenInformation(
+			token, TokenUser, nullptr, 0, &tokenInformationLength);
+		if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+		{
+			return FALSE;
+		}
+		heap_unique_ptr data(
+			::HeapAlloc(
+				::GetProcessHeap(), HEAP_ZERO_MEMORY,
+				tokenInformationLength));
+		if (data.get() == nullptr)
+		{
+			return FALSE;
+		}
+		BOOL getTokenInfo = ::GetTokenInformation(
+			token, TokenUser, data.get(),
+			tokenInformationLength, &tokenInformationLength);
+		if (!getTokenInfo)
+		{
+			return FALSE;
+		}
+		PTOKEN_USER pTokenUser = (PTOKEN_USER)(data.get());
+		DWORD sidLength = ::GetLengthSid(pTokenUser->User.Sid);
+		heap_unique_ptr sidPtr(
+			::HeapAlloc(
+				GetProcessHeap(), HEAP_ZERO_MEMORY, sidLength));
+		PSID sidL = (PSID)(sidPtr.get());
+		if (sidL == nullptr)
+		{
+			return FALSE;
+		}
+		BOOL copySid = ::CopySid(sidLength, sidL, pTokenUser->User.Sid);
+		if (!copySid)
+		{
+			return FALSE;
+		}
+		if (!IsValidSid(sidL))
+		{
+			return FALSE;
+		}
+		*sid = sidL;
+		sidPtr.release();
+		return TRUE;
+	}
+
+	uid_t GetUID(HANDLE token)
+	{
+		PSID sid = nullptr;
+		BOOL getSID = GetUserSID(token, &sid);
+		if (!getSID || !sid)
+		{
+			return -1;
+		}
+		heap_unique_ptr sidPtr((LPVOID)(sid));
+		LPWSTR stringSid = nullptr;
+		BOOL convertSid = ::ConvertSidToStringSidW(
+			sid, &stringSid);
+		if (!convertSid)
+		{
+			return -1;
+		}
+		uid_t ret = -1;
+		LPCWSTR p = ::wcsrchr(stringSid, L'-');
+		if (p && ::iswdigit(p[1]))
+		{
+			++p;
+			ret = ::_wtoi(p);
+		}
+		::LocalFree(stringSid);
+		return ret;
+	}
+
+	// Courtesy of Ben Key at https://stackoverflow.com/questions/1594746/win32-equivalent-of-getuid
+	uid_t getuid()
+	{
+		HANDLE process = ::GetCurrentProcess();
+		handle_unique_ptr processPtr(process);
+		HANDLE token = nullptr;
+		BOOL openToken = ::OpenProcessToken(
+			process, TOKEN_READ | TOKEN_QUERY_SOURCE, &token);
+		if (!openToken)
+		{
+			return -1;
+		}
+		handle_unique_ptr tokenPtr(token);
+		uid_t ret = GetUID(token);
+		return ret;
+	}
+}
+
+namespace securefs
+{
+	uint32_t FileSystemService::getuid() noexcept { static uint32_t uid = getuid(); return uid; }
+	uint32_t FileSystemService::getgid() noexcept { static uint32_t gid = getuid(); return gid; }
 }
 #endif
