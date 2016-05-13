@@ -112,7 +112,7 @@ public:
     }
 };
 
-class FileSystemServiceImpl
+class FileSystemService::Impl
 {
 public:
     std::string dir_name;
