@@ -1,6 +1,5 @@
 #include "files.h"
 #include "myutils.h"
-#include "xattr_compat.h"
 
 #include <algorithm>
 #include <unordered_map>
@@ -116,29 +115,12 @@ void FileBase::flush()
     m_stream->flush();
 }
 
-#ifdef HAS_XATTR
 // The IV size is for historical reasons. Doesn't really matter.
 static const ssize_t XATTR_IV_LENGTH = 16, XATTR_MAC_LENGTH = 16;
 
 ssize_t FileBase::listxattr(char* buffer, size_t size)
 {
-#ifdef __APPLE__
-    auto rc = ::flistxattr(get_data_fd(), buffer, size, 0);
-#else
-    auto rc = ::flistxattr(get_data_fd(), buffer, size);
-#endif
-    if (rc < 0)
-        throw OSException(errno);
-    return rc;
-}
-
-static ssize_t fgetxattr_wrapper(int fd, const char* name, void* value, size_t size)
-{
-#ifdef __APPLE__
-    return ::fgetxattr(fd, name, value, size, 0, 0);
-#else
-    return ::fgetxattr(fd, name, value, size);
-#endif
+    return m_data_stream->listxattr(buffer, size);
 }
 
 ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
@@ -146,19 +128,22 @@ ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
     if (!name)
         throw OSException(EFAULT);
 
-    auto true_size = fgetxattr_wrapper(get_data_fd(), name, value, size);
-    if (true_size < 0)
-        throw OSException(errno);
+    auto true_size = m_data_stream->getxattr(name, value, size);
     if (!value)
         return true_size;
 
     byte meta[XATTR_IV_LENGTH + XATTR_MAC_LENGTH];
-    auto true_meta_size = fgetxattr_wrapper(get_meta_fd(), name, meta, sizeof(meta));
-    if (true_meta_size < 0)
+    ssize_t true_meta_size;
+
+    try
     {
-        if (errno == ERANGE)
-            errno = EIO;
-        throw OSException(errno);
+        true_meta_size = m_meta_stream->getxattr(name, meta, sizeof(meta));
+    }
+    catch (const UnderlyingOSException& e)
+    {
+        if (e.error_number() == ERANGE)
+            throw OSException(EIO);
+        throw;
     }
 
     auto name_len = strlen(name);
@@ -184,15 +169,6 @@ ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
     if (m_check && !success)
         throw XattrVerificationException(get_id(), name);
     return true_size;
-}
-
-static int fsetxattr_wrapper(int fd, const char* name, void* value, size_t size, int flags)
-{
-#ifdef __APPLE__
-    return ::fsetxattr(fd, name, value, size, 0, flags);
-#else
-    return ::fsetxattr(fd, name, value, size, flags);
-#endif
 }
 
 void FileBase::setxattr(const char* name, const char* value, size_t size, int flags)
@@ -225,39 +201,15 @@ void FileBase::setxattr(const char* name, const char* value, size_t size, int fl
                     XATTR_MAC_LENGTH,
                     ciphertext);
 
-    auto rc = fsetxattr_wrapper(get_data_fd(), name, ciphertext, size, flags);
-    if (rc < 0)
-        throw OSException(errno);
-    rc = fsetxattr_wrapper(get_meta_fd(), name, meta, sizeof(meta), flags);
-    if (rc < 0)
-        throw OSException(errno);
+    m_data_stream->setxattr(name, ciphertext, size, flags);
+    m_meta_stream->setxattr(name, meta, sizeof(meta), flags);
 }
 
 void FileBase::removexattr(const char* name)
 {
-#ifdef __APPLE__
-    auto rc = ::fremovexattr(get_data_fd(), name, 0);
-#else
-    auto rc = ::fremovexattr(get_data_fd(), name);
-#endif
-    if (rc < 0)
-        throw OSException(errno);
+    m_data_stream->removexattr(name);
+    m_meta_stream->removexattr(name);
 }
-#else
-ssize_t FileBase::listxattr(char* buffer, size_t size) { throw OSException(ENOTSUP); }
-
-ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
-{
-    throw OSException(ENOTSUP);
-}
-
-void FileBase::setxattr(const char* name, const char* value, size_t size, int flags)
-{
-    throw OSException(ENOTSUP);
-}
-
-void FileBase::removexattr(const char* name) { throw OSException(ENOTSUP); }
-#endif
 
 void SimpleDirectory::initialize()
 {

@@ -26,12 +26,14 @@ static std::wstring from_utf8(const std::string& str)
     return converter.from_bytes(str);
 }
 
-static long long filetime_to_unix_time(const FILETIME *ft) {
+static long long filetime_to_unix_time(const FILETIME* ft)
+{
     long long ll = (long long(ft->dwHighDateTime) << 32) + ft->dwLowDateTime;
     return (ll - 116444736000000000LL) / 10000000LL;
 }
 
-static FILETIME unix_time_to_filetime(long long t) {
+static FILETIME unix_time_to_filetime(long long t)
+{
     long long ll = t * 10000000L + 116444736000000000LL;
     FILETIME res;
     res.dwLowDateTime = (DWORD)ll;
@@ -195,7 +197,7 @@ public:
     length_type optimal_block_size() const noexcept override { return 4096; }
 
     int get_native_handle() noexcept override { std::terminate(); }
-    
+
     void fsync() override
     {
         if (FlushFileBuffers(m_handle) == 0)
@@ -209,9 +211,9 @@ public:
     {
         memset(st, 0, sizeof(*st));
         BY_HANDLE_FILE_INFORMATION info;
-       if(GetFileInformationByHandle(m_handle, &info)==0)
-           throw WindowsException(GetLastError(), "GetFileInformationByHandle");
-           st->st_atime = filetime_to_unix_time(&info.ftLastAccessTime);
+        if (GetFileInformationByHandle(m_handle, &info) == 0)
+            throw WindowsException(GetLastError(), "GetFileInformationByHandle");
+        st->st_atime = filetime_to_unix_time(&info.ftLastAccessTime);
     }
 };
 
@@ -314,15 +316,8 @@ std::string format_current_time()
     return converter.to_bytes(buffer);
 }
 
-uint32_t FileSystemService::getuid() noexcept
-{
-    return 0;
-}
+uint32_t FileSystemService::getuid() noexcept { return 0; }
 
-uint32_t FileSystemService::getgid() noexcept
-{
-    return 0;
-}
-
+uint32_t FileSystemService::getgid() noexcept { return 0; }
 }
 #endif

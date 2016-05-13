@@ -38,6 +38,14 @@ public:
     virtual void fsync() = 0;
     virtual void utimens(const struct timespec ts[2]) = 0;
     virtual void fstat(real_stat_type*) = 0;
+
+    virtual ssize_t listxattr(char*, size_t) { throw OSException(ENOTSUP); }
+
+    virtual ssize_t getxattr(const char*, void*, size_t) { throw OSException(ENOTSUP); }
+
+    virtual void setxattr(const char*, void*, size_t, int) { throw OSException(ENOTSUP); }
+
+    virtual void removexattr(const char*) { throw OSException(ENOTSUP); }
 };
 
 class FileSystemServiceImpl;
