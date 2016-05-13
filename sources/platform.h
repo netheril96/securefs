@@ -45,7 +45,7 @@ class FileSystemServiceImpl;
 class FileSystemService
 {
 private:
-	typedef FileSystemServiceImpl Impl;
+    typedef FileSystemServiceImpl Impl;
     std::unique_ptr<Impl> impl;
 
 public:

@@ -9,11 +9,11 @@
 #include <cryptopp/sha.h>
 
 #include <algorithm>
+#include <cctype>
 #include <string.h>
 #include <system_error>
 #include <time.h>
 #include <vector>
-#include <cctype>
 
 #ifndef _WIN32
 #include <dirent.h>
@@ -29,15 +29,16 @@
 namespace securefs
 {
 
-	std::string to_lower(const std::string& str)
-	{
-		std::string result = str;
-		for (auto&& c : result) {
-			if (c > 0 && c < 128)
-				c = ::tolower(c);
-		}
-		return result;
-	}
+std::string to_lower(const std::string& str)
+{
+    std::string result = str;
+    for (auto&& c : result)
+    {
+        if (c > 0 && c < 128)
+            c = ::tolower(c);
+    }
+    return result;
+}
 
 std::string sane_strerror(int error_number) { return std::system_category().message(error_number); }
 
@@ -603,5 +604,4 @@ void respond_to_user_action(
         break;
     }
 }
-
 }

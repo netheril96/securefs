@@ -278,4 +278,3 @@ void respond_to_user_action(
 
 std::string to_lower(const std::string&);
 }
-
