@@ -210,7 +210,7 @@ namespace operations
 
 #define DEBUG_LOG(msg)                                                                             \
     if (should_debug_log(fs))                                                                      \
-        fs->logger->log(LoggingLevel::Debug, msg, __PRETTY_FUNCTION__, __FILE__, __LINE__)
+    fs->logger->log(LoggingLevel::Debug, msg, __PRETTY_FUNCTION__, __FILE__, __LINE__)
 
     void* init(struct fuse_conn_info*)
     {
@@ -248,6 +248,12 @@ namespace operations
         {
             auto fg = internal::open_all(fs, path);
             fg->stat(st);
+
+#ifdef _WIN32
+            st->st_mode |= 0666;    // The permission system on Windows are just insane, so we just
+                                    // permit everything
+#endif
+
             return 0;
         }
         COMMON_CATCH_BLOCK
