@@ -215,9 +215,9 @@ FileSystemService::open_file_stream(const std::string& path, int flags, unsigned
 	return std::make_shared<WindowsFileStream>(full_path(impl.get(), path), flags, mode);
 }
 
-bool FileSystemService::remove_file(const std::string& path) noexcept { return false; }
+bool FileSystemService::remove_file(const std::string& path) noexcept { return DeleteFileW(full_path(impl.get(), path).c_str()); }
 
-bool FileSystemService::remove_directory(const std::string& path) noexcept { return false; }
+bool FileSystemService::remove_directory(const std::string& path) noexcept { return RemoveDirectoryW(full_path(impl.get(), path).c_str()); }
 
 void FileSystemService::lock() {}
 
@@ -229,7 +229,21 @@ void FileSystemService::ensure_directory(const std::string& path, unsigned mode)
 	}
 }
 
-void FileSystemService::statfs(struct statvfs* fs_info) {}
+void FileSystemService::statfs(struct statvfs* fs_info) {
+	memset(fs_info, 0, sizeof(*fs_info));
+	ULARGE_INTEGER FreeBytesAvailable, TotalNumberOfBytes, TotalNumberOfFreeBytes;
+	if (GetDiskFreeSpaceExW(impl->dir_name.c_str(), &FreeBytesAvailable, &TotalNumberOfBytes, &TotalNumberOfFreeBytes) == 0)
+		throw WindowsException(GetLastError(), "GetDiskFreeSpaceExW");
+	auto maximum = static_cast<unsigned>(-1);
+	fs_info->f_bsize = 4096;
+	fs_info->f_frsize = fs_info->f_bsize;
+	fs_info->f_bfree = TotalNumberOfFreeBytes.QuadPart / fs_info->f_bsize;
+	fs_info->f_blocks = TotalNumberOfBytes.QuadPart / fs_info->f_bsize;
+	fs_info->f_bavail = FreeBytesAvailable.QuadPart / fs_info->f_bsize;
+	fs_info->f_files = maximum;
+	fs_info->f_ffree = maximum;
+	fs_info->f_favail = maximum;
+}
 
 void FileSystemService::rename(const std::string& a, const std::string& b)
 {
