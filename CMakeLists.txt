@@ -1,14 +1,20 @@
 cmake_minimum_required(VERSION 2.8.5 FATAL_ERROR)
-project (securefs)
 
+option(PORTABLE_BUILD "Build for the general architecture instead of this cpu" OFF)
+if (PORTABLE_BUILD)
+    set (DISABLE_ASM ON)
+    set (CMAKE_OSX_DEPLOYMENT_TARGET "10.9")
+endif()
+
+project (securefs)
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+
 if (UNIX)
     find_package(FUSE REQUIRED)
     include_directories(${FUSE_INCLUDE_DIR})
     link_libraries(${FUSE_LIBRARIES})
     set (CMAKE_CXX_FLAGS "-std=c++11 -Wall -Wextra -pedantic -D_FILE_OFFSET_BITS=64")
     
-    option(GENERAL_ARCH "Build for the general architecture instead of this cpu" OFF)
     option(SANITIZE "Turn on sanitization" OFF)
     
     if (${SANITIZE})
