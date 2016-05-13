@@ -16,7 +16,9 @@ Security, however, is often at odds with convenience, and people easily grow tir
 
 [![Build Status](https://api.travis-ci.org/netheril96/securefs.svg?branch=master)](https://travis-ci.org/netheril96/securefs)
 
-On Debian based Linux distro, you need to install `fuse` and `libfuse-dev`. On RPM based Linux, you need `fuse` and `fuse-devel`. On OS X, you need [`osxfuse`](https://osxfuse.github.io). Operating systems other than OS X and Linux are not supported for now.
+### Unix
+
+On Debian based Linux distro, you need to install `fuse` and `libfuse-dev`. On RPM based Linux, you need `fuse` and `fuse-devel`. On OS X, you need [`osxfuse`](https://osxfuse.github.io). BSD systems have not been tested, but they should not be much different.
 
 You also need a recent C++ compiler (g++ >= 4.8, clang++ >= 3.3) and CMake.
 
@@ -30,11 +32,20 @@ sudo make install
 
 If you encounter build errors, you could try `cmake -DDISABLE_ASM=1 ..` instead.
 
-By default, it builds for your current machine's CPU type, taking advantage of hardware acceleration if possible. To compile for the general architecture, turn on option `GENERAL_ARCH`.
-
 Run `ctest` to test the program. `ctest -V` for a full output.
 
 To uninstall the program, just remove `/usr/local/bin/securefs`.
+
+### Windows
+
+Support for Windows is highly experimental. To build for Windows, you need CMake, [Dokany](https://github.com/dokan-dev/dokany/releases) (the latest, even if unstable one) and Visual Studio 2015. If you install Dokany in a nonstandard place, you need to set variable `DOKAN_PREFIX` when generate the solution file with CMake.
+
+Some known issues:
+
+* The command line of `securefs` does not work when fed with relative path.
+* Some applications report file sizes as zero.
+* Some applications refuse to believe that they have enough permissions.
+* Chrome's downloading into the volume will hang at 100% indefinitely.
 
 ## Basic usage
 
