@@ -21,7 +21,7 @@ if (UNIX)
         set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
     endif()
     
-    if (NOT ${GENERAL_ARCH})
+    if (NOT ${PORTABLE_BUILD})
         set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -mtune=native")
     endif()
     
