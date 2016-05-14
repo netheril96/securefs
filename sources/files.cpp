@@ -139,7 +139,7 @@ ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
     {
         true_meta_size = m_meta_stream->getxattr(name, meta, sizeof(meta));
     }
-    catch (const POSIXException& e)
+    catch (const ExceptionBase& e)
     {
         if (e.error_number() == ERANGE)
             throw OSException(EIO);

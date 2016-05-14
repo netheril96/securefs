@@ -7,6 +7,7 @@ import tempfile
 import shutil
 import sys
 import platform
+import time
 
 
 SECUREFS_BINARY = './securefs'
@@ -60,11 +61,24 @@ class SimpleSecureFSTestBase(object):
         shutil.rmtree(self.mount_point)
         
     def mount(self):
-        return securefs_mount(self.data_dir, self.mount_point, self.password)
+        def impl():
+            securefs_mount(self.data_dir, self.mount_point, self.password)
+        try:
+            impl()
+        except:
+            time.sleep(0.5)
+            impl()
     
     def unmount(self):
-        return securefs_unmount(self.mount_point)
-        
+        def impl():
+            securefs_unmount(self.mount_point)
+        # Unmounting too quick will cause errors
+        try:
+            impl()
+        except:
+            time.sleep(0.5)
+            impl()
+    
     def runTest(self):
         dir_names = set(str(i) for i in xrange(2))
         self.mount()

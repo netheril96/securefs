@@ -1,6 +1,6 @@
 #include "operations.h"
 #include "platform.h"
-#include "xattr_compat.h"
+
 
 #include <algorithm>
 #include <chrono>
@@ -9,6 +9,10 @@
 #include <string>
 #include <typeinfo>
 #include <utility>
+
+#ifdef __APPLE__
+#include <sys/xattr.h>
+#endif
 
 using securefs::operations::FileSystem;
 
@@ -739,12 +743,17 @@ namespace operations
     {
         COMMON_PROLOGUE
 
-        DEBUG_LOG(fmt::format("path={} access_time={}({}) modification_time={}({})",
+        if (ts){
+            DEBUG_LOG(fmt::format("path={} access_time={}({}) modification_time={}({})",
                               path,
                               ts[0].tv_sec,
                               ts[0].tv_nsec,
                               ts[1].tv_sec,
                               ts[1].tv_nsec));
+        }
+        else{
+            DEBUG_LOG(fmt::format("path={} time=current", path));
+        }
 
         try
         {
@@ -755,7 +764,8 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-#ifdef HAS_XATTR
+#ifdef __APPLE__
+
     int listxattr(const char* path, char* list, size_t size)
     {
         COMMON_PROLOGUE
@@ -769,8 +779,6 @@ namespace operations
         }
         COMMON_CATCH_BLOCK
     }
-
-#ifdef __APPLE__
 
     static const char* APPLE_FINDER_INFO = "com.apple.FinderInfo";
 
@@ -824,43 +832,6 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-#else
-    int getxattr(const char* path, const char* name, char* value, size_t size)
-    {
-        COMMON_PROLOGUE
-
-        DEBUG_LOG(fmt::format("path={} name={}", path, name));
-
-        try
-        {
-            auto fg = internal::open_all(fs, path);
-            return static_cast<int>(fg->getxattr(name, value, size));
-        }
-        COMMON_CATCH_BLOCK
-    }
-
-    int setxattr(const char* path, const char* name, const char* value, size_t size, int flags)
-    {
-        COMMON_PROLOGUE
-
-        fs->logger->log(
-            LoggingLevel::Debug,
-            fmt::format("path={} name={} value={}", path, name, std::string(value, size)),
-            __PRETTY_FUNCTION__,
-            __FILE__,
-            __LINE__);
-
-        flags &= XATTR_CREATE | XATTR_REPLACE;
-        try
-        {
-            auto fg = internal::open_all(fs, path);
-            fg->setxattr(name, value, size, flags);
-            return 0;
-        }
-        COMMON_CATCH_BLOCK
-    }
-#endif
-
     int removexattr(const char* path, const char* name)
     {
         COMMON_PROLOGUE
@@ -875,6 +846,7 @@ namespace operations
         }
         COMMON_CATCH_BLOCK
     }
+    
 #endif
 }
 }

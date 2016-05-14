@@ -4,7 +4,6 @@
 #include "format.h"
 #include "platform.h"
 #include "streams.h"
-#include "xattr_compat.h"
 
 #include <fcntl.h>
 #include <sys/file.h>
@@ -14,6 +13,10 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#ifdef __APPLE__
+#include <sys/xattr.h>
+#endif
 
 namespace securefs
 {
@@ -112,26 +115,19 @@ public:
             throw POSIXException(errno, "utimens");
     }
 
-#ifdef HAS_XATTR
+#ifdef __APPLE__
 
     void removexattr(const char* name) override
     {
-#ifdef __APPLE__
         auto rc = ::fremovexattr(m_fd, name, 0);
-#else
-        auto rc = ::fremovexattr(m_fd, name);
-#endif
         if (rc < 0)
             throw POSIXException(errno, "fremovexattr");
     }
 
     ssize_t getxattr(const char* name, void* value, size_t size) override
     {
-#ifdef __APPLE__
         ssize_t rc = ::fgetxattr(m_fd, name, value, size, 0, 0);
-#else
-        ssize_t rc = ::fgetxattr(m_fd, name, value, size);
-#endif
+
         if (rc < 0)
         {
             if (errno != ENOATTR)
@@ -144,11 +140,8 @@ public:
 
     ssize_t listxattr(char* buffer, size_t size) override
     {
-#ifdef __APPLE__
         auto rc = ::flistxattr(m_fd, buffer, size, 0);
-#else
-        auto rc = ::flistxattr(m_fd, buffer, size);
-#endif
+
         if (rc < 0)
             throw POSIXException(errno, "flistxattr");
         return rc;
@@ -156,11 +149,8 @@ public:
 
     void setxattr(const char* name, void* value, size_t size, int flags) override
     {
-#ifdef __APPLE__
+
         auto rc = ::fsetxattr(m_fd, name, value, size, 0, flags);
-#else
-        auto rc = ::fsetxattr(m_fd, name, value, size, flags);
-#endif
         if (rc < 0)
             throw POSIXException(errno, "fsetxattr");
     }

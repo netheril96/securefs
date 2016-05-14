@@ -10,13 +10,4 @@ if (${HAS_THREAD_LOCAL})
     add_definitions(-DHAS_THREAD_LOCAL)
 endif()
 
-CHECK_CXX_SOURCE_COMPILES(
-"#include <sys/xattr.h>
-int main() {return 0;}" 
-HAS_XATTR)
-
-if (${HAS_XATTR})
-    add_definitions(-DHAS_XATTR)
-endif()
-
 set(CMAKE_REQUIRED_FLAGS ${TMP_FLAGS})

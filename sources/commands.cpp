@@ -3,7 +3,6 @@
 #include "operations.h"
 #include "platform.h"
 #include "streams.h"
-#include "xattr_compat.h"
 
 #include <cryptopp/secblock.h>
 #include <format.h>
@@ -19,6 +18,10 @@
 #include <typeinfo>
 #include <unordered_map>
 #include <vector>
+
+#ifdef __APPLE__
+#include <sys/xattr.h>
+#endif
 
 using namespace securefs;
 
@@ -495,17 +498,17 @@ void init_fuse_operations(const char* underlying_path, struct fuse_operations& o
     opt.fsyncdir = &securefs::operations::fsyncdir;
     opt.utimens = &securefs::operations::utimens;
     opt.statfs = &securefs::operations::statfs;
+
+    (void)xattr;
+
+#ifdef __APPLE__
     if (!xattr)
         return;
-
-#ifdef HAS_XATTR
-#ifdef __APPLE__
     auto rc = ::listxattr(underlying_path, nullptr, 0, 0);
-#else
-    auto rc = ::listxattr(underlying_path, nullptr, 0);
-#endif
-    if (rc < 0)
+    if (rc < 0) {
+        fprintf(stderr, "Warning: %s has no extended attribute support.\nXattr is disabled\n", underlying_path);
         return;    // The underlying filesystem does not support extended attributes
+    }
     opt.listxattr = &securefs::operations::listxattr;
     opt.getxattr = &securefs::operations::getxattr;
     opt.setxattr = &securefs::operations::setxattr;
@@ -590,10 +593,14 @@ int mount_filesys(int argc, char** argv)
         "data_dir", "Directory where the data are stored", true, "", "directory");
     TCLAP::UnlabeledValueArg<std::string> mount_point(
         "mount_point", "Mount point", true, "", "directory");
+
+#ifdef __APPLE__
+        cmdline.add(&noxattr);
+#endif
+
     cmdline.add(&stdinpass);
     cmdline.add(&background);
     cmdline.add(&insecure);
-    cmdline.add(&noxattr);
     cmdline.add(&trace);
     cmdline.add(&log);
     cmdline.add(&data_dir);
