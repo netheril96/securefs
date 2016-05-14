@@ -809,12 +809,7 @@ namespace operations
     {
         COMMON_PROLOGUE
 
-        fs->logger->log(
-            LoggingLevel::Debug,
-            fmt::format("path={} name={} value={}", path, name, std::string(value, size)),
-            __PRETTY_FUNCTION__,
-            __FILE__,
-            __LINE__);
+        DEBUG_LOG(fmt::format("path={} name={} value={}", path, name, std::string(value, size)));
 
         if (position != 0)
             return -EINVAL;
