@@ -230,12 +230,11 @@ void FileSystemService::statfs(struct statvfs* fs_info)
     int rc = ::fstatvfs(impl->dir_fd, fs_info);
     if (rc < 0)
         throw POSIXException(errno, "statvfs");
-    fs_info->f_namemax = 255;
 }
 
 void FileSystemService::rename(const std::string& a, const std::string& b)
 {
-    int rc = ::rename(a.c_str(), b.c_str());
+    int rc = ::renameat(impl->dir_fd, a.c_str(), impl->dir_fd, b.c_str());
     if (rc < 0)
         throw POSIXException(
             errno,
