@@ -1,7 +1,6 @@
 #include "operations.h"
 #include "platform.h"
 
-
 #include <algorithm>
 #include <chrono>
 #include <mutex>
@@ -743,15 +742,17 @@ namespace operations
     {
         COMMON_PROLOGUE
 
-        if (ts){
+        if (ts)
+        {
             DEBUG_LOG(fmt::format("path={} access_time={}({}) modification_time={}({})",
-                              path,
-                              ts[0].tv_sec,
-                              ts[0].tv_nsec,
-                              ts[1].tv_sec,
-                              ts[1].tv_nsec));
+                                  path,
+                                  ts[0].tv_sec,
+                                  ts[0].tv_nsec,
+                                  ts[1].tv_sec,
+                                  ts[1].tv_nsec));
         }
-        else{
+        else
+        {
             DEBUG_LOG(fmt::format("path={} time=current", path));
         }
 
@@ -846,7 +847,7 @@ namespace operations
         }
         COMMON_CATCH_BLOCK
     }
-    
+
 #endif
 }
 }

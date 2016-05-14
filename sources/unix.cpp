@@ -40,8 +40,6 @@ public:
 
     ~UnixFileStream() { ::close(m_fd); }
 
-    int get_native_handle() noexcept override { return m_fd; }
-
     void fsync() override
     {
         int rc = ::fsync(m_fd);

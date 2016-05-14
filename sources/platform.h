@@ -34,7 +34,6 @@ namespace securefs
 class FileStream : public StreamBase
 {
 public:
-    virtual int get_native_handle() noexcept = 0;
     virtual void fsync() = 0;
     virtual void utimens(const struct timespec ts[2]) = 0;
     virtual void fstat(real_stat_type*) = 0;

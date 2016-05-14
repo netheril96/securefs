@@ -25,8 +25,6 @@ private:
 
 private:
     void read_header();
-    int get_data_fd() noexcept { return m_data_stream->get_native_handle(); }
-    int get_meta_fd() noexcept { return m_meta_stream->get_native_handle(); }
 
 protected:
     std::shared_ptr<StreamBase> m_stream;

@@ -196,8 +196,6 @@ public:
 
     length_type optimal_block_size() const noexcept override { return 4096; }
 
-    int get_native_handle() noexcept override { std::terminate(); }
-
     void fsync() override
     {
         if (FlushFileBuffers(m_handle) == 0)

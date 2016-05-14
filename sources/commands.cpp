@@ -505,8 +505,11 @@ void init_fuse_operations(const char* underlying_path, struct fuse_operations& o
     if (!xattr)
         return;
     auto rc = ::listxattr(underlying_path, nullptr, 0, 0);
-    if (rc < 0) {
-        fprintf(stderr, "Warning: %s has no extended attribute support.\nXattr is disabled\n", underlying_path);
+    if (rc < 0)
+    {
+        fprintf(stderr,
+                "Warning: %s has no extended attribute support.\nXattr is disabled\n",
+                underlying_path);
         return;    // The underlying filesystem does not support extended attributes
     }
     opt.listxattr = &securefs::operations::listxattr;
@@ -595,7 +598,7 @@ int mount_filesys(int argc, char** argv)
         "mount_point", "Mount point", true, "", "directory");
 
 #ifdef __APPLE__
-        cmdline.add(&noxattr);
+    cmdline.add(&noxattr);
 #endif
 
     cmdline.add(&stdinpass);
