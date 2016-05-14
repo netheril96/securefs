@@ -32,10 +32,10 @@ namespace securefs
 std::string to_lower(const std::string& str)
 {
     std::string result = str;
-    for (auto&& c : result)
+    for (char& c : result)
     {
-        if (c > 0 && c < 128)
-            c = ::tolower(c);
+        if (c >= 'A' && c <= 'Z')
+            c += 'a' - 'A';
     }
     return result;
 }

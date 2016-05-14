@@ -15,7 +15,7 @@ TEST_CASE("Test endian")
     REQUIRE(from_little_endian<uint32_t>(raw) == 0xABCDEF);
 }
 
-TEST_CASE("Test split")
+TEST_CASE("Test string")
 {
     REQUIRE((securefs::split("/tmp//abcde/123/", '/')
              == std::vector<std::string>{"tmp", "abcde", "123"}));
@@ -23,6 +23,8 @@ TEST_CASE("Test split")
     REQUIRE((securefs::split("cdafadfm", ' ') == std::vector<std::string>{"cdafadfm"}));
     REQUIRE((securefs::split("", 'a')).empty());
     REQUIRE((securefs::split("//////", '/')).empty());
+    REQUIRE(securefs::to_lower("abc") == "abc");
+    REQUIRE(securefs::to_lower("ABcD;,") == "abcd;,");
 }
 
 TEST_CASE("Test conversion of hex")
