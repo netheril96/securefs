@@ -26,12 +26,8 @@ if (UNIX)
     endif()
     
     if (APPLE)
-    	set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-dead_strip")
-    else()
-    	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections -pthread")
-    	set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections -pthread")
+        set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto")
     endif()
-
 else()
     add_definitions(-DNOMINMAX)
     if (DOKAN_PREFIX)
