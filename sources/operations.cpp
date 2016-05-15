@@ -158,18 +158,15 @@ namespace internal
 
     inline bool is_readonly(struct fuse_context* ctx) { return get_fs(ctx)->table.is_readonly(); }
 
-    int
-    log_error(FileSystem* fs, const ExceptionBase& e, const char* func, const char* file, int line)
+    int log_error(FileSystem* fs, const ExceptionBase& e, const char* func)
     {
         auto logger = fs->logger.get();
         if (logger && e.level() >= logger->get_level())
-            logger->log(
-                e.level(), fmt::format("{}: {}", e.type_name(), e.message()), func, file, line);
+            logger->log(e.level(), fmt::format("{}: {}", e.type_name(), e.message()), func);
         return -e.error_number();
     }
 
-    int log_general_error(
-        FileSystem* fs, const std::exception& e, const char* func, const char* file, int line)
+    int log_general_error(FileSystem* fs, const std::exception& e, const char* func)
     {
         auto logger = fs->logger.get();
         if (logger && LoggingLevel::Error >= logger->get_level())
@@ -177,9 +174,7 @@ namespace internal
                         fmt::format("An unexcepted exception of type {} occurrs: {}",
                                     typeid(e).name(),
                                     e.what()),
-                        func,
-                        file,
-                        line);
+                        func);
         return -EPERM;
     }
 }
@@ -204,13 +199,10 @@ namespace operations
 
 #define COMMON_CATCH_BLOCK                                                                         \
     catch (const OSException& e) { return -e.error_number(); }                                     \
-    catch (const ExceptionBase& e)                                                                 \
-    {                                                                                              \
-        return internal::log_error(fs, e, __PRETTY_FUNCTION__, __FILE__, __LINE__);                \
-    }                                                                                              \
+    catch (const ExceptionBase& e) { return internal::log_error(fs, e, __PRETTY_FUNCTION__); }     \
     catch (const std::exception& e)                                                                \
     {                                                                                              \
-        return internal::log_general_error(fs, e, __PRETTY_FUNCTION__, __FILE__, __LINE__);        \
+        return internal::log_general_error(fs, e, __PRETTY_FUNCTION__);                            \
     }
 
 #ifdef _WIN32
@@ -225,14 +217,9 @@ namespace operations
     auto fs = internal::get_fs(ctx);
 #endif
 
-    static bool should_debug_log(FileSystem* fs)
-    {
-        return fs->logger && fs->logger->get_level() <= LoggingLevel::Debug;
-    }
-
 #define DEBUG_LOG(msg)                                                                             \
-    if (should_debug_log(fs))                                                                      \
-    fs->logger->log(LoggingLevel::Debug, msg, __PRETTY_FUNCTION__, __FILE__, __LINE__)
+    if (fs->logger && fs->logger->get_level() <= LoggingLevel::Debug)                              \
+    fs->logger->log(LoggingLevel::Debug, msg, __PRETTY_FUNCTION__)
 
     void* init(struct fuse_conn_info*)
     {

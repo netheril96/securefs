@@ -29,63 +29,26 @@ inline const char* stringify(LoggingLevel lvl)
 
 class Logger
 {
-protected:
-    virtual void append(const void* data, size_t length) = 0;
-
 private:
     LoggingLevel m_level;
+    FILE* m_fp;
+    bool m_close_on_exit;
 
 public:
-    explicit Logger(LoggingLevel level) : m_level(level) {}
+    explicit Logger(LoggingLevel level, FILE* fp, bool close_on_exit)
+        : m_level(level), m_fp(fp), m_close_on_exit(close_on_exit)
+    {
+    }
 
-    void log(LoggingLevel level,
-             const std::string& msg,
-             const char* func,
-             const char* file,
-             int line) noexcept;
+    void log(LoggingLevel level, const std::string& msg, const char* func) noexcept;
 
     LoggingLevel get_level() const noexcept { return m_level; }
     void set_level(LoggingLevel lvl) noexcept { m_level = lvl; }
 
-    virtual ~Logger() {}
-};
-
-class FileLogger : public Logger
-{
-private:
-    FILE* m_fp;
-
-public:
-    explicit FileLogger(LoggingLevel lvl, FILE* fp) : Logger(lvl), m_fp(fp)
+    ~Logger()
     {
-        if (!fp)
-            NULL_EXCEPT();
-    }
-
-protected:
-    void append(const void* data, size_t length) noexcept override
-    {
-        fwrite(data, 1, length, m_fp);
-        fflush(m_fp);
-    }
-};
-
-class StreamLogger : public Logger
-{
-private:
-    std::shared_ptr<StreamBase> m_stream;
-
-public:
-    explicit StreamLogger(LoggingLevel lvl, std::shared_ptr<StreamBase> stream)
-        : Logger(lvl), m_stream(std::move(stream))
-    {
-    }
-
-protected:
-    void append(const void* data, size_t length) override
-    {
-        m_stream->write(data, m_stream->size(), length);
-        m_stream->flush();
+        if (m_close_on_exit)
+            fclose(m_fp);
     }
 };
 }

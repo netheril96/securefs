@@ -700,10 +700,20 @@ public:
             fsopt.flags.get() |= FileTable::NO_AUTHENTICATION;
 
         if (log.isSet())
-            fsopt.logger = std::make_shared<FileLogger>(LoggingLevel::Warn,
-                                                        fopen(log.getValue().c_str(), "w+b"));
-        else
-            fsopt.logger = std::make_shared<FileLogger>(LoggingLevel::Warn, stderr);
+        {
+            FILE* fp = fopen(log.getValue().c_str(), "w+b");
+            if (!fp)
+            {
+                fmt::print(
+                    stderr, "Failed to open file {}: {}\n", log.getValue(), sane_strerror(errno));
+                return 10;
+            }
+            fsopt.logger = std::make_shared<Logger>(LoggingLevel::Warn, fp, true);
+        }
+        else if (!background.getValue())
+        {
+            fsopt.logger = std::make_shared<Logger>(LoggingLevel::Warn, stderr, false);
+        }
 
         if (trace.getValue() && fsopt.logger)
             fsopt.logger->set_level(LoggingLevel::Debug);
