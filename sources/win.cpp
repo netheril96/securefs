@@ -235,7 +235,7 @@ public:
             return from_utf8(path);
         else
         {
-            return impl->dir_name + L'\\' + from_utf8(path);
+            return dir_name + L'\\' + from_utf8(path);
         }
     }
 };

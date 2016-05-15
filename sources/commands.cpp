@@ -781,6 +781,10 @@ public:
 
     int execute() override
     {
+#ifdef _WIN32
+		fputs("Sorry, not implemented on Windows\n", stderr);
+		return 13;
+#else
         auto config_stream = open_config_stream(get_real_config_path(), O_RDONLY);
         auto config = read_config(config_stream.get(), password.data(), password.size());
         config_stream.reset();
@@ -799,6 +803,7 @@ public:
         operations::FileSystem fs(fsopt);
         fix(data_dir.getValue(), &fs);
         return 0;
+#endif
     }
 
     const char* long_name() const noexcept override { return "fix"; }
