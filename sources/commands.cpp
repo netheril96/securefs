@@ -21,7 +21,9 @@
 #include <vector>
 
 #ifdef __APPLE__
+
 #include <sys/xattr.h>
+
 #endif
 
 using namespace securefs;
@@ -215,6 +217,7 @@ void fix(const std::string& basedir, operations::FileSystem* fs)
     fix_hardlink_count(fs, root_dir.get_as<Directory>(), &nlink_map, NLinkFixPhase::FixingNLink);
     puts("Fix complete");
 }
+
 #endif
 
 Json::Value generate_config(int version,
@@ -428,15 +431,7 @@ size_t try_read_password(void* password, size_t size)
 namespace securefs
 {
 
-std::shared_ptr<FileStream> CommandBase::open_default_config_stream(const std::string& dir,
-                                                                    int flags)
-{
-    FileSystemService service(dir);
-    return service.open_file_stream(CONFIG_FILE_NAME, flags, 0644);
-}
-
-std::shared_ptr<FileStream> CommandBase::open_explicit_config_stream(const std::string& path,
-                                                                     int flags)
+std::shared_ptr<FileStream> CommandBase::open_config_stream(const std::string& path, int flags)
 {
     FileSystemService service;
     return service.open_file_stream(path, flags, 0644);
@@ -481,7 +476,28 @@ void CommandBase::write_config(StreamBase* stream,
     stream->write(str.data(), 0, str.size());
 }
 
-class CreateCommand : public CommandBase
+class CommonCommandBase : public CommandBase
+{
+protected:
+    TCLAP::UnlabeledValueArg<std::string> data_dir{
+        "dir", "Directory where the data are stored", true, "", "data_dir"};
+    TCLAP::ValueArg<std::string> config_path{
+        "",
+        "config",
+        "Full path name of the config file. ${data_dir}/.securefs.json by default",
+        false,
+        "",
+        "config_path"};
+
+protected:
+    std::string get_real_config_path()
+    {
+        return config_path.isSet() ? config_path.getValue()
+                                   : data_dir.getValue() + '/' + CONFIG_FILE_NAME;
+    }
+};
+
+class CreateCommand : public CommonCommandBase
 {
 private:
     CryptoPP::AlignedSecByteBlock password;
@@ -495,10 +511,9 @@ private:
         false,
         0,
         "integer"};
-    TCLAP::UnlabeledValueArg<std::string> dir{
-        "dir", "Directory where the data are stored", true, "", "directory"};
-    TCLAP::ValueArg<int> version{"", "ver", "The format version (1 or 2)", false, 2, "integer"};
-    TCLAP::ValueArg<int> iv_size{
+    TCLAP::ValueArg<unsigned int> version{
+        "", "ver", "The format version (1 or 2)", false, 2, "integer"};
+    TCLAP::ValueArg<unsigned int> iv_size{
         "", "iv-size", "The IV size (ignored for fs format 1)", false, 12, "integer"};
 
 public:
@@ -508,7 +523,8 @@ public:
         cmdline.add(&iv_size);
         cmdline.add(&stdinpass);
         cmdline.add(&rounds);
-        cmdline.add(&dir);
+        cmdline.add(&data_dir);
+        cmdline.add(&config_path);
         cmdline.add(&version);
         cmdline.parse(argc, argv);
 
@@ -532,7 +548,7 @@ public:
         config.block_size = 4096;
 
         auto config_stream
-            = open_default_config_stream(dir.getValue(), O_WRONLY | O_CREAT | O_EXCL);
+            = open_config_stream(get_real_config_path(), O_WRONLY | O_CREAT | O_EXCL);
 
         write_config(
             config_stream.get(), config, password.data(), password.size(), rounds.getValue());
@@ -540,7 +556,7 @@ public:
 
         operations::FSOptions opt;
         opt.version = version.getValue();
-        opt.root = std::make_shared<FileSystemService>(dir.getValue());
+        opt.root = std::make_shared<FileSystemService>(data_dir.getValue());
         opt.master_key = config.master_key;
         opt.flags = 0;
         opt.block_size = 4096;
@@ -557,11 +573,13 @@ public:
     }
 
     const char* long_name() const noexcept override { return "create"; }
+
     char short_name() const noexcept override { return 'c'; }
+
     const char* help_message() const noexcept override { return "Create a new filesystem"; }
 };
 
-class ChangePasswordCommand : public CommandBase
+class ChangePasswordCommand : public CommonCommandBase
 {
 private:
     CryptoPP::AlignedSecByteBlock old_password, new_password;
@@ -572,15 +590,14 @@ private:
         false,
         0,
         "integer"};
-    TCLAP::UnlabeledValueArg<std::string> dir{
-        "dir", "Directory where the data are stored", true, "", "directory"};
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
     {
         TCLAP::CmdLine cmdline(help_message());
         cmdline.add(&rounds);
-        cmdline.add(&dir);
+        cmdline.add(&data_dir);
+        cmdline.add(&config_path);
         cmdline.parse(argc, argv);
         old_password.resize(MAX_PASS_LEN);
         old_password.resize(try_read_password(old_password.data(), old_password.size()));
@@ -593,21 +610,24 @@ public:
 
     int execute() override
     {
-        auto stream = open_default_config_stream(dir.getValue(), O_RDWR);
+        auto stream = open_config_stream(get_real_config_path(), O_RDWR);
         auto config = read_config(stream.get(), old_password.data(), old_password.size());
         write_config(
             stream.get(), config, new_password.data(), new_password.size(), rounds.getValue());
         return 0;
     }
+
     const char* long_name() const noexcept override { return "chpass"; }
+
     char short_name() const noexcept override { return 0; }
+
     const char* help_message() const noexcept override
     {
         return "Change password of existing filesystem";
     }
 };
 
-class MountCommand : public CommandBase
+class MountCommand : public CommonCommandBase
 {
 private:
     CryptoPP::AlignedSecByteBlock password;
@@ -621,8 +641,6 @@ private:
     TCLAP::ValueArg<std::string> log{
         "", "log", "Path of the log file (may contain sensitive information)", false, "", "path"};
 
-    TCLAP::UnlabeledValueArg<std::string> data_dir{
-        "data_dir", "Directory where the data are stored", true, "", "data_dir"};
     TCLAP::UnlabeledValueArg<std::string> mount_point{
         "mount_point", "Mount point", true, "", "mount_point"};
 
@@ -641,6 +659,7 @@ public:
         cmdline.add(&trace);
         cmdline.add(&log);
         cmdline.add(&data_dir);
+        cmdline.add(&config_path);
         cmdline.add(&mount_point);
         cmdline.parse(argc, argv);
 
@@ -663,7 +682,7 @@ public:
             fputs("Warning: failure to raise the maximum file descriptor limit\n", stderr);
         }
 
-        auto config_stream = open_default_config_stream(data_dir.getValue(), O_RDONLY);
+        auto config_stream = open_config_stream(get_real_config_path(), O_RDONLY);
         auto config = read_config(config_stream.get(), password.data(), password.size());
         config_stream.reset();
 
@@ -708,7 +727,9 @@ public:
     }
 
     const char* long_name() const noexcept override { return "mount"; }
+
     char short_name() const noexcept override { return 'm'; }
+
     const char* help_message() const noexcept override { return "Mount an existing filesystem"; }
 };
 

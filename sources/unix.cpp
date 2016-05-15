@@ -195,7 +195,7 @@ FileSystemService::open_file_stream(const std::string& path, int flags, unsigned
     int fd = ::openat(impl->dir_fd, path.c_str(), flags, mode);
     if (fd < 0)
         throw POSIXException(
-            errno, fmt::format("Opening {}/{} with flags {}", impl->dir_name, path, flags));
+            errno, fmt::format("Opening {}/{} with flags {:#o}", impl->dir_name, path, flags));
     return std::make_shared<UnixFileStream>(fd);
 }
 
@@ -206,7 +206,7 @@ bool FileSystemService::remove_file(const std::string& path) noexcept
 
 bool FileSystemService::remove_directory(const std::string& path) noexcept
 {
-    return ::unlinkat(impl->dir_fd, path.c_str(), AT_REMOVEDIR);
+    return ::unlinkat(impl->dir_fd, path.c_str(), AT_REMOVEDIR) == 0;
 }
 
 void FileSystemService::lock()
