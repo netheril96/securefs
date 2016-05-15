@@ -370,14 +370,6 @@ inline void CmdLine::_constructor()
 		add( help );
 		deleteOnExit(help);
 		deleteOnExit(v);
-
-		v = new VersionVisitor( this, &_output );
-		SwitchArg* vers = new SwitchArg("","version",
-		                      "Displays version information and exits.",
-		                      false, v);
-		add( vers );
-		deleteOnExit(vers);
-		deleteOnExit(v);
 	}
 
 	v = new IgnoreRestVisitor();

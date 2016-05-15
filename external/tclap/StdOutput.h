@@ -116,16 +116,17 @@ inline void StdOutput::version(CmdLineInterface& _cmd)
 
 inline void StdOutput::usage(CmdLineInterface& _cmd ) 
 {
-	std::cout << std::endl << "USAGE: " << std::endl << std::endl; 
+    std::cout << "Functionality:\n\n";
+
+    spacePrint( std::cout, _cmd.getMessage(), 75, 3, 0 );
+
+	std::cout << std::endl << "Usage: " << std::endl << std::endl;
 
 	_shortUsage( _cmd, std::cout );
 
-	std::cout << std::endl << std::endl << "Where: " << std::endl << std::endl;
+    std::cout << '\n';
 
 	_longUsage( _cmd, std::cout );
-
-	std::cout << std::endl; 
-
 }
 
 inline void StdOutput::failure( CmdLineInterface& _cmd,
@@ -192,17 +193,38 @@ StdOutput::_longUsage( CmdLineInterface& _cmd,
 					   std::ostream& os ) const
 {
 	std::list<Arg*> argList = _cmd.getArgList();
-	std::string message = _cmd.getMessage();
 	XorHandler xorHandler = _cmd.getXorHandler();
 	std::vector< std::vector<Arg*> > xorList = xorHandler.getXorList();
+
+    auto required_first_compare = [](const Arg* a, const Arg* b) {
+        if (a->isRequired()) return true;
+        if (b->isRequired()) return false;
+        return true;
+    };
 
 	// first the xor 
 	for ( int i = 0; static_cast<unsigned int>(i) < xorList.size(); i++ )
 		{
-			for ( ArgVectorIterator it = xorList[i].begin(); 
+            std::sort(std::begin(xorList[i]), std::end(xorList[i]), required_first_compare);
+            bool required_printed = false;
+            bool optional_printed=false;
+
+			for ( ArgVectorIterator it = xorList[i].begin();
 				  it != xorList[i].end(); 
 				  it++ )
 				{
+                    if ((*it)->isRequired()) {
+                        if (!required_printed) {
+                        required_printed = true;
+                            os << "Required flags:\n\n";
+                        }
+                    } else {
+                        if (!optional_printed){
+                            optional_printed=true;
+                            os << "Optional flags:\n\n";
+                        }
+                    }
+
 					spacePrint( os, (*it)->longID(), 75, 3, 3 );
 					spacePrint( os, (*it)->getDescription(), 75, 5, 0 );
 
@@ -213,17 +235,29 @@ StdOutput::_longUsage( CmdLineInterface& _cmd,
 		}
 
 	// then the rest
+    bool required_printed = false;
+    bool optional_printed=false;
+    argList.sort(required_first_compare);
 	for (ArgListIterator it = argList.begin(); it != argList.end(); it++)
 		if ( !xorHandler.contains( (*it) ) )
 			{
-				spacePrint( os, (*it)->longID(), 75, 3, 3 ); 
+                if ((*it)->isRequired()) {
+                    if (!required_printed) {
+                        required_printed = true;
+                        os << "Required flags:\n\n";
+                    }
+                } else {
+                    if (!optional_printed){
+                        optional_printed=true;
+                        os << "Optional flags:\n\n";
+                    }
+                }
+				spacePrint( os, (*it)->longID(), 75, 3, 3 );
 				spacePrint( os, (*it)->getDescription(), 75, 5, 0 ); 
 				os << std::endl;
 			}
 
 	os << std::endl;
-
-	spacePrint( os, message, 75, 3, 0 );
 }
 
 inline void StdOutput::spacePrint( std::ostream& os, 
