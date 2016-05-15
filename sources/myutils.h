@@ -175,6 +175,12 @@ inline bool ends_with(const std::string& str, const std::string& suffix)
     return ends_with(str.data(), str.size(), suffix.data(), suffix.size());
 }
 
+bool starts_with(const char* str, size_t size, const char* prefix, size_t prefix_len);
+inline bool starts_with(const std::string& str, const std::string& prefix)
+{
+    return starts_with(str.data(), str.size(), prefix.data(), prefix.size());
+}
+
 std::vector<std::string> split(const char* str, size_t length, char separator);
 
 inline std::vector<std::string> split(const std::string& str, char separator)

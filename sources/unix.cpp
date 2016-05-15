@@ -156,23 +156,23 @@ public:
 #endif
 };
 
-class FileSystemServiceImpl
+class FileSystemService::Impl
 {
 public:
     std::string dir_name;
     int dir_fd;
+
+    std::string norm_path(const std::string& path) const
+    {
+        if (dir_fd == AT_FDCWD)
+            return path;
+        if (path.size() > 0 && path[0] == '/')
+            return path;
+        return dir_name + '/' + path;
+    }
 };
 
-FileSystemService::FileSystemService() : impl(new Impl())
-{
-    impl->dir_fd = AT_FDCWD;
-    char* cwd = getcwd(nullptr, 0);
-    if (!cwd)
-        impl->dir_name = "####UNKNOWN_DIRECTORY####";
-    else
-        impl->dir_name = cwd;
-    free(cwd);
-}
+FileSystemService::FileSystemService() : impl(new Impl()) { impl->dir_fd = AT_FDCWD; }
 
 FileSystemService::~FileSystemService()
 {
@@ -195,7 +195,7 @@ FileSystemService::open_file_stream(const std::string& path, int flags, unsigned
     int fd = ::openat(impl->dir_fd, path.c_str(), flags, mode);
     if (fd < 0)
         throw POSIXException(
-            errno, fmt::format("Opening {}/{} with flags {:#o}", impl->dir_name, path, flags));
+            errno, fmt::format("Opening {} with flags {:#o}", impl->norm_path(path), flags));
     return std::make_shared<UnixFileStream>(fd);
 }
 
@@ -222,7 +222,7 @@ void FileSystemService::ensure_directory(const std::string& path, unsigned mode)
     int rc = ::mkdirat(impl->dir_fd, path.c_str(), mode);
     if (rc < 0 && errno != EEXIST)
         throw POSIXException(errno,
-                             fmt::format("Fail to create directory {}/{}", impl->dir_name, path));
+                             fmt::format("Fail to create directory {}", impl->norm_path(path)));
 }
 
 void FileSystemService::statfs(struct statvfs* fs_info)
@@ -237,8 +237,7 @@ void FileSystemService::rename(const std::string& a, const std::string& b)
     int rc = ::renameat(impl->dir_fd, a.c_str(), impl->dir_fd, b.c_str());
     if (rc < 0)
         throw POSIXException(
-            errno,
-            fmt::format("Renaming from {}/{} to {}/{}", impl->dir_name, a, impl->dir_name, b));
+            errno, fmt::format("Renaming from {} to {}", impl->norm_path(a), impl->norm_path(b)));
 }
 
 uint32_t FileSystemService::getuid() noexcept { return ::getuid(); }

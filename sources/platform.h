@@ -47,12 +47,10 @@ public:
     virtual void removexattr(const char*) { throw OSException(ENOTSUP); }
 };
 
-class FileSystemServiceImpl;
-
 class FileSystemService
 {
 private:
-    typedef FileSystemServiceImpl Impl;
+    class Impl;
     std::unique_ptr<Impl> impl;
 
 public:

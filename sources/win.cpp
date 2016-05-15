@@ -122,7 +122,7 @@ public:
     length_type read(void* output, offset_type offset, length_type length) override
     {
         seek(offset);
-        DWORD total = 0;
+        length_type total = 0;
         while (length > MAX_SINGLE_BLOCK)
         {
             DWORD cur;
@@ -146,7 +146,7 @@ public:
     void write(const void* input, offset_type offset, length_type length) override
     {
         seek(offset);
-        DWORD total = 0;
+        length_type total = 0;
         while (length > MAX_SINGLE_BLOCK)
         {
             DWORD cur;
@@ -223,24 +223,22 @@ public:
     }
 };
 
-class FileSystemServiceImpl
+class FileSystemService::Impl
 {
 public:
     std::wstring dir_name;
-};
 
-static std::wstring full_path(FileSystemServiceImpl* impl, const std::string& path)
-{
-    if (impl->dir_name.empty())
-        return from_utf8(path);
-    auto result = impl->dir_name + L"\\" + from_utf8(path);
-    for (wchar_t& c : result)
+    std::wstring norm_path(const std::string& path) const
     {
-        if (c == L'/')
-            c = L'\\';
+        if (dir_name.empty() || (path.size() > 0 && (path[0] == '/' || path[0] == '\\'))
+            || (path.size() > 2 && path[1] == ':'))
+            return from_utf8(path);
+        else
+        {
+            return impl->dir_name + L'\\' + from_utf8(path);
+        }
     }
-    return result;
-}
+};
 
 FileSystemService::FileSystemService() : impl(new Impl()) {}
 
@@ -248,30 +246,30 @@ FileSystemService::~FileSystemService() {}
 
 FileSystemService::FileSystemService(const std::string& path) : impl(new Impl())
 {
-    impl->dir_name = L"//?/" + from_utf8(path);
+    impl->dir_name = from_utf8(path);
 }
 
 std::shared_ptr<FileStream>
 FileSystemService::open_file_stream(const std::string& path, int flags, unsigned mode)
 {
-    return std::make_shared<WindowsFileStream>(full_path(impl.get(), path), flags, mode);
+    return std::make_shared<WindowsFileStream>(impl->norm_path(path), flags, mode);
 }
 
 bool FileSystemService::remove_file(const std::string& path) noexcept
 {
-    return DeleteFileW(full_path(impl.get(), path).c_str());
+    return DeleteFileW(impl->norm_path(path).c_str());
 }
 
 bool FileSystemService::remove_directory(const std::string& path) noexcept
 {
-    return RemoveDirectoryW(full_path(impl.get(), path).c_str());
+    return RemoveDirectoryW(impl->norm_path(path).c_str());
 }
 
 void FileSystemService::lock() {}
 
 void FileSystemService::ensure_directory(const std::string& path, unsigned mode)
 {
-    if (CreateDirectoryW(full_path(impl.get(), path).c_str(), nullptr) == 0)
+    if (CreateDirectoryW(impl->norm_path(path).c_str(), nullptr) == 0)
     {
         DWORD err = GetLastError();
         if (err != ERROR_ALREADY_EXISTS)
@@ -302,8 +300,8 @@ void FileSystemService::statfs(struct statvfs* fs_info)
 
 void FileSystemService::rename(const std::string& a, const std::string& b)
 {
-    auto wa = full_path(impl.get(), a);
-    auto wb = full_path(impl.get(), b);
+    auto wa = impl->norm_path(a);
+    auto wb = impl->norm_path(b);
     DeleteFileW(wb.c_str());
     if (MoveFileW(wa.c_str(), wb.c_str()) == 0)
         throw WindowsException(GetLastError(), "MoveFileW");
