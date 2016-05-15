@@ -1,3 +1,4 @@
+#include "commands.h"
 #include "exceptions.h"
 #include "myutils.h"
 #include "operations.h"
@@ -759,6 +760,183 @@ int print_usage(FILE* fp)
 
 namespace securefs
 {
+
+std::shared_ptr<FileStream> CommandBase::open_default_config_stream(const std::string& dir,
+                                                                    int flags)
+{
+    FileSystemService service(dir);
+    return service.open_file_stream(CONFIG_FILE_NAME, flags, 0644);
+}
+
+std::shared_ptr<FileStream> CommandBase::open_explicit_config_stream(const std::string& path,
+                                                                     int flags)
+{
+    FileSystemService service;
+    return service.open_file_stream(path, flags, 0644);
+}
+
+FSConfig CommandBase::read_config(StreamBase* stream, const void* password, size_t pass_len)
+{
+    FSConfig result;
+
+    std::string str(stream->size(), 0);
+    stream->read(&str[0], 0, str.size());
+    Json::Reader reader;
+    Json::Value value;
+    if (!reader.parse(str, value))
+        throw std::runtime_error(fmt::format("Failure to parse the config file: {}",
+                                             reader.getFormattedErrorMessages()));
+
+    if (!parse_config(
+            value, password, pass_len, result.master_key, result.block_size, result.iv_size))
+        throw std::runtime_error("Invalid password");
+    result.version = value["version"].asUInt();
+    return result;
+}
+
+void CommandBase::write_config(StreamBase* stream,
+                               const FSConfig& config,
+                               const void* password,
+                               size_t pass_len,
+                               unsigned rounds)
+{
+    key_type salt;
+    generate_random(salt.data(), salt.size());
+    auto str = generate_config(config.version,
+                               config.master_key,
+                               salt,
+                               password,
+                               pass_len,
+                               config.block_size,
+                               config.iv_size,
+                               rounds)
+                   .toStyledString();
+    stream->write(str.data(), 0, str.size());
+}
+
+class CreateCommand final : public CommandBase
+{
+private:
+    std::string dir;
+    std::string config_path;
+    unsigned version;
+    unsigned iv_size;
+    unsigned rounds;
+    CryptoPP::AlignedSecByteBlock password;
+
+public:
+    void parse_cmdline(int argc, const char* const* argv) override
+    {
+        TCLAP::CmdLine cmdline(help_message());
+        TCLAP::SwitchArg stdinpass(
+            "s", "stdinpass", "Read password from stdin directly (useful for piping)");
+        TCLAP::ValueArg<unsigned> rounds(
+            "r",
+            "rounds",
+            "Specify how many rounds of PBKDF2 are applied (0 for automatic)",
+            false,
+            0,
+            "integer");
+        TCLAP::UnlabeledValueArg<std::string> dir(
+            "dir", "Directory where the data are stored", true, "", "directory");
+        TCLAP::ValueArg<int> version("", "ver", "The format version (1 or 2)", false, 2, "integer");
+        TCLAP::ValueArg<int> iv_size(
+            "", "iv-size", "The IV size (ignored for fs format 1)", false, 12, "integer");
+
+        cmdline.add(&iv_size);
+        cmdline.add(&stdinpass);
+        cmdline.add(&rounds);
+        cmdline.add(&dir);
+        cmdline.add(&version);
+        cmdline.parse(argc, argv);
+
+        this->iv_size = iv_size.getValue();
+        this->version = version.getValue();
+        this->rounds = rounds.getValue();
+        this->dir = dir.getValue();
+
+        password.resize(MAX_PASS_LEN);
+        if (stdinpass.getValue())
+        {
+            password.resize(insecure_read_password(stdin, nullptr, password.data(), password.size()));
+        }
+        else
+        {
+            password.resize(try_read_password_with_confirmation(password.data(), password.size()));
+        }
+    }
+
+    void execute() override
+    {
+        FSConfig config;
+        config.iv_size = iv_size;
+        config.version = version;
+        config.block_size = 4096;
+
+        auto config_stream = config_path.empty()
+            ? open_default_config_stream(dir, O_RDONLY)
+            : open_explicit_config_stream(config_path, O_RDONLY);
+        write_config(config_stream.get(), config, password.data(), password.size(), rounds);
+
+        operations::FSOptions opt;
+        opt.version = version;
+        opt.root = std::make_shared<FileSystemService>(dir);
+        opt.master_key = config.master_key;
+        opt.flags = 0;
+        opt.block_size = 4096;
+        opt.iv_size = version == 1 ? 32 : iv_size;
+
+        operations::FileSystem fs(opt);
+        auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
+        root->set_uid(securefs::FileSystemService::getuid());
+        root->set_gid(securefs::FileSystemService::getgid());
+        root->set_mode(S_IFDIR | 0755);
+        root->set_nlink(1);
+        root->flush();
+    }
+
+    const char* long_name() const noexcept override { return "create"; }
+    char short_name() const noexcept override { return 'c'; }
+    const char* help_message() const noexcept override { return "Create a new filesystem"; }
+};
+
+class ChangePasswordCommand : public CommandBase
+{
+private:
+    CryptoPP::AlignedSecByteBlock password;
+
+public:
+    void parse_cmdline(int argc, const char* const* argv) override
+    {
+        TCLAP::CmdLine cmdline("Change the password of a given filesystem");
+        TCLAP::SwitchArg stdinpass(
+            "s", "stdinpass", "Read password from stdin directly (useful for piping)");
+        TCLAP::ValueArg<unsigned> rounds(
+            "r",
+            "rounds",
+            "Specify how many rounds of PBKDF2 are applied (0 for automatic)",
+            false,
+            0,
+            "integer");
+        TCLAP::UnlabeledValueArg<std::string> dir(
+            "dir", "Directory where the data are stored", true, "", "directory");
+        cmdline.add(&stdinpass);
+        cmdline.add(&rounds);
+        cmdline.add(&dir);
+        cmdline.parse(argc, argv);
+
+
+        password.resize(MAX_PASS_LEN);
+        if (stdinpass.getValue())
+        {
+            password.resize(insecure_read_password(stdin, nullptr, password.data(), password.size()));
+        }
+        else
+        {
+            password.resize(try_read_password_with_confirmation(password.data(), password.size()));
+        }
+    }
+};
 int commands_main(int argc, char** argv)
 {
     try
