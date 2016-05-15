@@ -33,7 +33,6 @@ namespace
 
 static const char* VERSION_HEADER = "version=1";
 static const std::string CONFIG_FILE_NAME = ".securefs.json";
-static const std::string CONFIG_TMP_FILE_NAME = ".securefs.json.tmp";
 static const unsigned MIN_ITERATIONS = 20000;
 static const unsigned MIN_DERIVE_SECONDS = 1;
 static const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
@@ -602,7 +601,7 @@ public:
         old_password.resize(MAX_PASS_LEN);
         old_password.resize(try_read_password(old_password.data(), old_password.size()));
 
-        fputs("Now enter new password", stderr);
+        fputs("\nNow enter new password\n", stderr);
         new_password.resize(MAX_PASS_LEN);
         new_password.resize(
             try_read_password_with_confirmation(new_password.data(), new_password.size()));
@@ -610,10 +609,17 @@ public:
 
     int execute() override
     {
-        auto stream = open_config_stream(get_real_config_path(), O_RDWR);
+        FileSystemService service;
+        auto original_path = get_real_config_path();
+        byte buffer[16];
+        auto tmp_path = original_path + hexify(buffer, sizeof(buffer));
+        auto stream = service.open_file_stream(original_path, O_RDONLY, 0644);
         auto config = read_config(stream.get(), old_password.data(), old_password.size());
+        stream = service.open_file_stream(tmp_path, O_WRONLY | O_CREAT | O_EXCL, 0644);
         write_config(
             stream.get(), config, new_password.data(), new_password.size(), rounds.getValue());
+        stream.reset();
+        service.rename(tmp_path, original_path);
         return 0;
     }
 
