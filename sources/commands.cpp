@@ -686,6 +686,8 @@ public:
         auto config = read_config(config_stream.get(), password.data(), password.size());
         config_stream.reset();
 
+        generate_random(password.data(), password.size());    // Erase user input
+
         operations::FSOptions fsopt;
         fsopt.root = std::make_shared<FileSystemService>(data_dir.getValue());
         fsopt.root->lock();
@@ -733,29 +735,97 @@ public:
     const char* help_message() const noexcept override { return "Mount an existing filesystem"; }
 };
 
+class FixCommand : public CommonCommandBase
+{
+private:
+    CryptoPP::AlignedSecByteBlock password;
+    TCLAP::SwitchArg stdinpass{
+        "s", "stdinpass", "Read password from stdin directly (useful for piping)"};
+
+public:
+    void parse_cmdline(int argc, const char* const* argv) override
+    {
+        TCLAP::CmdLine cmdline(help_message());
+        cmdline.add(&stdinpass);
+        cmdline.add(&data_dir);
+        cmdline.add(&config_path);
+        cmdline.parse(argc, argv);
+
+        password.resize(MAX_PASS_LEN);
+        if (stdinpass.getValue())
+        {
+            password.resize(
+                insecure_read_password(stdin, nullptr, password.data(), password.size()));
+        }
+        else
+        {
+            password.resize(try_read_password(password.data(), password.size()));
+        }
+    }
+
+    int execute() override
+    {
+        auto config_stream = open_config_stream(get_real_config_path(), O_RDONLY);
+        auto config = read_config(config_stream.get(), password.data(), password.size());
+        config_stream.reset();
+
+        generate_random(password.data(), password.size());    // Erase user input
+
+        operations::FSOptions fsopt;
+        fsopt.root = std::make_shared<FileSystemService>(data_dir.getValue());
+        fsopt.root->lock();
+        fsopt.block_size = config.block_size;
+        fsopt.iv_size = config.iv_size;
+        fsopt.version = config.version;
+        fsopt.master_key = config.master_key;
+        fsopt.flags = 0;
+
+        operations::FileSystem fs(fsopt);
+        fix(data_dir.getValue(), &fs);
+        return 0;
+    }
+
+    const char* long_name() const noexcept override { return "fix"; }
+
+    char short_name() const noexcept override { return 0; }
+
+    const char* help_message() const noexcept override
+    {
+        return "Try to fix errors in an existing filesystem";
+    }
+};
+
 int commands_main(int argc, char** argv)
 {
     try
     {
         std::vector<std::unique_ptr<CommandBase>> cmds;
-        cmds.reserve(3);
+        cmds.reserve(4);
         cmds.emplace_back(new MountCommand());
         cmds.emplace_back(new CreateCommand());
         cmds.emplace_back(new ChangePasswordCommand());
+        cmds.emplace_back(new FixCommand());
 
         auto print_usage = [&]() {
-            fputs("Usage:\n\n", stderr);
+            fputs("Available subcommands:\n\n", stderr);
 
             for (auto&& command : cmds)
             {
-                fmt::print(stderr,
-                           "{} ({}): {}\n",
-                           command->long_name(),
-                           command->short_name(),
-                           command->help_message());
+                if (command->short_name())
+                {
+                    fmt::print(stderr,
+                               "{} (alias: {}): {}\n",
+                               command->long_name(),
+                               command->short_name(),
+                               command->help_message());
+                }
+                else
+                {
+                    fmt::print(stderr, "{}: {}\n", command->long_name(), command->help_message());
+                }
             }
 
-            fmt::print(stderr, "\nType {} command-name --help for details\n", argv[0]);
+            fmt::print(stderr, "\nType {} ${{SUBCOMMAND}} --help for details\n", argv[0]);
             return 1;
         };
 
