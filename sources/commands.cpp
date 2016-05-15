@@ -814,35 +814,30 @@ void CommandBase::write_config(StreamBase* stream,
     stream->write(str.data(), 0, str.size());
 }
 
-class CreateCommand final : public CommandBase
+class CreateCommand : public CommandBase
 {
 private:
-    std::string dir;
-    std::string config_path;
-    unsigned version;
-    unsigned iv_size;
-    unsigned rounds;
     CryptoPP::AlignedSecByteBlock password;
+
+    TCLAP::SwitchArg stdinpass{
+        "s", "stdinpass", "Read password from stdin directly (useful for piping)"};
+    TCLAP::ValueArg<unsigned> rounds{
+        "r",
+        "rounds",
+        "Specify how many rounds of PBKDF2 are applied (0 for automatic)",
+        false,
+        0,
+        "integer"};
+    TCLAP::UnlabeledValueArg<std::string> dir{
+        "dir", "Directory where the data are stored", true, "", "directory"};
+    TCLAP::ValueArg<int> version{"", "ver", "The format version (1 or 2)", false, 2, "integer"};
+    TCLAP::ValueArg<int> iv_size{
+        "", "iv-size", "The IV size (ignored for fs format 1)", false, 12, "integer"};
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
     {
         TCLAP::CmdLine cmdline(help_message());
-        TCLAP::SwitchArg stdinpass(
-            "s", "stdinpass", "Read password from stdin directly (useful for piping)");
-        TCLAP::ValueArg<unsigned> rounds(
-            "r",
-            "rounds",
-            "Specify how many rounds of PBKDF2 are applied (0 for automatic)",
-            false,
-            0,
-            "integer");
-        TCLAP::UnlabeledValueArg<std::string> dir(
-            "dir", "Directory where the data are stored", true, "", "directory");
-        TCLAP::ValueArg<int> version("", "ver", "The format version (1 or 2)", false, 2, "integer");
-        TCLAP::ValueArg<int> iv_size(
-            "", "iv-size", "The IV size (ignored for fs format 1)", false, 12, "integer");
-
         cmdline.add(&iv_size);
         cmdline.add(&stdinpass);
         cmdline.add(&rounds);
@@ -850,15 +845,11 @@ public:
         cmdline.add(&version);
         cmdline.parse(argc, argv);
 
-        this->iv_size = iv_size.getValue();
-        this->version = version.getValue();
-        this->rounds = rounds.getValue();
-        this->dir = dir.getValue();
-
         password.resize(MAX_PASS_LEN);
         if (stdinpass.getValue())
         {
-            password.resize(insecure_read_password(stdin, nullptr, password.data(), password.size()));
+            password.resize(
+                insecure_read_password(stdin, nullptr, password.data(), password.size()));
         }
         else
         {
@@ -866,25 +857,27 @@ public:
         }
     }
 
-    void execute() override
+    int execute() override
     {
         FSConfig config;
-        config.iv_size = iv_size;
-        config.version = version;
+        config.iv_size = iv_size.getValue();
+        config.version = version.getValue();
         config.block_size = 4096;
 
-        auto config_stream = config_path.empty()
-            ? open_default_config_stream(dir, O_RDONLY)
-            : open_explicit_config_stream(config_path, O_RDONLY);
-        write_config(config_stream.get(), config, password.data(), password.size(), rounds);
+        auto config_stream
+            = open_default_config_stream(dir.getValue(), O_WRONLY | O_CREAT | O_EXCL);
+
+        write_config(
+            config_stream.get(), config, password.data(), password.size(), rounds.getValue());
+        config_stream.reset();
 
         operations::FSOptions opt;
-        opt.version = version;
-        opt.root = std::make_shared<FileSystemService>(dir);
+        opt.version = version.getValue();
+        opt.root = std::make_shared<FileSystemService>(dir.getValue());
         opt.master_key = config.master_key;
         opt.flags = 0;
         opt.block_size = 4096;
-        opt.iv_size = version == 1 ? 32 : iv_size;
+        opt.iv_size = version.getValue() == 1 ? 32 : iv_size.getValue();
 
         operations::FileSystem fs(opt);
         auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
@@ -893,6 +886,7 @@ public:
         root->set_mode(S_IFDIR | 0755);
         root->set_nlink(1);
         root->flush();
+        return 0;
     }
 
     const char* long_name() const noexcept override { return "create"; }
@@ -903,40 +897,154 @@ public:
 class ChangePasswordCommand : public CommandBase
 {
 private:
-    CryptoPP::AlignedSecByteBlock password;
+    CryptoPP::AlignedSecByteBlock old_password, new_password;
+    TCLAP::ValueArg<unsigned> rounds{
+        "r",
+        "rounds",
+        "Specify how many rounds of PBKDF2 are applied (0 for automatic)",
+        false,
+        0,
+        "integer"};
+    TCLAP::UnlabeledValueArg<std::string> dir{
+        "dir", "Directory where the data are stored", true, "", "directory"};
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
     {
-        TCLAP::CmdLine cmdline("Change the password of a given filesystem");
-        TCLAP::SwitchArg stdinpass(
-            "s", "stdinpass", "Read password from stdin directly (useful for piping)");
-        TCLAP::ValueArg<unsigned> rounds(
-            "r",
-            "rounds",
-            "Specify how many rounds of PBKDF2 are applied (0 for automatic)",
-            false,
-            0,
-            "integer");
-        TCLAP::UnlabeledValueArg<std::string> dir(
-            "dir", "Directory where the data are stored", true, "", "directory");
-        cmdline.add(&stdinpass);
+        TCLAP::CmdLine cmdline(help_message());
         cmdline.add(&rounds);
         cmdline.add(&dir);
         cmdline.parse(argc, argv);
+        old_password.resize(MAX_PASS_LEN);
+        old_password.resize(try_read_password(old_password.data(), old_password.size()));
 
+        fputs("Now enter new password", stderr);
+        new_password.resize(MAX_PASS_LEN);
+        new_password.resize(
+            try_read_password_with_confirmation(new_password.data(), new_password.size()));
+    }
+
+    int execute() override
+    {
+        auto stream = open_default_config_stream(dir.getValue(), O_RDWR);
+        auto config = read_config(stream.get(), old_password.data(), old_password.size());
+        write_config(
+            stream.get(), config, new_password.data(), new_password.size(), rounds.getValue());
+        return 0;
+    }
+    const char* long_name() const noexcept override { return "chpass"; }
+    char short_name() const noexcept override { return 0; }
+    const char* help_message() const noexcept override
+    {
+        return "Change password of existing filesystem";
+    }
+};
+
+class MountCommand : public CommandBase
+{
+private:
+    CryptoPP::AlignedSecByteBlock password;
+    TCLAP::SwitchArg stdinpass{
+        "s", "stdinpass", "Read password from stdin directly (useful for piping)"};
+    TCLAP::SwitchArg background{"b", "background", "Run securefs in the background"};
+    TCLAP::SwitchArg insecure{
+        "i", "insecure", "Disable all integrity verification (insecure mode)"};
+    TCLAP::SwitchArg noxattr{"x", "noxattr", "Disable built-in xattr support"};
+    TCLAP::SwitchArg trace{"", "trace", "Trace all calls into `securefs`"};
+    TCLAP::ValueArg<std::string> log{
+        "", "log", "Path of the log file (may contain sensitive information)", false, "", "path"};
+
+    TCLAP::UnlabeledValueArg<std::string> data_dir{
+        "data_dir", "Directory where the data are stored", true, "", "directory"};
+    TCLAP::UnlabeledValueArg<std::string> mount_point{
+        "mount_point", "Mount point", true, "", "directory"};
+
+public:
+    void parse_cmdline(int argc, const char* const* argv) override
+    {
+        TCLAP::CmdLine cmdline(help_message());
+
+#ifdef __APPLE__
+        cmdline.add(&noxattr);
+#endif
+
+        cmdline.add(&stdinpass);
+        cmdline.add(&background);
+        cmdline.add(&insecure);
+        cmdline.add(&trace);
+        cmdline.add(&log);
+        cmdline.add(&data_dir);
+        cmdline.add(&mount_point);
+        cmdline.parse(argc, argv);
 
         password.resize(MAX_PASS_LEN);
         if (stdinpass.getValue())
         {
-            password.resize(insecure_read_password(stdin, nullptr, password.data(), password.size()));
+            password.resize(
+                insecure_read_password(stdin, nullptr, password.data(), password.size()));
         }
         else
         {
-            password.resize(try_read_password_with_confirmation(password.data(), password.size()));
+            password.resize(try_read_password(password.data(), password.size()));
         }
     }
+
+    int execute() override
+    {
+        if (!securefs::FileSystemService::raise_fd_limit())
+        {
+            fputs("Warning: failure to raise the maximum file descriptor limit\n", stderr);
+        }
+
+        auto config_stream = open_default_config_stream(data_dir.getValue(), O_RDONLY);
+        auto config = read_config(config_stream.get(), password.data(), password.size());
+        config_stream.reset();
+
+        operations::FSOptions fsopt;
+        fsopt.root = std::make_shared<FileSystemService>(data_dir.getValue());
+        fsopt.root->lock();
+        fsopt.block_size = config.block_size;
+        fsopt.iv_size = config.iv_size;
+        fsopt.version = config.version;
+        fsopt.master_key = config.master_key;
+        fsopt.flags = 0;
+        if (insecure.getValue())
+            fsopt.flags.get() |= FileTable::NO_AUTHENTICATION;
+
+        if (log.isSet())
+            fsopt.logger = std::make_shared<FileLogger>(LoggingLevel::Warn,
+                                                        fopen(log.getValue().c_str(), "w+b"));
+        else
+            fsopt.logger = std::make_shared<FileLogger>(LoggingLevel::Warn, stderr);
+
+        if (trace.getValue() && fsopt.logger)
+            fsopt.logger->set_level(LoggingLevel::Debug);
+
+        fprintf(stderr,
+                "Mounting filesystem stored at %s onto %s\nFormat version: %u\n",
+                data_dir.getValue().c_str(),
+                mount_point.getValue().c_str(),
+                fsopt.version.get());
+
+        struct fuse_operations opt;
+        init_fuse_operations(data_dir.getValue().c_str(), opt, !noxattr.getValue());
+
+        std::vector<const char*> fuse_args;
+        fuse_args.push_back("securefs");
+        fuse_args.push_back("-s");
+        if (!background.getValue())
+            fuse_args.push_back("-f");
+        fuse_args.push_back(mount_point.getValue().c_str());
+
+        return fuse_main(
+            static_cast<int>(fuse_args.size()), const_cast<char**>(fuse_args.data()), &opt, &fsopt);
+    }
+
+    const char* long_name() const noexcept override { return "mount"; }
+    char short_name() const noexcept override { return 'm'; }
+    const char* help_message() const noexcept override { return "Mount an existing filesystem"; }
 };
+
 int commands_main(int argc, char** argv)
 {
     try
@@ -945,11 +1053,20 @@ int commands_main(int argc, char** argv)
             return print_usage(stderr);
         argc--;
         argv++;
-        for (auto&& info : commands)
+        std::vector<std::unique_ptr<CommandBase>> cmds;
+        cmds.reserve(3);
+        cmds.emplace_back(new MountCommand());
+        cmds.emplace_back(new CreateCommand());
+        cmds.emplace_back(new ChangePasswordCommand());
+
+        for (std::unique_ptr<CommandBase>& command : cmds)
         {
-            if ((info.long_cmd && strcmp(argv[0], info.long_cmd) == 0)
-                || (info.short_cmd && strcmp(argv[0], info.short_cmd) == 0))
-                return info.function(argc, argv);
+            if (strcmp(argv[0], command->long_name()) == 0
+                || (argv[0] != 0 && argv[0][0] == command->short_name() && argv[0][1] == 0))
+            {
+                command->parse_cmdline(argc, argv);
+                return command->execute();
+            }
         }
         return print_usage(stderr);
     }

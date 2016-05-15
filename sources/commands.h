@@ -39,6 +39,6 @@ public:
     virtual const char* help_message() const noexcept = 0;
 
     virtual void parse_cmdline(int argc, const char* const* argv) = 0;
-    virtual void execute() = 0;
+    virtual int execute() = 0;
 };
 }
