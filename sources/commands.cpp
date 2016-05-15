@@ -334,23 +334,6 @@ bool parse_config(const Json::Value& config,
                            master_key.data());
 }
 
-Json::Value read_config(FileSystemService& dir)
-{
-    using namespace securefs;
-    auto config_stream = dir.open_file_stream(CONFIG_FILE_NAME, O_RDONLY, 0);
-    std::string config_str(config_stream->size(), 0);
-    if (config_str.empty())
-        throw std::runtime_error("Error parsing config file: file is empty");
-
-    config_stream->read(&config_str[0], 0, config_str.size());
-    Json::Reader reader;
-    Json::Value result;
-    if (!reader.parse(config_str, result))
-        throw std::runtime_error(fmt::format("Failure to parse the config file: {}",
-                                             reader.getFormattedErrorMessages()));
-    return result;
-}
-
 size_t try_read_password_with_confirmation(void* password, size_t length)
 {
     CryptoPP::AlignedSecByteBlock second_password(length);
@@ -374,99 +357,6 @@ size_t try_read_password_with_confirmation(void* password, size_t length)
         throw std::runtime_error("Error: mismatched passwords");
     }
     return len1;
-}
-
-int create_filesys(int argc, char** argv)
-{
-    using namespace securefs;
-    TCLAP::CmdLine cmdline("Create a securefs filesystem");
-    TCLAP::SwitchArg stdinpass(
-        "s", "stdinpass", "Read password from stdin directly (useful for piping)");
-    TCLAP::ValueArg<unsigned> rounds(
-        "r",
-        "rounds",
-        "Specify how many rounds of PBKDF2 are applied (0 for automatic)",
-        false,
-        0,
-        "integer");
-    TCLAP::UnlabeledValueArg<std::string> dir(
-        "dir", "Directory where the data are stored", true, "", "directory");
-    TCLAP::ValueArg<int> version("", "ver", "The format version (1 or 2)", false, 2, "integer");
-    TCLAP::ValueArg<int> iv_size(
-        "", "iv-size", "The IV size (ignored for fs format 1)", false, 12, "integer");
-
-    cmdline.add(&iv_size);
-    cmdline.add(&stdinpass);
-    cmdline.add(&rounds);
-    cmdline.add(&dir);
-    cmdline.add(&version);
-    cmdline.parse(argc, argv);
-
-    if (version.getValue() != 1 && version.getValue() != 2)
-    {
-        throw std::runtime_error("Unknown format version");
-    }
-
-    if (iv_size.getValue() < 12 || iv_size.getValue() > 64)
-        throw std::runtime_error("Invalid IV size");
-
-    auto root = std::make_shared<FileSystemService>(dir.getValue());
-    root->lock();
-
-    std::shared_ptr<FileStream> config_stream;
-
-    try
-    {
-        key_type master_key, salt;
-        generate_random(master_key.data(), master_key.size());
-        generate_random(salt.data(), salt.size());
-
-        CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
-        size_t pass_len;
-        if (stdinpass.getValue())
-            pass_len = insecure_read_password(stdin, nullptr, password.data(), password.size());
-        else
-            pass_len = try_read_password_with_confirmation(password.data(), password.size());
-
-        auto config = generate_config(version.getValue(),
-                                      master_key,
-                                      salt,
-                                      password.data(),
-                                      pass_len,
-                                      4096,
-                                      iv_size.getValue(),
-                                      rounds.getValue())
-                          .toStyledString();
-
-        config_stream = root->open_file_stream(CONFIG_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
-        config_stream->write(config.data(), 0, config.size());
-
-        operations::FSOptions opt;
-        opt.version = version.getValue();
-        opt.root = root;
-        opt.master_key = master_key;
-        opt.flags = 0;
-        opt.block_size = 4096;
-        opt.iv_size = version.getValue() == 1 ? 32 : 12;
-        operations::FileSystem fs(opt);
-        auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
-        root->set_uid(securefs::FileSystemService::getuid());
-        root->set_gid(securefs::FileSystemService::getgid());
-        root->set_mode(S_IFDIR | 0755);
-        root->set_nlink(1);
-        root->flush();
-        fputs("Filesystem successfully created\n", stderr);
-        return 0;
-    }
-    catch (...)
-    {
-        if (config_stream)
-        {
-            config_stream.reset();
-            root->remove_file(CONFIG_FILE_NAME);
-        }
-        throw;
-    }
 }
 
 void init_fuse_operations(const char* underlying_path, struct fuse_operations& opt, bool xattr)
@@ -532,229 +422,6 @@ size_t try_read_password(void* password, size_t size)
         fprintf(stderr, "Warning: failed to disable echoing of passwords (%s)\n", e.what());
         return securefs::insecure_read_password(stdin, prompt, password, size);
     }
-}
-
-operations::FSOptions
-get_options(const std::string& data_dir, bool stdinpass, bool insecure, const std::string& logfile)
-{
-    operations::FSOptions fsopt;
-    fsopt.root = std::make_shared<FileSystemService>(data_dir);
-    fsopt.root->lock();
-
-    auto config_json = read_config(*fsopt.root);
-    auto version = config_json["version"].asUInt();
-    fsopt.version = version;
-    if (version != 1 && version != 2)
-        throw std::runtime_error(fmt::format("Unkown format version {}", version));
-
-    {
-        CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
-        size_t pass_len = 0;
-        if (stdinpass)
-            pass_len = insecure_read_password(stdin, nullptr, password.data(), password.size());
-        else
-            pass_len = try_read_password(password.data(), password.size());
-
-        fsopt.master_key.set_init(true);
-        fsopt.block_size.set_init(true);
-        fsopt.iv_size.set_init(true);
-        if (!parse_config(config_json,
-                          password,
-                          pass_len,
-                          fsopt.master_key.get(),
-                          fsopt.block_size.get(),
-                          fsopt.iv_size.get()))
-            throw std::runtime_error("Error: wrong password");
-    }
-
-    if (!logfile.empty())
-        fsopt.logger
-            = std::make_shared<FileLogger>(LoggingLevel::Warn, fopen(logfile.c_str(), "w+b"));
-    else
-        fsopt.logger = std::make_shared<FileLogger>(LoggingLevel::Warn, stderr);
-
-    fsopt.flags = 0;
-    if (insecure)
-        fsopt.flags.get() |= FileTable::NO_AUTHENTICATION;
-    return fsopt;
-}
-
-int mount_filesys(int argc, char** argv)
-{
-    using namespace securefs;
-    TCLAP::CmdLine cmdline("Mount the filesystem");
-    TCLAP::SwitchArg stdinpass(
-        "s", "stdinpass", "Read password from stdin directly (useful for piping)");
-    TCLAP::SwitchArg background("b", "background", "Run securefs in the background");
-    TCLAP::SwitchArg insecure(
-        "i", "insecure", "Disable all integrity verification (insecure mode)");
-    TCLAP::SwitchArg noxattr("x", "noxattr", "Disable built-in xattr support");
-    TCLAP::SwitchArg trace("", "trace", "Trace all calls into `securefs`");
-    TCLAP::ValueArg<std::string> log(
-        "", "log", "Path of the log file (may contain sensitive information)", false, "", "path");
-
-    TCLAP::UnlabeledValueArg<std::string> data_dir(
-        "data_dir", "Directory where the data are stored", true, "", "directory");
-    TCLAP::UnlabeledValueArg<std::string> mount_point(
-        "mount_point", "Mount point", true, "", "directory");
-
-#ifdef __APPLE__
-    cmdline.add(&noxattr);
-#endif
-
-    cmdline.add(&stdinpass);
-    cmdline.add(&background);
-    cmdline.add(&insecure);
-    cmdline.add(&trace);
-    cmdline.add(&log);
-    cmdline.add(&data_dir);
-    cmdline.add(&mount_point);
-    cmdline.parse(argc, argv);
-
-    if (!securefs::FileSystemService::raise_fd_limit())
-    {
-        fputs("Warning: failure to raise the maximum file descriptor limit\n", stderr);
-    }
-
-    operations::FSOptions fsopt = get_options(
-        data_dir.getValue(), stdinpass.getValue(), insecure.getValue(), log.getValue());
-
-    if (trace.getValue() && fsopt.logger)
-        fsopt.logger->set_level(LoggingLevel::Debug);
-
-    fprintf(stderr,
-            "Mounting filesystem stored at %s onto %s\nFormat version: %u\n",
-            data_dir.getValue().c_str(),
-            mount_point.getValue().c_str(),
-            fsopt.version.get());
-
-    struct fuse_operations opt;
-    init_fuse_operations(data_dir.getValue().c_str(), opt, !noxattr.getValue());
-
-    std::vector<const char*> fuse_args;
-    fuse_args.push_back("securefs");
-    fuse_args.push_back("-s");
-    if (!background.getValue())
-        fuse_args.push_back("-f");
-    fuse_args.push_back(mount_point.getValue().c_str());
-
-    return fuse_main(
-        static_cast<int>(fuse_args.size()), const_cast<char**>(fuse_args.data()), &opt, &fsopt);
-}
-
-int fix_filesys(int argc, char** argv)
-{
-    TCLAP::CmdLine cmdline("Trying to fix corruptions in the underlying storage");
-    TCLAP::UnlabeledValueArg<std::string> dir(
-        "dir", "Directory where the data are stored", true, "", "directory");
-    cmdline.add(&dir);
-    cmdline.parse(argc, argv);
-
-#ifndef _WIN32
-    operations::FileSystem fs(get_options(dir.getValue(), false, false, ""));
-    fix(dir.getValue(), &fs);
-    return 0;
-#else
-    fprintf(stderr, "Sorry, this functionality is not implemented on Windows for now");
-    return 9;
-#endif
-}
-
-int chpass_filesys(int argc, char** argv)
-{
-    using namespace securefs;
-    TCLAP::CmdLine cmdline("Change the password of a given filesystem");
-    TCLAP::SwitchArg stdinpass(
-        "s", "stdinpass", "Read password from stdin directly (useful for piping)");
-    TCLAP::ValueArg<unsigned> rounds(
-        "r",
-        "rounds",
-        "Specify how many rounds of PBKDF2 are applied (0 for automatic)",
-        false,
-        0,
-        "integer");
-    TCLAP::UnlabeledValueArg<std::string> dir(
-        "dir", "Directory where the data are stored", true, "", "directory");
-    cmdline.add(&stdinpass);
-    cmdline.add(&rounds);
-    cmdline.add(&dir);
-    cmdline.parse(argc, argv);
-
-    FileSystemService root(dir.getValue());
-    root.lock();
-
-    auto config_json = read_config(root);
-    key_type master_key;
-
-    CryptoPP::AlignedSecByteBlock password(MAX_PASS_LEN);
-    size_t pass_len = try_read_password(password.data(), password.size());
-
-    unsigned block_size, iv_size;
-    if (!parse_config(config_json, password, pass_len, master_key, block_size, iv_size))
-        throw std::runtime_error("Error: wrong password");
-
-    fprintf(stderr, "Authentication success. Now enter new password.\n");
-    pass_len = try_read_password_with_confirmation(password, password.size());
-
-    key_type salt;
-    generate_random(salt.data(), salt.size());
-    auto config = generate_config(config_json["version"].asUInt(),
-                                  master_key,
-                                  salt,
-                                  password.data(),
-                                  pass_len,
-                                  block_size,
-                                  iv_size,
-                                  rounds.getValue())
-                      .toStyledString();
-
-    auto config_stream
-        = root.open_file_stream(CONFIG_TMP_FILE_NAME, O_WRONLY | O_CREAT | O_EXCL, 0644);
-    config_stream->write(config.data(), 0, config.size());
-    config_stream.reset();
-
-    root.rename(CONFIG_TMP_FILE_NAME, CONFIG_FILE_NAME);
-    fputs("Password change success\n", stderr);
-    return 0;
-}
-
-typedef int (*command_function)(int, char**);
-
-struct CommandInfo
-{
-    const char* short_cmd;
-    const char* long_cmd;
-    const char* help;
-    command_function function;
-};
-
-const CommandInfo commands[]
-    = {{"m", "mount", "Mount filesystem", &mount_filesys},
-       {"c", "create", "Create a new filesystem", &create_filesys},
-       {nullptr, "chpass", "Change the password of existing filesystem", &chpass_filesys},
-       {nullptr, "fix", "Trying to fix the underlying storage", &fix_filesys}};
-
-const char* get_nonnull(const char* a, const char* b)
-{
-    if (a)
-        return a;
-    if (b)
-        return b;
-    return nullptr;
-}
-
-int print_usage(FILE* fp)
-{
-    fputs("securefs [command] [args]\n\n    Available commands:\n\n", fp);
-    for (auto&& info : commands)
-    {
-        if (info.short_cmd && info.long_cmd)
-            fprintf(fp, "    %s, %s: %s\n", info.short_cmd, info.long_cmd, info.help);
-        else
-            fprintf(fp, "    %s: %s\n", get_nonnull(info.short_cmd, info.long_cmd), info.help);
-    }
-    fputs("\nCall \"securefs [command] -h\" to learn the detailed usage of the command\n", fp);
-    return 8;
 }
 }
 
@@ -955,9 +622,9 @@ private:
         "", "log", "Path of the log file (may contain sensitive information)", false, "", "path"};
 
     TCLAP::UnlabeledValueArg<std::string> data_dir{
-        "data_dir", "Directory where the data are stored", true, "", "directory"};
+        "data_dir", "Directory where the data are stored", true, "", "data_dir"};
     TCLAP::UnlabeledValueArg<std::string> mount_point{
-        "mount_point", "Mount point", true, "", "directory"};
+        "mount_point", "Mount point", true, "", "mount_point"};
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
@@ -1049,15 +716,32 @@ int commands_main(int argc, char** argv)
 {
     try
     {
-        if (argc < 2)
-            return print_usage(stderr);
-        argc--;
-        argv++;
         std::vector<std::unique_ptr<CommandBase>> cmds;
         cmds.reserve(3);
         cmds.emplace_back(new MountCommand());
         cmds.emplace_back(new CreateCommand());
         cmds.emplace_back(new ChangePasswordCommand());
+
+        auto print_usage = [&]() {
+            fputs("Usage:\n\n", stderr);
+
+            for (auto&& command : cmds)
+            {
+                fmt::print(stderr,
+                           "{} ({}): {}\n",
+                           command->long_name(),
+                           command->short_name(),
+                           command->help_message());
+            }
+
+            fmt::print(stderr, "\nType {} command-name --help for details\n", argv[0]);
+            return 1;
+        };
+
+        if (argc < 2)
+            return print_usage();
+        argc--;
+        argv++;
 
         for (std::unique_ptr<CommandBase>& command : cmds)
         {
@@ -1068,7 +752,7 @@ int commands_main(int argc, char** argv)
                 return command->execute();
             }
         }
-        return print_usage(stderr);
+        return print_usage();
     }
     catch (const TCLAP::ArgException& e)
     {
