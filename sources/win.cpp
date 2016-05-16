@@ -111,8 +111,13 @@ public:
             create = OPEN_EXISTING;
         }
 
-        m_handle
-            = CreateFileW(path.c_str(), access, 0, nullptr, create, FILE_ATTRIBUTE_NORMAL, nullptr);
+        m_handle = CreateFileW(path.c_str(),
+                               access,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                               nullptr,
+                               create,
+                               FILE_ATTRIBUTE_NORMAL,
+                               nullptr);
         if (m_handle == INVALID_HANDLE_VALUE)
             throw WindowsException(GetLastError(), "CreateFileW");
     }
