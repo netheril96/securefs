@@ -42,10 +42,8 @@ Support for Windows is highly experimental. To build for Windows, you need CMake
 
 Some known issues:
 
-* The command line of `securefs` does not work when fed with relative path.
 * Some applications report file sizes as zero.
 * Some applications refuse to believe that they have enough permissions.
-* Chrome's downloading into the volume will hang at 100% indefinitely.
 
 ## Basic usage
 
