@@ -133,18 +133,8 @@ ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
         return true_size;
 
     byte meta[XATTR_IV_LENGTH + XATTR_MAC_LENGTH];
-    ssize_t true_meta_size;
-
-    try
-    {
-        true_meta_size = m_meta_stream->getxattr(name, meta, sizeof(meta));
-    }
-    catch (const ExceptionBase& e)
-    {
-        if (e.error_number() == ERANGE)
-            throw OSException(EIO);
-        throw;
-    }
+    if (m_meta_stream->getxattr(name, meta, sizeof(meta)) != sizeof(meta))
+        throw OSException(EIO);
 
     auto name_len = strlen(name);
     std::unique_ptr<byte[]> header(new byte[name_len + ID_LENGTH]);
