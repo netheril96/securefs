@@ -24,7 +24,7 @@ class FileTable
     DISABLE_COPY_MOVE(FileTable)
 
 private:
-    typedef std::unordered_map<id_type, std::shared_ptr<FileBase>, id_hash> table_type;
+    typedef std::unordered_map<id_type, std::unique_ptr<FileBase>, id_hash> table_type;
 
 private:
     static const int MAX_NUM_CLOSED = 256, NUM_EJECT = 8;
@@ -40,7 +40,7 @@ private:
 
 private:
     void eject();
-    void finalize(FileBase*);
+    std::unique_ptr<FileBase> finalize(std::unique_ptr<FileBase>);
 
 public:
     static const uint32_t READ_ONLY = 0x1, NO_AUTHENTICATION = 0x2;
@@ -56,9 +56,13 @@ public:
     FileBase* open_as(const id_type& id, int type);
     FileBase* create_as(const id_type& id, int type);
     void close(FileBase*);
+    void close_without_caching(FileBase*);
+    void gc();
+    void eject_closed(const id_type&);
+
     bool is_readonly() const noexcept { return m_flags & READ_ONLY; }
     bool is_auth_enabled() const noexcept { return !(m_flags & NO_AUTHENTICATION); }
-    void gc();
+
     void statfs(struct statvfs* fs_info) { m_root->statfs(fs_info); }
 };
 

@@ -14,6 +14,22 @@
 
 namespace securefs
 {
+template <class... Args>
+static std::unique_ptr<FileBase> make_file_from_type(int type, Args&&... args)
+{
+    switch (type)
+    {
+    case FileBase::REGULAR_FILE:
+        return make_unique<RegularFile>(std::forward<Args>(args)...);
+    case FileBase::SYMLINK:
+        return make_unique<Symlink>(std::forward<Args>(args)...);
+    case FileBase::DIRECTORY:
+        return make_unique<BtreeDirectory>(std::forward<Args>(args)...);
+    case FileBase::BASE:
+        return make_unique<FileBase>(std::forward<Args>(args)...);
+    }
+    throw InvalidArgumentException("Unrecognized file type");
+}
 
 typedef std::pair<std::shared_ptr<FileStream>, std::shared_ptr<FileStream>> FileStreamPtrPair;
 class FileTableIO
@@ -167,9 +183,9 @@ FileTable::FileTable(int version,
 FileTable::~FileTable()
 {
     for (auto&& pair : m_opened)
-        finalize(pair.second.get());
+        finalize(std::move(pair.second));
     for (auto&& pair : m_closed)
-        finalize(pair.second.get());
+        finalize(std::move(pair.second));
 }
 
 FileBase* FileTable::open_as(const id_type& id, int type)
@@ -192,21 +208,20 @@ FileBase* FileTable::open_as(const id_type& id, int type)
         }
         else
         {
-            auto fb = it->second;
-            m_opened.emplace(*it);
+            FileBase* result = it->second.get();
+            m_opened.emplace(id, std::move(it->second));
             m_closed.erase(it);
-            fb->setref(1);
-            return fb.get();
+            return result;
         }
     }
 
     std::shared_ptr<FileStream> data_fd, meta_fd;
     std::tie(data_fd, meta_fd) = m_fio->open(id);
-    auto fb = btree_make_file_from_type(
+    std::unique_ptr<FileBase> fb = make_file_from_type(
         type, data_fd, meta_fd, m_master_key, id, is_auth_enabled(), m_block_size, m_iv_size);
-    m_opened.emplace(id, fb);
-    fb->setref(1);
-    return fb.get();
+    FileBase* result = fb.get();
+    m_opened.emplace(id, std::move(fb));
+    return result;
 }
 
 FileBase* FileTable::create_as(const id_type& id, int type)
@@ -218,34 +233,58 @@ FileBase* FileTable::create_as(const id_type& id, int type)
 
     std::shared_ptr<FileStream> data_fd, meta_fd;
     std::tie(data_fd, meta_fd) = m_fio->create(id);
-    auto fb = btree_make_file_from_type(
+    std::unique_ptr<FileBase> fb = make_file_from_type(
         type, data_fd, meta_fd, m_master_key, id, is_auth_enabled(), m_block_size, m_iv_size);
-    m_opened.emplace(id, fb);
-    fb->setref(1);
-    return fb.get();
+    FileBase* result = fb.get();
+    m_opened.emplace(id, std::move(fb));
+    return result;
 }
 
 void FileTable::close(FileBase* fb)
 {
     if (!fb)
-        NULL_EXCEPT();
+        throw OSException(EFAULT);
 
-    auto fb_shared = m_opened.at(fb->get_id());
-    if (fb_shared.get() != fb)
-        throw InvalidArgumentException("ID does not match the table");
+    auto it = m_opened.find(fb->get_id());
+    if (it == m_opened.end() || it->second.get() != fb)
+        throw InvalidArgumentException("Closing a file not yet opened");
 
-    if (fb->decref() <= 0)
+    if (it->second->decref() <= 0)
     {
-        m_opened.erase(fb->get_id());
-        finalize(fb);
+        std::unique_ptr<FileBase> owned_file = std::move(it->second);
+        m_opened.erase(it);
 
-        if (fb->is_unlinked())
+        owned_file = finalize(std::move(owned_file));
+        if (!owned_file)
+        {
+            // It is closed and unlinked
             return;
-        m_closed.emplace(fb->get_id(), fb_shared);
+        }
+
+        fb->flush();
+        m_closed.emplace(fb->get_id(), std::move(owned_file));
         m_closed_ids.push(fb->get_id());
         gc();
     }
 }
+
+void FileTable::close_without_caching(FileBase* fb)
+{
+    if (!fb)
+        throw OSException(EFAULT);
+
+    auto it = m_opened.find(fb->get_id());
+    if (it == m_opened.end() || it->second.get() != fb)
+        throw InvalidArgumentException("Closing a file not yet opened");
+
+    if (it->second->decref() <= 0)
+    {
+        finalize(std::move(it->second));
+        m_opened.erase(it);
+    }
+}
+
+void FileTable::eject_closed(const id_type& id) { m_closed.erase(id); }
 
 void FileTable::eject()
 {
@@ -258,24 +297,21 @@ void FileTable::eject()
     }
 }
 
-void FileTable::finalize(FileBase* fb)
-{
-    if (!fb)
-        return;
-
-    if (fb->is_unlinked())
-    {
-        m_fio->unlink(fb->get_id());
-    }
-    else
-    {
-        fb->flush();
-    }
-}
-
 void FileTable::gc()
 {
     if (m_closed.size() >= NUM_EJECT)
         eject();
+}
+
+// This function returns the original pointer if it is not unlinked, nullptr otherwise
+// The purpose is to close the file before unlinking, to deal with the stupidity of Windows
+std::unique_ptr<FileBase> FileTable::finalize(std::unique_ptr<FileBase> fb)
+{
+    if (!fb->is_unlinked())
+        return fb;
+    id_type id = fb->get_id();
+    fb.reset();
+    m_fio->unlink(id);
+    return fb;
 }
 }
