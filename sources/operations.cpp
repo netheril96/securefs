@@ -654,8 +654,6 @@ namespace operations
                 if (src_type != dst_type)
                     return -EINVAL;
                 dst_dir->remove_entry(dst_filename, dst_id, dst_type);
-                AutoClosedFileBase fb = open_as(fs->table, dst_id, dst_type);
-                fb->unlink();
             }
             src_dir->remove_entry(src_filename, src_id, src_type);
             dst_dir->add_entry(dst_filename, src_id, src_type);
