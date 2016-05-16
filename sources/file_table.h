@@ -121,11 +121,7 @@ public:
     {
         if (m_ft && m_fb)
         {
-#ifdef _WIN32
-            m_ft->close_without_caching(m_fb);
-#else
             m_ft->close(m_fb);
-#endif
         }
         m_fb = fb;
     }
