@@ -172,7 +172,7 @@ namespace internal
         auto logger = fs->logger.get();
         if (logger && LoggingLevel::Error >= logger->get_level())
             logger->log(LoggingLevel::Error,
-                        fmt::format("An unexcepted exception of type {} occurrs: {}",
+                        fmt::format("An unexcepted exception of type {} occurred: {}",
                                     typeid(e).name(),
                                     e.what()),
                         func);
@@ -227,7 +227,7 @@ namespace operations
         auto args = static_cast<FSOptions*>(fuse_get_context()->private_data);
         auto fs = new FileSystem(*args);
         DEBUG_LOG("init");
-        fputs("Filesystem mounted successfuly\n", stderr);
+        fputs("Filesystem mounted successfully\n", stderr);
         return fs;
     }
 
