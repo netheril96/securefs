@@ -120,7 +120,8 @@ static void test_securefs_fs_version(int version)
     stream = service.open_file_stream(random_filename, O_RDONLY, 0644);
     std::vector<byte> new_buffer(random_buffer.size());
     REQUIRE(stream->read(new_buffer.data(), 0, new_buffer.size()) == new_buffer.size());
-    REQUIRE(new_buffer == random_buffer);
+    bool data_unchanged = (new_buffer == random_buffer);
+    REQUIRE(data_unchanged);
     stream.reset();
     control.unmount();
 }

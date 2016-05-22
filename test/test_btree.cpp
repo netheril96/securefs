@@ -63,7 +63,8 @@ static void test(securefs::BtreeDirectory& dir,
                 bool got = dir.get_entry(n, id, type);
                 bool got_prime = reference.get_entry(n, id_prime, type_prime);
                 REQUIRE(got == got_prime);
-                REQUIRE(id == id_prime);
+                bool id_equal = (id == id_prime);
+                REQUIRE(id_equal);
                 REQUIRE(type == type_prime);
             }
         }
