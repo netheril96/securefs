@@ -7,7 +7,7 @@
 
 namespace securefs
 {
-int commands_main(int argc, char** argv);
+int commands_main(int argc, const char* const* argv);
 
 struct FSConfig
 {

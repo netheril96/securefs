@@ -816,7 +816,27 @@ public:
     }
 };
 
-int commands_main(int argc, char** argv)
+class TestCommand : public CommandBase
+{
+private:
+    int m_argc;
+    const char* const* m_argv;
+
+public:
+    void parse_cmdline(int argc, const char* const* argv) override
+    {
+        m_argc = argc;
+        m_argv = argv;
+    }
+
+    int execute() override
+    {
+        int securefs_test_main(int argc, const char* const* argv);
+        return securefs_test_main(m_argc, m_argv);
+    }
+};
+
+int commands_main(int argc, const char* const* argv)
 {
     try
     {
@@ -889,3 +909,5 @@ int commands_main(int argc, char** argv)
     }
 }
 }
+
+int main(int argc, char** argv) { return commands_main(argc, argv); }

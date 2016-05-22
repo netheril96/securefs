@@ -2,7 +2,7 @@
 #include "catch.hpp"
 #include "platform.h"
 
-int main(int argc, char** argv)
+int securefs_test_main(int argc, const char* const* argv)
 {
     securefs::FileSystemService service;
     service.ensure_directory("tmp", 0755);

@@ -51,16 +51,10 @@ set (CRYPTOPP_DIR ${EXTERNAL_DIR}/cryptopp)
 add_subdirectory(${CRYPTOPP_DIR})
 link_libraries(cryptopp-static)
 
-file (GLOB SOURCES ${PROJECT_SOURCE_DIR}/sources/*.cpp ${PROJECT_SOURCE_DIR}/sources/*.h ${EXTERNAL_DIR}/*.h ${EXTERNAL_DIR}/*.hpp ${EXTERNAL_DIR}/*.cpp)
-file (GLOB TEST_SOURCES ${PROJECT_SOURCE_DIR}/test/*.cpp)
-add_library(securefs-static STATIC ${SOURCES})
-link_libraries(securefs-static)
-
-add_executable(securefs ${PROJECT_SOURCE_DIR}/main.cpp)
-add_executable(securefs_test ${TEST_SOURCES})
+file (GLOB SOURCES ${PROJECT_SOURCE_DIR}/test/*.cpp ${PROJECT_SOURCE_DIR}/sources/*.cpp ${PROJECT_SOURCE_DIR}/sources/*.h ${EXTERNAL_DIR}/*.h ${EXTERNAL_DIR}/*.hpp ${EXTERNAL_DIR}/*.cpp)
+add_executable(securefs ${SOURCES})
 
 enable_testing()
-add_test(NAME sec_test COMMAND securefs_test)
-add_test(NAME simple_test COMMAND ${PROJECT_SOURCE_DIR}/test/simple_test.py)
+add_test(NAME sec_test COMMAND securefs test)
 
 install(TARGETS securefs DESTINATION bin)
