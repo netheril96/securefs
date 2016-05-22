@@ -866,6 +866,8 @@ public:
     const char* help_message() const noexcept override { return "Do a test of the program"; }
 };
 
+std::string process_name;
+
 int commands_main(int argc, const char* const* argv)
 {
     try
@@ -941,4 +943,8 @@ int commands_main(int argc, const char* const* argv)
 }
 }
 
-int main(int argc, char** argv) { return commands_main(argc, argv); }
+int main(int argc, char** argv)
+{
+    process_name = argv[0];
+    return commands_main(argc, argv);
+}

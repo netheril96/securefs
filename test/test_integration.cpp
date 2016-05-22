@@ -6,6 +6,8 @@
 
 #include <format.h>
 
+#include <chrono>
+#include <thread>
 #include <vector>
 
 #include <signal.h>
@@ -18,26 +20,16 @@ namespace
 class SecurefsTestControl
 {
 private:
-    bool mounted = false;
+    pid_t mount_pid = -1;
 
-    void wait_exit(pid_t pid)
-    {
-        int status;
-        while (waitpid(pid, &status, 0) == -1)
-        {
-            if (errno != EINTR)
-                FAIL("waitpid fails: " << sane_strerror(errno));
-        }
-        REQUIRE(WIFEXITED(status));
-        REQUIRE(WEXITSTATUS(status) == 0);
-    }
+    const std::chrono::milliseconds WAIT_DURATION{100};
 
 public:
     std::string mount_dir, data_dir, password, version_string;
 
     void create()
     {
-        const char* arguments[] = {"securefs",
+        const char* arguments[] = {process_name.c_str(),
                                    "create",
                                    data_dir.c_str(),
                                    "--ver",
@@ -53,67 +45,48 @@ public:
 
     void mount()
     {
-        pid_t pid = fork();
-        REQUIRE(pid >= 0);
-
-        if (pid == 0)
+        std::this_thread::sleep_for(WAIT_DURATION);
+        mount_pid = fork();
+        REQUIRE(mount_pid >= 0);
+        if (mount_pid == 0)
         {
-            const char* arguments[] = {"securefs",
-                                       "mount",
-                                       data_dir.c_str(),
-                                       mount_dir.c_str(),
-                                       "--background",
-                                       "--pass",
-                                       password.c_str(),
-                                       "--log",
-                                       "securefs.log",
-                                       nullptr};
-            int argc = sizeof(arguments) / sizeof(arguments[0]) - 1;
-            REQUIRE(commands_main(argc, arguments) == 0);
+            execlp(process_name.c_str(),
+                   process_name.c_str(),
+                   "mount",
+                   data_dir.c_str(),
+                   mount_dir.c_str(),
+                   "--pass",
+                   password.c_str(),
+                   (const char*)nullptr);
+            FAIL("execlp ourselves fails: " << sane_strerror(errno));
         }
         else
         {
-            usleep(500);
-            wait_exit(pid);
-            mounted = true;
+            std::this_thread::sleep_for(WAIT_DURATION);
         }
     }
 
     void unmount()
     {
-        pid_t pid = fork();
-        REQUIRE(pid >= 0);
-
-        if (pid == 0)
-        {
-#ifdef __APPLE__
-            int rc = execlp("umount", "umount", mount_dir.c_str(), (const char*)nullptr);
-#else
-            int rc
-                = execlp("fusermount", "fusermount", "-u", mount_dir.c_str(), (const char*)nullptr);
-#endif
-            REQUIRE(false);
-        }
-        else
-        {
-            usleep(500);
-            wait_exit(pid);
-            mounted = false;
-        }
+        if (mount_pid < 0)
+            return;
+        std::this_thread::sleep_for(WAIT_DURATION);
+        // Unmounting too quickly will cause errors
+        // This is unavoidable due to the communication design of FUSE
+        if (kill(mount_pid, SIGINT) < 0)
+            FAIL("Sending SIGINT to child fails: " << sane_strerror(errno));
+        std::this_thread::sleep_for(WAIT_DURATION);
     }
 
     SecurefsTestControl() {}
     ~SecurefsTestControl()
     {
-        if (mounted)
+        try
         {
-            try
-            {
-                unmount();
-            }
-            catch (...)
-            {
-            }
+            unmount();
+        }
+        catch (...)
+        {
         }
     }
 };
@@ -148,6 +121,7 @@ static void test_securefs_fs_version(int version)
     std::vector<byte> new_buffer(random_buffer.size());
     REQUIRE(stream->read(new_buffer.data(), 0, new_buffer.size()) == new_buffer.size());
     REQUIRE(new_buffer == random_buffer);
+    stream.reset();
     control.unmount();
 }
 

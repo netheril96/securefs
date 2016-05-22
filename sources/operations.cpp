@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <chrono>
 #include <mutex>
+#include <stdio.h>
 #include <string.h>
 #include <string>
 #include <typeinfo>
@@ -225,17 +226,17 @@ namespace operations
     {
         auto args = static_cast<FSOptions*>(fuse_get_context()->private_data);
         auto fs = new FileSystem(*args);
-        if (fs->logger)
-            fs->logger->log(LoggingLevel::Debug, "init", __PRETTY_FUNCTION__);
+        DEBUG_LOG("init");
+        fputs("Filesystem mounted successfuly\n", stderr);
         return fs;
     }
 
     void destroy(void* data)
     {
         auto fs = static_cast<FileSystem*>(data);
-        if (fs->logger)
-            fs->logger->log(LoggingLevel::Debug, "destroy", __PRETTY_FUNCTION__);
+        DEBUG_LOG("destroy");
         delete fs;
+        fputs("Filesystem unmounted successfully\n", stderr);
     }
 
     int statfs(const char* path, struct statvfs* fs_info)
