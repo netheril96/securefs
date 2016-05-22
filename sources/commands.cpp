@@ -487,6 +487,13 @@ protected:
         false,
         "",
         "config_path"};
+    TCLAP::ValueArg<std::string> pass{
+        "",
+        "pass",
+        "Password (prefer manually typing or piping since those methods are more secure)",
+        false,
+        "",
+        "password"};
 
 protected:
     std::string get_real_config_path()
@@ -525,7 +532,15 @@ public:
         cmdline.add(&data_dir);
         cmdline.add(&config_path);
         cmdline.add(&version);
+        cmdline.add(&pass);
         cmdline.parse(argc, argv);
+
+        if (pass.isSet())
+        {
+            password.resize(pass.getValue().size());
+            memcpy(password.data(), pass.getValue().data(), password.size());
+            return;
+        }
 
         password.resize(MAX_PASS_LEN);
         if (stdinpass.getValue())
@@ -667,7 +682,16 @@ public:
         cmdline.add(&data_dir);
         cmdline.add(&config_path);
         cmdline.add(&mount_point);
+        cmdline.add(&pass);
         cmdline.parse(argc, argv);
+
+        if (pass.isSet())
+        {
+            password.resize(pass.getValue().size());
+            memcpy(password.data(), pass.getValue().data(), password.size());
+            generate_random(&pass.getValue()[0], pass.getValue().size());
+            return;
+        }
 
         password.resize(MAX_PASS_LEN);
         if (stdinpass.getValue())
@@ -831,9 +855,15 @@ public:
 
     int execute() override
     {
-        int securefs_test_main(int argc, const char* const* argv);
-        return securefs_test_main(m_argc, m_argv);
+        int test_main(int argc, const char* const* argv);
+        return test_main(m_argc, m_argv);
     }
+
+    const char* long_name() const noexcept override { return "test"; }
+
+    char short_name() const noexcept override { return 0; }
+
+    const char* help_message() const noexcept override { return "Do a test of the program"; }
 };
 
 int commands_main(int argc, const char* const* argv)
@@ -841,11 +871,12 @@ int commands_main(int argc, const char* const* argv)
     try
     {
         std::vector<std::unique_ptr<CommandBase>> cmds;
-        cmds.reserve(4);
+        cmds.reserve(5);
         cmds.emplace_back(new MountCommand());
         cmds.emplace_back(new CreateCommand());
         cmds.emplace_back(new ChangePasswordCommand());
         cmds.emplace_back(new FixCommand());
+        cmds.emplace_back(new TestCommand());
 
         auto print_usage = [&]() {
             fputs("Available subcommands:\n\n", stderr);
