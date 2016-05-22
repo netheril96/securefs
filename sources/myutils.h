@@ -118,6 +118,7 @@ inline std::string hexify(const byte* data, size_t length)
 
 void parse_hex(const std::string& hex, byte* output, size_t len);
 std::string sane_strerror(int error_number);
+std::string errno_to_string();
 
 template <class ByteContainer>
 inline std::string hexify(const ByteContainer& c)

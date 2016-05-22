@@ -731,7 +731,7 @@ public:
 
         if (log.isSet())
         {
-            FILE* fp = fopen(log.getValue().c_str(), "w+b");
+            FILE* fp = fopen(log.getValue().c_str(), "ab");
             if (!fp)
             {
                 fmt::print(

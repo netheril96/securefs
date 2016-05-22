@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
 #include <string.h>
 #include <system_error>
 #include <time.h>
@@ -41,6 +42,8 @@ std::string to_lower(const std::string& str)
 }
 
 std::string sane_strerror(int error_number) { return std::system_category().message(error_number); }
+
+std::string errno_to_string() { return sane_strerror(errno); }
 
 void parse_hex(const std::string& hex, byte* output, size_t len)
 {

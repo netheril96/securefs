@@ -225,14 +225,16 @@ namespace operations
     {
         auto args = static_cast<FSOptions*>(fuse_get_context()->private_data);
         auto fs = new FileSystem(*args);
-        DEBUG_LOG("init");
+        if (fs->logger)
+            fs->logger->log(LoggingLevel::Debug, "init", __PRETTY_FUNCTION__);
         return fs;
     }
 
     void destroy(void* data)
     {
         auto fs = static_cast<FileSystem*>(data);
-        DEBUG_LOG("destroy");
+        if (fs->logger)
+            fs->logger->log(LoggingLevel::Debug, "destroy", __PRETTY_FUNCTION__);
         delete fs;
     }
 

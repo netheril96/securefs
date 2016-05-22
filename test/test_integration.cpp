@@ -4,7 +4,7 @@
 #include "myutils.h"
 #include "platform.h"
 
-#include "format.h"
+#include <format.h>
 
 #include <vector>
 
@@ -23,7 +23,11 @@ private:
     void wait_exit(pid_t pid)
     {
         int status;
-        REQUIRE(waitpid(pid, &status, 0) != -1);
+        while (waitpid(pid, &status, 0) == -1)
+        {
+            if (errno != EINTR)
+                FAIL("waitpid fails: " << sane_strerror(errno));
+        }
         REQUIRE(WIFEXITED(status));
         REQUIRE(WEXITSTATUS(status) == 0);
     }
@@ -55,18 +59,21 @@ public:
         if (pid == 0)
         {
             const char* arguments[] = {"securefs",
-                                       "create",
+                                       "mount",
                                        data_dir.c_str(),
-                                       "--ver",
-                                       version_string.c_str(),
+                                       mount_dir.c_str(),
+                                       "--background",
                                        "--pass",
                                        password.c_str(),
+                                       "--log",
+                                       "securefs.log",
                                        nullptr};
             int argc = sizeof(arguments) / sizeof(arguments[0]) - 1;
             REQUIRE(commands_main(argc, arguments) == 0);
         }
         else
         {
+            usleep(500);
             wait_exit(pid);
             mounted = true;
         }
@@ -89,8 +96,8 @@ public:
         }
         else
         {
+            usleep(500);
             wait_exit(pid);
-
             mounted = false;
         }
     }

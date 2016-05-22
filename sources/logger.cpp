@@ -3,8 +3,6 @@
 
 #include <format.h>
 
-#include <thread>
-
 namespace securefs
 {
 void Logger::log(LoggingLevel level, const std::string& msg, const char* func) noexcept
