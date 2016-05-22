@@ -12,65 +12,50 @@ Security, however, is often at odds with convenience, and people easily grow tir
 
 `securefs` is intended to make the experience as smooth as possible so that the security and convenience do not conflict. After mounting the virtual filesystem, everything just works&#8482;.
 
-## Build and test
+## Installation
 
 [![Build Status](https://api.travis-ci.org/netheril96/securefs.svg?branch=master)](https://travis-ci.org/netheril96/securefs)
 
-### Unix
+### Dependency: FUSE
 
-On Debian based Linux distro, you need to install `fuse` and `libfuse-dev`. On RPM based Linux, you need `fuse` and `fuse-devel`. On OS X, you need [`osxfuse`](https://osxfuse.github.io). BSD systems have not been tested, but they should not be much different.
+FUSE includes a kernel module, so the user needs to obtain *signed* binaries themselves to avoid security risk. On OS X, you need [`osxfuse`](https://osxfuse.github.io). On Debian based Linux distro, you need to install `fuse` and `libfuse-dev`. On RPM based Linux, you need `fuse` and `fuse-devel`. On Windows, you need [Dokany](https://github.com/dokan-dev/dokany/releases) (the latest, even if unstable one).
 
-You also need a recent C++ compiler (g++ >= 4.8, clang++ >= 3.3) and CMake.
+### Install with Homebrew
 
-```bash
-mkdir build
-cd build
-cmake ..
-make -j8
-sudo make install
+For OS X users, you can install `securefs` with homebrew:
+
+```
+brew tap netheril96/taps
+brew install securefs
 ```
 
-If you encounter build errors, you could try `cmake -DDISABLE_ASM=1 ..` instead.
+### Manually build
 
-Run `ctest` to test the program. `ctest -V` for a full output.
-
-To uninstall the program, just remove `/usr/local/bin/securefs`.
+Run `cmake .` then `make install`. The compiler must be new enough (g++ >= 4.8, clang >= 3.4, Visual Studio >= 2015). If you encounter build errors and the compiler is new enough, try `cmake -DDISABLE_ASM=1 .` instead.
 
 ### Windows
 
-Support for Windows is highly experimental. To build for Windows, you need CMake, [Dokany](https://github.com/dokan-dev/dokany/releases) (the latest, even if unstable one) and Visual Studio 2015. If you install Dokany in a nonstandard place, you need to set variable `DOKAN_PREFIX` when generate the solution file with CMake.
-
-Some known issues:
+Support for Windows is highly experimental. Some known issues:
 
 * Some applications report file sizes as zero.
 * Some applications refuse to believe that they have enough permissions.
+
+### Uninstallation
+
+Simply remove the executable `securefs`, usually placed in `/usr/local/bin`.
 
 ## Basic usage
 
 *It is recommended to disable or encrypt the swap and hibernation file. Otherwise plaintext and keys stored in the main memory may be written to disk by the OS at any time.*
 
+Examples:
+
 ```bash
+securefs --help
 securefs create ~/Secret
 securefs chpass ~/Secret
 securefs mount ~/Secret ~/Mount # press Ctrl-C to unmount
-```
-
-Use `securefs [verb] -h` to get detailed description of options of each command.
-
-For example, the options of `securefs mount` include
-
-```
-   --log <path>
-     Path of the log file (may contain sensitive information)
-
-   -x,  --noxattr
-     Disable built-in xattr support
-
-   -i,  --insecure
-     Disable all integrity verification (insecure mode)
-
-   -b,  --background
-     Run securefs in the background
+securefs m -h # m is an alias for mount, -h tell you all the flags
 ```
 
 ## Design and algorithms
