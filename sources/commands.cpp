@@ -874,11 +874,11 @@ int commands_main(int argc, const char* const* argv)
     {
         std::vector<std::unique_ptr<CommandBase>> cmds;
         cmds.reserve(5);
-        cmds.emplace_back(new MountCommand());
-        cmds.emplace_back(new CreateCommand());
-        cmds.emplace_back(new ChangePasswordCommand());
-        cmds.emplace_back(new FixCommand());
-        cmds.emplace_back(new TestCommand());
+        cmds.push_back(make_unique<MountCommand>());
+        cmds.push_back(make_unique<CreateCommand>());
+        cmds.push_back(make_unique<ChangePasswordCommand>());
+        cmds.push_back(make_unique<FixCommand>());
+        cmds.push_back(make_unique<TestCommand>());
 
         auto print_usage = [&]() {
             fputs("Available subcommands:\n\n", stderr);

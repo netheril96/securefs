@@ -301,7 +301,7 @@ BtreeDirectory::Node* BtreeDirectory::retrieve_node(uint32_t parent_num, uint32_
         dir_check(parent_num == INVALID_PAGE || parent_num == n->parent_page_number());
         return n;
     }
-    std::unique_ptr<Node> n(new Node(parent_num, num));
+    auto n = make_unique<Node>(parent_num, num);
     read_node(num, *n);
     auto result = n.get();
     m_node_cache.emplace(num, std::move(n));

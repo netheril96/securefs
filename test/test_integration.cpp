@@ -76,6 +76,7 @@ public:
         if (kill(mount_pid, SIGINT) < 0)
             FAIL("Sending SIGINT to child fails: " << sane_strerror(errno));
         std::this_thread::sleep_for(WAIT_DURATION);
+        mount_pid = -1;
     }
 
     SecurefsTestControl() {}

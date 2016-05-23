@@ -186,8 +186,7 @@ CryptStream::read_block(offset_type block_number, void* output, offset_type begi
 void CryptStream::write_block(offset_type block_number, const void* input, length_type length)
 {
     assert(length <= m_block_size);
-    std::unique_ptr<byte[]> buffer(
-        new byte[length]);    // Ciphertext needs not be cleared after use
+    auto buffer = make_unique_array<byte>(length);
     encrypt(block_number, input, buffer.get(), length);
     m_stream->write(buffer.get(), block_number * m_block_size, length);
 }
@@ -259,7 +258,7 @@ void CryptStream::unchecked_write(const void* input, offset_type offset, length_
 
 void CryptStream::zero_fill(offset_type offset, offset_type finish)
 {
-    std::unique_ptr<byte[]> zeros(new byte[m_block_size]);
+    auto zeros = make_unique_array<byte>(m_block_size);
     memset(zeros.get(), 0, m_block_size);
     while (offset < finish)
     {

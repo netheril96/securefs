@@ -137,7 +137,7 @@ ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
         throw OSException(EIO);
 
     auto name_len = strlen(name);
-    std::unique_ptr<byte[]> header(new byte[name_len + ID_LENGTH]);
+    auto header = make_unique_array<byte>(name_len + ID_LENGTH);
     memcpy(header.get(), get_id().data(), ID_LENGTH);
     memcpy(header.get() + ID_LENGTH, name, name_len);
 
@@ -166,7 +166,7 @@ void FileBase::setxattr(const char* name, const char* value, size_t size, int fl
     if (!name || !value)
         throw OSException(EFAULT);
 
-    std::unique_ptr<byte[]> buffer(new byte[size]);
+    auto buffer = make_unique_array<byte>(size);
     byte* ciphertext = buffer.get();
 
     byte meta[XATTR_MAC_LENGTH + XATTR_IV_LENGTH];
@@ -175,7 +175,7 @@ void FileBase::setxattr(const char* name, const char* value, size_t size, int fl
     generate_random(iv, XATTR_IV_LENGTH);
 
     auto name_len = strlen(name);
-    std::unique_ptr<byte[]> header(new byte[name_len + ID_LENGTH]);
+    auto header = make_unique_array<byte>(name_len + ID_LENGTH);
     memcpy(header.get(), get_id().data(), ID_LENGTH);
     memcpy(header.get() + ID_LENGTH, name, name_len);
 
