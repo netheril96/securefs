@@ -22,7 +22,7 @@ class SecurefsTestControl
 private:
     pid_t mount_pid = -1;
 
-    const std::chrono::milliseconds WAIT_DURATION{100};
+    const std::chrono::milliseconds WAIT_DURATION{300};
 
 public:
     std::string mount_dir, data_dir, password, version_string;
