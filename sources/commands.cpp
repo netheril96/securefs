@@ -5,6 +5,7 @@
 #include "platform.h"
 #include "streams.h"
 
+#include <cryptopp/cpu.h>
 #include <cryptopp/secblock.h>
 #include <format.h>
 #include <fuse.h>
@@ -866,6 +867,47 @@ public:
     const char* help_message() const noexcept override { return "Do a test of the program"; }
 };
 
+class VersionCommand : public CommandBase
+{
+private:
+    const char* version = "0.4.3";
+
+public:
+    void parse_cmdline(int argc, const char* const* argv) override
+    {
+        (void)argc;
+        (void)argv;
+    }
+
+    int execute() override
+    {
+        using namespace CryptoPP;
+        fmt::print(stdout, "securefs {} (with Crypto++ {})\n\n", version, CRYPTOPP_VERSION / 100.0);
+#ifdef CRYPTOPP_DISABLE_ASM
+        fputs("Built without hardware acceleration\n", stdout);
+#else
+#if CRYPTOPP_BOOL_X86 || CRYPTOPP_BOOL_X32 || CRYPTOPP_BOOL_X64
+        fmt::print(stdout,
+                   "Hardware features available:\nSSE2: {}\nSSE3: {}\nAES-NI: "
+                   "{}\nCLMUL: {}\nRDRAND: {}\nRDSEED: {}\n",
+                   HasSSE2(),
+                   HasSSSE3(),
+                   HasAESNI(),
+                   HasCLMUL(),
+                   HasRDRAND(),
+                   HasRDSEED());
+#endif
+#endif
+        return 0;
+    }
+
+    const char* long_name() const noexcept override { return "version"; }
+
+    char short_name() const noexcept override { return 'v'; }
+
+    const char* help_message() const noexcept override { return "Show version of the program"; }
+};
+
 std::string process_name;
 
 int commands_main(int argc, const char* const* argv)
@@ -873,12 +915,13 @@ int commands_main(int argc, const char* const* argv)
     try
     {
         std::vector<std::unique_ptr<CommandBase>> cmds;
-        cmds.reserve(5);
+        cmds.reserve(6);
         cmds.push_back(make_unique<MountCommand>());
         cmds.push_back(make_unique<CreateCommand>());
         cmds.push_back(make_unique<ChangePasswordCommand>());
         cmds.push_back(make_unique<FixCommand>());
         cmds.push_back(make_unique<TestCommand>());
+        cmds.push_back(make_unique<VersionCommand>());
 
         auto print_usage = [&]() {
             fputs("Available subcommands:\n\n", stderr);

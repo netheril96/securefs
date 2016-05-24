@@ -13,7 +13,7 @@ if (UNIX)
     find_package(FUSE REQUIRED)
     include_directories(${FUSE_INCLUDE_DIR})
     link_libraries(${FUSE_LIBRARIES})
-    set (CMAKE_CXX_FLAGS "-std=c++11 -Wall -Wextra -pedantic -D_FILE_OFFSET_BITS=64")
+    set (CMAKE_CXX_FLAGS "-std=c++11 -Wall -Wextra -pedantic")
     
     option(SANITIZE "Turn on sanitization" OFF)
     
@@ -39,6 +39,8 @@ else()
     link_libraries(${DOKAN_PREFIX}/lib/dokanfuse1.lib)
 endif()
 
+add_definitions(-D_FILE_OFFSET_BITS=64)
+
 set (CMAKE_BUILD_TYPE Release)
 
 include(FeatureDetection)
@@ -50,6 +52,10 @@ include_directories(${EXTERNAL_DIR})
 set (CRYPTOPP_DIR ${EXTERNAL_DIR}/cryptopp)
 add_subdirectory(${CRYPTOPP_DIR})
 link_libraries(cryptopp-static)
+
+if (DISABLE_ASM)
+    add_definitions(-DCRYPTOPP_DISABLE_ASM)
+endif()
 
 file (GLOB SOURCES ${PROJECT_SOURCE_DIR}/test/*.cpp ${PROJECT_SOURCE_DIR}/sources/*.cpp ${PROJECT_SOURCE_DIR}/sources/*.h ${EXTERNAL_DIR}/*.h ${EXTERNAL_DIR}/*.hpp ${EXTERNAL_DIR}/*.cpp)
 add_executable(securefs ${SOURCES})
