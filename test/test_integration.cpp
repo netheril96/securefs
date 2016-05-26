@@ -13,6 +13,7 @@
 #include <signal.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 using namespace securefs;
@@ -21,13 +22,12 @@ static bool is_mounted(const std::string& path)
 {
     auto parent_path = path + "/..";
     struct stat parent_st, st;
-    if (stat(path.c_str(), &st))
+    if (stat(path.c_str(), &st) < 0 || stat(parent_path.c_str(), &parent_st) < 0)
     {
-        throw POSIXException(errno, "stating " + path);
-    }
-    if (stat(parent_path.c_str(), &parent_st))
-    {
-        throw POSIXException(errno, "stating " + parent_path);
+        if (errno == ENXIO)
+            return false;    // "Device not configured" because fuse mounting isn't fully
+                             // initialized
+        throw POSIXException(errno, "stat");
     }
     if (!S_ISDIR(parent_st.st_mode) || !S_ISDIR(st.st_mode))
     {
@@ -82,7 +82,8 @@ public:
 
     void mount()
     {
-        sleep_until_unmounted();
+        if (mount_pid > 0)
+            return;
         mount_pid = fork();
         REQUIRE(mount_pid >= 0);
         if (mount_pid == 0)
@@ -95,7 +96,7 @@ public:
                    "--pass",
                    password.c_str(),
                    (const char*)nullptr);
-            FAIL("execlp ourselves fails: " << sane_strerror(errno));
+            throw POSIXException(errno, "execlp");
         }
         else
         {
@@ -107,9 +108,13 @@ public:
     {
         if (mount_pid < 0)
             return;
-        sleep_until_mounted();
         if (kill(mount_pid, SIGINT) < 0)
-            FAIL("Sending SIGINT to child fails: " << sane_strerror(errno));
+            throw POSIXException(errno, "kill");
+        while (waitpid(mount_pid, nullptr, 0) < 0)
+        {
+            if (errno != EINTR)
+                throw POSIXException(errno, "waitpid");
+        }
         sleep_until_unmounted();
         mount_pid = -1;
     }
@@ -117,13 +122,10 @@ public:
     SecurefsTestControl() {}
     ~SecurefsTestControl()
     {
-        try
-        {
-            unmount();
-        }
-        catch (...)
-        {
-        }
+        if (mount_pid < 0)
+            return;
+        (void)kill(mount_pid, SIGINT);
+        (void)waitpid(mount_pid, nullptr, WNOHANG);
     }
 };
 }

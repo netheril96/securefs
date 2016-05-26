@@ -2009,7 +2009,7 @@ namespace Catch{
 
     // The following code snippet based on:
     // http://cocoawithlove.com/2008/03/break-into-debugger.html
-    #ifdef DEBUG
+    #if 1
         #if defined(__ppc64__) || defined(__ppc__)
             #define CATCH_BREAK_INTO_DEBUGGER() \
                 if( Catch::isDebuggerActive() ) { \
