@@ -11,9 +11,30 @@
 #include <vector>
 
 #include <signal.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 using namespace securefs;
+
+static bool is_mounted(const std::string& path)
+{
+    auto parent_path = path + "/..";
+    struct stat parent_st, st;
+    if (stat(path.c_str(), &st))
+    {
+        throw POSIXException(errno, "stating " + path);
+    }
+    if (stat(parent_path.c_str(), &parent_st))
+    {
+        throw POSIXException(errno, "stating " + parent_path);
+    }
+    if (!S_ISDIR(parent_st.st_mode) || !S_ISDIR(st.st_mode))
+    {
+        throw OSException(ENOTDIR);
+    }
+    return st.st_dev != parent_st.st_dev;
+}
 
 namespace
 {
@@ -22,7 +43,23 @@ class SecurefsTestControl
 private:
     pid_t mount_pid = -1;
 
-    const std::chrono::milliseconds WAIT_DURATION{300};
+    void sleep_while() { std::this_thread::sleep_for(std::chrono::nanoseconds(100000)); }
+
+    void sleep_until_mounted()
+    {
+        do
+        {
+            sleep_while();
+        } while (!is_mounted(mount_dir));
+    }
+
+    void sleep_until_unmounted()
+    {
+        do
+        {
+            sleep_while();
+        } while (is_mounted(mount_dir));
+    }
 
 public:
     std::string mount_dir, data_dir, password, version_string;
@@ -45,7 +82,7 @@ public:
 
     void mount()
     {
-        std::this_thread::sleep_for(WAIT_DURATION);
+        sleep_until_unmounted();
         mount_pid = fork();
         REQUIRE(mount_pid >= 0);
         if (mount_pid == 0)
@@ -62,7 +99,7 @@ public:
         }
         else
         {
-            std::this_thread::sleep_for(WAIT_DURATION);
+            sleep_until_mounted();
         }
     }
 
@@ -70,12 +107,10 @@ public:
     {
         if (mount_pid < 0)
             return;
-        std::this_thread::sleep_for(WAIT_DURATION);
-        // Unmounting too quickly will cause errors
-        // This is unavoidable due to the communication design of FUSE
+        sleep_until_mounted();
         if (kill(mount_pid, SIGINT) < 0)
             FAIL("Sending SIGINT to child fails: " << sane_strerror(errno));
-        std::this_thread::sleep_for(WAIT_DURATION);
+        sleep_until_unmounted();
         mount_pid = -1;
     }
 
