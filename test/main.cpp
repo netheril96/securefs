@@ -2,14 +2,10 @@
 #include "catch.hpp"
 #include "platform.h"
 
-namespace securefs
-{
-
-int test_main(int argc, const char* const* argv)
+int main(int argc, char** argv)
 {
     securefs::FileSystemService service;
     service.ensure_directory("tmp", 0755);
     Catch::Session s;
     return s.run(argc, argv);
-}
 }

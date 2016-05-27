@@ -841,32 +841,6 @@ public:
     }
 };
 
-class TestCommand : public CommandBase
-{
-private:
-    int m_argc;
-    const char* const* m_argv;
-
-public:
-    void parse_cmdline(int argc, const char* const* argv) override
-    {
-        m_argc = argc;
-        m_argv = argv;
-    }
-
-    int execute() override
-    {
-        int test_main(int argc, const char* const* argv);
-        return test_main(m_argc, m_argv);
-    }
-
-    const char* long_name() const noexcept override { return "test"; }
-
-    char short_name() const noexcept override { return 0; }
-
-    const char* help_message() const noexcept override { return "Do a test of the program"; }
-};
-
 class VersionCommand : public CommandBase
 {
 private:
@@ -920,7 +894,6 @@ int commands_main(int argc, const char* const* argv)
         cmds.push_back(make_unique<CreateCommand>());
         cmds.push_back(make_unique<ChangePasswordCommand>());
         cmds.push_back(make_unique<FixCommand>());
-        cmds.push_back(make_unique<TestCommand>());
         cmds.push_back(make_unique<VersionCommand>());
 
         auto print_usage = [&]() {
@@ -984,10 +957,4 @@ int commands_main(int argc, const char* const* argv)
         return 3;
     }
 }
-}
-
-int main(int argc, char** argv)
-{
-    process_name = argv[0];
-    return commands_main(argc, argv);
 }
