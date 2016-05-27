@@ -8,6 +8,7 @@ import shutil
 import sys
 import platform
 import time
+import traceback
 
 
 SECUREFS_BINARY = './securefs'
@@ -24,6 +25,13 @@ def securefs_mount(data_dir, mount_point, password):
     out, err = p.communicate(input=password+'\n')
     if p.returncode:
         raise RuntimeError(err)
+    while 1:
+        time.sleep(0.05)
+        try:
+            if os.path.ismount(mount_point):
+                break
+        except EnvironmentError:
+            traceback.print_exc()
 
 
 def securefs_unmount(mount_point):
@@ -31,6 +39,13 @@ def securefs_unmount(mount_point):
     out, err = p.communicate()
     if p.returncode:
         raise RuntimeError(err)
+    while 1:
+        time.sleep(0.05)
+        try:
+            if not os.path.ismount(mount_point):
+                break
+        except EnvironmentError:
+            traceback.print_exc()
 
 
 def securefs_create(data_dir, password, version):
@@ -61,23 +76,10 @@ class SimpleSecureFSTestBase(object):
         shutil.rmtree(self.mount_point)
         
     def mount(self):
-        def impl():
-            securefs_mount(self.data_dir, self.mount_point, self.password)
-        try:
-            impl()
-        except:
-            time.sleep(0.5)
-            impl()
+        securefs_mount(self.data_dir, self.mount_point, self.password)
     
     def unmount(self):
-        def impl():
-            securefs_unmount(self.mount_point)
-        # Unmounting too quick will cause errors
-        try:
-            impl()
-        except:
-            time.sleep(0.5)
-            impl()
+        securefs_unmount(self.mount_point)
     
     def runTest(self):
         dir_names = set(str(i) for i in xrange(2))
