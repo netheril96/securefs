@@ -171,7 +171,7 @@ public:
     virtual bool get_entry(const std::string& name, id_type& id, int& type) override;
     virtual bool add_entry(const std::string& name, const id_type& id, int type) override;
     virtual bool remove_entry(const std::string& name, id_type& id, int& type) override;
-    virtual void iterate_over_entries(callback cb) override;
+    virtual void iterate_over_entries(const callback&) override;
     virtual bool empty() override;
     void rebuild();
 

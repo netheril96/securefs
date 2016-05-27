@@ -27,7 +27,7 @@ namespace internal
 
     typedef AutoClosedFileBase FileGuard;
 
-    FileGuard open_base_dir(FileSystem* fs, const std::string& path, std::string& last_component)
+    FileGuard open_base_dir(FileSystem* fs, const char* path, std::string& last_component)
     {
 
 #ifdef _WIN32
@@ -58,7 +58,7 @@ namespace internal
         return result;
     }
 
-    FileGuard open_all(FileSystem* fs, const std::string& path)
+    FileGuard open_all(FileSystem* fs, const char* path)
     {
         std::string last_component;
         auto fg = open_base_dir(fs, path, last_component);
@@ -74,7 +74,7 @@ namespace internal
     }
 
     // Specialization of `open_all` since `OSException(ENOENT)` occurs too frequently
-    bool open_all(FileSystem* fs, const std::string& path, FileGuard& fg)
+    bool open_all(FileSystem* fs, const char* path, FileGuard& fg)
     {
         std::string last_component;
         fg = open_base_dir(fs, path, last_component);
@@ -93,7 +93,7 @@ namespace internal
     }
 
     template <class Initializer>
-    FileGuard create(FileSystem* fs, const std::string& path, int type, const Initializer& init)
+    FileGuard create(FileSystem* fs, const char* path, int type, const Initializer& init)
     {
         std::string last_component;
         auto dir = open_base_dir(fs, path, last_component);
@@ -131,7 +131,7 @@ namespace internal
         }
     }
 
-    void remove(FileSystem* fs, const std::string& path)
+    void remove(FileSystem* fs, const char* path)
     {
         std::string last_component;
         auto dir_guard = open_base_dir(fs, path, last_component);

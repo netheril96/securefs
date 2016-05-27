@@ -705,7 +705,7 @@ void BtreeDirectory::mutable_recursive_iterate(BtreeNode* n, const Callback& cb,
         mutable_recursive_iterate(retrieve_node(n->page_number(), c), cb, depth + 1);
 }
 
-void BtreeDirectory::iterate_over_entries(BtreeDirectory::callback cb)
+void BtreeDirectory::iterate_over_entries(const BtreeDirectory::callback& cb)
 {
     auto root = get_root_node();
     if (root)

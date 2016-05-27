@@ -236,7 +236,7 @@ public:
     /**
      * When callback returns false, the iteration will be terminated
      */
-    virtual void iterate_over_entries(callback cb) = 0;
+    virtual void iterate_over_entries(const callback& cb) = 0;
 
     virtual bool empty() = 0;
 };
@@ -265,7 +265,7 @@ public:
 
     void subflush() override;
 
-    void iterate_over_entries(callback cb) override
+    void iterate_over_entries(const callback& cb) override
     {
         for (const auto& pair : m_table)
         {
