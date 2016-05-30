@@ -479,7 +479,7 @@ namespace internal
                             mac,
                             get_mac_size(),
                             output);
-            return get_encrypted_header_size();
+            return get_header_size();
         }
 
         void unchecked_write_header(const void* input)
