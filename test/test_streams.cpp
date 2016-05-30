@@ -9,12 +9,12 @@
 #include <string.h>
 #include <vector>
 
+using securefs::FileSystemService;
+
 static void test(securefs::StreamBase& stream, unsigned times)
 {
-    securefs::FileSystemService service;
-
-    auto posix_stream_impl = service.open_file_stream(
-        service.temp_name("tmp/", "stream"), O_RDWR | O_CREAT | O_EXCL, 0644);
+    auto posix_stream_impl = FileSystemService::get_default().open_file_stream(
+        FileSystemService::temp_name("tmp/", "stream"), O_RDWR | O_CREAT | O_EXCL, 0644);
     auto&& posix_stream = *posix_stream_impl;
 
     posix_stream.resize(0);
@@ -116,22 +116,21 @@ namespace dummy
 // Used for debugging
 void dump_contents(const std::vector<byte>& bytes, const char* filename, size_t max_size)
 {
-    securefs::FileSystemService service;
-    auto fs = service.open_file_stream(filename, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    auto fs = securefs::FileSystemService::get_default().open_file_stream(
+        filename, O_WRONLY | O_CREAT | O_TRUNC, 0600);
     fs->write(bytes.data(), 0, max_size);
 }
 
 TEST_CASE("Test streams")
 {
-    securefs::FileSystemService service;
-
-    auto filename = service.temp_name("tmp/", ".stream");
+    auto filename = FileSystemService::temp_name("tmp/", ".stream");
 
     securefs::key_type key;
     securefs::id_type id;
     memset(key.data(), 0xff, key.size());
     memset(id.data(), 0xee, id.size());
-    auto posix_stream = service.open_file_stream(filename, O_RDWR | O_CREAT | O_EXCL, 0644);
+    auto posix_stream = FileSystemService::get_default().open_file_stream(
+        filename, O_RDWR | O_CREAT | O_EXCL, 0644);
 
     {
         auto hmac_stream = securefs::make_stream_hmac(key, id, posix_stream, true);
@@ -143,8 +142,8 @@ TEST_CASE("Test streams")
         test(ds, 5000);
     }
     {
-        auto meta_posix_stream = service.open_file_stream(
-            service.temp_name("tmp/", "metastream"), O_RDWR | O_CREAT | O_EXCL, 0644);
+        auto meta_posix_stream = FileSystemService::get_default().open_file_stream(
+            FileSystemService::temp_name("tmp/", "metastream"), O_RDWR | O_CREAT | O_EXCL, 0644);
         auto aes_gcm_stream = securefs::make_cryptstream_aes_gcm(
             posix_stream, meta_posix_stream, key, key, id, true, 4096, 12);
         std::vector<byte> header(aes_gcm_stream.second->max_header_length() - 1, 5);

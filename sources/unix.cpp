@@ -190,7 +190,7 @@ FileSystemService::FileSystemService(const std::string& path) : impl(new Impl())
 }
 
 std::shared_ptr<FileStream>
-FileSystemService::open_file_stream(const std::string& path, int flags, unsigned mode)
+FileSystemService::open_file_stream(const std::string& path, int flags, unsigned mode) const
 {
     int fd = ::openat(impl->dir_fd, path.c_str(), flags, mode);
     if (fd < 0)
@@ -199,17 +199,17 @@ FileSystemService::open_file_stream(const std::string& path, int flags, unsigned
     return std::make_shared<UnixFileStream>(fd);
 }
 
-bool FileSystemService::remove_file(const std::string& path) noexcept
+bool FileSystemService::remove_file(const std::string& path) const noexcept
 {
     return ::unlinkat(impl->dir_fd, path.c_str(), 0) == 0;
 }
 
-bool FileSystemService::remove_directory(const std::string& path) noexcept
+bool FileSystemService::remove_directory(const std::string& path) const noexcept
 {
     return ::unlinkat(impl->dir_fd, path.c_str(), AT_REMOVEDIR) == 0;
 }
 
-void FileSystemService::lock()
+void FileSystemService::lock() const
 {
     int rc = ::flock(impl->dir_fd, LOCK_NB | LOCK_EX);
     if (rc < 0)
@@ -217,7 +217,7 @@ void FileSystemService::lock()
                              fmt::format("Fail to obtain exclusive lock on {}", impl->dir_name));
 }
 
-void FileSystemService::ensure_directory(const std::string& path, unsigned mode)
+void FileSystemService::ensure_directory(const std::string& path, unsigned mode) const
 {
     int rc = ::mkdirat(impl->dir_fd, path.c_str(), mode);
     if (rc < 0 && errno != EEXIST)
@@ -225,14 +225,14 @@ void FileSystemService::ensure_directory(const std::string& path, unsigned mode)
                              fmt::format("Fail to create directory {}", impl->norm_path(path)));
 }
 
-void FileSystemService::statfs(struct statvfs* fs_info)
+void FileSystemService::statfs(struct statvfs* fs_info) const
 {
     int rc = ::fstatvfs(impl->dir_fd, fs_info);
     if (rc < 0)
         throw POSIXException(errno, "statvfs");
 }
 
-void FileSystemService::rename(const std::string& a, const std::string& b)
+void FileSystemService::rename(const std::string& a, const std::string& b) const
 {
     int rc = ::renameat(impl->dir_fd, a.c_str(), impl->dir_fd, b.c_str());
     if (rc < 0)

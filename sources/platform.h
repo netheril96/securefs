@@ -53,17 +53,20 @@ private:
     class Impl;
     std::unique_ptr<Impl> impl;
 
-public:
+private:
     FileSystemService();
+
+public:
     FileSystemService(const std::string& path);
     ~FileSystemService();
-    std::shared_ptr<FileStream> open_file_stream(const std::string& path, int flags, unsigned mode);
-    bool remove_file(const std::string& path) noexcept;
-    bool remove_directory(const std::string& path) noexcept;
-    void rename(const std::string& a, const std::string& b);
-    void lock();
-    void ensure_directory(const std::string& path, unsigned mode);
-    void statfs(struct statvfs*);
+    std::shared_ptr<FileStream>
+    open_file_stream(const std::string& path, int flags, unsigned mode) const;
+    bool remove_file(const std::string& path) const noexcept;
+    bool remove_directory(const std::string& path) const noexcept;
+    void rename(const std::string& a, const std::string& b) const;
+    void lock() const;
+    void ensure_directory(const std::string& path, unsigned mode) const;
+    void statfs(struct statvfs*) const;
 
 public:
     static uint32_t getuid() noexcept;
@@ -73,6 +76,12 @@ public:
     static std::string temp_name(const std::string& prefix, const std::string& suffix)
     {
         return prefix + random_hex_string(16) + suffix;
+    }
+
+    static const FileSystemService& get_default()
+    {
+        static const FileSystemService service;
+        return service;
     }
 };
 }

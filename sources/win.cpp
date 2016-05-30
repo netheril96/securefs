@@ -255,24 +255,24 @@ FileSystemService::FileSystemService(const std::string& path) : impl(new Impl())
 }
 
 std::shared_ptr<FileStream>
-FileSystemService::open_file_stream(const std::string& path, int flags, unsigned mode)
+FileSystemService::open_file_stream(const std::string& path, int flags, unsigned mode) const
 {
     return std::make_shared<WindowsFileStream>(impl->norm_path(path), flags, mode);
 }
 
-bool FileSystemService::remove_file(const std::string& path) noexcept
+bool FileSystemService::remove_file(const std::string& path) const noexcept
 {
     return DeleteFileW(impl->norm_path(path).c_str());
 }
 
-bool FileSystemService::remove_directory(const std::string& path) noexcept
+bool FileSystemService::remove_directory(const std::string& path) const noexcept
 {
     return RemoveDirectoryW(impl->norm_path(path).c_str());
 }
 
-void FileSystemService::lock() {}
+void FileSystemService::lock() const {}
 
-void FileSystemService::ensure_directory(const std::string& path, unsigned mode)
+void FileSystemService::ensure_directory(const std::string& path, unsigned mode) const
 {
     if (CreateDirectoryW(impl->norm_path(path).c_str(), nullptr) == 0)
     {
@@ -282,7 +282,7 @@ void FileSystemService::ensure_directory(const std::string& path, unsigned mode)
     }
 }
 
-void FileSystemService::statfs(struct statvfs* fs_info)
+void FileSystemService::statfs(struct statvfs* fs_info) const
 {
     memset(fs_info, 0, sizeof(*fs_info));
     ULARGE_INTEGER FreeBytesAvailable, TotalNumberOfBytes, TotalNumberOfFreeBytes;
@@ -303,7 +303,7 @@ void FileSystemService::statfs(struct statvfs* fs_info)
     fs_info->f_favail = maximum;
 }
 
-void FileSystemService::rename(const std::string& a, const std::string& b)
+void FileSystemService::rename(const std::string& a, const std::string& b) const
 {
     auto wa = impl->norm_path(a);
     auto wb = impl->norm_path(b);

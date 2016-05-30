@@ -433,8 +433,7 @@ namespace securefs
 
 std::shared_ptr<FileStream> CommandBase::open_config_stream(const std::string& path, int flags)
 {
-    FileSystemService service;
-    return service.open_file_stream(path, flags, 0644);
+    return FileSystemService::get_default().open_file_stream(path, flags, 0644);
 }
 
 FSConfig CommandBase::read_config(StreamBase* stream, const void* password, size_t pass_len)
@@ -557,6 +556,7 @@ public:
 
     int execute() override
     {
+        FileSystemService::get_default().ensure_directory(data_dir.getValue(), 0755);
         FSConfig config;
         config.iv_size = iv_size.getValue();
         config.version = version.getValue();
@@ -625,17 +625,18 @@ public:
 
     int execute() override
     {
-        FileSystemService service;
         auto original_path = get_real_config_path();
         byte buffer[16];
         auto tmp_path = original_path + hexify(buffer, sizeof(buffer));
-        auto stream = service.open_file_stream(original_path, O_RDONLY, 0644);
+        auto stream
+            = FileSystemService::get_default().open_file_stream(original_path, O_RDONLY, 0644);
         auto config = read_config(stream.get(), old_password.data(), old_password.size());
-        stream = service.open_file_stream(tmp_path, O_WRONLY | O_CREAT | O_EXCL, 0644);
+        stream = FileSystemService::get_default().open_file_stream(
+            tmp_path, O_WRONLY | O_CREAT | O_EXCL, 0644);
         write_config(
             stream.get(), config, new_password.data(), new_password.size(), rounds.getValue());
         stream.reset();
-        service.rename(tmp_path, original_path);
+        FileSystemService::get_default().rename(tmp_path, original_path);
         return 0;
     }
 
@@ -713,7 +714,24 @@ public:
             fputs("Warning: failure to raise the maximum file descriptor limit\n", stderr);
         }
 
-        auto config_stream = open_config_stream(get_real_config_path(), O_RDONLY);
+        FileSystemService::get_default().ensure_directory(mount_point.getValue(), 0755);
+        std::shared_ptr<FileStream> config_stream;
+        try
+        {
+            config_stream = open_config_stream(get_real_config_path(), O_RDONLY);
+        }
+        catch (const ExceptionBase& e)
+        {
+            if (e.error_number() == ENOENT)
+            {
+                fprintf(stderr,
+                        "Config file %s does not exist. Perhaps you forget to run `create` command "
+                        "first?\n",
+                        get_real_config_path().c_str());
+                return 19;
+            }
+            throw;
+        }
         auto config = read_config(config_stream.get(), password.data(), password.size());
         config_stream.reset();
 

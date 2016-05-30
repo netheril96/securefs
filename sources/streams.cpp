@@ -510,7 +510,7 @@ namespace internal
             if (length > get_header_size())
                 throw InvalidArgumentException("Header too long");
             if (length == get_header_size())
-                return unchecked_read_header(output);
+                return unchecked_read_header(output) == length;
 
             CryptoPP::AlignedSecByteBlock buffer(get_header_size());
             auto rc = unchecked_read_header(buffer.data());

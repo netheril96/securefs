@@ -12,9 +12,8 @@
 TEST_CASE("File table")
 {
     using namespace securefs;
-    FileSystemService service;
     auto base_dir = FileSystemService::temp_name("tmp/file_table", ".dir");
-    service.ensure_directory(base_dir, 0755);
+    FileSystemService::get_default().ensure_directory(base_dir, 0755);
 
     key_type master_key;
     id_type null_id, file_id;
