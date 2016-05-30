@@ -73,15 +73,7 @@ public:
     static uint32_t getgid() noexcept;
     static bool raise_fd_limit() noexcept;
 
-    static std::string temp_name(const std::string& prefix, const std::string& suffix)
-    {
-        return prefix + random_hex_string(16) + suffix;
-    }
-
-    static const FileSystemService& get_default()
-    {
-        static const FileSystemService service;
-        return service;
-    }
+    static std::string temp_name(const std::string& prefix, const std::string& suffix);
+    static const FileSystemService& get_default();
 };
 }
