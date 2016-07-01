@@ -249,11 +249,12 @@ void FileTable::close(FileBase* fb)
 
 void FileTable::eject()
 {
-    for (int i = 0; i < NUM_EJECT; ++i)
+    size_t ejected = 0;
+    while (ejected < NUM_EJECT)
     {
         if (m_closed_ids.empty())
             break;
-        m_closed.erase(m_closed_ids.front());
+        ejected += m_closed.erase(m_closed_ids.front());
         m_closed_ids.pop();
     }
 }
