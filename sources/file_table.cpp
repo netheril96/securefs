@@ -275,7 +275,7 @@ void FileTable::finalize(FileBase* fb)
 
 void FileTable::gc()
 {
-    if (m_closed.size() >= NUM_EJECT)
+    if (m_closed.size() >= MAX_NUM_CLOSED)
         eject();
 }
 }
