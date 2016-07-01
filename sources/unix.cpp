@@ -243,19 +243,31 @@ void FileSystemService::rename(const std::string& a, const std::string& b) const
 uint32_t FileSystemService::getuid() noexcept { return ::getuid(); }
 uint32_t FileSystemService::getgid() noexcept { return ::getgid(); }
 
-bool FileSystemService::raise_fd_limit() noexcept
+int FileSystemService::raise_fd_limit()
 {
     struct rlimit rl;
     int rc = ::getrlimit(RLIMIT_NOFILE, &rl);
-    if (rc != 0)
-        return false;
+    if (rc < 0)
+        throw POSIXException(errno, "getrlimit");
+
     rl.rlim_cur = 10240 * 16;
     do
     {
         rl.rlim_cur /= 2;
         rc = ::setrlimit(RLIMIT_NOFILE, &rl);
     } while (rc < 0 && rl.rlim_cur >= 1024);
-    return rc == 0;
+
+    if (rc < 0)
+        throw POSIXException(errno, "setrlimit");
+
+    for (int lim = rl.rlim_cur * 2 - 1, bound = rl.rlim_cur; lim >= bound; --lim)
+    {
+        rl.rlim_cur = lim;
+        rc = ::setrlimit(RLIMIT_NOFILE, &rl);
+        if (rc == 0)
+            return lim;
+    }
+    throw POSIXException(errno, "setrlimit");
 }
 
 std::string format_current_time()

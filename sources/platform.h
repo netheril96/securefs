@@ -71,7 +71,7 @@ public:
 public:
     static uint32_t getuid() noexcept;
     static uint32_t getgid() noexcept;
-    static bool raise_fd_limit() noexcept;
+    static int raise_fd_limit();
 
     static std::string temp_name(const std::string& prefix, const std::string& suffix);
     static const FileSystemService& get_default();

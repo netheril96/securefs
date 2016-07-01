@@ -709,9 +709,17 @@ public:
 
     int execute() override
     {
-        if (!securefs::FileSystemService::raise_fd_limit())
+        try
         {
-            fputs("Warning: failure to raise the maximum file descriptor limit\n", stderr);
+            fprintf(stderr,
+                    "Raising the number of file descriptor limit to %d\n",
+                    FileSystemService::raise_fd_limit());
+        }
+        catch (const ExceptionBase& e)
+        {
+            fprintf(stderr,
+                    "Warning: failure to raise the maximum file descriptor limit (%s)\n",
+                    e.message().c_str());
         }
 
         FileSystemService::get_default().ensure_directory(mount_point.getValue(), 0755);
@@ -739,7 +747,19 @@ public:
 
         operations::FSOptions fsopt;
         fsopt.root = std::make_shared<FileSystemService>(data_dir.getValue());
-        fsopt.root->lock();
+        try
+        {
+            fsopt.root->lock();
+        }
+        catch (const ExceptionBase& e)
+        {
+            fprintf(stderr,
+                    "%s: %s\nAnother securefs instance is probably already running on %s\n",
+                    e.type_name(),
+                    e.message().c_str(),
+                    data_dir.getValue().c_str());
+            return 19;
+        }
         fsopt.block_size = config.block_size;
         fsopt.iv_size = config.iv_size;
         fsopt.version = config.version;
@@ -862,7 +882,7 @@ public:
 class VersionCommand : public CommandBase
 {
 private:
-    const char* version = "0.4.3";
+    const char* version = "0.4.5";
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override

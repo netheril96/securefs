@@ -312,10 +312,9 @@ void FileSystemService::rename(const std::string& a, const std::string& b) const
         throw WindowsException(GetLastError(), "MoveFileW");
 }
 
-bool FileSystemService::raise_fd_limit() noexcept
+int FileSystemService::raise_fd_limit()
 {
-    return true;
-    // The handle limit on Windows is high enough that no adjustments are necessary
+    return 10000;
 }
 
 std::string format_current_time()
