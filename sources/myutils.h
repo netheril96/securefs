@@ -1,4 +1,6 @@
 #pragma once
+#include "mystring.h"
+
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -133,29 +135,6 @@ public:
 typedef PODArray<byte, KEY_LENGTH> key_type;
 typedef PODArray<byte, ID_LENGTH> id_type;
 
-inline std::string hexify(const byte* data, size_t length)
-{
-    const char* table = "0123456789abcdef";
-    std::string result;
-    result.reserve(length * 2);
-    for (size_t i = 0; i < length; ++i)
-    {
-        result += table[data[i] / 16];
-        result += table[data[i] % 16];
-    }
-    return result;
-}
-
-void parse_hex(const std::string& hex, byte* output, size_t len);
-std::string sane_strerror(int error_number);
-std::string errno_to_string();
-
-template <class ByteContainer>
-inline std::string hexify(const ByteContainer& c)
-{
-    return hexify(c.data(), c.size());
-}
-
 template <class Iterator, class T>
 inline bool is_all_equal(Iterator begin, Iterator end, const T& value)
 {
@@ -199,32 +178,6 @@ inline typename std::remove_reference<T>::type from_little_endian(const void* in
     }
     return value;
 }
-
-bool ends_with(const char* str, size_t size, const char* suffix, size_t suffix_len);
-inline bool ends_with(const std::string& str, const std::string& suffix)
-{
-    return ends_with(str.data(), str.size(), suffix.data(), suffix.size());
-}
-
-bool starts_with(const char* str, size_t size, const char* prefix, size_t prefix_len);
-inline bool starts_with(const std::string& str, const std::string& prefix)
-{
-    return starts_with(str.data(), str.size(), prefix.data(), prefix.size());
-}
-
-std::vector<std::string> split(const char* str, size_t length, char separator);
-
-inline std::vector<std::string> split(const std::string& str, char separator)
-{
-    return split(str.data(), str.size(), separator);
-}
-
-inline std::vector<std::string> split(const char* str, char separator)
-{
-    return split(str, strlen(str), separator);
-}
-
-std::string sane_strerror(int error_number);
 
 void generate_random(void* data, size_t size);
 
@@ -312,6 +265,4 @@ std::string get_user_input_until_enter();
 
 void respond_to_user_action(
     const std::unordered_map<std::string, std::function<void(void)>>& actionMap);
-
-std::string to_lower(const std::string&);
 }
