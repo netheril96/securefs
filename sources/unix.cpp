@@ -301,7 +301,7 @@ std::string FileSystemService::temp_name(const std::string& prefix, const std::s
     return prefix + random_hex_string(16) + suffix;
 }
 
-bool getStackTrace(std::vector<StackTraceElement>& output, int num_ignore) noexcept
+bool getStackTrace(std::vector<StackTraceElement>& output) noexcept
 {
     const int MAX_SIZE = 200;
     void* buffer[MAX_SIZE];
@@ -309,11 +309,11 @@ bool getStackTrace(std::vector<StackTraceElement>& output, int num_ignore) noexc
     char* demangled_name = nullptr;
     try
     {
-        output.resize(std::max(buffer_size - num_ignore, 0));
-        for (int i = num_ignore; i < buffer_size; ++i)
+        output.resize(std::max(buffer_size - 1, 0));
+        for (int i = 1; i < buffer_size; ++i)
         {
             Dl_info info;
-            StackTraceElement& element = output[i - num_ignore];
+            StackTraceElement& element = output[i - 1];
             if (dladdr(buffer[i], &info) == 0)
                 continue;
             element.object_name = info.dli_fname;

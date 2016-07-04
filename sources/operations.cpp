@@ -158,7 +158,7 @@ namespace internal
     {
         auto logger = fs->logger.get();
         if (logger && e.level() >= logger->get_level())
-            logger->log(e.level(), fmt::format("{}: {}", e.type_name(), e.message()), func);
+            logger->log_old(e.level(), fmt::format("{}: {}", e.type_name(), e.message()), func);
         return -e.error_number();
     }
 
@@ -166,11 +166,11 @@ namespace internal
     {
         auto logger = fs->logger.get();
         if (logger && LoggingLevel::Error >= logger->get_level())
-            logger->log(LoggingLevel::Error,
-                        fmt::format("An unexcepted exception of type {} occurred: {}",
-                                    typeid(e).name(),
-                                    e.what()),
-                        func);
+            logger->log_old(LoggingLevel::Error,
+                            fmt::format("An unexcepted exception of type {} occurred: {}",
+                                        typeid(e).name(),
+                                        e.what()),
+                            func);
         return -EPERM;
     }
 }
@@ -195,7 +195,23 @@ namespace operations
 
 #define COMMON_CATCH_BLOCK                                                                         \
     catch (const OSException& e) { return -e.error_number(); }                                     \
-    catch (const ExceptionBase& e) { return internal::log_error(fs, e, __PRETTY_FUNCTION__); }     \
+    catch (const SeriousException& e)                                                              \
+    {                                                                                              \
+        if (fs->logger)                                                                            \
+        {                                                                                          \
+            fs->logger->log(                                                                       \
+                e.level(), &e.stack_trace(), "%s: %s", e.type_name(), e.message().c_str());        \
+        }                                                                                          \
+        return -e.error_number();                                                                  \
+    }                                                                                              \
+    catch (const ExceptionBase& e)                                                                 \
+    {                                                                                              \
+        if (fs->logger)                                                                            \
+        {                                                                                          \
+            fs->logger->log(e.level(), nullptr, "%s: %s", e.type_name(), e.message().c_str());     \
+        }                                                                                          \
+        return -e.error_number();                                                                  \
+    }                                                                                              \
     catch (const std::exception& e)                                                                \
     {                                                                                              \
         return internal::log_general_error(fs, e, __PRETTY_FUNCTION__);                            \
@@ -207,7 +223,7 @@ namespace operations
 
 #define DEBUG_LOG(msg)                                                                             \
     if (fs->logger && fs->logger->get_level() <= LoggingLevel::Debug)                              \
-    fs->logger->log(LoggingLevel::Debug, msg, __PRETTY_FUNCTION__)
+    fs->logger->log_old(LoggingLevel::Debug, msg, __PRETTY_FUNCTION__)
 
     void* init(struct fuse_conn_info*)
     {

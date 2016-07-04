@@ -17,7 +17,7 @@ struct StackTraceElement
     std::string object_name, function_name;
 };
 typedef std::vector<StackTraceElement> StackTrace;
-bool getStackTrace(StackTrace& output, int num_ignore) noexcept;
+bool getStackTrace(StackTrace& output) noexcept;
 
 enum class ExceptionLevel
 {
@@ -67,7 +67,7 @@ private:
     StackTrace m_traces;
 
 public:
-    explicit SeriousException() { getStackTrace(m_traces, 1); }
+    explicit SeriousException() { getStackTrace(m_traces); }
     ExceptionLevel level() const noexcept override { return ExceptionLevel::Error; }
     const StackTrace& stack_trace() const noexcept { return m_traces; }
 };
