@@ -22,7 +22,7 @@ void Logger::vlog(LoggingLevel level,
     gmtime_r(&now.tv_sec, &tm);
     fprintf(m_fp,
             "[%s] [%d-%02d-%02dT%02d:%02d:%02d.%06dZ]    ",
-            stringify(get_level()),
+            stringify(level),
             tm.tm_year + 1900,
             tm.tm_mon + 1,
             tm.tm_mday,
