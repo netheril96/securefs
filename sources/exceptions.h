@@ -12,6 +12,13 @@
 
 namespace securefs
 {
+struct StackTraceElement
+{
+    std::string object_name, function_name;
+};
+typedef std::vector<StackTraceElement> StackTrace;
+bool getStackTrace(StackTrace& output, int num_ignore) noexcept;
+
 enum class ExceptionLevel
 {
     Debug = 0,
@@ -56,10 +63,16 @@ class CommonException : public ExceptionBase
 
 class SeriousException : public ExceptionBase
 {
+private:
+    StackTrace m_traces;
+
+public:
+    explicit SeriousException() { getStackTrace(m_traces, 1); }
     ExceptionLevel level() const noexcept override { return ExceptionLevel::Error; }
+    const StackTrace& stack_trace() const noexcept { return m_traces; }
 };
 
-class FatalException : public ExceptionBase
+class FatalException : public SeriousException
 {
     ExceptionLevel level() const noexcept override { return ExceptionLevel::Fatal; }
 };

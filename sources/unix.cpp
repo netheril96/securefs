@@ -3,6 +3,12 @@
 #include "platform.h"
 #include "streams.h"
 
+#include <algorithm>
+#include <vector>
+
+#include <cxxabi.h>
+#include <dlfcn.h>
+#include <execinfo.h>
 #include <fcntl.h>
 #include <sys/file.h>
 #include <sys/resource.h>
@@ -293,5 +299,35 @@ const FileSystemService& FileSystemService::get_default()
 std::string FileSystemService::temp_name(const std::string& prefix, const std::string& suffix)
 {
     return prefix + random_hex_string(16) + suffix;
+}
+
+bool getStackTrace(std::vector<StackTraceElement>& output, int num_ignore) noexcept
+{
+    const int MAX_SIZE = 200;
+    void* buffer[MAX_SIZE];
+    int buffer_size = backtrace(buffer, MAX_SIZE);
+    char* demangled_name = nullptr;
+    try
+    {
+        output.resize(std::max(buffer_size - num_ignore, 0));
+        for (int i = num_ignore; i < buffer_size; ++i)
+        {
+            Dl_info info;
+            StackTraceElement& element = output[i - num_ignore];
+            if (dladdr(buffer[i], &info) == 0)
+                continue;
+            element.object_name = info.dli_fname;
+            demangled_name = abi::__cxa_demangle(info.dli_sname, 0, 0, 0);
+            element.function_name = demangled_name ? demangled_name : info.dli_sname;
+            free(demangled_name);
+            demangled_name = nullptr;
+        }
+        return true;
+    }
+    catch (...)
+    {
+        free(demangled_name);
+        return false;
+    }
 }
 }
