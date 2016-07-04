@@ -1,5 +1,3 @@
-#ifndef _WIN32
-
 #include "exceptions.h"
 #include "format.h"
 #include "platform.h"
@@ -47,7 +45,7 @@ public:
             throw POSIXException(errno, "fsync");
     }
 
-    void fstat(real_stat_type* out) override
+    void fstat(struct stat* out) override
     {
         if (!out)
             throw OSException(EFAULT);
@@ -285,5 +283,15 @@ std::string format_current_time()
                        tm.tm_sec,
                        now.tv_usec);
 }
+
+const FileSystemService& FileSystemService::get_default()
+{
+    static const FileSystemService service;
+    return service;
 }
-#endif
+
+std::string FileSystemService::temp_name(const std::string& prefix, const std::string& suffix)
+{
+    return prefix + random_hex_string(16) + suffix;
+}
+}

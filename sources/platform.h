@@ -15,19 +15,6 @@
 struct statvfs;
 struct timespec;
 
-#ifdef _WIN32
-typedef unsigned mode_t;
-typedef long long ssize_t;
-#endif
-
-#ifdef _WIN32
-#include <fuse_win.h>
-#define off_t long long
-typedef struct FUSE_STAT real_stat_type;
-#else
-typedef struct stat real_stat_type;
-#endif
-
 namespace securefs
 {
 
@@ -36,7 +23,7 @@ class FileStream : public StreamBase
 public:
     virtual void fsync() = 0;
     virtual void utimens(const struct timespec ts[2]) = 0;
-    virtual void fstat(real_stat_type*) = 0;
+    virtual void fstat(struct stat*) = 0;
 
     virtual ssize_t listxattr(char*, size_t) { throw OSException(ENOTSUP); }
 

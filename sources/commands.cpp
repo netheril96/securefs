@@ -39,8 +39,6 @@ static const unsigned MIN_DERIVE_SECONDS = 1;
 static const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
 static const size_t MAX_PASS_LEN = 4000;
 
-#ifndef _WIN32
-
 enum class NLinkFixPhase
 {
     CollectingNLink,
@@ -217,8 +215,6 @@ void fix(const std::string& basedir, operations::FileSystem* fs)
     fix_hardlink_count(fs, root_dir.get_as<Directory>(), &nlink_map, NLinkFixPhase::FixingNLink);
     puts("Fix complete");
 }
-
-#endif
 
 Json::Value generate_config(int version,
                             const securefs::key_type& master_key,
@@ -844,10 +840,6 @@ public:
 
     int execute() override
     {
-#ifdef _WIN32
-        fputs("Sorry, not implemented on Windows\n", stderr);
-        return 13;
-#else
         auto config_stream = open_config_stream(get_real_config_path(), O_RDONLY);
         auto config = read_config(config_stream.get(), password.data(), password.size());
         config_stream.reset();
@@ -866,7 +858,6 @@ public:
         operations::FileSystem fs(fsopt);
         fix(data_dir.getValue(), &fs);
         return 0;
-#endif
     }
 
     const char* long_name() const noexcept override { return "fix"; }

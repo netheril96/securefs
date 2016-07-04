@@ -7,10 +7,6 @@
 
 #include <fuse.h>
 
-#ifdef _WIN32
-#define off_t long long
-#endif
-
 namespace securefs
 {
 namespace operations
@@ -45,7 +41,7 @@ namespace operations
 
     void destroy(void* ptr);
 
-    int getattr(const char*, real_stat_type*);
+    int getattr(const char*, struct stat*);
 
     int opendir(const char*, struct fuse_file_info*);
 

@@ -163,7 +163,7 @@ public:
         m_meta_stream->fsync();
     }
     void utimens(const struct timespec ts[2]) { m_data_stream->utimens(ts); }
-    void stat(real_stat_type* st);
+    void stat(struct stat* st);
 
     ssize_t listxattr(char* buffer, size_t size);
 

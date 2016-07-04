@@ -14,10 +14,6 @@
 #include <unordered_set>
 #include <vector>
 
-#ifdef _WIN32
-#define __PRETTY_FUNCTION__ __FUNCTION__
-#endif
-
 #define DISABLE_COPY_MOVE(cls)                                                                     \
     cls(const cls&) = delete;                                                                      \
     cls(cls&&) = delete;                                                                           \

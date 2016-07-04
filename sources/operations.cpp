@@ -29,12 +29,7 @@ namespace internal
 
     FileGuard open_base_dir(FileSystem* fs, const char* path, std::string& last_component)
     {
-
-#ifdef _WIN32
-        auto components = split(to_lower(path), '/');    // Stupid WIN32 API messes up cases
-#else
         auto components = split(path, '/');
-#endif
 
         FileGuard result(&fs->table, fs->table.open_as(fs->root_id, FileBase::DIRECTORY));
         if (components.empty())
@@ -206,17 +201,9 @@ namespace operations
         return internal::log_general_error(fs, e, __PRETTY_FUNCTION__);                            \
     }
 
-#ifdef _WIN32
-    static std::mutex global_mutex;    // Stupid Dokany does not respect the "single threaded" flag
-#define COMMON_PROLOGUE                                                                            \
-    auto ctx = fuse_get_context();                                                                 \
-    auto fs = internal::get_fs(ctx);                                                               \
-    std::lock_guard<std::mutex> global_guard(global_mutex);
-#else
 #define COMMON_PROLOGUE                                                                            \
     auto ctx = fuse_get_context();                                                                 \
     auto fs = internal::get_fs(ctx);
-#endif
 
 #define DEBUG_LOG(msg)                                                                             \
     if (fs->logger && fs->logger->get_level() <= LoggingLevel::Debug)                              \
@@ -251,7 +238,7 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-    int getattr(const char* path, real_stat_type* st)
+    int getattr(const char* path, struct stat* st)
     {
         COMMON_PROLOGUE
         DEBUG_LOG(fmt::format("path={}", path));
@@ -266,12 +253,6 @@ namespace operations
                 return -ENOENT;
 
             fg->stat(st);
-
-#ifdef _WIN32
-            st->st_mode |= 0666;    // The permission system on Windows are just insane, so we just
-                                    // permit everything
-#endif
-
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -314,7 +295,7 @@ namespace operations
                 return -EINVAL;
             if (fb->type() != FileBase::DIRECTORY)
                 return -ENOTDIR;
-            real_stat_type st;
+            struct stat st;
             memset(&st, 0, sizeof(st));
             auto actions = [&](const std::string& name, const id_type&, int type) -> bool {
                 st.st_mode = FileBase::mode_for_type(type);

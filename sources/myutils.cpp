@@ -16,7 +16,6 @@
 #include <time.h>
 #include <vector>
 
-#ifndef _WIN32
 #include <dirent.h>
 #include <fcntl.h>
 
@@ -25,7 +24,6 @@
 #include <sys/types.h>
 #include <termios.h>
 #include <unistd.h>
-#endif
 
 namespace securefs
 {
@@ -431,7 +429,6 @@ size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size
 
 size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length)
 {
-#ifndef _WIN32
     if (!fp || !password)
         NULL_EXCEPT();
 
@@ -452,9 +449,6 @@ size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t
     auto retval = insecure_read_password(fp, prompt, password, max_length);
     (void)::tcsetattr(fd, TCSAFLUSH, &old_termios);
     return retval;
-#else
-    return insecure_read_password(fp, prompt, password, max_length);
-#endif
 }
 
 std::vector<std::string> split(const char* str, size_t length, char separator)
@@ -479,7 +473,6 @@ std::vector<std::string> split(const char* str, size_t length, char separator)
     return result;
 }
 
-#ifndef _WIN32
 static void find_ids_helper(const std::string& current_dir,
                             std::unordered_set<id_type, id_hash>& result)
 {
@@ -554,7 +547,6 @@ std::unordered_set<id_type, id_hash> find_all_ids(const std::string& basedir)
     find_ids_helper(basedir, result);
     return result;
 }
-#endif
 
 bool ends_with(const char* str, size_t size, const char* suffix, size_t suffix_len)
 {
