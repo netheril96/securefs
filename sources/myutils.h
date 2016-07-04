@@ -249,13 +249,13 @@ unsigned int pbkdf_hmac_sha256(const void* password,
 size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length);
 size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length);
 
-std::string format_current_time();
-
 struct id_hash
 {
     size_t operator()(const id_type& id) const noexcept
     {
-        return from_little_endian<size_t>(id.data() + (id.size() - sizeof(size_t)));
+        size_t value;
+        memcpy(&value, id.data() + (id.size() - sizeof(size_t)), sizeof(size_t));
+        return value;
     }
 };
 

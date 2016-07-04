@@ -47,8 +47,6 @@ public:
     {
     }
 
-    void log_old(LoggingLevel level, const std::string& msg, const char* func) noexcept;
-
     void
     vlog(LoggingLevel level, const StackTrace* trace, const char* format, va_list args) noexcept;
 

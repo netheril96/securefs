@@ -1,6 +1,4 @@
 #pragma once
-
-#include "format.h"
 #include "myutils.h"
 
 #include <errno.h>
@@ -75,7 +73,7 @@ public:
 
     std::string message() const override
     {
-        return fmt::format("Function/method {} of this instance is not implemented", m_func);
+        return strprintf("Function/method %s of this instance is not implemented", m_func);
     }
 
     const char* type_name() const noexcept override { return "NotImplementedException"; }
@@ -98,8 +96,8 @@ public:
 
     std::string message() const override
     {
-        const char* format = "Unexpected null pointer in function \"{}\" at {}:{}";
-        return fmt::format(format, m_func, m_file, m_line);
+        const char* format = "Unexpected null pointer in function \"%s\" at %s:%d";
+        return strprintf(format, m_func, m_file, m_line);
     }
 };
 
@@ -122,8 +120,8 @@ public:
 
     std::string message() const override
     {
-        const char* format = "Unreachable code executed in function \"{}\" at {}:{}";
-        return fmt::format(format, m_func, m_file, m_line);
+        const char* format = "Unreachable code executed in function \"%s\" at %s:%d";
+        return strprintf(format, m_func, m_file, m_line);
     }
 };
 
@@ -200,8 +198,9 @@ public:
 
     std::string message() const override
     {
-        return fmt::format(
-            "Metadata for ID {} is corrupted ({})", hexify(m_id.data(), m_id.size()), m_reason);
+        return strprintf("Metadata for ID %s is corrupted (%s)",
+                         hexify(m_id.data(), m_id.size()).c_str(),
+                         m_reason);
     }
 };
 
@@ -220,9 +219,9 @@ public:
 
     std::string message() const override
     {
-        return fmt::format("Message for ID {} at offset {} does not match the checksum",
-                           hexify(m_id.data(), m_id.size()),
-                           m_off);
+        return strprintf("Message for ID %s at offset %lld does not match the checksum",
+                         hexify(m_id.data(), m_id.size()).c_str(),
+                         (long long)m_off);
     }
 };
 
@@ -243,9 +242,9 @@ public:
 
     std::string message() const override
     {
-        return fmt::format("Extended attribute for ID {} and name \"{}\" has wrong checksum",
-                           hexify(m_id.data(), m_id.size()),
-                           m_name);
+        return strprintf("Extended attribute for ID %s and name \"%s\" has wrong checksum",
+                         hexify(m_id.data(), m_id.size()).c_str(),
+                         m_name.c_str());
     }
 };
 
@@ -263,9 +262,9 @@ public:
     const char* type_name() const noexcept override { return "StreamTooLongException"; }
     std::string message() const override
     {
-        return fmt::format("Operation on stream at point {}, which exceeds its maximum size {}",
-                           m_size,
-                           m_max_size);
+        return strprintf("Operation on stream at point %lld, which exceeds its maximum size %lld",
+                         (long long)m_size,
+                         (long long)m_max_size);
     }
     int error_number() const noexcept override { return EFBIG; }
 };

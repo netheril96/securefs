@@ -1,6 +1,5 @@
 #define _GNU_SOURCE
 #include "exceptions.h"
-#include "format.h"
 #include "platform.h"
 #include "streams.h"
 
@@ -11,6 +10,7 @@
 #include <dlfcn.h>
 #include <execinfo.h>
 #include <fcntl.h>
+#include <stdlib.h>
 #include <sys/file.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
@@ -190,7 +190,7 @@ FileSystemService::FileSystemService(const std::string& path) : impl(new Impl())
     impl->dir_name = path;
     int dir_fd = ::open(path.c_str(), O_RDONLY);
     if (dir_fd < 0)
-        throw POSIXException(errno, fmt::format("Opening directory {}", path));
+        throw POSIXException(errno, strprintf("Opening directory %s", path.c_str()));
     impl->dir_fd = dir_fd;
 }
 
@@ -200,7 +200,7 @@ FileSystemService::open_file_stream(const std::string& path, int flags, unsigned
     int fd = ::openat(impl->dir_fd, path.c_str(), flags, mode);
     if (fd < 0)
         throw POSIXException(
-            errno, fmt::format("Opening {} with flags {:#o}", impl->norm_path(path), flags));
+            errno, strprintf("Opening %s with flags %#o", impl->norm_path(path).c_str(), flags));
     return std::make_shared<UnixFileStream>(fd);
 }
 
@@ -218,16 +218,16 @@ void FileSystemService::lock() const
 {
     int rc = ::flock(impl->dir_fd, LOCK_NB | LOCK_EX);
     if (rc < 0)
-        throw POSIXException(errno,
-                             fmt::format("Fail to obtain exclusive lock on {}", impl->dir_name));
+        throw POSIXException(
+            errno, strprintf("Fail to obtain exclusive lock on %s", impl->dir_name.c_str()));
 }
 
 void FileSystemService::ensure_directory(const std::string& path, unsigned mode) const
 {
     int rc = ::mkdirat(impl->dir_fd, path.c_str(), mode);
     if (rc < 0 && errno != EEXIST)
-        throw POSIXException(errno,
-                             fmt::format("Fail to create directory {}", impl->norm_path(path)));
+        throw POSIXException(
+            errno, strprintf("Fail to create directory %s", impl->norm_path(path).c_str()));
 }
 
 void FileSystemService::statfs(struct statvfs* fs_info) const
@@ -241,8 +241,10 @@ void FileSystemService::rename(const std::string& a, const std::string& b) const
 {
     int rc = ::renameat(impl->dir_fd, a.c_str(), impl->dir_fd, b.c_str());
     if (rc < 0)
-        throw POSIXException(
-            errno, fmt::format("Renaming from {} to {}", impl->norm_path(a), impl->norm_path(b)));
+        throw POSIXException(errno,
+                             strprintf("Renaming from %s to %s",
+                                       impl->norm_path(a).c_str(),
+                                       impl->norm_path(b).c_str()));
 }
 
 uint32_t FileSystemService::getuid() noexcept { return ::getuid(); }
@@ -273,22 +275,6 @@ int FileSystemService::raise_fd_limit()
             return lim;
     }
     throw POSIXException(errno, "setrlimit");
-}
-
-std::string format_current_time()
-{
-    struct timeval now;
-    (void)gettimeofday(&now, nullptr);
-    struct tm tm;
-    gmtime_r(&now.tv_sec, &tm);
-    return fmt::format("{}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}.{:06d}Z",
-                       tm.tm_year + 1900,
-                       tm.tm_mon + 1,
-                       tm.tm_mday,
-                       tm.tm_hour,
-                       tm.tm_min,
-                       tm.tm_sec,
-                       now.tv_usec);
 }
 
 const FileSystemService& FileSystemService::get_default()

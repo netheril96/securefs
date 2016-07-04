@@ -7,7 +7,6 @@
 
 #include <cryptopp/cpu.h>
 #include <cryptopp/secblock.h>
-#include <format.h>
 #include <fuse.h>
 #include <json/json.h>
 #include <tclap/CmdLine.h>
@@ -291,7 +290,7 @@ bool parse_config(const Json::Value& config,
     }
     else
     {
-        throw InvalidArgumentException(fmt::format("Unsupported version {}", version));
+        throw InvalidArgumentException(strprintf("Unsupported version %u", version));
     }
 
     unsigned iterations = config["iterations"].asUInt();
@@ -441,8 +440,8 @@ FSConfig CommandBase::read_config(StreamBase* stream, const void* password, size
     Json::Reader reader;
     Json::Value value;
     if (!reader.parse(str, value))
-        throw std::runtime_error(fmt::format("Failure to parse the config file: {}",
-                                             reader.getFormattedErrorMessages()));
+        throw std::runtime_error(strprintf("Failure to parse the config file: %s",
+                                           reader.getFormattedErrorMessages().c_str()));
 
     if (!parse_config(
             value, password, pass_len, result.master_key, result.block_size, result.iv_size))
@@ -769,8 +768,10 @@ public:
             FILE* fp = fopen(log.getValue().c_str(), "ab");
             if (!fp)
             {
-                fmt::print(
-                    stderr, "Failed to open file {}: {}\n", log.getValue(), sane_strerror(errno));
+                fprintf(stderr,
+                        "Failed to open file %s: %s\n",
+                        log.getValue().c_str(),
+                        sane_strerror(errno).c_str());
                 return 10;
             }
             fsopt.logger = std::make_shared<Logger>(LoggingLevel::WARNING, fp, true);
@@ -885,20 +886,18 @@ public:
     int execute() override
     {
         using namespace CryptoPP;
-        fmt::print(stdout, "securefs {} (with Crypto++ {})\n\n", version, CRYPTOPP_VERSION / 100.0);
+        fprintf(stdout, "securefs %s (with Crypto++ %f)\n\n", version, CRYPTOPP_VERSION / 100.0);
 #ifdef CRYPTOPP_DISABLE_ASM
         fputs("Built without hardware acceleration\n", stdout);
 #else
 #if CRYPTOPP_BOOL_X86 || CRYPTOPP_BOOL_X32 || CRYPTOPP_BOOL_X64
-        fmt::print(stdout,
-                   "Hardware features available:\nSSE2: {}\nSSE3: {}\nAES-NI: "
-                   "{}\nCLMUL: {}\nRDRAND: {}\nRDSEED: {}\n",
-                   HasSSE2(),
-                   HasSSSE3(),
-                   HasAESNI(),
-                   HasCLMUL(),
-                   HasRDRAND(),
-                   HasRDSEED());
+        fprintf(stdout,
+                "Hardware features available:\nSSE2: %s\nSSE3: %s\nAES-NI: "
+                "%s\nCLMUL: %s\n",
+                HasSSE2() ? "true" : "false",
+                HasSSSE3() ? "true" : "false",
+                HasAESNI() ? "true" : "false",
+                HasCLMUL() ? "true" : "false");
 #endif
 #endif
         return 0;
@@ -932,19 +931,19 @@ int commands_main(int argc, const char* const* argv)
             {
                 if (command->short_name())
                 {
-                    fmt::print(stderr,
-                               "{} (alias: {}): {}\n",
-                               command->long_name(),
-                               command->short_name(),
-                               command->help_message());
+                    fprintf(stderr,
+                            "%s (alias: %c): %s\n",
+                            command->long_name(),
+                            command->short_name(),
+                            command->help_message());
                 }
                 else
                 {
-                    fmt::print(stderr, "{}: {}\n", command->long_name(), command->help_message());
+                    fprintf(stderr, "%s: %s\n", command->long_name(), command->help_message());
                 }
             }
 
-            fmt::print(stderr, "\nType {} ${{SUBCOMMAND}} --help for details\n", argv[0]);
+            fprintf(stderr, "\nType %s ${SUBCOMMAND} --help for details\n", argv[0]);
             return 1;
         };
 

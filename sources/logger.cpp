@@ -1,26 +1,12 @@
 #include "logger.h"
 #include "myutils.h"
 
-#include <format.h>
-
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 namespace securefs
 {
-void Logger::log_old(LoggingLevel level, const std::string& msg, const char* func) noexcept
-{
-    try
-    {
-        fmt::print(
-            m_fp, "[{}] [{}] [{}]      {}\n", stringify(level), format_current_time(), func, msg);
-    }
-    catch (...)
-    {
-        // Cannot handle errors in logging
-    }
-}
 
 void Logger::vlog(LoggingLevel level,
                   const StackTrace* trace,

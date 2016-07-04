@@ -336,7 +336,7 @@ static void find_ids_helper(const std::string& current_dir,
     {
         if (errno == ENOTDIR)
             return;
-        throw POSIXException(errno, fmt::format("Opening dir {}", current_dir));
+        throw POSIXException(errno, strprintf("Opening dir %s", current_dir.c_str()));
     }
 
     DirGuard guard;
@@ -349,7 +349,7 @@ static void find_ids_helper(const std::string& current_dir,
         errno = 0;
         dirent* dr = ::readdir(dp);
         if (!dr && errno)
-            throw POSIXException(errno, fmt::format("Reading dir {}", current_dir));
+            throw POSIXException(errno, strprintf("Reading dir %s", current_dir.c_str()));
         if (!dr)
             break;
         std::string name(dr->d_name);
@@ -372,9 +372,9 @@ static void find_ids_helper(const std::string& current_dir,
                 else if (namechar != '/')
                 {
                     throw std::runtime_error(
-                        fmt::format("File \"{}\" has extension .meta, but not a valid securefs "
-                                    "meta filename. Please cleanup the underlying storage first.",
-                                    total_name));
+                        strprintf("File \"%s\" has extension .meta, but not a valid securefs "
+                                  "meta filename. Please cleanup the underlying storage first.",
+                                  total_name.c_str()));
                 }
                 --j;
             }
