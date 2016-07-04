@@ -233,6 +233,13 @@ namespace operations
             if (!internal::open_all(fs, path, fg))
                 return -ENOENT;
 
+            if (fs->logger->get_level() <= LoggingLevel::INFO)
+                fs->logger->log(LoggingLevel::INFO,
+                                nullptr,
+                                "Path %s corresponds to ID %s",
+                                path,
+                                hexify(fg.get()->get_id()).c_str());
+
             fg->stat(st);
             return 0;
         }

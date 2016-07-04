@@ -37,19 +37,7 @@ inline std::vector<std::string> split(const char* str, char separator)
     return split(str, strlen(str), separator);
 }
 
-inline std::string hexify(const byte* data, size_t length)
-{
-    const char* table = "0123456789abcdef";
-    std::string result;
-    result.reserve(length * 2);
-    for (size_t i = 0; i < length; ++i)
-    {
-        result += table[data[i] / 16];
-        result += table[data[i] % 16];
-    }
-    return result;
-}
-
+std::string hexify(const byte* data, size_t length);
 void parse_hex(const std::string& hex, byte* output, size_t len);
 std::string sane_strerror(int error_number);
 std::string errno_to_string();

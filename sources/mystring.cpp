@@ -9,15 +9,16 @@ std::string vstrprintf(const char* format, va_list args)
 {
     va_list copied_args;
     va_copy(copied_args, args);
-    const int MAX_SIZE = 999;
+    const int MAX_SIZE = 500;
     char buffer[MAX_SIZE + 1];
     int size = vsnprintf(buffer, sizeof(buffer), format, copied_args);
+    va_end(copied_args);
     if (size < 0)
         throw POSIXException(errno, "vsnprintf");
     if (size <= MAX_SIZE)
         return std::string(buffer, size);
-    std::string result(0, size);
-    vsnprintf(&result[0], size, format, args);
+    std::string result(static_cast<std::string::size_type>(size), '\0');
+    vsnprintf(&result[0], size + 1, format, args);
     return result;
 }
 
@@ -198,6 +199,19 @@ std::vector<std::string> split(const char* str, size_t length, char separator)
 
     if (start < end)
         result.emplace_back(start, end);
+    return result;
+}
+
+std::string hexify(const byte* data, size_t length)
+{
+    const char* table = "0123456789abcdef";
+    std::string result;
+    result.reserve(length * 2);
+    for (size_t i = 0; i < length; ++i)
+    {
+        result += table[data[i] / 16];
+        result += table[data[i] % 16];
+    }
     return result;
 }
 }

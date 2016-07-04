@@ -46,6 +46,8 @@ void Logger::vlog(LoggingLevel level,
 
 void Logger::log(LoggingLevel level, const StackTrace* trace, const char* format, ...) noexcept
 {
+    if (level < this->get_level())
+        return;
     va_list args;
     va_start(args, format);
     vlog(level, trace, format, args);
