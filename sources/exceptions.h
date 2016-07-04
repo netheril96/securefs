@@ -19,14 +19,6 @@ struct StackTraceElement
 typedef std::vector<StackTraceElement> StackTrace;
 bool getStackTrace(StackTrace& output) noexcept;
 
-enum class ExceptionLevel
-{
-    Debug = 0,
-    Warn = 1,
-    Error = 2,
-    Fatal = 3
-};
-
 class ExceptionBase : public std::exception
 {
 private:
@@ -38,7 +30,6 @@ public:
     virtual const char* type_name() const noexcept = 0;
     virtual std::string message() const = 0;
     virtual int error_number() const noexcept { return EPERM; }
-    virtual ExceptionLevel level() const noexcept = 0;
     const char* what() const noexcept final override
     {
         if (m_cached_msg.empty())
@@ -58,7 +49,6 @@ public:
 
 class CommonException : public ExceptionBase
 {
-    ExceptionLevel level() const noexcept override { return ExceptionLevel::Warn; }
 };
 
 class SeriousException : public ExceptionBase
@@ -68,13 +58,11 @@ private:
 
 public:
     explicit SeriousException() { getStackTrace(m_traces); }
-    ExceptionLevel level() const noexcept override { return ExceptionLevel::Error; }
     const StackTrace& stack_trace() const noexcept { return m_traces; }
 };
 
 class FatalException : public SeriousException
 {
-    ExceptionLevel level() const noexcept override { return ExceptionLevel::Fatal; }
 };
 
 class NotImplementedException : public SeriousException

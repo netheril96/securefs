@@ -3,6 +3,10 @@
 
 #include <format.h>
 
+#include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 namespace securefs
 {
 void Logger::log_old(LoggingLevel level, const std::string& msg, const char* func) noexcept
@@ -25,6 +29,21 @@ void Logger::vlog(LoggingLevel level,
 {
     if (level < this->get_level())
         return;
+
+    struct timeval now;
+    gettimeofday(&now, nullptr);
+    struct tm tm;
+    gmtime_r(&now.tv_sec, &tm);
+    fprintf(m_fp,
+            "[%s] [%d-%02d-%02dT%02d:%02d:%02d.%06dZ]    ",
+            stringify(get_level()),
+            tm.tm_year + 1900,
+            tm.tm_mon + 1,
+            tm.tm_mday,
+            tm.tm_hour,
+            tm.tm_min,
+            tm.tm_sec,
+            now.tv_usec);
 
     vfprintf(m_fp, format, args);
     putc('\n', m_fp);

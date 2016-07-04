@@ -773,15 +773,15 @@ public:
                     stderr, "Failed to open file {}: {}\n", log.getValue(), sane_strerror(errno));
                 return 10;
             }
-            fsopt.logger = std::make_shared<Logger>(LoggingLevel::Warn, fp, true);
+            fsopt.logger = std::make_shared<Logger>(LoggingLevel::WARNING, fp, true);
         }
         else if (!background.getValue())
         {
-            fsopt.logger = std::make_shared<Logger>(LoggingLevel::Warn, stderr, false);
+            fsopt.logger = std::make_shared<Logger>(LoggingLevel::WARNING, stderr, false);
         }
 
         if (trace.getValue() && fsopt.logger)
-            fsopt.logger->set_level(LoggingLevel::Debug);
+            fsopt.logger->set_level(LoggingLevel::VERBOSE);
 
         fprintf(stderr,
                 "Mounting filesystem stored at %s onto %s\nFormat version: %u\n",

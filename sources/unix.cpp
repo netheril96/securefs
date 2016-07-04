@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include "exceptions.h"
 #include "format.h"
 #include "platform.h"

@@ -9,20 +9,26 @@
 
 namespace securefs
 {
-typedef ExceptionLevel LoggingLevel;
+enum class LoggingLevel
+{
+    VERBOSE = 0,
+    INFO = 1,
+    WARNING = 2,
+    ERROR = 3
+};
 
 inline const char* stringify(LoggingLevel lvl)
 {
     switch (lvl)
     {
-    case LoggingLevel::Debug:
-        return "DEBUG";
-    case LoggingLevel::Warn:
-        return "WARN";
-    case LoggingLevel::Error:
+    case LoggingLevel::VERBOSE:
+        return "VERBOSE";
+    case LoggingLevel::WARNING:
+        return "WARNING";
+    case LoggingLevel::ERROR:
         return "ERROR";
-    case LoggingLevel::Fatal:
-        return "FATAL";
+    case LoggingLevel::INFO:
+        return "INFO";
     default:
         return "UNKNOWN";
     }

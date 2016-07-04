@@ -153,26 +153,6 @@ namespace internal
     }
 
     inline bool is_readonly(struct fuse_context* ctx) { return get_fs(ctx)->table.is_readonly(); }
-
-    int log_error(FileSystem* fs, const ExceptionBase& e, const char* func)
-    {
-        auto logger = fs->logger.get();
-        if (logger && e.level() >= logger->get_level())
-            logger->log_old(e.level(), fmt::format("{}: {}", e.type_name(), e.message()), func);
-        return -e.error_number();
-    }
-
-    int log_general_error(FileSystem* fs, const std::exception& e, const char* func)
-    {
-        auto logger = fs->logger.get();
-        if (logger && LoggingLevel::Error >= logger->get_level())
-            logger->log_old(LoggingLevel::Error,
-                            fmt::format("An unexcepted exception of type {} occurred: {}",
-                                        typeid(e).name(),
-                                        e.what()),
-                            func);
-        return -EPERM;
-    }
 }
 
 namespace operations
@@ -193,43 +173,30 @@ namespace operations
 
     FileSystem::~FileSystem() {}
 
-#define COMMON_CATCH_BLOCK                                                                         \
-    catch (const OSException& e) { return -e.error_number(); }                                     \
-    catch (const SeriousException& e)                                                              \
-    {                                                                                              \
-        if (fs->logger)                                                                            \
-        {                                                                                          \
-            fs->logger->log(                                                                       \
-                e.level(), &e.stack_trace(), "%s: %s", e.type_name(), e.message().c_str());        \
-        }                                                                                          \
-        return -e.error_number();                                                                  \
-    }                                                                                              \
-    catch (const ExceptionBase& e)                                                                 \
-    {                                                                                              \
-        if (fs->logger)                                                                            \
-        {                                                                                          \
-            fs->logger->log(e.level(), nullptr, "%s: %s", e.type_name(), e.message().c_str());     \
-        }                                                                                          \
-        return -e.error_number();                                                                  \
-    }                                                                                              \
-    catch (const std::exception& e)                                                                \
-    {                                                                                              \
-        return internal::log_general_error(fs, e, __PRETTY_FUNCTION__);                            \
-    }
-
 #define COMMON_PROLOGUE                                                                            \
     auto ctx = fuse_get_context();                                                                 \
-    auto fs = internal::get_fs(ctx);
+    auto fs = internal::get_fs(ctx);                                                               \
+    fs->logger->log(LoggingLevel::VERBOSE, nullptr, "%s (path=%s)", __FUNCTION__, path);
 
-#define DEBUG_LOG(msg)                                                                             \
-    if (fs->logger && fs->logger->get_level() <= LoggingLevel::Debug)                              \
-    fs->logger->log_old(LoggingLevel::Debug, msg, __PRETTY_FUNCTION__)
+#define COMMON_CATCH_BLOCK                                                                         \
+    catch (const CommonException& e) { return -e.error_number(); }                                 \
+    catch (const SeriousException& e)                                                              \
+    {                                                                                              \
+        fs->logger->log(LoggingLevel::ERROR,                                                       \
+                        &e.stack_trace(),                                                          \
+                        "%s (path=%s) encounters %s: %s",                                          \
+                        __FUNCTION__,                                                              \
+                        path,                                                                      \
+                        e.type_name(),                                                             \
+                        e.what());                                                                 \
+        return -e.error_number();                                                                  \
+    }
 
     void* init(struct fuse_conn_info*)
     {
         auto args = static_cast<FSOptions*>(fuse_get_context()->private_data);
         auto fs = new FileSystem(*args);
-        DEBUG_LOG("init");
+        fs->logger->log(LoggingLevel::VERBOSE, nullptr, "%s", __FUNCTION__);
         fputs("Filesystem mounted successfully\n", stderr);
         return fs;
     }
@@ -237,7 +204,7 @@ namespace operations
     void destroy(void* data)
     {
         auto fs = static_cast<FileSystem*>(data);
-        DEBUG_LOG("destroy");
+        fs->logger->log(LoggingLevel::VERBOSE, nullptr, "%s", __FUNCTION__);
         delete fs;
         fputs("Filesystem unmounted successfully\n", stderr);
     }
@@ -245,7 +212,6 @@ namespace operations
     int statfs(const char* path, struct statvfs* fs_info)
     {
         COMMON_PROLOGUE
-        DEBUG_LOG(fmt::format("path={}", path));
         try
         {
             fs->table.statfs(fs_info);
@@ -257,7 +223,6 @@ namespace operations
     int getattr(const char* path, struct stat* st)
     {
         COMMON_PROLOGUE
-        DEBUG_LOG(fmt::format("path={}", path));
 
         try
         {
@@ -277,7 +242,6 @@ namespace operations
     int opendir(const char* path, struct fuse_file_info* info)
     {
         COMMON_PROLOGUE
-        DEBUG_LOG(fmt::format("path={}", path));
 
         try
         {
@@ -285,8 +249,6 @@ namespace operations
             if (fg->type() != FileBase::DIRECTORY)
                 return -ENOTDIR;
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
-
-            DEBUG_LOG(fmt::format("path={} handle=0x{:x}", path, info->fh));
 
             return 0;
         }
@@ -302,7 +264,6 @@ namespace operations
         const char* path, void* buffer, fuse_fill_dir_t filler, off_t, struct fuse_file_info* info)
     {
         COMMON_PROLOGUE
-        DEBUG_LOG(fmt::format("path={} handle=0x{:x}", path, info->fh));
 
         try
         {
@@ -327,8 +288,6 @@ namespace operations
     {
         COMMON_PROLOGUE
 
-        DEBUG_LOG(fmt::format("path={}", path));
-
         mode &= ~static_cast<uint32_t>(S_IFMT);
         mode |= S_IFREG;
         try
@@ -346,8 +305,6 @@ namespace operations
                 return -EPERM;
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
 
-            DEBUG_LOG(fmt::format("path={} handle=0x{:x}", path, info->fh));
-
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -356,8 +313,6 @@ namespace operations
     int open(const char* path, struct fuse_file_info* info)
     {
         COMMON_PROLOGUE
-
-        DEBUG_LOG(fmt::format("path={}", path));
 
         // bool rdonly = info->flags & O_RDONLY;
         bool rdwr = info->flags & O_RDWR;
@@ -379,8 +334,6 @@ namespace operations
             }
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
 
-            DEBUG_LOG(fmt::format("path={} handle=0x{:x}", path, info->fh));
-
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -389,7 +342,6 @@ namespace operations
     int release(const char* path, struct fuse_file_info* info)
     {
         COMMON_PROLOGUE
-        DEBUG_LOG(fmt::format("path={} handle=0x{:x}", path, info->fh));
 
         try
         {
@@ -406,10 +358,16 @@ namespace operations
 
     int read(const char* path, char* buffer, size_t len, off_t off, struct fuse_file_info* info)
     {
-        COMMON_PROLOGUE
+        auto ctx = fuse_get_context();
+        auto fs = internal::get_fs(ctx);
+        fs->logger->log(LoggingLevel::VERBOSE,
+                        nullptr,
+                        "%s (path=%s, length=%zu, offset=%lld)",
+                        __FUNCTION__,
+                        path,
+                        len,
+                        (long long)off);
 
-        DEBUG_LOG(
-            fmt::format("path={} handle=0x{:x} length={} offset={}", path, info->fh, len, off));
         try
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
@@ -419,16 +377,37 @@ namespace operations
                 return -EPERM;
             return static_cast<int>(static_cast<RegularFile*>(fb)->read(buffer, off, len));
         }
-        COMMON_CATCH_BLOCK
+        catch (const CommonException& e)
+        {
+            return -e.error_number();
+        }
+        catch (const SeriousException& e)
+        {
+            fs->logger->log(LoggingLevel::ERROR,
+                            &e.stack_trace(),
+                            "%s (path=%s, length=%zu, offset=%lld) encounters %s: %s",
+                            __FUNCTION__,
+                            path,
+                            len,
+                            (long long)off,
+                            e.type_name(),
+                            e.what());
+            return -e.error_number();
+        }
     }
 
     int
     write(const char* path, const char* buffer, size_t len, off_t off, struct fuse_file_info* info)
     {
-        COMMON_PROLOGUE
-
-        DEBUG_LOG(
-            fmt::format("path={} handle=0x{:x} length={} offset={}", path, info->fh, len, off));
+        auto ctx = fuse_get_context();
+        auto fs = internal::get_fs(ctx);
+        fs->logger->log(LoggingLevel::VERBOSE,
+                        nullptr,
+                        "%s (path=%s, length=%zu, offset=%lld)",
+                        __FUNCTION__,
+                        path,
+                        len,
+                        (long long)off);
 
         try
         {
@@ -440,14 +419,28 @@ namespace operations
             static_cast<RegularFile*>(fb)->write(buffer, off, len);
             return static_cast<int>(len);
         }
-        COMMON_CATCH_BLOCK
+        catch (const CommonException& e)
+        {
+            return -e.error_number();
+        }
+        catch (const SeriousException& e)
+        {
+            fs->logger->log(LoggingLevel::ERROR,
+                            &e.stack_trace(),
+                            "%s (path=%s, length=%zu, offset=%lld) encounters %s: %s",
+                            __FUNCTION__,
+                            path,
+                            len,
+                            (long long)off,
+                            e.type_name(),
+                            e.what());
+            return -e.error_number();
+        }
     }
 
     int flush(const char* path, struct fuse_file_info* info)
     {
         COMMON_PROLOGUE
-
-        DEBUG_LOG(fmt::format("path={} handle=0x{:x}", path, info->fh));
 
         try
         {
@@ -466,7 +459,6 @@ namespace operations
     {
         COMMON_PROLOGUE
 
-        DEBUG_LOG(fmt::format("path={} size={}", path, size));
         try
         {
             auto fg = internal::open_all(fs, path);
@@ -483,7 +475,6 @@ namespace operations
     {
         COMMON_PROLOGUE
 
-        DEBUG_LOG(fmt::format("path={} size={} handle=0x{:x}", path, size, info->fh));
         try
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
@@ -502,8 +493,6 @@ namespace operations
     {
         COMMON_PROLOGUE
 
-        DEBUG_LOG(fmt::format("path={}", path));
-
         try
         {
             if (internal::is_readonly(ctx))
@@ -517,8 +506,6 @@ namespace operations
     int mkdir(const char* path, mode_t mode)
     {
         COMMON_PROLOGUE
-
-        DEBUG_LOG(fmt::format("path={} mode={}", path, mode));
 
         mode &= ~static_cast<uint32_t>(S_IFMT);
         mode |= S_IFDIR;
@@ -546,8 +533,6 @@ namespace operations
     {
         COMMON_PROLOGUE
 
-        DEBUG_LOG(fmt::format("path={} mode={}", path, mode));
-
         try
         {
             auto fg = internal::open_all(fs, path);
@@ -565,8 +550,6 @@ namespace operations
     {
         COMMON_PROLOGUE
 
-        DEBUG_LOG(fmt::format("path={} uid={} gid={}", path, uid, gid));
-
         try
         {
             auto fg = internal::open_all(fs, path);
@@ -580,9 +563,10 @@ namespace operations
 
     int symlink(const char* to, const char* from)
     {
-        COMMON_PROLOGUE
-
-        DEBUG_LOG(fmt::format("to={} from={}", to, from));
+        auto ctx = fuse_get_context();
+        auto fs = internal::get_fs(ctx);
+        fs->logger->log(
+            LoggingLevel::VERBOSE, nullptr, "%s (to=%s, from=%s)", __FUNCTION__, to, from);
 
         try
         {
@@ -600,7 +584,22 @@ namespace operations
                 return -EINVAL;
             return 0;
         }
-        COMMON_CATCH_BLOCK
+        catch (const CommonException& e)
+        {
+            return -e.error_number();
+        }
+        catch (const SeriousException& e)
+        {
+            fs->logger->log(LoggingLevel::ERROR,
+                            &e.stack_trace(),
+                            "%s (to=%s, from=%s) encounters %s: %s",
+                            __FUNCTION__,
+                            to,
+                            from,
+                            e.type_name(),
+                            e.what());
+            return -e.error_number();
+        }
     }
 
     int readlink(const char* path, char* buf, size_t size)
@@ -608,8 +607,6 @@ namespace operations
         if (size == 0)
             return -EINVAL;
         COMMON_PROLOGUE
-
-        DEBUG_LOG(fmt::format("path={}", path));
 
         try
         {
@@ -626,9 +623,10 @@ namespace operations
 
     int rename(const char* src, const char* dst)
     {
-        COMMON_PROLOGUE
-
-        DEBUG_LOG(fmt::format("src={} dst={}", src, dst));
+        auto ctx = fuse_get_context();
+        auto fs = internal::get_fs(ctx);
+        fs->logger->log(
+            LoggingLevel::VERBOSE, nullptr, "%s (src=%s, dest=%s)", __FUNCTION__, src, dst);
 
         try
         {
@@ -662,14 +660,30 @@ namespace operations
                 internal::remove(fs, dst_id, dst_type);
             return 0;
         }
-        COMMON_CATCH_BLOCK
+        catch (const CommonException& e)
+        {
+            return -e.error_number();
+        }
+        catch (const SeriousException& e)
+        {
+            fs->logger->log(LoggingLevel::ERROR,
+                            &e.stack_trace(),
+                            "%s (src=%s, dest=%s) encounters %s: %s",
+                            __FUNCTION__,
+                            src,
+                            dst,
+                            e.type_name(),
+                            e.what());
+            return -e.error_number();
+        }
     }
 
     int link(const char* src, const char* dst)
     {
-        COMMON_PROLOGUE
-
-        DEBUG_LOG(fmt::format("src={} dst={}", src, dst));
+        auto ctx = fuse_get_context();
+        auto fs = internal::get_fs(ctx);
+        fs->logger->log(
+            LoggingLevel::VERBOSE, nullptr, "%s (src=%s, dest=%s)", __FUNCTION__, src, dst);
 
         try
         {
@@ -699,14 +713,27 @@ namespace operations
             dst_dir->add_entry(dst_filename, src_id, src_type);
             return 0;
         }
-        COMMON_CATCH_BLOCK
+        catch (const CommonException& e)
+        {
+            return -e.error_number();
+        }
+        catch (const SeriousException& e)
+        {
+            fs->logger->log(LoggingLevel::ERROR,
+                            &e.stack_trace(),
+                            "%s (src=%s, dest=%s) encounters %s: %s",
+                            __FUNCTION__,
+                            src,
+                            dst,
+                            e.type_name(),
+                            e.what());
+            return -e.error_number();
+        }
     }
 
     int fsync(const char* path, int, struct fuse_file_info* fi)
     {
         COMMON_PROLOGUE
-
-        DEBUG_LOG(fmt::format("path={} handle=0x{:x}", path, fi->fh));
 
         try
         {
@@ -729,20 +756,6 @@ namespace operations
     {
         COMMON_PROLOGUE
 
-        if (ts)
-        {
-            DEBUG_LOG(fmt::format("path={} access_time={}({}) modification_time={}({})",
-                                  path,
-                                  ts[0].tv_sec,
-                                  ts[0].tv_nsec,
-                                  ts[1].tv_sec,
-                                  ts[1].tv_nsec));
-        }
-        else
-        {
-            DEBUG_LOG(fmt::format("path={} time=current", path));
-        }
-
         try
         {
             auto fg = internal::open_all(fs, path);
@@ -758,8 +771,6 @@ namespace operations
     {
         COMMON_PROLOGUE
 
-        DEBUG_LOG(fmt::format("path={}", path));
-
         try
         {
             auto fg = internal::open_all(fs, path);
@@ -770,11 +781,30 @@ namespace operations
 
     static const char* APPLE_FINDER_INFO = "com.apple.FinderInfo";
 
+#define XATTR_COMMON_PROLOGUE                                                                      \
+    auto ctx = fuse_get_context();                                                                 \
+    auto fs = internal::get_fs(ctx);                                                               \
+    fs->logger->log(                                                                               \
+        LoggingLevel::VERBOSE, nullptr, "%s (path=%s, name=%s)", __FUNCTION__, path, name);
+
+#define XATTR_COMMON_CATCH_BLOCK                                                                   \
+    catch (const CommonException& e) { return -e.error_number(); }                                 \
+    catch (const SeriousException& e)                                                              \
+    {                                                                                              \
+        fs->logger->log(LoggingLevel::ERROR,                                                       \
+                        &e.stack_trace(),                                                          \
+                        "%s (path=%s, name=%s) encounters %s: %s",                                 \
+                        __FUNCTION__,                                                              \
+                        path,                                                                      \
+                        name,                                                                      \
+                        e.type_name(),                                                             \
+                        e.what());                                                                 \
+        return -e.error_number();                                                                  \
+    }
+
     int getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position)
     {
-        COMMON_PROLOGUE
-
-        DEBUG_LOG(fmt::format("path={} name={}", path, name));
+        XATTR_COMMON_PROLOGUE
 
         if (position != 0)
             return -EINVAL;
@@ -784,7 +814,7 @@ namespace operations
             auto fg = internal::open_all(fs, path);
             return static_cast<int>(fg->getxattr(name, value, size));
         }
-        COMMON_CATCH_BLOCK
+        XATTR_COMMON_CATCH_BLOCK
     }
 
     int setxattr(const char* path,
@@ -794,9 +824,7 @@ namespace operations
                  int flags,
                  uint32_t position)
     {
-        COMMON_PROLOGUE
-
-        DEBUG_LOG(fmt::format("path={} name={} value={}", path, name, std::string(value, size)));
+        XATTR_COMMON_PROLOGUE
 
         if (position != 0)
             return -EINVAL;
@@ -812,14 +840,12 @@ namespace operations
             fg->setxattr(name, value, size, flags);
             return 0;
         }
-        COMMON_CATCH_BLOCK
+        XATTR_COMMON_CATCH_BLOCK
     }
 
     int removexattr(const char* path, const char* name)
     {
-        COMMON_PROLOGUE
-
-        DEBUG_LOG(fmt::format("path={} name={}", path, name));
+        XATTR_COMMON_PROLOGUE
 
         try
         {
@@ -827,9 +853,8 @@ namespace operations
             fg->removexattr(name);
             return 0;
         }
-        COMMON_CATCH_BLOCK
+        XATTR_COMMON_CATCH_BLOCK
     }
-
 #endif
 }
 }
