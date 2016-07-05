@@ -7,7 +7,6 @@
 
 namespace securefs
 {
-
 void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
 {
     if (level < this->get_level())
@@ -17,6 +16,8 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
     gettimeofday(&now, nullptr);
     struct tm tm;
     gmtime_r(&now.tv_sec, &tm);
+
+    flockfile(m_fp);
     fprintf(m_fp,
             "[%s] [%d-%02d-%02dT%02d:%02d:%02d.%06dZ]    ",
             stringify(level),
@@ -31,6 +32,7 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
     vfprintf(m_fp, format, args);
     putc('\n', m_fp);
     fflush(m_fp);
+    funlockfile(m_fp);
 }
 
 void Logger::log(LoggingLevel level, const char* format, ...) noexcept

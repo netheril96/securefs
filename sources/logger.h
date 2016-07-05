@@ -36,6 +36,7 @@ inline const char* stringify(LoggingLevel lvl)
 
 class Logger
 {
+    DISABLE_COPY_MOVE(Logger);
 private:
     LoggingLevel m_level;
     FILE* m_fp;
