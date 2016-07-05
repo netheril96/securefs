@@ -9,6 +9,7 @@ import errno
 import platform
 import time
 import traceback
+import uuid
 
 SECUREFS_BINARY = './securefs'
 
@@ -68,6 +69,7 @@ def make_test_case(format_version):
             cls.mount_point = tempfile.mkdtemp(prefix='securefs.format{}.mount_point'.format(format_version), dir='tmp')
             cls.password = 'madoka'
             securefs_create(cls.data_dir, cls.password, format_version)
+            securefs_mount(cls.data_dir, cls.mount_point, cls.password)
 
         @classmethod
         def tearDownClass(cls):
@@ -85,9 +87,85 @@ def make_test_case(format_version):
         def unmount(self):
             securefs_unmount(self.mount_point)
 
-        def runTest(self):
-            dir_names = set(str(i) for i in xrange(2))
-            self.mount()
+        def test_hardlink(self):
+            data = os.urandom(16)
+            source = os.path.join(self.mount_point, str(uuid.uuid4()))
+            dest = os.path.join(self.mount_point, str(uuid.uuid4()))
+            try:
+                with open(source, 'wb') as f:
+                    f.write(data)
+                os.link(source, dest)
+                source_stat = os.stat(source)
+                dest_stat = os.stat(dest)
+                self.assertEqual(source_stat.st_mode, dest_stat.st_mode)
+                self.assertEqual(source_stat.st_mtime, dest_stat.st_mtime)
+                self.assertEqual(source_stat.st_size, dest_stat.st_size)
+                self.assertEqual(source_stat.st_nlink, 2)
+                with open(dest, 'rb') as f:
+                    self.assertEqual(data, f.read())
+                # Moving hard links onto each other is a no-op
+                os.rename(dest, source)
+                self.assertTrue(os.path.isfile(dest) and os.path.isfile(source))
+            finally:
+                try:
+                    os.remove(source)
+                except EnvironmentError:
+                    pass
+                try:
+                    os.remove(dest)
+                except EnvironmentError:
+                    pass
+
+        def test_symlink(self):
+            data = os.urandom(16)
+            source = os.path.join(self.mount_point, str(uuid.uuid4()))
+            dest = os.path.join(self.mount_point, str(uuid.uuid4()))
+            try:
+                with open(source, 'wb') as f:
+                    f.write(data)
+                os.symlink(source, dest)
+                self.assertEqual(os.readlink(dest), source)
+                os.remove(source)
+                with self.assertRaises(EnvironmentError):
+                    with open(dest, 'rb') as f:
+                        f.read()
+            finally:
+                try:
+                    os.remove(source)
+                except EnvironmentError:
+                    pass
+                try:
+                    os.remove(dest)
+                except EnvironmentError:
+                    pass
+
+        def test_rename(self):
+            data = os.urandom(32)
+            source = os.path.join(self.mount_point, str(uuid.uuid4()))
+            dest = os.path.join(self.mount_point, str(uuid.uuid4()))
+            try:
+                with open(source, 'wb') as f:
+                    f.write(data)
+                source_stat = os.stat(source)
+                self.assertFalse(os.path.isfile(dest))
+                os.rename(source, dest)
+                self.assertFalse(os.path.isfile(source))
+                self.assertTrue(os.path.isfile(dest))
+                dest_stat = os.stat(dest)
+                self.assertEqual(source_stat.st_ino, dest_stat.st_ino)
+                self.assertEqual(source_stat.st_size, dest_stat.st_size)
+            finally:
+                try:
+                    os.remove(source)
+                except EnvironmentError:
+                    pass
+                try:
+                    os.remove(dest)
+                except EnvironmentError:
+                    pass
+
+        def test_read_write_mkdir_listdir_remove(self):
+            dir_names = set(str(i) for i in xrange(3))
             random_data = os.urandom(1111111)
             rng_filename = os.path.join(self.mount_point, 'rng')
             with open(rng_filename, 'wb') as f:
@@ -110,7 +188,8 @@ def make_test_case(format_version):
             self.assertEqual(set(os.listdir(self.mount_point)), dir_names)
             self.assertEqual(set(os.listdir(os.path.join(self.mount_point, '0'))), dir_names)
             self.assertEqual(set(os.listdir(os.path.join(self.mount_point, '0', '1'))), dir_names)
-            self.unmount()
+            for dn in dir_names:
+                shutil.rmtree(os.path.join(self.mount_point, dn))
 
     return SimpleSecureFSTestBase
 
