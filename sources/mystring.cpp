@@ -9,7 +9,7 @@ std::string vstrprintf(const char* format, va_list args)
 {
     va_list copied_args;
     va_copy(copied_args, args);
-    const int MAX_SIZE = 500;
+    const int MAX_SIZE = 499;
     char buffer[MAX_SIZE + 1];
     int size = vsnprintf(buffer, sizeof(buffer), format, copied_args);
     va_end(copied_args);

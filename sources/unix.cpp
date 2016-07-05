@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include "exceptions.h"
 #include "platform.h"
 #include "streams.h"

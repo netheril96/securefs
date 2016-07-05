@@ -40,7 +40,7 @@ else()
     link_libraries(${DOKAN_PREFIX}/lib/dokanfuse1.lib)
 endif()
 
-add_definitions(-D_FILE_OFFSET_BITS=64)
+add_definitions(-D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE)
 
 set (CMAKE_BUILD_TYPE Release)
 

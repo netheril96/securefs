@@ -26,6 +26,8 @@ TEST_CASE("Test string")
     REQUIRE(securefs::to_lower("abc") == "abc");
     REQUIRE(securefs::to_lower("ABcD;,") == "abcd;,");
     REQUIRE(securefs::strprintf("%s %04d", "rsy", 9) == "rsy 0009");
+    std::string long_string(2000, 'r');
+    REQUIRE(securefs::strprintf("%s", long_string.c_str()) == long_string);
 }
 
 TEST_CASE("Test conversion of hex")
