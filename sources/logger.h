@@ -47,8 +47,7 @@ public:
     {
     }
 
-    void
-    vlog(LoggingLevel level, const char* format, va_list args) noexcept;
+    void vlog(LoggingLevel level, const char* format, va_list args) noexcept;
 
     void log(LoggingLevel level, const char* format, ...) noexcept
         __attribute__((format(printf, 3, 4)));
