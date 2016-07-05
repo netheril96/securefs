@@ -13,7 +13,7 @@ if (UNIX)
     find_package(FUSE REQUIRED)
     include_directories(${FUSE_INCLUDE_DIR})
     link_libraries(${FUSE_LIBRARIES})
-    set (CMAKE_CXX_FLAGS "-std=c++11 -Wall -Wextra")
+    set (CMAKE_CXX_FLAGS "-std=c++11 -Wall -Wextra -pedantic")
     
     option(SANITIZE "Turn on sanitization" OFF)
     
@@ -40,7 +40,7 @@ else()
     link_libraries(${DOKAN_PREFIX}/lib/dokanfuse1.lib)
 endif()
 
-add_definitions(-D_FILE_OFFSET_BITS=64)
+add_definitions(-D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE)
 
 set (CMAKE_BUILD_TYPE Release)
 
