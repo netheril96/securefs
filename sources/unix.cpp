@@ -126,7 +126,8 @@ public:
     ssize_t getxattr(const char* name, void* value, size_t size) override
     {
         ssize_t rc = ::fgetxattr(m_fd, name, value, size, 0, 0);
-        throw POSIXException(errno, "fgetxattr");
+        if (rc < 0)
+            throw POSIXException(errno, "fgetxattr");
         return rc;
     }
 
