@@ -1,7 +1,7 @@
 #pragma once
 #include "myutils.h"
 
-#include <errno.h>
+#include <cerrno>
 #include <exception>
 #include <stdint.h>
 #include <string.h>
@@ -28,7 +28,7 @@ public:
     virtual const char* type_name() const noexcept = 0;
     virtual std::string message() const = 0;
     virtual int error_number() const noexcept { return EPERM; }
-    const char* what() const noexcept final override
+    const char* what() const noexcept override
     {
         if (m_cached_msg.empty())
         {

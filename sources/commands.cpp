@@ -648,14 +648,15 @@ public:
 class MountCommand : public CommonCommandBase
 {
 private:
-    CryptoPP::AlignedSecByteBlock password;
+    std::vector<byte> password;
     TCLAP::SwitchArg stdinpass{
         "s", "stdinpass", "Read password from stdin directly (useful for piping)"};
     TCLAP::SwitchArg background{"b", "background", "Run securefs in the background"};
     TCLAP::SwitchArg insecure{
         "i", "insecure", "Disable all integrity verification (insecure mode)"};
     TCLAP::SwitchArg noxattr{"x", "noxattr", "Disable built-in xattr support"};
-    TCLAP::SwitchArg trace{"", "trace", "Trace all calls into `securefs`"};
+    TCLAP::SwitchArg trace{"", "trace", "Trace all calls into `securefs` (implies --info)"};
+    TCLAP::SwitchArg info{"", "info", "Logs more information than warnings and errors"};
     TCLAP::ValueArg<std::string> log{
         "", "log", "Path of the log file (may contain sensitive information)", false, "", "path"};
 
@@ -680,9 +681,10 @@ public:
         cmdline.add(&config_path);
         cmdline.add(&mount_point);
         cmdline.add(&pass);
+        cmdline.add(&info);
         cmdline.parse(argc, argv);
 
-        if (pass.isSet())
+        if (pass.isSet() && !pass.getValue().empty())
         {
             password.resize(pass.getValue().size());
             memcpy(password.data(), pass.getValue().data(), password.size());
@@ -713,8 +715,9 @@ public:
         catch (const ExceptionBase& e)
         {
             fprintf(stderr,
-                    "Warning: failure to raise the maximum file descriptor limit (%s)\n",
-                    e.message().c_str());
+                    "Warning: failure to raise the maximum file descriptor limit (%s: %s)\n",
+                    e.type_name(),
+                    e.what());
         }
 
         FileSystemService::get_default().ensure_directory(mount_point.getValue(), 0755);
@@ -751,7 +754,7 @@ public:
             fprintf(stderr,
                     "%s: %s\nAnother securefs instance is probably already running on %s\n",
                     e.type_name(),
-                    e.message().c_str(),
+                    e.what(),
                     data_dir.getValue().c_str());
             return 19;
         }
@@ -763,25 +766,38 @@ public:
         if (insecure.getValue())
             fsopt.flags.get() |= FileTable::NO_AUTHENTICATION;
 
+        std::string log_filename;
         if (log.isSet())
         {
-            FILE* fp = fopen(log.getValue().c_str(), "ab");
+            log_filename.swap(log.getValue());
+        }
+        else if (background.getValue())
+        {
+            log_filename = FileSystemService::temp_name("/tmp/securefs_", ".log");
+            fprintf(stderr,
+                    "Setting %s as the log file since the user specifies none\n",
+                    log_filename.c_str());
+        }
+        if (log_filename.empty())
+        {
+            fsopt.logger = std::make_shared<Logger>(LoggingLevel::WARNING, stderr, false);
+        }
+        else
+        {
+            FILE* fp = fopen(log_filename.c_str(), "ab");
             if (!fp)
             {
                 fprintf(stderr,
                         "Failed to open file %s: %s\n",
-                        log.getValue().c_str(),
+                        log_filename.c_str(),
                         sane_strerror(errno).c_str());
                 return 10;
             }
             fsopt.logger = std::make_shared<Logger>(LoggingLevel::WARNING, fp, true);
         }
-        else if (!background.getValue())
-        {
-            fsopt.logger = std::make_shared<Logger>(LoggingLevel::WARNING, stderr, false);
-        }
-
-        if (trace.getValue() && fsopt.logger)
+        if (info.getValue())
+            fsopt.logger->set_level(LoggingLevel::INFO);
+        if (trace.getValue())
             fsopt.logger->set_level(LoggingLevel::VERBOSE);
 
         fprintf(stderr,
@@ -976,7 +992,7 @@ int commands_main(int argc, const char* const* argv)
     }
     catch (const securefs::ExceptionBase& e)
     {
-        fprintf(stderr, "%s: %s\n", e.type_name(), e.message().c_str());
+        fprintf(stderr, "%s: %s\n", e.type_name(), e.what());
         return 2;
     }
     catch (const std::exception& e)
