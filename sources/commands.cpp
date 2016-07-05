@@ -706,20 +706,6 @@ public:
 
     int execute() override
     {
-        try
-        {
-            fprintf(stderr,
-                    "Raising the number of file descriptor limit to %d\n",
-                    FileSystemService::raise_fd_limit());
-        }
-        catch (const ExceptionBase& e)
-        {
-            fprintf(stderr,
-                    "Warning: failure to raise the maximum file descriptor limit (%s: %s)\n",
-                    e.type_name(),
-                    e.what());
-        }
-
         FileSystemService::get_default().ensure_directory(mount_point.getValue(), 0755);
         std::shared_ptr<FileStream> config_stream;
         try
@@ -799,6 +785,20 @@ public:
             fsopt.logger->set_level(LoggingLevel::INFO);
         if (trace.getValue())
             fsopt.logger->set_level(LoggingLevel::VERBOSE);
+
+        try
+        {
+            fprintf(stderr,
+                    "Raising the number of file descriptor limit to %d\n",
+                    FileSystemService::raise_fd_limit());
+        }
+        catch (const ExceptionBase& e)
+        {
+            fprintf(stderr,
+                    "Warning: failure to raise the maximum file descriptor limit (%s: %s)\n",
+                    e.type_name(),
+                    e.what());
+        }
 
         fprintf(stderr,
                 "Mounting filesystem stored at %s onto %s\nFormat version: %u\n",

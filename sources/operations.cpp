@@ -423,7 +423,7 @@ namespace operations
         catch (const SeriousException& e)
         {
             fs->logger->log(LoggingLevel::ERROR,
-                            
+
                             "%s (path=%s, length=%zu, offset=%lld) encounters %s: %s",
                             __FUNCTION__,
                             path,
@@ -588,7 +588,7 @@ namespace operations
         catch (const SeriousException& e)
         {
             fs->logger->log(LoggingLevel::ERROR,
-                            
+
                             "%s (to=%s, from=%s) encounters %s: %s",
                             __FUNCTION__,
                             to,
@@ -664,7 +664,7 @@ namespace operations
         catch (const SeriousException& e)
         {
             fs->logger->log(LoggingLevel::ERROR,
-                            
+
                             "%s (src=%s, dest=%s) encounters %s: %s",
                             __FUNCTION__,
                             src,
@@ -717,7 +717,7 @@ namespace operations
         catch (const SeriousException& e)
         {
             fs->logger->log(LoggingLevel::ERROR,
-                            
+
                             "%s (src=%s, dest=%s) encounters %s: %s",
                             __FUNCTION__,
                             src,
@@ -788,15 +788,17 @@ namespace operations
     catch (const CommonException& e) { return -e.error_number(); }                                 \
     catch (const SeriousException& e)                                                              \
     {                                                                                              \
-        fs->logger->log(LoggingLevel::ERROR,                                                       \
-                                                                                  \
-                        "%s (path=%s, name=%s) encounters %s: %s",                                 \
-                        __FUNCTION__,                                                              \
-                        path,                                                                      \
-                        name,                                                                      \
-                        e.type_name(),                                                             \
-                        e.what());                                                                 \
-        return -e.error_number();                                                                  \
+        int errc = e.error_number();                                                               \
+        if (errc != ENOATTR) /* Attribute not found is very common and normal; no need to log it   \
+                                as an error */                                                     \
+            fs->logger->log(LoggingLevel::ERROR,                                                   \
+                            "%s (path=%s, name=%s) encounters %s: %s",                             \
+                            __FUNCTION__,                                                          \
+                            path,                                                                  \
+                            name,                                                                  \
+                            e.type_name(),                                                         \
+                            e.what());                                                             \
+        return -errc;                                                                              \
     }
 
     int getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position)

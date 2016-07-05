@@ -126,21 +126,13 @@ public:
     ssize_t getxattr(const char* name, void* value, size_t size) override
     {
         ssize_t rc = ::fgetxattr(m_fd, name, value, size, 0, 0);
-
-        if (rc < 0)
-        {
-            if (errno != ENOATTR)
-                throw POSIXException(errno, "fgetxattr");
-            else
-                throw OSException(ENOATTR);
-        }
+        throw POSIXException(errno, "fgetxattr");
         return rc;
     }
 
     ssize_t listxattr(char* buffer, size_t size) override
     {
         auto rc = ::flistxattr(m_fd, buffer, size, 0);
-
         if (rc < 0)
             throw POSIXException(errno, "flistxattr");
         return rc;
@@ -148,7 +140,6 @@ public:
 
     void setxattr(const char* name, void* value, size_t size, int flags) override
     {
-
         auto rc = ::fsetxattr(m_fd, name, value, size, 0, flags);
         if (rc < 0)
             throw POSIXException(errno, "fsetxattr");
