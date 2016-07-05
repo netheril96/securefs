@@ -890,7 +890,7 @@ public:
 class VersionCommand : public CommandBase
 {
 private:
-    const char* version = "0.4.5";
+    const char* version = "0.5.0";
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
@@ -902,7 +902,7 @@ public:
     int execute() override
     {
         using namespace CryptoPP;
-        fprintf(stdout, "securefs %s (with Crypto++ %f)\n\n", version, CRYPTOPP_VERSION / 100.0);
+        fprintf(stdout, "securefs %s (with Crypto++ %g)\n\n", version, CRYPTOPP_VERSION / 100.0);
 #ifdef CRYPTOPP_DISABLE_ASM
         fputs("Built without hardware acceleration\n", stdout);
 #else

@@ -12,7 +12,21 @@ Security, however, is often at odds with convenience, and people easily grow tir
 
 `securefs` is intended to make the experience as smooth as possible so that the security and convenience do not conflict. After mounting the virtual filesystem, everything just works&#8482;.
 
-## Install with Homebrew
+
+
+## Install
+
+[![Build Status](https://api.travis-ci.org/netheril96/securefs.svg?branch=master)](https://travis-ci.org/netheril96/securefs)
+
+### Dependency: FUSE
+
+On OS X, you need [`osxfuse`](https://osxfuse.github.io).
+
+On Debian based Linux distro, `sudo apt-get install fuse libfuse-dev`. 
+
+On RPM based Linux, `sudo yum install fuse fuse-devel`.
+
+### Install with Homebrew
 
 For OS X users, you can install `securefs` with homebrew:
 
@@ -21,28 +35,9 @@ brew tap netheril96/taps
 brew install securefs
 ```
 
-## Install manually
-
-[![Build Status](https://api.travis-ci.org/netheril96/securefs.svg?branch=master)](https://travis-ci.org/netheril96/securefs)
-
-### Dependency: FUSE
-
-FUSE includes a kernel module, so the user needs to obtain *signed* binaries themselves to avoid security risk. On OS X, you need [`osxfuse`](https://osxfuse.github.io). On Debian based Linux distro, you need to install `fuse` and `libfuse-dev`. On RPM based Linux, you need `fuse` and `fuse-devel`. On Windows, you need [Dokany](https://github.com/dokan-dev/dokany/releases) (the latest, even if unstable one).
-
-### Build
+### Manual Build
 
 Run `cmake .` then `make install`. The compiler must be new enough (g++ >= 4.8, clang >= 3.4, Visual Studio >= 2015). If you encounter build errors and the compiler is new enough, try `cmake -DDISABLE_ASM=1 .` instead.
-
-### Windows
-
-Support for Windows is highly experimental. Some known issues:
-
-* Some applications report file sizes as zero.
-* Some applications refuse to believe that they have enough permissions.
-
-### Uninstall
-
-Simply remove the executable `securefs`, usually placed in `/usr/local/bin`.
 
 ## Basic usage
 
