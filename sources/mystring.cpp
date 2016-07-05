@@ -1,7 +1,8 @@
 #include "mystring.h"
 #include "exceptions.h"
 
-#include <system_error>
+#include <stdio.h>
+#include <string.h>
 
 namespace securefs
 {
@@ -168,7 +169,16 @@ void parse_hex(const std::string& hex, byte* output, size_t len)
     }
 }
 
-std::string sane_strerror(int error_number) { return std::system_category().message(error_number); }
+std::string sane_strerror(int error_number)
+{
+    char buffer[1000];
+    int rc = strerror_r(
+        error_number,
+        buffer,
+        sizeof(buffer));    // Force compilation error with non-compliant implementations
+    (void)rc;
+    return {buffer};
+}
 
 bool ends_with(const char* str, size_t size, const char* suffix, size_t suffix_len)
 {
