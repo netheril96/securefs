@@ -10,13 +10,20 @@ import platform
 import time
 import traceback
 import uuid
+import sys
 
 SECUREFS_BINARY = './securefs'
 
 if platform.system() == 'Darwin':
     UNMOUNT = ['umount']
+    try:
+        import xattr
+    except ImportError:
+        sys.stderr.write('Importing module "xattr" failed. Testing for extended attribute support is skipped\n')
+        xattr = None
 else:
     UNMOUNT = ['fusermount', '-u']
+    xattr = None
 
 
 def securefs_mount(data_dir, mount_point, password):
@@ -86,6 +93,34 @@ def make_test_case(format_version):
 
         def unmount(self):
             securefs_unmount(self.mount_point)
+
+        def test_long_name(self):
+            try:
+                os.mkdir(os.path.join(self.mount_point, 'k' * 256))
+                self.fail('mkdir should fail')
+            except EnvironmentError as e:
+                self.assertEqual(e.errno, errno.ENAMETOOLONG)
+
+        if xattr:
+            def test_xattr(self):
+                fn = os.path.join(self.mount_point, str(uuid.uuid4()))
+                try:
+                    with open(fn, 'wb') as f:
+                        f.write('hello\n')
+                    x = xattr.xattr(fn)
+                    x.set('abc', 'def')
+                    x.set('123', '456')
+                    self.unmount()
+                    self.mount()
+                    self.assertEqual(x.get('abc'), 'def')
+                    self.assertEqual(set(x.list()), {'abc', '123'})
+                    xattr.removexattr(fn, 'abc')
+                    self.assertEqual(set(x.list()), {'123'})
+                finally:
+                    try:
+                        os.remove(fn)
+                    except EnvironmentError:
+                        pass
 
         def test_hardlink(self):
             data = os.urandom(16)
