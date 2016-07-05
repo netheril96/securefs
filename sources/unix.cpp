@@ -274,4 +274,6 @@ std::string FileSystemService::temp_name(const std::string& prefix, const std::s
 {
     return prefix + random_hex_string(16) + suffix;
 }
+
+bool FileSystemService::isatty(int fd) noexcept { return ::isatty(fd); }
 }

@@ -504,7 +504,7 @@ private:
     CryptoPP::AlignedSecByteBlock password;
 
     TCLAP::SwitchArg stdinpass{
-        "s", "stdinpass", "Read password from stdin directly (useful for piping)"};
+        "s", "stdinpass", "Compatibility flag with older version. Does nothing."};
     TCLAP::ValueArg<unsigned> rounds{
         "r",
         "rounds",
@@ -538,7 +538,7 @@ public:
         }
 
         password.resize(MAX_PASS_LEN);
-        if (stdinpass.getValue())
+        if (!FileSystemService::isatty(0))
         {
             password.resize(
                 insecure_read_password(stdin, nullptr, password.data(), password.size()));
@@ -650,7 +650,7 @@ class MountCommand : public CommonCommandBase
 private:
     std::vector<byte> password;
     TCLAP::SwitchArg stdinpass{
-        "s", "stdinpass", "Read password from stdin directly (useful for piping)"};
+        "s", "stdinpass", "Compatibility flag with older version. Does nothing."};
     TCLAP::SwitchArg background{"b", "background", "Run securefs in the background"};
     TCLAP::SwitchArg insecure{
         "i", "insecure", "Disable all integrity verification (insecure mode)"};
@@ -693,7 +693,7 @@ public:
         }
 
         password.resize(MAX_PASS_LEN);
-        if (stdinpass.getValue())
+        if (!FileSystemService::isatty(0))
         {
             password.resize(
                 insecure_read_password(stdin, nullptr, password.data(), password.size()));
@@ -832,7 +832,7 @@ class FixCommand : public CommonCommandBase
 private:
     CryptoPP::AlignedSecByteBlock password;
     TCLAP::SwitchArg stdinpass{
-        "s", "stdinpass", "Read password from stdin directly (useful for piping)"};
+        "s", "stdinpass", "Compatibility flag with older version. Does nothing."};
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
@@ -844,7 +844,7 @@ public:
         cmdline.parse(argc, argv);
 
         password.resize(MAX_PASS_LEN);
-        if (stdinpass.getValue())
+        if (!FileSystemService::isatty(0))
         {
             password.resize(
                 insecure_read_password(stdin, nullptr, password.data(), password.size()));
