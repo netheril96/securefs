@@ -183,7 +183,6 @@ namespace operations
     catch (const SeriousException& e)                                                              \
     {                                                                                              \
         fs->logger->log(LoggingLevel::ERROR,                                                       \
-                        &e.stack_trace(),                                                          \
                         "%s (path=%s) encounters %s: %s",                                          \
                         __FUNCTION__,                                                              \
                         path,                                                                      \
@@ -232,14 +231,6 @@ namespace operations
             internal::FileGuard fg(nullptr, nullptr);
             if (!internal::open_all(fs, path, fg))
                 return -ENOENT;
-
-            if (fs->logger->get_level() <= LoggingLevel::INFO)
-                fs->logger->log(LoggingLevel::INFO,
-                                nullptr,
-                                "Path %s corresponds to ID %s",
-                                path,
-                                hexify(fg.get()->get_id()).c_str());
-
             fg->stat(st);
             return 0;
         }
@@ -391,7 +382,6 @@ namespace operations
         catch (const SeriousException& e)
         {
             fs->logger->log(LoggingLevel::ERROR,
-                            &e.stack_trace(),
                             "%s (path=%s, length=%zu, offset=%lld) encounters %s: %s",
                             __FUNCTION__,
                             path,
@@ -433,7 +423,7 @@ namespace operations
         catch (const SeriousException& e)
         {
             fs->logger->log(LoggingLevel::ERROR,
-                            &e.stack_trace(),
+                            
                             "%s (path=%s, length=%zu, offset=%lld) encounters %s: %s",
                             __FUNCTION__,
                             path,
@@ -598,7 +588,7 @@ namespace operations
         catch (const SeriousException& e)
         {
             fs->logger->log(LoggingLevel::ERROR,
-                            &e.stack_trace(),
+                            
                             "%s (to=%s, from=%s) encounters %s: %s",
                             __FUNCTION__,
                             to,
@@ -674,7 +664,7 @@ namespace operations
         catch (const SeriousException& e)
         {
             fs->logger->log(LoggingLevel::ERROR,
-                            &e.stack_trace(),
+                            
                             "%s (src=%s, dest=%s) encounters %s: %s",
                             __FUNCTION__,
                             src,
@@ -727,7 +717,7 @@ namespace operations
         catch (const SeriousException& e)
         {
             fs->logger->log(LoggingLevel::ERROR,
-                            &e.stack_trace(),
+                            
                             "%s (src=%s, dest=%s) encounters %s: %s",
                             __FUNCTION__,
                             src,
@@ -799,7 +789,7 @@ namespace operations
     catch (const SeriousException& e)                                                              \
     {                                                                                              \
         fs->logger->log(LoggingLevel::ERROR,                                                       \
-                        &e.stack_trace(),                                                          \
+                                                                                  \
                         "%s (path=%s, name=%s) encounters %s: %s",                                 \
                         __FUNCTION__,                                                              \
                         path,                                                                      \

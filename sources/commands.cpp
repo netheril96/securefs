@@ -656,7 +656,8 @@ private:
         "i", "insecure", "Disable all integrity verification (insecure mode)"};
     TCLAP::SwitchArg noxattr{"x", "noxattr", "Disable built-in xattr support"};
     TCLAP::SwitchArg trace{"", "trace", "Trace all calls into `securefs` (implies --info)"};
-    TCLAP::SwitchArg info{"", "info", "Logs more information than warnings and errors"};
+    TCLAP::SwitchArg info{
+        "", "info", "Logs more information than warnings and errors"};    // Disabled for now
     TCLAP::ValueArg<std::string> log{
         "", "log", "Path of the log file (may contain sensitive information)", false, "", "path"};
 
@@ -681,7 +682,6 @@ public:
         cmdline.add(&config_path);
         cmdline.add(&mount_point);
         cmdline.add(&pass);
-        cmdline.add(&info);
         cmdline.parse(argc, argv);
 
         if (pass.isSet() && !pass.getValue().empty())
