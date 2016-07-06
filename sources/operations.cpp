@@ -176,7 +176,7 @@ namespace operations
 #define COMMON_PROLOGUE                                                                            \
     auto ctx = fuse_get_context();                                                                 \
     auto fs = internal::get_fs(ctx);                                                               \
-    fs->logger->log(LoggingLevel::VERBOSE, nullptr, "%s (path=%s)", __FUNCTION__, path);
+    fs->logger->log(LoggingLevel::VERBOSE, "%s (path=%s)", __FUNCTION__, path);
 
 #define COMMON_CATCH_BLOCK                                                                         \
     catch (const CommonException& e) { return -e.error_number(); }                                 \
@@ -195,7 +195,7 @@ namespace operations
     {
         auto args = static_cast<FSOptions*>(fuse_get_context()->private_data);
         auto fs = new FileSystem(*args);
-        fs->logger->log(LoggingLevel::VERBOSE, nullptr, "%s", __FUNCTION__);
+        fs->logger->log(LoggingLevel::VERBOSE, "%s", __FUNCTION__);
         fputs("Filesystem mounted successfully\n", stderr);
         return fs;
     }
@@ -203,7 +203,7 @@ namespace operations
     void destroy(void* data)
     {
         auto fs = static_cast<FileSystem*>(data);
-        fs->logger->log(LoggingLevel::VERBOSE, nullptr, "%s", __FUNCTION__);
+        fs->logger->log(LoggingLevel::VERBOSE, "%s", __FUNCTION__);
         delete fs;
         fputs("Filesystem unmounted successfully\n", stderr);
     }
@@ -267,7 +267,7 @@ namespace operations
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
-                return -EINVAL;
+                return -EFAULT;
             if (fb->type() != FileBase::DIRECTORY)
                 return -ENOTDIR;
             struct stat st;
@@ -359,7 +359,6 @@ namespace operations
         auto ctx = fuse_get_context();
         auto fs = internal::get_fs(ctx);
         fs->logger->log(LoggingLevel::VERBOSE,
-                        nullptr,
                         "%s (path=%s, length=%zu, offset=%lld)",
                         __FUNCTION__,
                         path,
@@ -399,7 +398,6 @@ namespace operations
         auto ctx = fuse_get_context();
         auto fs = internal::get_fs(ctx);
         fs->logger->log(LoggingLevel::VERBOSE,
-                        nullptr,
                         "%s (path=%s, length=%zu, offset=%lld)",
                         __FUNCTION__,
                         path,
@@ -562,8 +560,7 @@ namespace operations
     {
         auto ctx = fuse_get_context();
         auto fs = internal::get_fs(ctx);
-        fs->logger->log(
-            LoggingLevel::VERBOSE, nullptr, "%s (to=%s, from=%s)", __FUNCTION__, to, from);
+        fs->logger->log(LoggingLevel::VERBOSE, "%s (to=%s, from=%s)", __FUNCTION__, to, from);
 
         try
         {
@@ -622,8 +619,7 @@ namespace operations
     {
         auto ctx = fuse_get_context();
         auto fs = internal::get_fs(ctx);
-        fs->logger->log(
-            LoggingLevel::VERBOSE, nullptr, "%s (src=%s, dest=%s)", __FUNCTION__, src, dst);
+        fs->logger->log(LoggingLevel::VERBOSE, "%s (src=%s, dest=%s)", __FUNCTION__, src, dst);
 
         try
         {
@@ -679,8 +675,7 @@ namespace operations
     {
         auto ctx = fuse_get_context();
         auto fs = internal::get_fs(ctx);
-        fs->logger->log(
-            LoggingLevel::VERBOSE, nullptr, "%s (src=%s, dest=%s)", __FUNCTION__, src, dst);
+        fs->logger->log(LoggingLevel::VERBOSE, "%s (src=%s, dest=%s)", __FUNCTION__, src, dst);
 
         try
         {
@@ -781,8 +776,7 @@ namespace operations
 #define XATTR_COMMON_PROLOGUE                                                                      \
     auto ctx = fuse_get_context();                                                                 \
     auto fs = internal::get_fs(ctx);                                                               \
-    fs->logger->log(                                                                               \
-        LoggingLevel::VERBOSE, nullptr, "%s (path=%s, name=%s)", __FUNCTION__, path, name);
+    fs->logger->log(LoggingLevel::VERBOSE, "%s (path=%s, name=%s)", __FUNCTION__, path, name);
 
 #define XATTR_COMMON_CATCH_BLOCK                                                                   \
     catch (const CommonException& e) { return -e.error_number(); }                                 \
