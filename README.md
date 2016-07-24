@@ -31,8 +31,7 @@ On RPM based Linux, `sudo yum install fuse fuse-devel`.
 For OS X users, you can install `securefs` with homebrew:
 
 ```
-brew tap netheril96/taps
-brew install securefs
+brew install netheril96/taps/securefs
 ```
 
 ### Manual Build
