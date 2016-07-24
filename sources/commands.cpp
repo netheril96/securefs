@@ -660,7 +660,12 @@ private:
         "", "info", "Logs more information than warnings and errors"};    // Disabled for now
     TCLAP::ValueArg<std::string> log{
         "", "log", "Path of the log file (may contain sensitive information)", false, "", "path"};
-
+    TCLAP::MultiArg<std::string> fuse_options{
+        "o",
+        "opt",
+        "Additional FUSE options; this may crash the filesystem; use only for testing!",
+        false,
+        "options"};
     TCLAP::UnlabeledValueArg<std::string> mount_point{
         "mount_point", "Mount point", true, "", "mount_point"};
 
@@ -682,6 +687,7 @@ public:
         cmdline.add(&config_path);
         cmdline.add(&mount_point);
         cmdline.add(&pass);
+        cmdline.add(&fuse_options);
         cmdline.parse(argc, argv);
 
         if (pass.isSet() && !pass.getValue().empty())
@@ -814,6 +820,14 @@ public:
         fuse_args.push_back("-s");
         if (!background.getValue())
             fuse_args.push_back("-f");
+        if (fuse_options.isSet())
+        {
+            for (const std::string& opt : fuse_options.getValue())
+            {
+                fuse_args.push_back("-o");
+                fuse_args.push_back(const_cast<char*>(opt.c_str()));
+            }
+        }
         fuse_args.push_back(mount_point.getValue().c_str());
 
         return fuse_main(
@@ -890,7 +904,7 @@ public:
 class VersionCommand : public CommandBase
 {
 private:
-    const char* version = "0.5.0";
+    const char* version = "0.5.2";
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
