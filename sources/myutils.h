@@ -1,6 +1,8 @@
 #pragma once
 #include "mystring.h"
 
+#include "optional.hpp"
+
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -26,6 +28,8 @@ typedef unsigned char byte;
 
 namespace securefs
 {
+using std::experimental::optional;
+
 typedef uint64_t length_type;
 typedef uint64_t offset_type;
 
@@ -70,40 +74,6 @@ typename _Unique_if<T>::_Unknown_bound make_unique(size_t n)
 
 template <class T, class... Args>
 typename _Unique_if<T>::_Known_bound make_unique(Args&&...) = delete;
-
-template <class T>
-class optional
-{
-private:
-    T value;
-    bool inited;
-
-public:
-    explicit optional() : value(), inited(false) {}
-    explicit optional(T value) : value(std::move(value)), inited(true) {}
-    bool is_inited() const noexcept { return inited; }
-    T& get()
-    {
-        if (!is_inited())
-            throw std::invalid_argument("Optional not inited");
-        return value;
-    }
-    const T& get() const
-    {
-        if (!is_inited())
-            throw std::invalid_argument("Optional not inited");
-        return value;
-    }
-
-    optional& operator=(T value)
-    {
-        this->value = std::move(value);
-        inited = true;
-        return *this;
-    }
-
-    void set_init(bool inited) noexcept { this->inited = inited; }
-};
 
 template <class T, size_t Size>
 class PODArray

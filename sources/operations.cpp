@@ -159,16 +159,16 @@ namespace operations
 {
 
     FileSystem::FileSystem(const FSOptions& opt)
-        : table(opt.version.get(),
+        : table(opt.version.value(),
                 opt.root,
-                opt.master_key.get(),
-                opt.flags.get(),
-                opt.block_size.get(),
-                opt.iv_size.get())
+                opt.master_key.value(),
+                opt.flags.value(),
+                opt.block_size.value(),
+                opt.iv_size.value())
         , root_id()
         , logger(opt.logger)
     {
-        block_size = opt.block_size.get();
+        block_size = opt.block_size.value();
     }
 
     FileSystem::~FileSystem() {}

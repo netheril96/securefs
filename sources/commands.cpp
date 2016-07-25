@@ -756,7 +756,7 @@ public:
         fsopt.master_key = config.master_key;
         fsopt.flags = 0;
         if (insecure.getValue())
-            fsopt.flags.get() |= FileTable::NO_AUTHENTICATION;
+            fsopt.flags.value() |= FileTable::NO_AUTHENTICATION;
 
         std::string log_filename;
         if (log.isSet())
@@ -810,7 +810,7 @@ public:
                 "Mounting filesystem stored at %s onto %s\nFormat version: %u\n",
                 data_dir.getValue().c_str(),
                 mount_point.getValue().c_str(),
-                fsopt.version.get());
+                fsopt.version.value());
 
         struct fuse_operations opt;
         init_fuse_operations(data_dir.getValue().c_str(), opt, !noxattr.getValue());
