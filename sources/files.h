@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <typeinfo>
 #include <unordered_map>
 
 namespace securefs
@@ -170,16 +171,26 @@ public:
     ssize_t getxattr(const char* name, char* value, size_t size);
     void setxattr(const char* name, const char* value, size_t size, int flags);
     void removexattr(const char* name);
+
+    template <class T>
+    T* cast_as()
+    {
+        if (type() != T::class_type())
+            throw InvalidCastException(typeid(this).name(), typeid(T).name());
+        return static_cast<T*>(this);
+    }
 };
 
 class RegularFile : public FileBase
 {
 public:
+    static int class_type() { return FileBase::REGULAR_FILE; }
+
     template <class... Args>
     explicit RegularFile(Args&&... args) : FileBase(std::forward<Args>(args)...)
     {
     }
-    int type() const noexcept override { return FileBase::REGULAR_FILE; }
+    int type() const noexcept override { return class_type(); }
     length_type read(void* output, offset_type off, length_type len)
     {
         return this->m_stream->read(output, off, len);
@@ -195,11 +206,13 @@ public:
 class Symlink : public FileBase
 {
 public:
+    static int class_type() { return FileBase::SYMLINK; }
+
     template <class... Args>
     explicit Symlink(Args&&... args) : FileBase(std::forward<Args>(args)...)
     {
     }
-    int type() const noexcept override { return FileBase::SYMLINK; }
+    int type() const noexcept override { return class_type(); }
     std::string get()
     {
         std::string result(m_stream->size(), 0);
@@ -216,12 +229,14 @@ public:
     static const size_t MAX_FILENAME_LENGTH = 255;
 
 public:
+    static int class_type() { return FileBase::DIRECTORY; }
+
     template <class... Args>
     explicit Directory(Args&&... args) : FileBase(std::forward<Args>(args)...)
     {
     }
 
-    int type() const noexcept override { return FileBase::DIRECTORY; }
+    int type() const noexcept override { return class_type(); }
 
     virtual bool get_entry(const std::string& name, id_type& id, int& type) = 0;
     virtual bool add_entry(const std::string& name, const id_type& id, int type) = 0;

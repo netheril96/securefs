@@ -10,7 +10,6 @@
 
 namespace securefs
 {
-
 class ExceptionBase : public std::exception
 {
 private:
@@ -255,5 +254,25 @@ public:
                          (long long)m_max_size);
     }
     int error_number() const noexcept override { return EFBIG; }
+};
+
+class InvalidCastException : public SeriousException
+{
+private:
+    const char* from_name;
+    const char* to_name;
+
+public:
+    explicit InvalidCastException(const char* from_name, const char* to_name)
+        : from_name(from_name), to_name(to_name)
+    {
+    }
+
+    const char* type_name() const noexcept override { return "InvalidCastException"; }
+
+    std::string message() const override
+    {
+        return strprintf("Invalid cast from %s to %s", from_name, to_name);
+    }
 };
 }

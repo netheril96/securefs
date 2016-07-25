@@ -103,7 +103,7 @@ public:
     template <class T>
     T* get_as() noexcept
     {
-        return static_cast<T*>(m_fb);
+        return m_fb->cast_as<T>();
     }
     FileBase& operator*() noexcept { return *m_fb; }
     FileBase* operator->() noexcept { return m_fb; }
