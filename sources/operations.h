@@ -19,6 +19,8 @@ namespace operations
         optional<uint32_t> flags;
         optional<unsigned> block_size;
         optional<unsigned> iv_size;
+        optional<uid_t> uid_override;
+        optional<gid_t> gid_override;
         std::shared_ptr<Logger> logger;
     };
 
@@ -29,6 +31,8 @@ namespace operations
         id_type root_id;
         std::shared_ptr<Logger> logger;
         unsigned block_size;
+        optional<uid_t> uid_override;
+        optional<gid_t> gid_override;
 
         explicit FileSystem(const FSOptions& opt);
 

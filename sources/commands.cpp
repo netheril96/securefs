@@ -666,6 +666,22 @@ private:
         "Additional FUSE options; this may crash the filesystem; use only for testing!",
         false,
         "options"};
+    TCLAP::ValueArg<unsigned> uid_override{
+        "",
+        "override-uid",
+        "Override the owner UID of all files to this; allows bypass of "
+        "the permission system",
+        false,
+        0,
+        "uid"};
+    TCLAP::ValueArg<unsigned> gid_override{
+        "",
+        "override-gid",
+        "Override the owner GID of all files to this; allows bypass of "
+        "the permission system",
+        false,
+        0,
+        "gid"};
     TCLAP::UnlabeledValueArg<std::string> mount_point{
         "mount_point", "Mount point", true, "", "mount_point"};
 
@@ -688,6 +704,8 @@ public:
         cmdline.add(&mount_point);
         cmdline.add(&pass);
         cmdline.add(&fuse_options);
+        cmdline.add(&uid_override);
+        cmdline.add(&gid_override);
         cmdline.parse(argc, argv);
 
         if (pass.isSet() && !pass.getValue().empty())
@@ -757,6 +775,14 @@ public:
         fsopt.flags = 0;
         if (insecure.getValue())
             fsopt.flags.value() |= FileTable::NO_AUTHENTICATION;
+        if (uid_override.isSet())
+        {
+            fsopt.uid_override = uid_override.getValue();
+        }
+        if (gid_override.isSet())
+        {
+            fsopt.gid_override = gid_override.getValue();
+        }
 
         std::string log_filename;
         if (log.isSet())

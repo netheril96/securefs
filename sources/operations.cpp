@@ -167,6 +167,8 @@ namespace operations
                 opt.iv_size.value())
         , root_id()
         , logger(opt.logger)
+        , uid_override(opt.uid_override)
+        , gid_override(opt.gid_override)
     {
         block_size = opt.block_size.value();
     }
@@ -232,6 +234,14 @@ namespace operations
             if (!internal::open_all(fs, path, fg))
                 return -ENOENT;
             fg->stat(st);
+            if (fs->uid_override)
+            {
+                st->st_uid = *fs->uid_override;
+            }
+            if (fs->gid_override)
+            {
+                st->st_gid = *fs->gid_override;
+            }
             return 0;
         }
         COMMON_CATCH_BLOCK
