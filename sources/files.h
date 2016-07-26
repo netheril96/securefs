@@ -8,7 +8,6 @@
 #include <functional>
 #include <memory>
 #include <string>
-#include <typeinfo>
 #include <unordered_map>
 
 namespace securefs
@@ -26,6 +25,7 @@ private:
 
 private:
     void read_header();
+    [[noreturn]] void throw_invalid_cast(int to_type);
 
 protected:
     std::shared_ptr<StreamBase> m_stream;
@@ -176,7 +176,7 @@ public:
     T* cast_as()
     {
         if (type() != T::class_type())
-            throw InvalidCastException(typeid(this).name(), typeid(T).name());
+            throw_invalid_cast(T::class_type());
         return static_cast<T*>(this);
     }
 };

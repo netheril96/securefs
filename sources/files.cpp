@@ -115,6 +115,11 @@ void FileBase::flush()
     m_stream->flush();
 }
 
+void FileBase::throw_invalid_cast(int to_type)
+{
+    throw InvalidCastException(type_name(this->type()), type_name(to_type));
+}
+
 // The IV size is for historical reasons. Doesn't really matter.
 static const ssize_t XATTR_IV_LENGTH = 16, XATTR_MAC_LENGTH = 16;
 
