@@ -1,5 +1,11 @@
 language: cpp
-sudo: required
-dist: trusty
-install: "sudo apt-get update && sudo apt-get install -y cmake fuse libfuse-dev"
-script: "cmake . && make && ctest -V"
+matrix:
+  include:
+    - os: linux
+      dist: trusty
+      sudo: required
+      install: "sudo apt-get update && sudo apt-get install -y cmake fuse libfuse-dev"
+    - os: osx
+      install: "brew update && sudo brew cask install osxfuse"
+      sudo: required
+script: "cmake . && make -j4 && ctest -V"
