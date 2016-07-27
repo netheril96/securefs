@@ -220,11 +220,11 @@ void BtreeNode::to_buffer(byte* buffer, size_t size) const
 
     for (auto&& e : m_entries)
     {
-        std::array<char, Directory::MAX_FILENAME_LENGTH + 1> filename;
         if (e.filename.size() > Directory::MAX_FILENAME_LENGTH)
             throw OSException(ENAMETOOLONG);
+        std::array<char, Directory::MAX_FILENAME_LENGTH + 1> filename;
+        filename.fill(0);
         std::copy(e.filename.begin(), e.filename.end(), filename.begin());
-        filename[e.filename.size()] = 0;
         buffer = write_and_forward(filename, buffer, end_of_buffer);
         buffer = write_and_forward(e.id, buffer, end_of_buffer);
         buffer = write_and_forward(e.type, buffer, end_of_buffer);

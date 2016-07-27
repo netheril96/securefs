@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <memory>
 #include <stdexcept>
+#include <stdlib.h>
 #include <string.h>
 #include <typeinfo>
 #include <typeinfo>
@@ -851,7 +852,7 @@ public:
             for (const std::string& opt : fuse_options.getValue())
             {
                 fuse_args.push_back("-o");
-                fuse_args.push_back(const_cast<char*>(opt.c_str()));
+                fuse_args.push_back(opt.c_str());
             }
         }
         fuse_args.push_back(mount_point.getValue().c_str());
