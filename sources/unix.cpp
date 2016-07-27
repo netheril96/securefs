@@ -19,6 +19,10 @@
 #include <sys/xattr.h>
 #endif
 
+#ifndef AT_FDCWD
+#define AT_FDCWD -2
+#endif
+
 namespace securefs
 {
 class UnixFileStream final : public FileStream
@@ -93,7 +97,7 @@ public:
     void utimens(const struct timespec ts[2]) override
     {
         int rc;
-#if _XOPEN_SOURCE >= 700 || _POSIX_C_SOURCE >= 200809L
+#ifdef HAS_FUTIMENS
         rc = ::futimens(m_fd, ts);
 #else
         if (!ts)
@@ -145,7 +149,6 @@ public:
         if (rc < 0)
             throw POSIXException(errno, "fsetxattr");
     }
-
 #endif
 };
 
@@ -157,7 +160,7 @@ public:
 
     std::string norm_path(const std::string& path) const
     {
-        if (dir_fd == AT_FDCWD)
+        if (dir_fd < 0)
             return path;
         if (path.size() > 0 && path[0] == '/')
             return path;
@@ -169,7 +172,7 @@ FileSystemService::FileSystemService() : impl(new Impl()) { impl->dir_fd = AT_FD
 
 FileSystemService::~FileSystemService()
 {
-    if (impl->dir_fd != AT_FDCWD)
+    if (impl->dir_fd >= 0)
         ::close(impl->dir_fd);
 }
 
@@ -178,14 +181,18 @@ FileSystemService::FileSystemService(const std::string& path) : impl(new Impl())
     impl->dir_name = path;
     int dir_fd = ::open(path.c_str(), O_RDONLY);
     if (dir_fd < 0)
-        throw POSIXException(errno, strprintf("Opening directory %s", path.c_str()));
+        throw POSIXException(errno, "Opening directory " + path);
     impl->dir_fd = dir_fd;
 }
 
 std::shared_ptr<FileStream>
 FileSystemService::open_file_stream(const std::string& path, int flags, unsigned mode) const
 {
+#ifdef HAS_AT_FUNCTIONS
     int fd = ::openat(impl->dir_fd, path.c_str(), flags, mode);
+#else
+    int fd = ::open(impl->norm_path(path).c_str(), flags, mode);
+#endif
     if (fd < 0)
         throw POSIXException(
             errno, strprintf("Opening %s with flags %#o", impl->norm_path(path).c_str(), flags));
@@ -194,12 +201,20 @@ FileSystemService::open_file_stream(const std::string& path, int flags, unsigned
 
 bool FileSystemService::remove_file(const std::string& path) const noexcept
 {
+#ifdef HAS_AT_FUNCTIONS
     return ::unlinkat(impl->dir_fd, path.c_str(), 0) == 0;
+#else
+    return ::unlink(impl->norm_path(path).c_str()) == 0;
+#endif
 }
 
 bool FileSystemService::remove_directory(const std::string& path) const noexcept
 {
+#ifdef HAS_AT_FUNCTIONS
     return ::unlinkat(impl->dir_fd, path.c_str(), AT_REMOVEDIR) == 0;
+#else
+    return ::rmdir(impl->norm_path(path).c_str());
+#endif
 }
 
 void FileSystemService::lock() const
@@ -212,7 +227,11 @@ void FileSystemService::lock() const
 
 void FileSystemService::ensure_directory(const std::string& path, unsigned mode) const
 {
+#ifdef HAS_AT_FUNCTIONS
     int rc = ::mkdirat(impl->dir_fd, path.c_str(), mode);
+#else
+    int rc = ::mkdir(impl->norm_path(path).c_str(), mode);
+#endif
     if (rc < 0 && errno != EEXIST)
         throw POSIXException(
             errno, strprintf("Fail to create directory %s", impl->norm_path(path).c_str()));
@@ -227,7 +246,11 @@ void FileSystemService::statfs(struct statvfs* fs_info) const
 
 void FileSystemService::rename(const std::string& a, const std::string& b) const
 {
+#ifdef HAS_AT_FUNCTIONS
     int rc = ::renameat(impl->dir_fd, a.c_str(), impl->dir_fd, b.c_str());
+#else
+    int rc = ::rename(impl->norm_path(a).c_str(), impl->norm_path(b).c_str());
+#endif
     if (rc < 0)
         throw POSIXException(errno,
                              strprintf("Renaming from %s to %s",

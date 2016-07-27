@@ -1,4 +1,5 @@
 include(CheckCXXSourceCompiles)
+include(CheckFunctionExists)
 
 set (TMP_FLAGS ${CMAKE_REQUIRED_FLAGS})
 if (UNIX)
@@ -9,5 +10,18 @@ CHECK_CXX_SOURCE_COMPILES("int main() { thread_local int a = 0; return a; }" HAS
 if (${HAS_THREAD_LOCAL})
     add_definitions(-DHAS_THREAD_LOCAL)
 endif()
-
 set(CMAKE_REQUIRED_FLAGS ${TMP_FLAGS})
+
+CHECK_FUNCTION_EXISTS(openat HAS_OPENAT)
+CHECK_FUNCTION_EXISTS(unlinkat HAS_UNLINKAT)
+CHECK_FUNCTION_EXISTS(mkdirat HAS_MKDIRAT)
+CHECK_FUNCTION_EXISTS(renameat HAS_RENAMEAT)
+CHECK_FUNCTION_EXISTS(futimens HAS_FUTIMENS)
+
+if (${HAS_OPENAT} AND ${HAS_UNLINKAT} AND ${HAS_MKDIRAT} AND ${HAS_RENAMEAT})
+    add_definitions(-DHAS_AT_FUNCTIONS)
+endif()
+
+if (HAS_FUTIMENS)
+    add_definitions(-DHAS_FUTIMENS)
+endif()
