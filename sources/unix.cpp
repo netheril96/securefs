@@ -213,7 +213,7 @@ bool FileSystemService::remove_directory(const std::string& path) const noexcept
 #ifdef HAS_AT_FUNCTIONS
     return ::unlinkat(impl->dir_fd, path.c_str(), AT_REMOVEDIR) == 0;
 #else
-    return ::rmdir(impl->norm_path(path).c_str());
+    return ::rmdir(impl->norm_path(path).c_str()) == 0;
 #endif
 }
 
