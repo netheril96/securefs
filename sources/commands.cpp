@@ -21,6 +21,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include <fcntl.h>
+#include <unistd.h>
+
 #ifdef __APPLE__
 
 #include <sys/xattr.h>
@@ -729,6 +732,23 @@ public:
         }
     }
 
+    const char* get_tmp_dir()
+    {
+        const char* ret = getenv("TMP");
+        if (ret)
+            return ret;
+        ret = getenv("TEMP");
+        if (ret)
+            return ret;
+        ret = getenv("TMPDIR");
+        if (ret)
+            return ret;
+        ret = getenv("TEMPDIR");
+        if (ret)
+            return ret;
+        return "/tmp";
+    }
+
     int execute() override
     {
         FileSystemService::get_default().ensure_directory(mount_point.getValue(), 0755);
@@ -792,19 +812,20 @@ public:
         }
         else if (background.getValue())
         {
-            log_filename = FileSystemService::temp_name("/tmp/securefs_", ".log");
+            log_filename
+                = FileSystemService::temp_name(std::string(get_tmp_dir()) + "/securefs_", ".log");
             fprintf(stderr,
                     "Setting %s as the log file since the user specifies none\n",
                     log_filename.c_str());
         }
         if (log_filename.empty())
         {
-            fsopt.logger = std::make_shared<Logger>(LoggingLevel::WARNING, stderr, false);
+            fsopt.logger = std::make_shared<Logger>(LoggingLevel::WARNING, STDERR_FILENO, false);
         }
         else
         {
-            FILE* fp = fopen(log_filename.c_str(), "ab");
-            if (!fp)
+            int fd = ::open(log_filename.c_str(), O_CREAT | O_APPEND | O_WRONLY, 0600);
+            if (fd < 0)
             {
                 fprintf(stderr,
                         "Failed to open file %s: %s\n",
@@ -812,7 +833,7 @@ public:
                         sane_strerror(errno).c_str());
                 return 10;
             }
-            fsopt.logger = std::make_shared<Logger>(LoggingLevel::WARNING, fp, true);
+            fsopt.logger = std::make_shared<Logger>(LoggingLevel::WARNING, fd, true);
         }
         if (info.getValue())
             fsopt.logger->set_level(LoggingLevel::INFO);

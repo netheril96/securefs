@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string>
+#include <vector>
 
 namespace securefs
 {
@@ -37,16 +38,15 @@ inline const char* stringify(LoggingLevel lvl)
 class Logger
 {
     DISABLE_COPY_MOVE(Logger);
+
 private:
     LoggingLevel m_level;
-    FILE* m_fp;
+    int m_fd;
     bool m_close_on_exit;
+    std::vector<char> buffer;
 
 public:
-    explicit Logger(LoggingLevel level, FILE* fp, bool close_on_exit)
-        : m_level(level), m_fp(fp), m_close_on_exit(close_on_exit)
-    {
-    }
+    explicit Logger(LoggingLevel level, int fd, bool close_on_exit);
 
     void vlog(LoggingLevel level, const char* format, va_list args) noexcept;
 
@@ -56,10 +56,6 @@ public:
     LoggingLevel get_level() const noexcept { return m_level; }
     void set_level(LoggingLevel lvl) noexcept { m_level = lvl; }
 
-    ~Logger()
-    {
-        if (m_close_on_exit)
-            fclose(m_fp);
-    }
+    ~Logger();
 };
 }
