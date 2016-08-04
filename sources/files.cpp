@@ -90,7 +90,6 @@ void FileBase::stat(struct stat* st)
     if (blk_sz > 1 && blk_sz < std::numeric_limits<decltype(st->st_blksize)>::max())
     {
         st->st_blksize = static_cast<decltype(st->st_blksize)>(blk_sz);
-        st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
     }
 }
 
