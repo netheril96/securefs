@@ -70,13 +70,21 @@ public:
 
 void generate_random(void* data, size_t size)
 {
-#ifndef HAS_THREAD_LOCAL
-    static ThreadLocalStorage<CryptoPP::AutoSeededRandomPool> pool;
-    pool->GenerateBlock(static_cast<byte*>(data), size);
-#else
-    thread_local CryptoPP::AutoSeededRandomPool pool;
-    pool.GenerateBlock(static_cast<byte*>(data), size);
-#endif
+    static int fd = ::open("/dev/urandom", O_RDONLY);
+    if (fd < 0)
+        throw POSIXException(errno, "/dev/urandom not available");
+    while (size > 0)
+    {
+        auto rc = ::read(fd, data, size);
+        if (rc < 0)
+        {
+            if (errno == EINTR)
+                continue;
+            throw POSIXException(errno, "Reading /dev/urandom");
+        }
+        data = static_cast<char*>(data) + rc;
+        size -= rc;
+    }
 }
 
 void aes_gcm_encrypt(const void* plaintext,
