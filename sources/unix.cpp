@@ -39,7 +39,7 @@ public:
         struct stat st;
         int rc = ::fstat(m_fd, &st);
         if (rc < 0)
-            throw OSException(errno);
+            throw POSIXException(errno, "fstat");
         m_size = st.st_size;
     }
 

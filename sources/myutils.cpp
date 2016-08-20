@@ -18,7 +18,7 @@
 
 #include <dirent.h>
 #include <fcntl.h>
-
+#include <pthread.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -30,9 +30,6 @@ namespace securefs
 std::string errno_to_string() { return sane_strerror(errno); }
 
 #ifndef HAS_THREAD_LOCAL
-
-#include <pthread.h>
-
 template <class T>
 class ThreadLocalStorage
 {
@@ -43,22 +40,21 @@ public:
     explicit ThreadLocalStorage()
     {
         int rc = pthread_key_create(&m_pkey, [](void* ptr) { delete static_cast<T*>(ptr); });
-        if (rc < 0)
-            throw std::runtime_error("Fail to initialize pthread TLS");
+        if (rc)
+            throw POSIXException(rc, "Fail to initialize pthread TLS");
     }
 
     ~ThreadLocalStorage() { pthread_key_delete(m_pkey); }
 
     T* get()
     {
-        auto ptr = pthread_getspecific(m_pkey);
+        void* ptr = pthread_getspecific(m_pkey);
         if (!ptr)
         {
             ptr = new T();
-
             int rc = pthread_setspecific(m_pkey, ptr);
-            if (rc < 0)
-                throw std::runtime_error("Fail to set TLS value");
+            if (rc)
+                throw POSIXException(rc, "Fail to set TLS value");
         }
         return static_cast<T*>(ptr);
     }

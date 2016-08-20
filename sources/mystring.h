@@ -25,17 +25,7 @@ inline bool starts_with(const std::string& str, const std::string& prefix)
     return starts_with(str.data(), str.size(), prefix.data(), prefix.size());
 }
 
-std::vector<std::string> split(const char* str, size_t length, char separator);
-
-inline std::vector<std::string> split(const std::string& str, char separator)
-{
-    return split(str.data(), str.size(), separator);
-}
-
-inline std::vector<std::string> split(const char* str, char separator)
-{
-    return split(str, strlen(str), separator);
-}
+std::vector<std::string> split(const char* str, char separator);
 
 std::string hexify(const byte* data, size_t length);
 void parse_hex(const std::string& hex, byte* output, size_t len);

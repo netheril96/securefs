@@ -180,13 +180,12 @@ bool starts_with(const char* str, size_t size, const char* prefix, size_t prefix
     return size >= prefix_len && memcmp(str, prefix, prefix_len) == 0;
 }
 
-std::vector<std::string> split(const char* str, size_t length, char separator)
+std::vector<std::string> split(const char* str, char separator)
 {
-    const char* end = str + length;
     const char* start = str;
     std::vector<std::string> result;
 
-    while (str < end)
+    while (*str)
     {
         if (*str == separator)
         {
@@ -197,8 +196,8 @@ std::vector<std::string> split(const char* str, size_t length, char separator)
         ++str;
     }
 
-    if (start < end)
-        result.emplace_back(start, end);
+    if (start < str)
+        result.emplace_back(start, str);
     return result;
 }
 
