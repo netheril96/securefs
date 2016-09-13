@@ -94,7 +94,7 @@ struct HuffmanNode
 		: symbol(0), parent(0) {}
 	HuffmanNode(const HuffmanNode& rhs)
 		: symbol(rhs.symbol), parent(rhs.parent) {}
-	
+
 	size_t symbol;
 	union {size_t parent; unsigned depth, freq;};
 };
@@ -582,13 +582,13 @@ void Deflator::MatchFound(unsigned int distance, unsigned int length)
 	static const unsigned int lengthBases[] =
 		{3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,
 		 227,258};
-	static const unsigned int distanceBases[30] = 
+	static const unsigned int distanceBases[30] =
 		{1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,
 		 4097,6145,8193,12289,16385,24577};
 
 	assert(m_matchBufferEnd < m_matchBuffer.size());
 	EncodedMatch &m = m_matchBuffer[m_matchBufferEnd++];
-	assert(length >= 3 && length < COUNTOF(lengthCodes));
+	assert((length >= 3) && (length-3 < COUNTOF(lengthCodes)));
 	unsigned int lengthCode = lengthCodes[length-3];
 	m.literalCode = lengthCode;
 	m.literalExtra = length - lengthBases[lengthCode-257];
@@ -601,10 +601,10 @@ void Deflator::MatchFound(unsigned int distance, unsigned int length)
 	m_blockLength += length;
 }
 
-inline unsigned int CodeLengthEncode(const unsigned int *begin, 
-									 const unsigned int *end, 
-									 const unsigned int *& p, 
-									 unsigned int &extraBits, 
+inline unsigned int CodeLengthEncode(const unsigned int *begin,
+									 const unsigned int *end,
+									 const unsigned int *& p,
+									 unsigned int &extraBits,
 									 unsigned int &extraBitsLength)
 {
 	unsigned int v = *p;
@@ -663,9 +663,9 @@ void Deflator::EncodeBlock(bool eof, unsigned int blockType)
 		{
 #if defined(_MSC_VER) && !defined(__MWERKS__) && (_MSC_VER <= 1300)
 			// VC60 and VC7 workaround: built-in std::reverse_iterator has two template parameters, Dinkumware only has one
-			typedef reverse_bidirectional_iterator<unsigned int *, unsigned int> RevIt;
+			typedef std::reverse_bidirectional_iterator<unsigned int *, unsigned int> RevIt;
 #elif defined(_RWSTD_NO_CLASS_PARTIAL_SPEC)
-	typedef std::reverse_iterator<unsigned int *, random_access_iterator_tag, unsigned int> RevIt;
+			typedef std::reverse_iterator<unsigned int *, std::random_access_iterator_tag, unsigned int> RevIt;
 #else
 			typedef std::reverse_iterator<unsigned int *> RevIt;
 #endif

@@ -19,7 +19,7 @@ NAMESPACE_BEGIN(CryptoPP)
 class PKCS_EncryptionPaddingScheme : public PK_EncryptionMessageEncodingMethod
 {
 public:
-	static const char * StaticAlgorithmName() {return "EME-PKCS1-v1_5";}
+	CRYPTOPP_CONSTEXPR static const char *StaticAlgorithmName() {return "EME-PKCS1-v1_5";}
 
 	size_t MaxUnpaddedLength(size_t paddedLength) const;
 	void Pad(RandomNumberGenerator &rng, const byte *raw, size_t inputLength, byte *padded, size_t paddedLength, const NameValuePairs &parameters) const;
@@ -60,12 +60,12 @@ CRYPTOPP_DLL_TEMPLATE_CLASS PKCS_DigestDecoration<SHA512>;
 class CRYPTOPP_DLL PKCS1v15_SignatureMessageEncodingMethod : public PK_DeterministicSignatureMessageEncodingMethod
 {
 public:
-	static const char * CRYPTOPP_API StaticAlgorithmName() {return "EMSA-PKCS1-v1_5";}
+	CRYPTOPP_CONSTEXPR static const char * CRYPTOPP_API StaticAlgorithmName() {return "EMSA-PKCS1-v1_5";}
 
 	size_t MinRepresentativeBitLength(size_t hashIdentifierSize, size_t digestSize) const
 		{return 8 * (digestSize + hashIdentifierSize + 10);}
 
-	void ComputeMessageRepresentative(RandomNumberGenerator &rng, 
+	void ComputeMessageRepresentative(RandomNumberGenerator &rng,
 		const byte *recoverableMessage, size_t recoverableMessageLength,
 		HashTransformation &hash, HashIdentifier hashIdentifier, bool messageEmpty,
 		byte *representative, size_t representativeBitLength) const;
@@ -76,7 +76,7 @@ public:
 		{
 			static HashIdentifier Lookup()
 			{
-				return HashIdentifier(PKCS_DigestDecoration<H>::decoration, PKCS_DigestDecoration<H>::length);
+				return HashIdentifier(PKCS_DigestDecoration<H>::decoration, (size_t)PKCS_DigestDecoration<H>::length);
 			}
 		};
 	};

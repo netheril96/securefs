@@ -102,7 +102,7 @@ void SHA256::InitState(HashWordType *state)
 	memcpy(state, s, sizeof(s));
 }
 
-#if CRYPTOPP_BOOL_SSE2_ASM_AVAILABLE
+#if CRYPTOPP_BOOL_SSE2_ASM_AVAILABLE && !defined(CRYPTOPP_DISABLE_SHA_ASM)
 CRYPTOPP_ALIGN_DATA(16) extern const word32 SHA256_K[64] CRYPTOPP_SECTION_ALIGN16 = {
 #else
 extern const word32 SHA256_K[64] = {
@@ -127,7 +127,7 @@ extern const word32 SHA256_K[64] = {
 
 #endif // #ifndef CRYPTOPP_GENERATE_X64_MASM
 
-#if defined(CRYPTOPP_X86_ASM_AVAILABLE) || defined(CRYPTOPP_X32_ASM_AVAILABLE) || defined(CRYPTOPP_GENERATE_X64_MASM)
+#if (defined(CRYPTOPP_X86_ASM_AVAILABLE) || defined(CRYPTOPP_X32_ASM_AVAILABLE) || defined(CRYPTOPP_GENERATE_X64_MASM)) && !defined(CRYPTOPP_DISABLE_SHA_ASM)
 
 static void CRYPTOPP_FASTCALL X86_SHA256_HashBlocks(word32 *state, const word32 *data, size_t len
 #if defined(_MSC_VER) && (_MSC_VER == 1200)
@@ -245,7 +245,7 @@ static void CRYPTOPP_FASTCALL X86_SHA256_HashBlocks(word32 *state, const word32 
 #define SWAP_COPY(i)		\
 	AS2(	mov		WORD_REG(bx), [WORD_REG(dx)+i*WORD_SZ])\
 	AS1(	bswap	WORD_REG(bx))\
-	AS2(	mov		[Wt(i)], WORD_REG(bx))	
+	AS2(	mov		[Wt(i)], WORD_REG(bx))
 #endif
 
 #if defined(__GNUC__)
@@ -310,7 +310,9 @@ static void CRYPTOPP_FASTCALL X86_SHA256_HashBlocks(word32 *state, const word32 
 	AS2(	mov		esi, ecx)
 	AS2(	lea		edi, A(0))
 	AS2(	mov		ecx, 8)
+ATT_NOPREFIX
 	AS1(	rep movsd)
+INTEL_NOPREFIX
 	AS2(	mov		esi, K_END)
 	ASJ(	jmp,	3, f)
 #endif
@@ -371,7 +373,9 @@ static void CRYPTOPP_FASTCALL X86_SHA256_HashBlocks(word32 *state, const word32 
 	ROUND(14, 1, eax, ecx, edi, edx)
 	ROUND(15, 1, ecx, eax, edx, edi)
 	AS2(	cmp		WORD_REG(si), K_END)
+	ATT_NOPREFIX
 	ASJ(	jb,		1, b)
+	INTEL_NOPREFIX
 
 	AS2(	mov		WORD_REG(dx), DATA_SAVE)
 	AS2(	add		WORD_REG(dx), 64)
@@ -390,7 +394,9 @@ static void CRYPTOPP_FASTCALL X86_SHA256_HashBlocks(word32 *state, const word32 
 	AS2(	movdqa	[AS_REG_7+1*16], xmm1)
 	AS2(	movdqa	[AS_REG_7+0*16], xmm0)
 	AS2(	cmp		WORD_REG(dx), DATA_END)
+	ATT_NOPREFIX
 	ASJ(	jb,		0, b)
+	INTEL_NOPREFIX
 #endif
 
 #if CRYPTOPP_BOOL_X86 || CRYPTOPP_BOOL_X32
@@ -438,7 +444,7 @@ static void CRYPTOPP_FASTCALL X86_SHA256_HashBlocks(word32 *state, const word32 
 
 #ifdef __GNUC__
 	ATT_PREFIX
-	: 
+	:
 	: "c" (state), "d" (data), "S" (SHA256_K+48), "D" (len)
 	#if CRYPTOPP_BOOL_X64
 		, "m" (workspace[0])
@@ -461,7 +467,7 @@ void CRYPTOPP_FASTCALL X86_SHA256_HashBlocks(word32 *state, const word32 *data, 
 }
 #endif
 
-#if defined(CRYPTOPP_X86_ASM_AVAILABLE) || defined(CRYPTOPP_X32_ASM_AVAILABLE) || defined(CRYPTOPP_X64_MASM_AVAILABLE)
+#if (defined(CRYPTOPP_X86_ASM_AVAILABLE) || defined(CRYPTOPP_X32_ASM_AVAILABLE) || defined(CRYPTOPP_X64_MASM_AVAILABLE)) && !defined(CRYPTOPP_DISABLE_SHA_ASM)
 
 size_t SHA256::HashMultipleBlocks(const word32 *input, size_t length)
 {
@@ -503,7 +509,7 @@ size_t SHA224::HashMultipleBlocks(const word32 *input, size_t length)
 void SHA256::Transform(word32 *state, const word32 *data)
 {
 	word32 W[16];
-#if defined(CRYPTOPP_X86_ASM_AVAILABLE) || defined(CRYPTOPP_X32_ASM_AVAILABLE) || defined(CRYPTOPP_X64_MASM_AVAILABLE)
+#if (defined(CRYPTOPP_X86_ASM_AVAILABLE) || defined(CRYPTOPP_X32_ASM_AVAILABLE) || defined(CRYPTOPP_X64_MASM_AVAILABLE)) && !defined(CRYPTOPP_DISABLE_SHA_ASM)
 	// this byte reverse is a waste of time, but this function is only called by MDC
 	ByteReverse(W, data, BLOCKSIZE);
 	X86_SHA256_HashBlocks(state, W, BLOCKSIZE - !HasSSE2());
@@ -531,7 +537,7 @@ void SHA256::Transform(word32 *state, const word32 *data)
 #endif
 }
 
-/* 
+/*
 // smaller but slower
 void SHA256::Transform(word32 *state, const word32 *data)
 {
@@ -543,7 +549,7 @@ void SHA256::Transform(word32 *state, const word32 *data)
 	memcpy(t, state, 8*4);
 	word32 e = t[4], a = t[0];
 
-	do 
+	do
 	{
 		word32 w = data[j];
 		W[j] = w;
@@ -703,14 +709,14 @@ CRYPTOPP_NAKED static void CRYPTOPP_FASTCALL SHA512_SSE2_Transform(word64 *state
 	AS2(	sub		esp, 27*16)				// 17*16 for expanded data, 20*8 for state
 	AS_PUSH_IF86(	ax)
 	AS2(	xor		eax, eax)
-			
+
 #if CRYPTOPP_BOOL_X32
 	AS2(	lea		edi, [esp+8+8*8])		// start at middle of state buffer. will decrement pointer each round to avoid copying
 	AS2(	lea		esi, [esp+8+20*8+8])	// 16-byte alignment, then add 8
 #else
 	AS2(	lea		edi, [esp+4+8*8])		// start at middle of state buffer. will decrement pointer each round to avoid copying
 	AS2(	lea		esi, [esp+4+20*8+8])	// 16-byte alignment, then add 8
-#endif	
+#endif
 
 	AS2(	movdqa	xmm0, [ecx+0*16])
 	AS2(	movdq2q	mm4, xmm0)

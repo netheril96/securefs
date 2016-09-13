@@ -33,6 +33,7 @@
 #include <time.h>
 
 #ifdef CRYPTOPP_WIN32_AVAILABLE
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #endif
 
@@ -61,6 +62,15 @@
 // Aggressive stack checking with VS2005 SP1 and above.
 #if (CRYPTOPP_MSC_VERSION >= 1410)
 # pragma strict_gs_check (on)
+#endif
+
+// Quiet deprecated warnings intended to benefit users.
+#if CRYPTOPP_MSC_VERSION
+# pragma warning(disable: 4996)
+#endif
+
+#if CRYPTOPP_GCC_DIAGNOSTIC_AVAILABLE
+# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
 USING_NAMESPACE(CryptoPP)
@@ -132,7 +142,7 @@ int CRYPTOPP_API main(int argc, char *argv[])
 #endif
 
 	try
-	{		
+	{
 		RegisterFactories();
 
 		// Some editors have problems with the '\0' character when redirecting output.
@@ -234,9 +244,9 @@ int CRYPTOPP_API main(int argc, char *argv[])
 			dllFile.read((char *)buf.begin(), fileSize);
 
 			// find positions of relevant sections in the file, based on version 8 of documentation from http://www.microsoft.com/whdc/system/platform/firmware/PECOFF.mspx
-			word32 coffPos = *(word16 *)(buf+0x3c);
+			word32 coffPos = *(word16 *)(void *)(buf+0x3c);
 			word32 optionalHeaderPos = coffPos + 24;
-			word16 optionalHeaderMagic = *(word16 *)(buf+optionalHeaderPos);
+			word16 optionalHeaderMagic = *(word16 *)(void *)(buf+optionalHeaderPos);
 			if (optionalHeaderMagic != 0x10b && optionalHeaderMagic != 0x20b)
 			{
 				cerr << "Target file is not a PE32 or PE32+ image.\n";
@@ -244,8 +254,8 @@ int CRYPTOPP_API main(int argc, char *argv[])
 			}
 			word32 checksumPos = optionalHeaderPos + 64;
 			word32 certificateTableDirectoryPos = optionalHeaderPos + (optionalHeaderMagic == 0x10b ? 128 : 144);
-			word32 certificateTablePos = *(word32 *)(buf+certificateTableDirectoryPos);
-			word32 certificateTableSize = *(word32 *)(buf+certificateTableDirectoryPos+4);
+			word32 certificateTablePos = *(word32 *)(void *)(buf+certificateTableDirectoryPos);
+			word32 certificateTableSize = *(word32 *)(void *)(buf+certificateTableDirectoryPos+4);
 			if (certificateTableSize != 0)
 				cerr << "Warning: certificate table (IMAGE_DIRECTORY_ENTRY_SECURITY) of target image is not empty.\n";
 
@@ -279,10 +289,11 @@ int CRYPTOPP_API main(int argc, char *argv[])
 			DigestFile(argv[2]);
 		else if (command == "tv")
 		{
+			// TestDataFile() adds CRYPTOPP_DATA_DIR as required
 			std::string fname = (argv[2] ? argv[2] : "all");
 			if (fname.find(".txt") == std::string::npos)
 				fname = "TestVectors/" + fname + ".txt";
-			
+
 			PrintSeedAndThreads(seed);
 			return !RunTestDataFile(fname.c_str());
 		}
@@ -369,7 +380,7 @@ int CRYPTOPP_API main(int argc, char *argv[])
 			AES_CTR_Encrypt(argv[2], argv[3], argv[4], argv[5]);
 		else if (command == "h")
 		{
-			FileSource usage("TestData/usage.dat", true, new FileSink(cout));
+			FileSource usage(CRYPTOPP_DATA_DIR "TestData/usage.dat", true, new FileSink(cout));
 			return 1;
 		}
 		else if (command == "V")
@@ -414,7 +425,7 @@ T StringToValue(const std::string& str) {
 	std::istringstream iss(str);
 	T value;
 	iss >> value;
-	
+
 	// Use fail(), not bad()
 	if (iss.fail())
 		throw InvalidArgument("cryptest.exe: '" + str +"' is not a value");
@@ -424,7 +435,7 @@ T StringToValue(const std::string& str) {
 		throw InvalidArgument("cryptest.exe: '" + str +"' is negative");
 #endif
 
-	return value;	
+	return value;
 }
 
 template<>
@@ -432,11 +443,11 @@ int StringToValue<int, true>(const std::string& str)
 {
 	Integer n(str.c_str());
 	long l = n.ConvertToLong();
-	
+
 	int r;
 	if(!SafeConvert(l, r))
 		throw InvalidArgument("cryptest.exe: '" + str +"' is not an integer value");
-	
+
 	return r;
 }
 
@@ -624,7 +635,7 @@ void SecretShareFile(int threshold, int nShares, const char *filename, const cha
 	RandomPool rng;
 	rng.IncorporateEntropy((byte *)seed, strlen(seed));
 
-	ChannelSwitch *channelSwitch;
+	ChannelSwitch *channelSwitch = NULL;
 	FileSource source(filename, false, new SecretSharing(rng, threshold, nShares, channelSwitch = new ChannelSwitch));
 
 	vector_member_ptrs<FileSink> fileSinks(nShares);
@@ -678,7 +689,7 @@ void InformationDisperseFile(int threshold, int nShares, const char *filename)
 	if (threshold < 1 || threshold > 1000)
 		throw InvalidArgument("InformationDisperseFile: " + IntToString(nShares) + " is not in range [1, 1000]");
 
-	ChannelSwitch *channelSwitch;
+	ChannelSwitch *channelSwitch = NULL;
 	FileSource source(filename, false, new InformationDispersal(threshold, nShares, channelSwitch = new ChannelSwitch));
 
 	vector_member_ptrs<FileSink> fileSinks(nShares);
@@ -737,8 +748,8 @@ void GzipFile(const char *in, const char *out, int deflate_level)
 	//	    \       Gunzip
 	//		  \       |
 	//		    \     v
-	//		      > ComparisonFilter 
-			   
+	//		      > ComparisonFilter
+
 	EqualityComparisonFilter comparison;
 
 	Gunzip gunzip(new ChannelSwitch(comparison, "0"));
@@ -785,6 +796,9 @@ void HexDecode(const char *in, const char *out)
 
 void ForwardTcpPort(const char *sourcePortName, const char *destinationHost, const char *destinationPortName)
 {
+	// Quiet warnings for Windows Phone and Windows Store builds
+	CRYPTOPP_UNUSED(sourcePortName), CRYPTOPP_UNUSED(destinationHost), CRYPTOPP_UNUSED(destinationPortName);
+
 #ifdef SOCKETS_AVAILABLE
 	SocketsInitializer sockInit;
 
@@ -795,12 +809,12 @@ void ForwardTcpPort(const char *sourcePortName, const char *destinationHost, con
 
 	sockListen.Create();
 	sockListen.Bind(sourcePort);
-	
+
 	int err = setsockopt(sockListen, IPPROTO_TCP, TCP_NODELAY, "\x01", 1);
 	assert(err == 0);
 	if(err != 0)
 		throw Socket::Err(sockListen, "setsockopt", sockListen.GetLastError());
-	
+
 	cout << "Listing on port " << sourcePort << ".\n";
 	sockListen.Listen();
 
@@ -936,6 +950,8 @@ bool Validate(int alg, bool thorough, const char *seedInput)
 	case 68: result = ValidateGCM(); break;
 	case 69: result = ValidateCMAC(); break;
 	case 70: result = ValidateHKDF(); break;
+	case 71: result = ValidateBLAKE2s(); break;
+	case 72: result = ValidateBLAKE2b(); break;
 	default: return false;
 	}
 
@@ -944,7 +960,7 @@ bool Validate(int alg, bool thorough, const char *seedInput)
 	tm localTime = {};
 	char timeBuf[64];
 	errno_t err;
-	
+
 	const time_t endTime = time(NULL);
 	err = localtime_s(&localTime, &endTime);
 	assert(err == 0);

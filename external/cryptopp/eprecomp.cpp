@@ -6,6 +6,7 @@
 
 #include "eprecomp.h"
 #include "integer.h"
+#include "algebra.h"
 #include "asn.h"
 
 NAMESPACE_BEGIN(CryptoPP)
@@ -96,8 +97,8 @@ template <class T> T DL_FixedBasePrecomputationImpl<T>::Exponentiate(const DL_Gr
 	return group.ConvertOut(GeneralCascadeMultiplication<Element>(group.GetGroup(), eb.begin(), eb.end()));
 }
 
-template <class T> T 
-	DL_FixedBasePrecomputationImpl<T>::CascadeExponentiate(const DL_GroupPrecomputation<Element> &group, const Integer &exponent, 
+template <class T> T
+	DL_FixedBasePrecomputationImpl<T>::CascadeExponentiate(const DL_GroupPrecomputation<Element> &group, const Integer &exponent,
 		const DL_FixedBasePrecomputation<T> &i_pc2, const Integer &exponent2) const
 {
 	std::vector<BaseAndExponent<Element> > eb;	// array of segments of the exponent and precalculated bases

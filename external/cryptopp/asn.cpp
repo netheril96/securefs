@@ -266,7 +266,7 @@ void OID::BERDecode(BufferedTransformation &bt)
 
 	if (!bt.Get(b))
 		BERDecodeError();
-	
+
 	length--;
 	m_values.resize(2);
 	m_values[0] = b / 40;
@@ -292,7 +292,7 @@ void OID::BERDecodeAndCheck(BufferedTransformation &bt) const
 
 inline BufferedTransformation & EncodedObjectFilter::CurrentTarget()
 {
-	if (m_flags & PUT_OBJECTS) 
+	if (m_flags & PUT_OBJECTS)
 		return *AttachedTransformation();
 	else
 		return TheBitBucket();
@@ -352,7 +352,7 @@ void EncodedObjectFilter::Put(const byte *inString, size_t length)
 
 		case TAIL:			// silence warnings
 		case ALL_DONE:
-		default: ;; 
+		default: ;;
 		}
 
 		if (m_state == IDENTIFIER && m_level == 0)
@@ -405,14 +405,14 @@ void BERGeneralDecoder::Init(byte asnTag)
 
 BERGeneralDecoder::~BERGeneralDecoder()
 {
-	try	// avoid throwing in constructor
+	try	// avoid throwing in destructor
 	{
 		if (!m_finished)
 			MessageEnd();
 	}
 	catch (const Exception&)
 	{
-		assert(0);
+		// assert(0);
 	}
 }
 
