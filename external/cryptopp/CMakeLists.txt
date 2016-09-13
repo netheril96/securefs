@@ -20,8 +20,8 @@ include(TestBigEndian)
 #============================================================================
 
 option(BUILD_STATIC "Build static library" ON)
-option(BUILD_SHARED "Build shared library" ON)
-option(BUILD_TESTING "Build library tests" ON)
+option(BUILD_SHARED "Build shared library" OFF)
+option(BUILD_TESTING "Build library tests" OFF)
 option(BUILD_DOCUMENTATION "Use Doxygen to create the HTML based API documentation" OFF)
 
 option(DISABLE_ASM "Disable ASM" OFF)
@@ -277,48 +277,4 @@ if(BUILD_DOCUMENTATION)
 				COMMAND ${CMAKE_COMMAND} -E remove_directory "${in_source_DOCS_DIR}"
 		)
 	endif()
-endif()
-
-#============================================================================
-# Install
-#============================================================================
-set(export_name "cryptopp-targets")
-
-# Runtime package
-if (BUILD_SHARED)
-	install(
-			TARGETS cryptopp-shared
-			EXPORT ${export_name}
-			DESTINATION ${CMAKE_INSTALL_LIBDIR}
-			RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-			LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-			ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-	)
-endif()
-
-# Development package
-if (BUILD_STATIC)
-	install(TARGETS cryptopp-static EXPORT ${export_name} DESTINATION ${CMAKE_INSTALL_LIBDIR})
-endif()
-install(FILES ${cryptopp_HEADERS} DESTINATION include/cryptopp)
-
-# CMake Package
-if(NOT CMAKE_VERSION VERSION_LESS 2.8.8)	# CMakePackageConfigHelpers is supported from 2.8.8
-	include(CMakePackageConfigHelpers)
-	write_basic_package_version_file("${PROJECT_BINARY_DIR}/cryptopp-config-version.cmake" VERSION ${cryptopp_VERSION_MAJOR}.${cryptopp_VERSION_MINOR}.${cryptopp_VERSION_PATCH} COMPATIBILITY SameMajorVersion)
-	install(FILES cryptopp-config.cmake ${PROJECT_BINARY_DIR}/cryptopp-config-version.cmake DESTINATION "lib/cmake/cryptopp")
-	install(EXPORT ${export_name} DESTINATION "lib/cmake/cryptopp")
-endif()
-
-# Tests
-if(BUILD_TESTING)
-	install(TARGETS cryptest DESTINATION ${CMAKE_INSTALL_BINDIR})
-	install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/TestData DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/cryptopp)
-	install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/TestVectors DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/cryptopp)
-endif()
-
-
-# Documentation
-if(BUILD_DOCUMENTATION)
-	install(DIRECTORY "${out_source_DOCS_DIR}" DESTINATION ${CMAKE_INSTALL_DOCDIR})
 endif()
