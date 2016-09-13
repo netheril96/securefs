@@ -31,7 +31,7 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
                          tm.tm_hour,
                          tm.tm_min,
                          tm.tm_sec,
-                         now.tv_usec);
+                         static_cast<int>(now.tv_usec));
 
     if (size1 < 0 || static_cast<size_t>(size1) >= buffer.size())
         return;
