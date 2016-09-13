@@ -91,6 +91,7 @@ license you like.
 
 #ifndef LIB_JSONCPP_JSON_TOOL_H_INCLUDED
 #define LIB_JSONCPP_JSON_TOOL_H_INCLUDED
+#include <clocale>
 
 /* This header provides common string manipulation support, such as UTF-8,
  * portable conversion from/to string...
@@ -99,6 +100,26 @@ license you like.
  */
 
 namespace Json {
+
+/// Fallback for decimal_point on android, where the lconv is an empty struct.
+template<typename Lconv, bool=(sizeof(Lconv) >= sizeof(char*))>
+struct Locale {
+  static char decimalPoint() {
+    return '\0';
+  }
+};
+
+/// Return decimal_point for the current locale.
+template<typename Lconv>
+struct Locale<Lconv, true> {
+  static char decimalPoint() {
+    Lconv* lc = localeconv();
+    if (lc == NULL) {
+      return '\0';
+    }
+    return *(lc->decimal_point);
+  }
+};
 
 /// Converts a unicode code-point to UTF-8.
 static inline JSONCPP_STRING codePointToUTF8(unsigned int cp) {
@@ -165,6 +186,18 @@ static inline void fixNumericLocale(char* begin, char* end) {
       *begin = '.';
     }
     ++begin;
+  }
+}
+
+static inline void fixNumericLocaleInput(char* begin, char* end) {
+  char decimalPoint = Locale<struct lconv>::decimalPoint();
+  if (decimalPoint != '\0' && decimalPoint != '.') {
+    while (begin < end) {
+      if (*begin == '.') {
+        *begin = decimalPoint;
+      }
+      ++begin;
+    }
   }
 }
 
@@ -1255,7 +1288,7 @@ bool OurReader::parse(const char* beginDoc,
   Token token;
   skipCommentTokens(token);
   if (features_.failIfExtra_) {
-    if (token.type_ != tokenError && token.type_ != tokenEndOfStream) {
+    if ((features_.strictRoot_ || token.type_ != tokenError) && token.type_ != tokenEndOfStream) {
       addError("Extra non-whitespace after JSON value.", token);
       return false;
     }
@@ -1806,6 +1839,7 @@ bool OurReader::decodeDouble(Token& token, Value& decoded) {
     Char buffer[bufferSize + 1];
     memcpy(buffer, token.start_, ulength);
     buffer[length] = 0;
+    fixNumericLocaleInput(buffer, buffer + length);
     count = sscanf(buffer, format, &value);
   } else {
     JSONCPP_STRING buffer(token.start_, token.end_);
@@ -2459,8 +2493,8 @@ namespace Json {
 // static
 Value const& Value::nullSingleton()
 {
- static Value const* nullStatic = new Value;
- return *nullStatic;
+ static Value const nullStatic;
+ return nullStatic;
 }
 
 // for backwards compatibility, we'll leave these global references around, but DO NOT
@@ -2763,6 +2797,7 @@ bool Value::CZString::isStaticString() const { return storage_.policy_ == noDupl
  * This optimization is used in ValueInternalMap fast allocator.
  */
 Value::Value(ValueType vtype) {
+  static char const empty[] = "";
   initBasic(vtype);
   switch (vtype) {
   case nullValue:
@@ -2775,7 +2810,8 @@ Value::Value(ValueType vtype) {
     value_.real_ = 0.0;
     break;
   case stringValue:
-    value_.string_ = 0;
+    // allocated_ == false, so this is safe.
+    value_.string_ = const_cast<char*>(static_cast<char const*>(empty));
     break;
   case arrayValue:
   case objectValue:
@@ -2920,8 +2956,7 @@ Value::~Value() {
     JSON_ASSERT_UNREACHABLE;
   }
 
-  if (comments_)
-    delete[] comments_;
+  delete[] comments_;
 
   value_.uint_ = 0;
 }
@@ -4387,7 +4422,7 @@ void FastWriter::writeValue(const Value& value) {
     break;
   case stringValue:
   {
-    // Is NULL possible for value.string_?
+    // Is NULL possible for value.string_? No.
     char const* str;
     char const* end;
     bool ok = value.getString(&str, &end);
@@ -4457,7 +4492,7 @@ void StyledWriter::writeValue(const Value& value) {
     break;
   case stringValue:
   {
-    // Is NULL possible for value.string_?
+    // Is NULL possible for value.string_? No.
     char const* str;
     char const* end;
     bool ok = value.getString(&str, &end);
@@ -4674,7 +4709,7 @@ void StyledStreamWriter::writeValue(const Value& value) {
     break;
   case stringValue:
   {
-    // Is NULL possible for value.string_?
+    // Is NULL possible for value.string_? No.
     char const* str;
     char const* end;
     bool ok = value.getString(&str, &end);
@@ -4955,7 +4990,7 @@ void BuiltStyledStreamWriter::writeValue(Value const& value) {
     break;
   case stringValue:
   {
-    // Is NULL is possible for value.string_?
+    // Is NULL is possible for value.string_? No.
     char const* str;
     char const* end;
     bool ok = value.getString(&str, &end);
@@ -5036,7 +5071,7 @@ void BuiltStyledStreamWriter::writeArrayValue(Value const& value) {
       if (!indentation_.empty()) *sout_ << " ";
       for (unsigned index = 0; index < size; ++index) {
         if (index > 0)
-          *sout_ << ", ";
+          *sout_ << ((!indentation_.empty()) ? ", " : ",");
         *sout_ << childValues_[index];
       }
       if (!indentation_.empty()) *sout_ << " ";
