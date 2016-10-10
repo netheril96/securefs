@@ -19,13 +19,16 @@ private:
     std::shared_ptr<HeaderBase> m_header;
     key_type m_key;
     id_type m_id;
-    uint32_t m_flags[8];
+    uint32_t m_flags[16];
     std::shared_ptr<FileStream> m_data_stream, m_meta_stream;
-    bool m_dirty, m_check;
+    bool m_dirty, m_check, m_store_time;
 
 private:
     void read_header();
     [[noreturn]] void throw_invalid_cast(int to_type);
+
+    static void convert_timespec_to_flags(uint32_t flags[3], const timespec& spec) noexcept;
+    static void convert_flags_to_timespec(const uint32_t flags[3], timespec& spec) noexcept;
 
 protected:
     std::shared_ptr<StreamBase> m_stream;
@@ -99,7 +102,8 @@ public:
                       const id_type& id_,
                       bool check,
                       unsigned block_size,
-                      unsigned iv_size);
+                      unsigned iv_size,
+                      bool store_time = false);
     virtual ~FileBase();
     DISABLE_COPY_MOVE(FileBase)
 
@@ -136,6 +140,27 @@ public:
         m_flags[3] = value;
         m_dirty = true;
     }
+
+    void get_atime(timespec& out) const noexcept { convert_flags_to_timespec(m_flags + 7, out); }
+    void get_mtime(timespec& out) const noexcept { convert_flags_to_timespec(m_flags + 10, out); }
+    void get_ctime(timespec& out) const noexcept { convert_flags_to_timespec(m_flags + 13, out); }
+
+    void set_atime(const timespec& in) noexcept
+    {
+        convert_timespec_to_flags(m_flags + 7, in);
+        m_dirty = true;
+    }
+    void set_mtime(const timespec& in) noexcept
+    {
+        convert_timespec_to_flags(m_flags + 10, in);
+        m_dirty = true;
+    }
+    void set_ctime(const timespec& in) noexcept
+    {
+        convert_timespec_to_flags(m_flags + 13, in);
+        m_dirty = true;
+    }
+
     // --End of getters and setters for stats---
 
     const id_type& get_id() const { return m_id; }

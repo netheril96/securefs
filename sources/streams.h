@@ -154,5 +154,6 @@ make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
                          const id_type& id_,
                          bool check,
                          unsigned block_size,
-                         unsigned iv_size);
+                         unsigned iv_size,
+                         unsigned header_size = 32);
 }

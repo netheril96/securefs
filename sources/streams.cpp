@@ -316,7 +316,7 @@ namespace internal
 
         unsigned get_meta_size() const noexcept { return get_iv_size() + get_mac_size(); }
 
-        unsigned get_header_size() const noexcept { return 32; }
+        unsigned get_header_size() const noexcept { return m_header_size; }
 
         unsigned get_encrypted_header_size() const noexcept
         {
@@ -329,7 +329,7 @@ namespace internal
         HMACStream m_metastream;
         key_type m_key;
         id_type m_id;
-        unsigned m_iv_size;
+        unsigned m_iv_size, m_header_size;
         bool m_check;
 
     private:
@@ -356,12 +356,14 @@ namespace internal
                                    const id_type& id_,
                                    bool check,
                                    unsigned block_size,
-                                   unsigned iv_size)
+                                   unsigned iv_size,
+                                   unsigned header_size)
             : CryptStream(data_stream, block_size)
             , m_metastream(meta_key, id_, meta_stream, check)
             , m_key(data_key)
             , m_id(id_)
             , m_iv_size(iv_size)
+            , m_header_size(header_size)
             , m_check(check)
         {
         }
@@ -546,7 +548,8 @@ make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
                          const id_type& id_,
                          bool check,
                          unsigned block_size,
-                         unsigned iv_size)
+                         unsigned iv_size,
+                         unsigned header_size)
 {
     auto stream = std::make_shared<internal::AESGCMCryptStream>(std::move(data_stream),
                                                                 std::move(meta_stream),
@@ -555,7 +558,8 @@ make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
                                                                 id_,
                                                                 check,
                                                                 block_size,
-                                                                iv_size);
+                                                                iv_size,
+                                                                header_size);
     return {stream, stream};
 }
 }

@@ -9,6 +9,70 @@
 
 #include <sys/types.h>
 
+#ifdef __MACH__
+#include <mach/clock.h>
+#include <mach/mach.h>
+#endif
+
+/**
+
+ Layout of the header field in the metadata file:
+
+ ----
+ mode
+----
+ uid
+ ----
+ gid
+ ----
+ nlink
+ ----
+ root_page
+ ----
+ start_of_free_page
+ ----
+ num_free_page
+ ----
+ (unused)
+ ----
+
+ Each field is a 32-bit unsigned number. The last four field is unused for regular files.
+
+ When store_time extension is enabled, the header field is enlarged to store the atime, mtime, and
+ctime of the file.
+
+The layout becomes
+ ----
+ mode
+ ----
+ uid
+ ----
+ gid
+ ----
+ nlink
+ ----
+ root_page
+ ----
+ start_of_free_page
+ ----
+ num_free_page
+ ----
+
+ atime
+
+ ----
+
+ mtime
+
+ ----
+
+ ctime
+
+ ----
+ Each time field is composed of three 32-bit integers, the first two compose the time in seconds
+since epoch, and last one is the number of nanoseconds.
+**/
+
 namespace securefs
 {
 
@@ -18,7 +82,8 @@ FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
                    const id_type& id_,
                    bool check,
                    unsigned block_size,
-                   unsigned iv_size)
+                   unsigned iv_size,
+                   bool store_time)
     : m_refcount(1)
     , m_header()
     , m_id(id_)
@@ -26,6 +91,7 @@ FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
     , m_meta_stream(meta_stream)
     , m_dirty(false)
     , m_check(check)
+    , m_store_time(store_time)
     , m_stream()
 {
     key_type data_key, meta_key;
@@ -48,7 +114,10 @@ FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
                                           id_,
                                           check,
                                           block_size,
-                                          iv_size);
+                                          iv_size,
+                                          store_time ? 64 : 32);
+    // The header size when time extension is enabled is enlarged by the space required by st_atime,
+    // st_ctime and st_mtime
 
     m_stream = crypt.first;
     m_header = crypt.second;
@@ -57,22 +126,34 @@ FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
 
 void FileBase::read_header()
 {
-    byte header[sizeof(m_flags)];
-    auto rc = m_header->read_header(header, sizeof(header));
+    memset(m_flags, 0xFF, sizeof(m_flags));
+    size_t header_size = m_store_time ? 64 : 32;
+    auto header = make_unique_array<byte>(header_size);
+    auto rc = m_header->read_header(header.get(), header_size);
     if (!rc)
     {
-        memset(m_flags, 0xFF, sizeof(m_flags));
         set_num_free_page(0);
     }
     else
     {
-        const byte* ptr = header;
-        for (auto&& f : m_flags)
+        for (size_t i = 0; i < header_size / sizeof(uint32_t); ++i)
         {
-            f = from_little_endian<decltype(f)>(ptr);
-            ptr += sizeof(f);
+            m_flags[i] = from_little_endian<uint32_t>(&header[i * sizeof(uint32_t)]);
         }
     }
+}
+
+void FileBase::convert_flags_to_timespec(const uint32_t flags[3], timespec& spec) noexcept
+{
+    spec.tv_sec = static_cast<uint64_t>(flags[0]) + (static_cast<uint64_t>(flags[1]) << 32);
+    spec.tv_nsec = flags[2];
+}
+
+void FileBase::convert_timespec_to_flags(uint32_t* flags, const timespec& spec) noexcept
+{
+    flags[0] = static_cast<uint32_t>(spec.tv_sec);
+    flags[1] = static_cast<uint32_t>(spec.tv_sec >> 32);
+    flags[2] = static_cast<uint32_t>(flags[2]);
 }
 
 int FileBase::get_real_type() { return type_for_mode(get_mode() & S_IFMT); }
@@ -91,6 +172,18 @@ void FileBase::stat(FUSE_STAT* st)
     {
         st->st_blksize = static_cast<decltype(st->st_blksize)>(blk_sz);
     }
+    if (m_store_time)
+    {
+#ifdef __APPLE__
+        get_atime(st->st_atimespec);
+        get_mtime(st->st_mtimespec);
+        get_ctime(st->st_ctimespec);
+#else
+        get_atime(st->st_atim);
+        get_mtime(st->st_mtim);
+        get_ctime(st->st_ctim);
+#endif
+    }
 }
 
 FileBase::~FileBase() {}
@@ -100,14 +193,13 @@ void FileBase::flush()
     this->subflush();
     if (m_dirty)
     {
-        byte header[sizeof(m_flags)];
-        byte* ptr = header;
-        for (auto&& f : m_flags)
+        size_t header_size = m_store_time ? 64 : 32;
+        auto header = make_unique_array<byte>(header_size);
+        for (size_t i = 0; i < header_size / sizeof(uint32_t); ++i)
         {
-            to_little_endian(f, ptr);
-            ptr += sizeof(f);
+            to_little_endian<uint32_t>(m_flags[i], &header[i * sizeof(uint32_t)]);
         }
-        m_header->write_header(header, sizeof(header));
+        m_header->write_header(header.get(), header_size);
         m_dirty = false;
     }
     m_header->flush_header();
@@ -163,6 +255,42 @@ ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
     if (m_check && !success)
         throw XattrVerificationException(get_id(), name);
     return true_size;
+}
+
+void FileBase::utimens(const struct timespec* ts)
+{
+    if (m_store_time)
+    {
+        struct timespec current_time;
+#ifdef __MACH__    // OS X does not have clock_gettime, use clock_get_time
+        clock_serv_t cclock;
+        mach_timespec_t mts;
+        host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
+        clock_get_time(cclock, &mts);
+        mach_port_deallocate(mach_task_self(), cclock);
+        current_time.tv_sec = mts.tv_sec;
+        current_time.tv_nsec = mts.tv_nsec;
+#else
+        clock_gettime(CLOCK_REALTIME, &current_time);
+#endif
+
+        if (ts)
+        {
+            set_atime(ts[0]);
+            set_mtime(ts[1]);
+        }
+        else
+        {
+            set_atime(current_time);
+            set_mtime(current_time);
+        }
+
+        set_ctime(current_time);
+    }
+    else
+    {
+        m_data_stream->utimens(ts);
+    }
 }
 
 void FileBase::setxattr(const char* name, const char* value, size_t size, int flags)

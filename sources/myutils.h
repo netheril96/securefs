@@ -124,7 +124,7 @@ inline bool is_all_zeros(const void* data, size_t len)
 }
 
 template <class T>
-inline void to_little_endian(T value, void* output)
+inline void to_little_endian(T value, void* output) noexcept
 {
     typedef typename std::remove_reference<T>::type underlying_type;
     static_assert(std::is_unsigned<underlying_type>::value, "Must be an unsigned integer type");
@@ -136,7 +136,7 @@ inline void to_little_endian(T value, void* output)
 }
 
 template <class T>
-inline typename std::remove_reference<T>::type from_little_endian(const void* input)
+inline typename std::remove_reference<T>::type from_little_endian(const void* input) noexcept
 {
     typedef typename std::remove_reference<T>::type underlying_type;
     static_assert(std::is_unsigned<underlying_type>::value, "Must be an unsigned integer type");
