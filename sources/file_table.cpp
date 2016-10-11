@@ -202,8 +202,15 @@ FileBase* FileTable::open_as(const id_type& id, int type)
 
     std::shared_ptr<FileStream> data_fd, meta_fd;
     std::tie(data_fd, meta_fd) = m_fio->open(id);
-    auto fb = btree_make_file_from_type(
-        type, data_fd, meta_fd, m_master_key, id, is_auth_enabled(), m_block_size, m_iv_size);
+    auto fb = btree_make_file_from_type(type,
+                                        data_fd,
+                                        meta_fd,
+                                        m_master_key,
+                                        id,
+                                        is_auth_enabled(),
+                                        m_block_size,
+                                        m_iv_size,
+                                        is_time_stored());
     m_opened.emplace(id, fb);
     fb->setref(1);
     return fb.get();
@@ -218,8 +225,15 @@ FileBase* FileTable::create_as(const id_type& id, int type)
 
     std::shared_ptr<FileStream> data_fd, meta_fd;
     std::tie(data_fd, meta_fd) = m_fio->create(id);
-    auto fb = btree_make_file_from_type(
-        type, data_fd, meta_fd, m_master_key, id, is_auth_enabled(), m_block_size, m_iv_size);
+    auto fb = btree_make_file_from_type(type,
+                                        data_fd,
+                                        meta_fd,
+                                        m_master_key,
+                                        id,
+                                        is_auth_enabled(),
+                                        m_block_size,
+                                        m_iv_size,
+                                        is_time_stored());
     m_opened.emplace(id, fb);
     fb->setref(1);
     return fb.get();

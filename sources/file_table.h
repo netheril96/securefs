@@ -43,7 +43,7 @@ private:
     void finalize(FileBase*);
 
 public:
-    static const uint32_t READ_ONLY = 0x1, NO_AUTHENTICATION = 0x2;
+    static const uint32_t READ_ONLY = 0x1, NO_AUTHENTICATION = 0x2, STORE_TIME = 0x4;
 
 public:
     explicit FileTable(int version,
@@ -58,6 +58,7 @@ public:
     void close(FileBase*);
     bool is_readonly() const noexcept { return m_flags & READ_ONLY; }
     bool is_auth_enabled() const noexcept { return !(m_flags & NO_AUTHENTICATION); }
+    bool is_time_stored() const noexcept { return m_flags & STORE_TIME; }
     void gc();
     void statfs(struct statvfs* fs_info) { m_root->statfs(fs_info); }
 };
