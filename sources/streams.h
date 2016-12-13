@@ -126,8 +126,8 @@ public:
     explicit CryptStream(std::shared_ptr<StreamBase> stream, length_type block_size)
         : m_stream(std::move(stream)), m_block_size(block_size)
     {
-        if (!m_stream)
-            NULL_EXCEPT();
+		if (!m_stream)
+			throw NullPointerException(__FUNCTION__, __FILE__, __LINE__);
         if (m_block_size < 1)
             throw InvalidArgumentException("Too small block size");
     }

@@ -1,13 +1,18 @@
 #include "logger.h"
 #include "myutils.h"
+#include "platform.h"
 
 #include <stdarg.h>
 #include <stdio.h>
 
+#ifdef WIN32
+#include <Windows.h>
+#else
 #include <fcntl.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#endif
 
 namespace securefs
 {
@@ -16,6 +21,13 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
     if (level < this->get_level())
         return;
 
+#ifdef WIN32
+	SYSTEMTIME tm;
+	GetSystemTime(&tm);
+	int size1 = snprintf(buffer.data(), buffer.size(), "[%s] [%d-%02d-%02dT%02d:%02d:%02d.%03dZ]    ",
+		stringify(level), tm.wYear, tm.wMonth, tm.wDay,
+		tm.wHour, tm.wMinute, tm.wSecond, tm.wMilliseconds);
+#else
     struct timeval now;
     gettimeofday(&now, nullptr);
     struct tm tm;
@@ -32,6 +44,7 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
                          tm.tm_min,
                          tm.tm_sec,
                          static_cast<int>(now.tv_usec));
+#endif
 
     if (size1 < 0 || static_cast<size_t>(size1) >= buffer.size())
         return;
@@ -40,13 +53,13 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
     if (size2 < 0)
         return;
 
-    size_t total_size = size1 + size2;
-    if (total_size < buffer.size())
+    int total_size = size1 + size2;
+    if (static_cast<size_t>(total_size) < buffer.size())
         buffer[total_size] = '\n';
     else
         buffer.back() = '\n';
 
-    (void)write(m_fd, buffer.data(), std::min<size_t>(buffer.size(), total_size + 1));
+    (void)write(m_fd, buffer.data(), std::min<int>(buffer.size(), total_size + 1));
 }
 
 void Logger::log(LoggingLevel level, const char* format, ...) noexcept

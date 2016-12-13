@@ -77,7 +77,7 @@ void FileBase::read_header()
 
 int FileBase::get_real_type() { return type_for_mode(get_mode() & S_IFMT); }
 
-void FileBase::stat(struct stat* st)
+void FileBase::stat(FUSE_STAT* st)
 {
     m_data_stream->fstat(st);
 

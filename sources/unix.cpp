@@ -1,3 +1,4 @@
+#ifndef WIN32
 #include "exceptions.h"
 #include "platform.h"
 #include "streams.h"
@@ -288,16 +289,8 @@ int FileSystemService::raise_fd_limit()
     throw POSIXException(errno, "setrlimit");
 }
 
-const FileSystemService& FileSystemService::get_default()
-{
-    static const FileSystemService service;
-    return service;
-}
 
-std::string FileSystemService::temp_name(const std::string& prefix, const std::string& suffix)
-{
-    return prefix + random_hex_string(16) + suffix;
-}
 
 bool FileSystemService::isatty(int fd) noexcept { return ::isatty(fd); }
 }
+#endif

@@ -27,9 +27,18 @@ namespace internal
 
     typedef AutoClosedFileBase FileGuard;
 
-    FileGuard open_base_dir(FileSystem* fs, const char* path, std::string& last_component)
-    {
+	FileGuard open_base_dir(FileSystem* fs, const char* path, std::string& last_component)
+	{
+#ifdef WIN32
+		std::string norm_path(path);
+		for (char& c : norm_path) {
+			if (c >= 'A' && c <= 'Z')
+				c -= 'A' - 'a';
+		}
+		auto components = split(norm_path.c_str(), '/');
+#else
         auto components = split(path, '/');
+#endif
 
         FileGuard result(&fs->table, fs->table.open_as(fs->root_id, FileBase::DIRECTORY));
         if (components.empty())
@@ -221,7 +230,7 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-    int getattr(const char* path, struct stat* st)
+    int getattr(const char* path, FUSE_STAT* st)
     {
         COMMON_PROLOGUE
 
@@ -280,7 +289,7 @@ namespace operations
                 return -EFAULT;
             if (fb->type() != FileBase::DIRECTORY)
                 return -ENOTDIR;
-            struct stat st;
+            FUSE_STAT st;
             memset(&st, 0, sizeof(st));
             auto actions = [&](const std::string& name, const id_type&, int type) -> bool {
                 st.st_mode = FileBase::mode_for_type(type);

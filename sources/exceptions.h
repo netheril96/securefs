@@ -88,7 +88,7 @@ public:
     }
 };
 
-#define NULL_EXCEPT() throw securefs::NullPointerException(__PRETTY_FUNCTION__, __FILE__, __LINE__)
+#define NULL_EXCEPT() throw securefs::NullPointerException(__FUNCTION__, __FILE__, __LINE__)
 
 class UnreachableCodeException : public FatalException
 {
@@ -113,7 +113,7 @@ public:
 };
 
 #define UNREACHABLE()                                                                              \
-    throw securefs::UnreachableCodeException(__PRETTY_FUNCTION__, __FILE__, __LINE__)
+    throw securefs::UnreachableCodeException(__FUNCTION__, __FILE__, __LINE__)
 
 class OSException : public CommonException
 {

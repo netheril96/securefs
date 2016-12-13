@@ -45,7 +45,7 @@ namespace operations
 
     void destroy(void* ptr);
 
-    int getattr(const char*, struct stat*);
+    int getattr(const char*, FUSE_STAT*);
 
     int opendir(const char*, struct fuse_file_info*);
 
