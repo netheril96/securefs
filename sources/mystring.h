@@ -10,11 +10,11 @@ typedef unsigned char byte;
 
 namespace securefs
 {
-std::string strprintf(const char* format, ...) 
+std::string strprintf(const char* format, ...)
 #ifndef WIN32
-__attribute__((format(printf, 1, 2)))
+    __attribute__((format(printf, 1, 2)))
 #endif
-;
+    ;
 std::string vstrprintf(const char* format, va_list args);
 
 bool ends_with(const char* str, size_t size, const char* suffix, size_t suffix_len);

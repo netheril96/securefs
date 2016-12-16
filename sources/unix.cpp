@@ -289,8 +289,6 @@ int FileSystemService::raise_fd_limit()
     throw POSIXException(errno, "setrlimit");
 }
 
-
-
 bool FileSystemService::isatty(int fd) noexcept { return ::isatty(fd); }
 }
 #endif

@@ -25,7 +25,7 @@
 #include <sys/types.h>
 #include <termios.h>
 #include <unistd.h>
-#endif 
+#endif
 
 namespace securefs
 {
@@ -297,7 +297,7 @@ size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size
 size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length)
 {
 #ifdef WIN32
-	return insecure_read_password(fp, prompt, password, max_length);
+    return insecure_read_password(fp, prompt, password, max_length);
 #else
     if (!fp || !password)
         NULL_EXCEPT();

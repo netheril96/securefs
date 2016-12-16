@@ -921,8 +921,8 @@ public:
     int execute() override
     {
 #ifdef WIN32
-		fprintf(stderr, "This functionality is currently unavailable on Windows\n");
-		return 1;
+        fprintf(stderr, "This functionality is currently unavailable on Windows\n");
+        return 1;
 #else
         auto config_stream = open_config_stream(get_real_config_path(), O_RDONLY);
         auto config = read_config(config_stream.get(), password.data(), password.size());

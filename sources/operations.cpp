@@ -27,15 +27,16 @@ namespace internal
 
     typedef AutoClosedFileBase FileGuard;
 
-	FileGuard open_base_dir(FileSystem* fs, const char* path, std::string& last_component)
-	{
+    FileGuard open_base_dir(FileSystem* fs, const char* path, std::string& last_component)
+    {
 #ifdef WIN32
-		std::string norm_path(path);
-		for (char& c : norm_path) {
-			if (c >= 'A' && c <= 'Z')
-				c -= 'A' - 'a';
-		}
-		auto components = split(norm_path.c_str(), '/');
+        std::string norm_path(path);
+        for (char& c : norm_path)
+        {
+            if (c >= 'A' && c <= 'Z')
+                c -= 'A' - 'a';
+        }
+        auto components = split(norm_path.c_str(), '/');
 #else
         auto components = split(path, '/');
 #endif

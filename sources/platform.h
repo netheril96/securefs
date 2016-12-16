@@ -27,20 +27,20 @@ typedef ptrdiff_t ssize_t;
 
 #define __PRETTY_FUNCTION__ __FUNCTION__
 
-#define O_RDONLY     _O_RDONLY
-#define O_WRONLY     _O_WRONLY
-#define O_RDWR       _O_RDWR
-#define O_APPEND     _O_APPEND
-#define O_CREAT      _O_CREAT
-#define O_TRUNC      _O_TRUNC
-#define O_EXCL       _O_EXCL
-#define O_TEXT       _O_TEXT
-#define O_BINARY     _O_BINARY
-#define O_RAW        _O_BINARY
-#define O_TEMPORARY  _O_TEMPORARY
-#define O_NOINHERIT  _O_NOINHERIT
+#define O_RDONLY _O_RDONLY
+#define O_WRONLY _O_WRONLY
+#define O_RDWR _O_RDWR
+#define O_APPEND _O_APPEND
+#define O_CREAT _O_CREAT
+#define O_TRUNC _O_TRUNC
+#define O_EXCL _O_EXCL
+#define O_TEXT _O_TEXT
+#define O_BINARY _O_BINARY
+#define O_RAW _O_BINARY
+#define O_TEMPORARY _O_TEMPORARY
+#define O_NOINHERIT _O_NOINHERIT
 #define O_SEQUENTIAL _O_SEQUENTIAL
-#define O_RANDOM     _O_RANDOM
+#define O_RANDOM _O_RANDOM
 
 inline int open(const char* fn, int flags, int mode) { return ::_open(fn, flags, mode); }
 inline int close(int fd) { return ::_close(fd); }
@@ -48,8 +48,7 @@ inline int write(int fd, const void* data, int size) { return ::_write(fd, data,
 #else
 
 typedef struct stat FUSE_STAT;
-#endif // WIN32
-
+#endif    // WIN32
 
 namespace securefs
 {
@@ -103,12 +102,13 @@ public:
 
 inline const FileSystemService& FileSystemService::get_default()
 {
-	static const FileSystemService service;
-	return service;
+    static const FileSystemService service;
+    return service;
 }
 
-inline std::string FileSystemService::temp_name(const std::string& prefix, const std::string& suffix)
+inline std::string FileSystemService::temp_name(const std::string& prefix,
+                                                const std::string& suffix)
 {
-	return prefix + random_hex_string(16) + suffix;
+    return prefix + random_hex_string(16) + suffix;
 }
 }

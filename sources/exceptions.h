@@ -112,8 +112,7 @@ public:
     }
 };
 
-#define UNREACHABLE()                                                                              \
-    throw securefs::UnreachableCodeException(__FUNCTION__, __FILE__, __LINE__)
+#define UNREACHABLE() throw securefs::UnreachableCodeException(__FUNCTION__, __FILE__, __LINE__)
 
 class OSException : public CommonException
 {

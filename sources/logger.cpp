@@ -22,11 +22,19 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
         return;
 
 #ifdef WIN32
-	SYSTEMTIME tm;
-	GetSystemTime(&tm);
-	int size1 = snprintf(buffer.data(), buffer.size(), "[%s] [%d-%02d-%02dT%02d:%02d:%02d.%03dZ]    ",
-		stringify(level), tm.wYear, tm.wMonth, tm.wDay,
-		tm.wHour, tm.wMinute, tm.wSecond, tm.wMilliseconds);
+    SYSTEMTIME tm;
+    GetSystemTime(&tm);
+    int size1 = snprintf(buffer.data(),
+                         buffer.size(),
+                         "[%s] [%d-%02d-%02dT%02d:%02d:%02d.%03dZ]    ",
+                         stringify(level),
+                         tm.wYear,
+                         tm.wMonth,
+                         tm.wDay,
+                         tm.wHour,
+                         tm.wMinute,
+                         tm.wSecond,
+                         tm.wMilliseconds);
 #else
     struct timeval now;
     gettimeofday(&now, nullptr);

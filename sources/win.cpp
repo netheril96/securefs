@@ -12,8 +12,8 @@
 #include <time.h>
 
 #include <Windows.h>
-#include <sddl.h>
 #include <io.h>
+#include <sddl.h>
 
 static std::string from_utf16(const std::wstring& str)
 {
@@ -68,7 +68,7 @@ public:
                        256,
                        NULL);
 
-		return strprintf("%s: %s", buffer, msg.c_str());
+        return strprintf("%s: %s", buffer, msg.c_str());
     }
 };
 
@@ -334,8 +334,6 @@ uint32_t FileSystemService::getuid() noexcept { return 0; }
 uint32_t FileSystemService::getgid() noexcept { return 0; }
 
 bool FileSystemService::isatty(int fd) noexcept { return ::_isatty(fd) != 0; }
-
 }
-
 
 #endif

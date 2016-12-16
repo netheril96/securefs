@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#undef ERROR // Stupid Windows header 
+#undef ERROR    // Stupid Windows header
 
 namespace securefs
 {
@@ -56,7 +56,7 @@ public:
 #ifndef WIN32
         __attribute__((format(printf, 3, 4)))
 #endif
-	;
+        ;
 
     LoggingLevel get_level() const noexcept { return m_level; }
     void set_level(LoggingLevel lvl) noexcept { m_level = lvl; }
