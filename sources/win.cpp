@@ -27,15 +27,18 @@ static std::wstring from_utf8(const std::string& str)
     return converter.from_bytes(str);
 }
 
-static long long filetime_to_unix_time(const FILETIME* ft)
+static void filetime_to_unix_time(const FILETIME* ft, struct timespec* out)
 {
-    long long ll = (long long(ft->dwHighDateTime) << 32) + ft->dwLowDateTime;
-    return (ll - 116444736000000000LL) / 10000000LL;
+    long long ll = (static_cast<long long>(ft->dwHighDateTime) << 32) + 
+						static_cast<long long>(ft->dwLowDateTime) - 116444736000000000LL;
+	static const long long FACTOR = 10000000LL;
+	out->tv_sec = ll / FACTOR;
+	out->tv_nsec = (ll % FACTOR) * 100;
 }
 
 static FILETIME unix_time_to_filetime(const timespec* t)
 {
-    long long ll = t->tv_sec * 10000000L + t->tv_nsec * 10L + 116444736000000000LL;
+    long long ll = t->tv_sec * 10000000LL + t->tv_nsec / 100LL + 116444736000000000LL;
     FILETIME res;
     res.dwLowDateTime = (DWORD)ll;
     res.dwHighDateTime = (DWORD)(ll >> 32);
@@ -209,10 +212,17 @@ public:
     }
     void utimens(const struct timespec ts[2]) override
     {
-        if (!ts)
-            return;
-        auto access_time = unix_time_to_filetime(ts + 0);
-        auto mod_time = unix_time_to_filetime(ts + 1);
+		FILETIME access_time, mod_time;
+		if (!ts)
+		{
+			GetSystemTimeAsFileTime(&access_time);
+			mod_time = access_time;
+		}
+		else
+		{
+			access_time = unix_time_to_filetime(ts + 0);
+			mod_time = unix_time_to_filetime(ts + 1);
+		}
         if (SetFileTime(m_handle, nullptr, &access_time, &mod_time) == 0)
             throw WindowsException(GetLastError(), "SetFileTime");
     }
@@ -222,10 +232,10 @@ public:
         BY_HANDLE_FILE_INFORMATION info;
         if (GetFileInformationByHandle(m_handle, &info) == 0)
             throw WindowsException(GetLastError(), "GetFileInformationByHandle");
-        st->st_atim.tv_sec = filetime_to_unix_time(&info.ftLastAccessTime);
-        st->st_mtim.tv_nsec = filetime_to_unix_time(&info.ftLastWriteTime);
-        st->st_birthtim.tv_sec = filetime_to_unix_time(&info.ftCreationTime);
-        st->st_ctim.tv_sec = filetime_to_unix_time(&info.ftLastWriteTime);
+		filetime_to_unix_time(&info.ftLastAccessTime, &st->st_atim);
+        filetime_to_unix_time(&info.ftLastWriteTime, &st->st_mtim);
+        filetime_to_unix_time(&info.ftCreationTime, &st->st_birthtim);
+		st->st_ctim = st->st_mtim;
     }
 };
 
