@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 2.8.5 FATAL_ERROR)
 option(PORTABLE_BUILD "Build for the general architecture instead of this cpu" OFF)
 if (PORTABLE_BUILD)
     set (DISABLE_ASM ON)
-    set (CMAKE_OSX_DEPLOYMENT_TARGET "10.9")
+    add_definitions(-DCRYPTOPP_DISABLE_ASM=1)
 endif()
 
 project (securefs)

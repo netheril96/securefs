@@ -33,8 +33,8 @@
 # You can test using original config.h with the following. 'orig', 'original' and 'config.h' are synonyms:
 #     ./cryptest.sh original
 
-# You can test using config.recommend with the following. 'rec', 'recommend' and 'config.recommend' are synonyms:
-#     ./cryptest.sh recommend
+# You can test 5.6.2 compatibility using config.compat with the following. 'compat', 'compatibility' and 'config.compat' are synonyms:
+#     ./cryptest.sh compatibility
 
 ############################################
 # Set to suite your taste
@@ -94,7 +94,7 @@ IS_NETBSD=$(echo -n "$THIS_SYSTEM" | "$GREP" -i -c netbsd)
 IS_SOLARIS=$(echo -n "$THIS_SYSTEM" | "$GREP" -i -c sunos)
 
 THIS_MACHINE=$(uname -m 2>&1)
-IS_X86=$(echo -n "$THIS_MACHINE" | "$EGREP" -i -c "(i386|i586|i686|amd64|x86_64)")
+IS_X86=$(echo -n "$THIS_MACHINE" | "$EGREP" -i -c "(i386|i486|i586|i686)")
 IS_X64=$(echo -n "$THIS_MACHINE" | "$EGREP" -i -c "(amd64|x86_64)")
 IS_PPC=$(echo -n "$THIS_MACHINE" | "$EGREP" -i -c "(Power|PPC)")
 IS_ARM32=$(echo -n "$THIS_MACHINE" | "$GREP" -v "64" | "$EGREP" -i -c "(arm|aarch32)")
@@ -109,7 +109,7 @@ if [[ "$IS_SOLARIS" -ne "0" ]]; then
 		IS_X86=0
 	fi
 
-	# Need something more powerful than the non-Posix versions
+	# Need something more powerful than the Posix versions
 	if [[ (-e "/usr/gnu/bin/grep") ]]; then
 		GREP=/usr/gnu/bin/grep;
 	fi
@@ -166,7 +166,6 @@ elif [[ ("$IS_ARM32" -ne "0" || "$IS_ARM64" -ne "0") ]]; then
 	fi
 fi
 
-WANTED_CONFIG=0
 for ARG in "$@"
 do
 	# Recognize "fast" and "quick", which does not perform tests that take more time to execute
@@ -178,11 +177,9 @@ do
 		WANT_NICE=1
 	elif [[ ($("$EGREP" -ix "orig" <<< "$ARG") || $("$EGREP" -ix "original" <<< "$ARG") || $("$EGREP" -ix "config.h" <<< "$ARG")) ]]; then
 		git checkout config.h > /dev/null 2>&1
-		WANTED_CONFIG=1
-	elif [[ ($("$EGREP" -ix "rec" <<< "$ARG") || $("$EGREP" -ix "recommend" <<< "$ARG") || $("$EGREP" -ix "config.recommend" <<< "$ARG")) ]]; then
-		git checkout config.recommend > /dev/null 2>&1
-		cp config.recommend config.h
-		WANTED_CONFIG=1
+	elif [[ ($("$EGREP" -ix "compat" <<< "$ARG") || $("$EGREP" -ix "compatibility" <<< "$ARG") || $("$EGREP" -ix "config.compat" <<< "$ARG")) ]]; then
+		git checkout config.compatibility > /dev/null 2>&1
+		cp config.compatibility config.h
 	else
 		echo "Unknown option $ARG"
 	fi
@@ -857,8 +854,8 @@ if [[ (-e "/proc/cpuinfo") && (-e "/proc/meminfo") ]]; then
 	MEM_SIZE=$(cat /proc/meminfo | "$GREP" "MemTotal" | "$AWK" '{print $2}')
 	MEM_SIZE=$(($MEM_SIZE/1024))
 elif [[ "$IS_DARWIN" -ne "0" ]]; then
-	CPU_COUNT=$(sysctl -a 2>/dev/null | "$GREP" 'hw.availcpu' | "$AWK" '{print $3; exit}')
-	MEM_SIZE=$(sysctl -a 2>/dev/null | "$GREP" 'hw.memsize' | "$AWK" '{print $3; exit;}')
+	CPU_COUNT=$(sysctl -a 2>&1 | "$GREP" 'hw.availcpu' | "$AWK" '{print $3; exit}')
+	MEM_SIZE=$(sysctl -a 2>&1 | "$GREP" 'hw.memsize' | "$AWK" '{print $3; exit;}')
 	MEM_SIZE=$(($MEM_SIZE/1024/1024))
 elif [[ "$IS_SOLARIS" -ne "0" ]]; then
 	CPU_COUNT=$(psrinfo 2>/dev/null | wc -l | "$AWK" '{print $1}')
@@ -875,7 +872,7 @@ elif [[ (-e "/proc/cpuinfo") ]]; then
 	if [[ -z "$CPU_FREQ" ]]; then CPU_FREQ=512; fi
 	CPU_FREQ=$("$AWK" "BEGIN {print $CPU_FREQ/1024}")
 elif [[ "$IS_DARWIN" -ne "0" ]]; then
-	CPU_FREQ=$(sysctl -a 2>/dev/null | "$GREP" 'hw.cpufrequency' | "$AWK" '{print $3; exit;}')
+	CPU_FREQ=$(sysctl -a 2>&1 | "$GREP" 'hw.cpufrequency' | "$AWK" '{print $3; exit;}')
 	CPU_FREQ=$("$AWK" "BEGIN {print $CPU_FREQ/1024/1024/1024}")
 elif [[ "$IS_SOLARIS" -ne "0" ]]; then
 	CPU_FREQ=$(psrinfo -v 2>/dev/null | "$GREP" 'MHz' | "$AWK" '{print $6; exit;}')
@@ -975,23 +972,30 @@ if [[ ("$IS_X86" -ne "0" || "$IS_X64" -ne "0") && ("$IS_SOLARIS" -ne "0") && ("$
 	SUNCC_XARCH=
 	if [[ ("$SUNCC_511_OR_ABOVE" -ne "0") ]]; then
 		if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "sse2") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__SSE2__"); SUNCC_XARCH=sse2; fi
-			if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "sse3") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__SSE3__"); SUNCC_XARCH=ssse3; fi
-			if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "ssse3") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__SSSE3__"); SUNCC_XARCH=ssse3; fi
-			if [[ ("$SUNCC_512_OR_ABOVE" -ne "0") ]]; then
-				if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "sse4.1") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__SSE4_1__"); SUNCC_XARCH=ssse4_1; fi
-				if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "sse4.2") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__SSE4_2__"); SUNCC_XARCH=ssse4_2; fi
-				if [[ ("$SUNCC_513_OR_ABOVE" -ne "0") ]]; then
-					if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "aes") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__AES__"); SUNCC_XARCH=aes; fi
-					if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "pclmulqdq") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__PCLMUL__"); SUNCC_XARCH=aes; fi
-					if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "rdrand") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__RDRND__"); SUNCC_XARCH=avx_i; fi
-					if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "rdseed") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__RDSEED__"); SUNCC_XARCH=avx_i; fi
-					if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "avx") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__AVX__"); SUNCC_XARCH=avx; fi
-					if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "avx2") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__AVX2__"); SUNCC_XARCH=avx2; fi
-					if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "bmi") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__BMI__"); SUNCC_XARCH=avx2; fi
-					if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "bmi2") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__BMI2__"); SUNCC_XARCH=avx2; fi
+		if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "sse3") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__SSE3__"); SUNCC_XARCH=ssse3; fi
+		if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "ssse3") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__SSSE3__"); SUNCC_XARCH=ssse3; fi
+		if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "sse4.1") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__SSE4_1__"); SUNCC_XARCH=sse4_1; fi
+		if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "sse4.2") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__SSE4_2__"); SUNCC_XARCH=sse4_2; fi
+
+		# This should use SUNCC_512_OR_ABOVE, but SunCC 5.12 crashes with -xarch=aes.
+		if [[ ("$SUNCC_513_OR_ABOVE" -ne "0") ]]; then
+			if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "aes") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__AES__"); SUNCC_XARCH=aes; fi
+			if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "pclmulqdq") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__PCLMUL__"); SUNCC_XARCH=aes; fi
+
+			if [[ ("$SUNCC_513_OR_ABOVE" -ne "0") ]]; then
+				if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "rdrand") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__RDRND__"); SUNCC_XARCH=avx_i; fi
+				if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "rdseed") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__RDSEED__"); SUNCC_XARCH=avx_i; fi
+				if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "avx") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__AVX__"); SUNCC_XARCH=avx; fi
+				if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "avx2") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__AVX2__"); SUNCC_XARCH=avx2; fi
+				if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "bmi") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__BMI__"); SUNCC_XARCH=avx2; fi
+				if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "bmi2") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__BMI2__"); SUNCC_XARCH=avx2; fi
+
+				# SunCC 5.13 and "illegal use of -xarch option, illegal value ignored: avx2_i"
+				if [[ ("$SUNCC_514_OR_ABOVE" -ne "0") ]]; then
 					if [[ ($(echo -n "$X86_CPU_FLAGS" | "$GREP" -c "adx") -ne "0") ]]; then PLATFORM_CXXFLAGS+=("-D__ADX__"); SUNCC_XARCH=avx2_i; fi
 				fi
 			fi
+		fi
 	fi
 	PLATFORM_CXXFLAGS+=("-xarch=$SUNCC_XARCH")
 fi
@@ -1108,6 +1112,74 @@ fi
 TEST_BEGIN=$(date)
 echo | tee -a "$TEST_RESULTS"
 echo "Start time: $TEST_BEGIN" | tee -a "$TEST_RESULTS"
+
+############################################
+# Posix NDEBUG and assert
+if true; then
+
+	echo
+	echo "************************************" | tee -a "$TEST_RESULTS"
+	echo "Testing: No Posix NDEBUG or assert" | tee -a "$TEST_RESULTS"
+	echo
+
+	FAILED=0
+
+	# Filter out C++ and Doxygen comments.
+	COUNT=$(cat *.h *.cpp | "$GREP" -v '//' | "$GREP" -c '(assert.h|cassert)')
+	if [[ "$COUNT" -ne "0" ]]; then
+		FAILED=1
+		echo "FAILED: found Posix assert headers" | tee -a "$TEST_RESULTS"
+	fi
+
+	# Filter out C++ and Doxygen comments.
+	COUNT=$(cat *.h *.cpp | "$GREP" -v '//' | "$EGREP" -c 'assert[[:space:]]*\(')
+	if [[ "$COUNT" -ne "0" ]]; then
+		FAILED=1
+		echo "FAILED: found use of Posix assert" | tee -a "$TEST_RESULTS"
+	fi
+
+	# Filter out C++ and Doxygen comments.
+	COUNT=$(cat *.h *.cpp | "$GREP" -v '//' | "$GREP" -c 'NDEBUG')
+	if [[ "$COUNT" -ne "0" ]]; then
+		FAILED=1
+		echo "FAILED: found use of Posix NDEBUG" | tee -a "$TEST_RESULTS"
+	fi
+
+	if [[ ("$FAILED" -eq "0") ]]; then
+		echo "Verified no Posix NDEBUG or assert" | tee -a "$TEST_RESULTS"
+	fi
+fi
+
+############################################
+# C++ std::min and std::max
+# This is due to Windows.h and NOMINMAX. Linux test fine, while Windows breaks.
+if true; then
+
+	echo
+	echo "************************************" | tee -a "$TEST_RESULTS"
+	echo "Testing: C++ std::min and std::max" | tee -a "$TEST_RESULTS"
+	echo
+
+	FAILED=0
+
+	# If this fires, then use the library's STDMIN(a,b) or (std::min)(a, b);
+	COUNT=$(cat *.h *.cpp | "$GREP" -v '//' | "$EGREP" -c 'std::min[[:space:]]*\(')
+	if [[ "$COUNT" -ne "0" ]]; then
+		FAILED=1
+		echo "FAILED: found std::min" | tee -a "$TEST_RESULTS"
+	fi
+
+	# If this fires, then use the library's STDMAX(a,b) or (std::max)(a, b);
+	COUNT=$(cat *.h *.cpp | "$GREP" -v '//' | "$EGREP" -c 'std::max[[:space:]]*\(')
+	if [[ "$COUNT" -ne "0" ]]; then
+		FAILED=1
+		echo "FAILED: found std::max" | tee -a "$TEST_RESULTS"
+	fi
+
+	if [[ ("$FAILED" -eq "0") ]]; then
+		echo "Verified std::min and std::max" | tee -a "$TEST_RESULTS"
+	fi
+fi
 
 ############################################
 # X86 code generation tests
@@ -1479,62 +1551,68 @@ if [[ ("$HAVE_DISASS" -ne "0" && ("$IS_ARM32" -ne "0" || "$IS_ARM64" -ne "0")) ]
 fi
 
 ############################################
-# Debug build
-echo
-echo "************************************" | tee -a "$TEST_RESULTS"
-echo "Testing: Debug, default CXXFLAGS" | tee -a "$TEST_RESULTS"
-echo
-
-"$MAKE" clean > /dev/null 2>&1
-rm -f adhoc.cpp > /dev/null 2>&1
-
-CXXFLAGS="$DEBUG_CXXFLAGS ${DEPRECATED_CXXFLAGS[@]}"
-CXX="$CXX" CXXFLAGS="$CXXFLAGS" "$MAKE" "${MAKEARGS[@]}" static dynamic cryptest.exe 2>&1 | tee -a "$TEST_RESULTS"
-
-if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
-	echo "ERROR: failed to make cryptest.exe" | tee -a "$TEST_RESULTS"
-else
-	./cryptest.exe v 2>&1 | tee -a "$TEST_RESULTS"
-	if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
-		echo "ERROR: failed to execute validation suite" | tee -a "$TEST_RESULTS"
-	fi
-	./cryptest.exe tv all 2>&1 | tee -a "$TEST_RESULTS"
-	if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
-		echo "ERROR: failed to execute test vectors" | tee -a "$TEST_RESULTS"
-	fi
+# Default CXXFLAGS
+if true; then
+	############################################
+	# Debug build
 	echo
+	echo "************************************" | tee -a "$TEST_RESULTS"
+	echo "Testing: Debug, default CXXFLAGS" | tee -a "$TEST_RESULTS"
+	echo
+
+	"$MAKE" clean > /dev/null 2>&1
+	rm -f adhoc.cpp > /dev/null 2>&1
+
+	CXXFLAGS="$DEBUG_CXXFLAGS ${DEPRECATED_CXXFLAGS[@]}"
+	CXX="$CXX" CXXFLAGS="$CXXFLAGS" "$MAKE" "${MAKEARGS[@]}" static dynamic cryptest.exe 2>&1 | tee -a "$TEST_RESULTS"
+
+	if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+		echo "ERROR: failed to make cryptest.exe" | tee -a "$TEST_RESULTS"
+	else
+		./cryptest.exe v 2>&1 | tee -a "$TEST_RESULTS"
+		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+			echo "ERROR: failed to execute validation suite" | tee -a "$TEST_RESULTS"
+		fi
+		./cryptest.exe tv all 2>&1 | tee -a "$TEST_RESULTS"
+		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+			echo "ERROR: failed to execute test vectors" | tee -a "$TEST_RESULTS"
+		fi
+	fi
+
+	############################################
+	# Release build
+	echo
+	echo "************************************" | tee -a "$TEST_RESULTS"
+	echo "Testing: Release, default CXXFLAGS" | tee -a "$TEST_RESULTS"
+	echo
+
+	"$MAKE" clean > /dev/null 2>&1
+	rm -f adhoc.cpp > /dev/null 2>&1
+
+	CXXFLAGS="$RELEASE_CXXFLAGS ${DEPRECATED_CXXFLAGS[@]}"
+	CXX="$CXX" CXXFLAGS="$CXXFLAGS" "$MAKE" "${MAKEARGS[@]}" static dynamic cryptest.exe 2>&1 | tee -a "$TEST_RESULTS"
+
+	if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+		echo "ERROR: failed to make cryptest.exe" | tee -a "$TEST_RESULTS"
+	else
+		./cryptest.exe v 2>&1 | tee -a "$TEST_RESULTS"
+		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+			echo "ERROR: failed to execute validation suite" | tee -a "$TEST_RESULTS"
+		fi
+		./cryptest.exe tv all 2>&1 | tee -a "$TEST_RESULTS"
+		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+			echo "ERROR: failed to execute test vectors" | tee -a "$TEST_RESULTS"
+		fi
+		echo
+	fi
 fi
 
 ############################################
-# Release build
-echo
-echo "************************************" | tee -a "$TEST_RESULTS"
-echo "Testing: Release, default CXXFLAGS" | tee -a "$TEST_RESULTS"
-echo
-
-"$MAKE" clean > /dev/null 2>&1
-rm -f adhoc.cpp > /dev/null 2>&1
-
-CXXFLAGS="$RELEASE_CXXFLAGS ${DEPRECATED_CXXFLAGS[@]}"
-CXX="$CXX" CXXFLAGS="$CXXFLAGS" "$MAKE" "${MAKEARGS[@]}" static dynamic cryptest.exe 2>&1 | tee -a "$TEST_RESULTS"
-
-if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
-	echo "ERROR: failed to make cryptest.exe" | tee -a "$TEST_RESULTS"
-else
-	./cryptest.exe v 2>&1 | tee -a "$TEST_RESULTS"
-	if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
-		echo "ERROR: failed to execute validation suite" | tee -a "$TEST_RESULTS"
-	fi
-	./cryptest.exe tv all 2>&1 | tee -a "$TEST_RESULTS"
-	if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
-		echo "ERROR: failed to execute test vectors" | tee -a "$TEST_RESULTS"
-	fi
-	echo
-fi
-
-############################################
-# Debug build, platform defines
+# Platform CXXFLAGS
 if [[ ("${#PLATFORM_CXXFLAGS[@]}" -ne "0") ]]; then
+
+	############################################
+	# Debug build, platform defines
 	echo
 	echo "************************************" | tee -a "$TEST_RESULTS"
 	echo "Testing: Debug, platform CXXFLAGS" | tee -a "$TEST_RESULTS"
@@ -1557,13 +1635,10 @@ if [[ ("${#PLATFORM_CXXFLAGS[@]}" -ne "0") ]]; then
 		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
 			echo "ERROR: failed to execute test vectors" | tee -a "$TEST_RESULTS"
 		fi
-		echo
 	fi
-fi
 
-############################################
-# Release build, platform defines
-if [[ ("${#PLATFORM_CXXFLAGS[@]}" -ne "0") ]]; then
+	############################################
+	# Release build, platform defines
 	echo
 	echo "************************************" | tee -a "$TEST_RESULTS"
 	echo "Testing: Release, platform CXXFLAGS" | tee -a "$TEST_RESULTS"
@@ -1586,59 +1661,305 @@ if [[ ("${#PLATFORM_CXXFLAGS[@]}" -ne "0") ]]; then
 		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
 			echo "ERROR: failed to execute test vectors" | tee -a "$TEST_RESULTS"
 		fi
+	fi
+fi
+
+############################################
+# Minimum platform
+if [[ ("$GCC_COMPILER" -ne "0" || "$CLANG_COMPILER" -ne "0" || "$INTEL_COMPILER" -ne "0") ]]; then
+
+	# i686
+	if [[ "$IS_X86" -ne "0" ]]; then
+		############################################
+		# Debug build
 		echo
+		echo "************************************" | tee -a "$TEST_RESULTS"
+		echo "Testing: Debug, i686 minimum arch CXXFLAGS" | tee -a "$TEST_RESULTS"
+		echo
+
+		"$MAKE" clean > /dev/null 2>&1
+		rm -f adhoc.cpp > /dev/null 2>&1
+
+		CXXFLAGS="$DEBUG_CXXFLAGS -march=i686 -fPIC -pipe ${DEPRECATED_CXXFLAGS[@]}"
+		CXX="$CXX" "$MAKE" "${MAKEARGS[@]}" CXXFLAGS="$CXXFLAGS" static dynamic cryptest.exe 2>&1 | tee -a "$TEST_RESULTS"
+
+		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+			echo "ERROR: failed to make cryptest.exe" | tee -a "$TEST_RESULTS"
+		else
+			./cryptest.exe v 2>&1 | tee -a "$TEST_RESULTS"
+			if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+				echo "ERROR: failed to execute validation suite" | tee -a "$TEST_RESULTS"
+			fi
+			./cryptest.exe tv all 2>&1 | tee -a "$TEST_RESULTS"
+			if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+				echo "ERROR: failed to execute test vectors" | tee -a "$TEST_RESULTS"
+			fi
+		fi
+
+		############################################
+		# Release build
+		echo
+		echo "************************************" | tee -a "$TEST_RESULTS"
+		echo "Testing: Release, i686 minimum arch CXXFLAGS" | tee -a "$TEST_RESULTS"
+		echo
+
+		"$MAKE" clean > /dev/null 2>&1
+		rm -f adhoc.cpp > /dev/null 2>&1
+
+		CXXFLAGS="$RELEASE_CXXFLAGS -march=i686 -fPIC -pipe ${DEPRECATED_CXXFLAGS[@]}"
+		CXX="$CXX" "$MAKE" "${MAKEARGS[@]}" CXXFLAGS="$CXXFLAGS" static dynamic cryptest.exe 2>&1 | tee -a "$TEST_RESULTS"
+
+		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+			echo "ERROR: failed to make cryptest.exe" | tee -a "$TEST_RESULTS"
+		else
+			./cryptest.exe v 2>&1 | tee -a "$TEST_RESULTS"
+			if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+				echo "ERROR: failed to execute validation suite" | tee -a "$TEST_RESULTS"
+			fi
+			./cryptest.exe tv all 2>&1 | tee -a "$TEST_RESULTS"
+			if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+				echo "ERROR: failed to execute test vectors" | tee -a "$TEST_RESULTS"
+			fi
+		fi
+	fi
+
+	# x86_64
+	if [[ "$IS_X64" -ne "0" ]]; then
+		############################################
+		# Debug build
+		echo
+		echo "************************************" | tee -a "$TEST_RESULTS"
+		echo "Testing: Debug, x86_64 minimum arch CXXFLAGS" | tee -a "$TEST_RESULTS"
+		echo
+
+		"$MAKE" clean > /dev/null 2>&1
+		rm -f adhoc.cpp > /dev/null 2>&1
+
+		CXXFLAGS="$DEBUG_CXXFLAGS -march=x86-64 -fPIC -pipe ${DEPRECATED_CXXFLAGS[@]}"
+		CXX="$CXX" "$MAKE" "${MAKEARGS[@]}" CXXFLAGS="$CXXFLAGS" static dynamic cryptest.exe 2>&1 | tee -a "$TEST_RESULTS"
+
+		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+			echo "ERROR: failed to make cryptest.exe" | tee -a "$TEST_RESULTS"
+		else
+			./cryptest.exe v 2>&1 | tee -a "$TEST_RESULTS"
+			if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+				echo "ERROR: failed to execute validation suite" | tee -a "$TEST_RESULTS"
+			fi
+			./cryptest.exe tv all 2>&1 | tee -a "$TEST_RESULTS"
+			if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+				echo "ERROR: failed to execute test vectors" | tee -a "$TEST_RESULTS"
+			fi
+		fi
+
+		############################################
+		# Release build
+		echo
+		echo "************************************" | tee -a "$TEST_RESULTS"
+		echo "Testing: Release, x86_64 minimum arch CXXFLAGS" | tee -a "$TEST_RESULTS"
+		echo
+
+		"$MAKE" clean > /dev/null 2>&1
+		rm -f adhoc.cpp > /dev/null 2>&1
+
+		CXXFLAGS="$RELEASE_CXXFLAGS -march=x86-64 -fPIC -pipe ${DEPRECATED_CXXFLAGS[@]}"
+		CXX="$CXX" "$MAKE" "${MAKEARGS[@]}" CXXFLAGS="$CXXFLAGS" static dynamic cryptest.exe 2>&1 | tee -a "$TEST_RESULTS"
+
+		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+			echo "ERROR: failed to make cryptest.exe" | tee -a "$TEST_RESULTS"
+		else
+			./cryptest.exe v 2>&1 | tee -a "$TEST_RESULTS"
+			if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+				echo "ERROR: failed to execute validation suite" | tee -a "$TEST_RESULTS"
+			fi
+			./cryptest.exe tv all 2>&1 | tee -a "$TEST_RESULTS"
+			if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+				echo "ERROR: failed to execute test vectors" | tee -a "$TEST_RESULTS"
+			fi
+		fi
+	fi
+fi
+
+############################################
+# mismatched arch capabilities
+if [[ ("$GCC_COMPILER" -ne "0" || "$CLANG_COMPILER" -ne "0" || "$INTEL_COMPILER" -ne "0") ]]; then
+
+	# i686
+	if [[ "$IS_X86" -ne "0" ]]; then
+		############################################
+		# Debug build
+		echo
+		echo "************************************" | tee -a "$TEST_RESULTS"
+		echo "Testing: Debug, mismatched arch capabilities" | tee -a "$TEST_RESULTS"
+		echo
+
+		"$MAKE" clean > /dev/null 2>&1
+		rm -f adhoc.cpp > /dev/null 2>&1
+
+		CXXFLAGS="$DEBUG_CXXFLAGS -march=i686 -fPIC -pipe ${DEPRECATED_CXXFLAGS[@]}"
+		CXX="$CXX" "$MAKE" "${MAKEARGS[@]}" CXXFLAGS="$CXXFLAGS" static 2>&1 | tee -a "$TEST_RESULTS"
+
+		CXXFLAGS="$DEBUG_CXXFLAGS -march=native -fPIC -pipe ${DEPRECATED_CXXFLAGS[@]}"
+		CXX="$CXX" "$MAKE" "${MAKEARGS[@]}" CXXFLAGS="$CXXFLAGS" cryptest.exe 2>&1 | tee -a "$TEST_RESULTS"
+
+		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+			echo "ERROR: failed to make cryptest.exe" | tee -a "$TEST_RESULTS"
+		else
+			./cryptest.exe v 2>&1 | tee -a "$TEST_RESULTS"
+			if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+				echo "ERROR: failed to execute validation suite" | tee -a "$TEST_RESULTS"
+			fi
+			./cryptest.exe tv all 2>&1 | tee -a "$TEST_RESULTS"
+			if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+				echo "ERROR: failed to execute test vectors" | tee -a "$TEST_RESULTS"
+			fi
+		fi
+
+		############################################
+		# Release build
+		echo
+		echo "************************************" | tee -a "$TEST_RESULTS"
+		echo "Testing: Release, mismatched arch capabilities" | tee -a "$TEST_RESULTS"
+		echo
+
+		"$MAKE" clean > /dev/null 2>&1
+		rm -f adhoc.cpp > /dev/null 2>&1
+
+		CXXFLAGS="$RELEASE_CXXFLAGS -march=i686 -fPIC -pipe ${DEPRECATED_CXXFLAGS[@]}"
+		CXX="$CXX" "$MAKE" "${MAKEARGS[@]}" CXXFLAGS="$CXXFLAGS" static 2>&1 | tee -a "$TEST_RESULTS"
+
+		CXXFLAGS="$RELEASE_CXXFLAGS -march=native -fPIC -pipe ${DEPRECATED_CXXFLAGS[@]}"
+		CXX="$CXX" "$MAKE" "${MAKEARGS[@]}" CXXFLAGS="$CXXFLAGS" cryptest.exe 2>&1 | tee -a "$TEST_RESULTS"
+
+		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+			echo "ERROR: failed to make cryptest.exe" | tee -a "$TEST_RESULTS"
+		else
+			./cryptest.exe v 2>&1 | tee -a "$TEST_RESULTS"
+			if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+				echo "ERROR: failed to execute validation suite" | tee -a "$TEST_RESULTS"
+			fi
+			./cryptest.exe tv all 2>&1 | tee -a "$TEST_RESULTS"
+			if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+				echo "ERROR: failed to execute test vectors" | tee -a "$TEST_RESULTS"
+			fi
+		fi
+	fi
+
+	# x86-64
+	if [[ "$IS_X64" -ne "0" ]]; then
+		############################################
+		# Debug build
+		echo
+		echo "************************************" | tee -a "$TEST_RESULTS"
+		echo "Testing: Debug, mismatched arch capabilities" | tee -a "$TEST_RESULTS"
+		echo
+
+		"$MAKE" clean > /dev/null 2>&1
+		rm -f adhoc.cpp > /dev/null 2>&1
+
+		CXXFLAGS="$DEBUG_CXXFLAGS -march=x86-64 -fPIC -pipe ${DEPRECATED_CXXFLAGS[@]}"
+		CXX="$CXX" "$MAKE" "${MAKEARGS[@]}" CXXFLAGS="$CXXFLAGS" static 2>&1 | tee -a "$TEST_RESULTS"
+
+		CXXFLAGS="$DEBUG_CXXFLAGS -march=native -fPIC -pipe ${DEPRECATED_CXXFLAGS[@]}"
+		CXX="$CXX" "$MAKE" "${MAKEARGS[@]}" CXXFLAGS="$CXXFLAGS" cryptest.exe 2>&1 | tee -a "$TEST_RESULTS"
+
+		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+			echo "ERROR: failed to make cryptest.exe" | tee -a "$TEST_RESULTS"
+		else
+			./cryptest.exe v 2>&1 | tee -a "$TEST_RESULTS"
+			if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+				echo "ERROR: failed to execute validation suite" | tee -a "$TEST_RESULTS"
+			fi
+			./cryptest.exe tv all 2>&1 | tee -a "$TEST_RESULTS"
+			if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+				echo "ERROR: failed to execute test vectors" | tee -a "$TEST_RESULTS"
+			fi
+		fi
+
+		############################################
+		# Release build
+		echo
+		echo "************************************" | tee -a "$TEST_RESULTS"
+		echo "Testing: Release, mismatched arch capabilities" | tee -a "$TEST_RESULTS"
+		echo
+
+		"$MAKE" clean > /dev/null 2>&1
+		rm -f adhoc.cpp > /dev/null 2>&1
+
+		CXXFLAGS="$RELEASE_CXXFLAGS -march=x86-64 -fPIC -pipe ${DEPRECATED_CXXFLAGS[@]}"
+		CXX="$CXX" "$MAKE" "${MAKEARGS[@]}" CXXFLAGS="$CXXFLAGS" static 2>&1 | tee -a "$TEST_RESULTS"
+
+		CXXFLAGS="$RELEASE_CXXFLAGS -march=native -fPIC -pipe ${DEPRECATED_CXXFLAGS[@]}"
+		CXX="$CXX" "$MAKE" "${MAKEARGS[@]}" CXXFLAGS="$CXXFLAGS" cryptest.exe 2>&1 | tee -a "$TEST_RESULTS"
+
+		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+			echo "ERROR: failed to make cryptest.exe" | tee -a "$TEST_RESULTS"
+		else
+			./cryptest.exe v 2>&1 | tee -a "$TEST_RESULTS"
+			if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+				echo "ERROR: failed to execute validation suite" | tee -a "$TEST_RESULTS"
+			fi
+			./cryptest.exe tv all 2>&1 | tee -a "$TEST_RESULTS"
+			if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+				echo "ERROR: failed to execute test vectors" | tee -a "$TEST_RESULTS"
+			fi
+		fi
 	fi
 fi
 
 ############################################
 # Debug build, DISABLE_ASM
-echo
-echo "************************************" | tee -a "$TEST_RESULTS"
-echo "Testing: Debug, DISABLE_ASM" | tee -a "$TEST_RESULTS"
-echo
+if true; then
 
-"$MAKE" clean > /dev/null 2>&1
-rm -f adhoc.cpp > /dev/null 2>&1
+	############################################
+	# Debug build
+	echo
+	echo "************************************" | tee -a "$TEST_RESULTS"
+	echo "Testing: Debug, DISABLE_ASM" | tee -a "$TEST_RESULTS"
+	echo
 
-CXXFLAGS="$DEBUG_CXXFLAGS -DCRYPTOPP_DISABLE_ASM ${DEPRECATED_CXXFLAGS[@]}"
-CXX="$CXX" CXXFLAGS="$CXXFLAGS" "$MAKE" "${MAKEARGS[@]}" static dynamic cryptest.exe 2>&1 | tee -a "$TEST_RESULTS"
+	"$MAKE" clean > /dev/null 2>&1
+	rm -f adhoc.cpp > /dev/null 2>&1
 
-if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
-	echo "ERROR: failed to make cryptest.exe" | tee -a "$TEST_RESULTS"
-else
-	./cryptest.exe v 2>&1 | tee -a "$TEST_RESULTS"
+	CXXFLAGS="$DEBUG_CXXFLAGS -DCRYPTOPP_DISABLE_ASM ${DEPRECATED_CXXFLAGS[@]}"
+	CXX="$CXX" CXXFLAGS="$CXXFLAGS" "$MAKE" "${MAKEARGS[@]}" static dynamic cryptest.exe 2>&1 | tee -a "$TEST_RESULTS"
+
 	if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
-		echo "ERROR: failed to execute validation suite" | tee -a "$TEST_RESULTS"
+		echo "ERROR: failed to make cryptest.exe" | tee -a "$TEST_RESULTS"
+	else
+		./cryptest.exe v 2>&1 | tee -a "$TEST_RESULTS"
+		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+			echo "ERROR: failed to execute validation suite" | tee -a "$TEST_RESULTS"
+		fi
+		./cryptest.exe tv all 2>&1 | tee -a "$TEST_RESULTS"
+		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+			echo "ERROR: failed to execute test vectors" | tee -a "$TEST_RESULTS"
+		fi
 	fi
-	./cryptest.exe tv all 2>&1 | tee -a "$TEST_RESULTS"
+
+	############################################
+	# Release build
+	echo
+	echo "************************************" | tee -a "$TEST_RESULTS"
+	echo "Testing: Release, DISABLE_ASM" | tee -a "$TEST_RESULTS"
+	echo
+
+	"$MAKE" clean > /dev/null 2>&1
+	rm -f adhoc.cpp > /dev/null 2>&1
+
+	CXXFLAGS="$RELEASE_CXXFLAGS -DCRYPTOPP_DISABLE_ASM ${DEPRECATED_CXXFLAGS[@]}"
+	CXX="$CXX" CXXFLAGS="$CXXFLAGS" "$MAKE" "${MAKEARGS[@]}" static dynamic cryptest.exe 2>&1 | tee -a "$TEST_RESULTS"
+
 	if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
-		echo "ERROR: failed to execute test vectors" | tee -a "$TEST_RESULTS"
-	fi
-fi
-
-############################################
-# Release build, DISABLE_ASM
-echo
-echo "************************************" | tee -a "$TEST_RESULTS"
-echo "Testing: Release, DISABLE_ASM" | tee -a "$TEST_RESULTS"
-echo
-
-"$MAKE" clean > /dev/null 2>&1
-rm -f adhoc.cpp > /dev/null 2>&1
-
-CXXFLAGS="$RELEASE_CXXFLAGS -DCRYPTOPP_DISABLE_ASM ${DEPRECATED_CXXFLAGS[@]}"
-CXX="$CXX" CXXFLAGS="$CXXFLAGS" "$MAKE" "${MAKEARGS[@]}" static dynamic cryptest.exe 2>&1 | tee -a "$TEST_RESULTS"
-
-if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
-	echo "ERROR: failed to make cryptest.exe" | tee -a "$TEST_RESULTS"
-else
-	./cryptest.exe v 2>&1 | tee -a "$TEST_RESULTS"
-	if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
-		echo "ERROR: failed to execute validation suite" | tee -a "$TEST_RESULTS"
-	fi
-	./cryptest.exe tv all 2>&1 | tee -a "$TEST_RESULTS"
-	if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
-		echo "ERROR: failed to execute test vectors" | tee -a "$TEST_RESULTS"
+		echo "ERROR: failed to make cryptest.exe" | tee -a "$TEST_RESULTS"
+	else
+		./cryptest.exe v 2>&1 | tee -a "$TEST_RESULTS"
+		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+			echo "ERROR: failed to execute validation suite" | tee -a "$TEST_RESULTS"
+		fi
+		./cryptest.exe tv all 2>&1 | tee -a "$TEST_RESULTS"
+		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
+			echo "ERROR: failed to execute test vectors" | tee -a "$TEST_RESULTS"
+		fi
 	fi
 fi
 
@@ -3503,24 +3824,32 @@ if [[ "$IS_SOLARIS" -ne "0" ]]; then
 		SUNCC_CXXFLAGS="${PLATFORM_CXXFLAGS[@]}"
 	fi
 
-	# Sun Studio 12.3 and below workaround, http://github.com/weidai11/cryptopp/issues/228
-	SUNCC_SSE_CXXFLAGS=$(echo -n "${SUNCC_CXXFLAGS[@]}" | "$AWK" '/SSE/' ORS=' ' RS=' ')
-
 	############################################
-	# Sun Studio 12.2
+	# Sun Studio 12.2/SunCC 5.11
 	if [[ (-e "/opt/solstudio12.2/bin/CC") ]]; then
+
+		# More workarounds... SunCC 5.11 only does SSSE3, http://github.com/weidai11/cryptopp/issues/228
+		SUNCC_SSE_CXXFLAGS=$(echo -n "${SUNCC_CXXFLAGS[@]}" | "$AWK" '/__(SSE2|SSE3|SSSE3)__/' ORS=' ' RS=' ')
+
+		if [[ $(echo -n "$SUNCC_SSE_CXXFLAGS" | "$GREP" -i -c "ssse3") != "0" ]]; then
+			SUNCC_SSE_CXXFLAGS="$SUNCC_SSE_CXXFLAGS -xarch=ssse3";
+		elif [[ $(echo -n "$SUNCC_SSE_CXXFLAGS" | "$GREP" -i -c "sse3") != "0" ]]; then
+			SUNCC_SSE_CXXFLAGS="$SUNCC_SSE_CXXFLAGS -xarch=sse3";
+		else
+			SUNCC_SSE_CXXFLAGS="$SUNCC_SSE_CXXFLAGS -xarch=sse2";
+		fi
 
 		############################################
 		# Debug build
 		echo
 		echo "************************************" | tee -a "$TEST_RESULTS"
-		echo "Testing: Sun Studio 12.2, debug, default CXXFLAGS" | tee -a "$TEST_RESULTS"
+		echo "Testing: Sun Studio 12.2, debug, platform CXXFLAGS" | tee -a "$TEST_RESULTS"
 		echo
 
 		"$MAKE" clean > /dev/null 2>&1
 		rm -f adhoc.cpp > /dev/null 2>&1
 
-		CXXFLAGS="-DDEBUG -g -xO0 ${SUNCC_SSE_CXXFLAGS[@]}"
+		CXXFLAGS="-DDEBUG -g -xO0 $SUNCC_SSE_CXXFLAGS"
 		CXX="/opt/solstudio12.2/bin/CC" CXXFLAGS="$CXXFLAGS" "$MAKE" "${MAKEARGS[@]}" static dynamic cryptest.exe 2>&1 | tee -a "$TEST_RESULTS"
 
 		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
@@ -3540,13 +3869,13 @@ if [[ "$IS_SOLARIS" -ne "0" ]]; then
 		# Release build
 		echo
 		echo "************************************" | tee -a "$TEST_RESULTS"
-		echo "Testing: Sun Studio 12.2, release, default CXXFLAGS" | tee -a "$TEST_RESULTS"
+		echo "Testing: Sun Studio 12.2, release, platform CXXFLAGS" | tee -a "$TEST_RESULTS"
 		echo
 
 		"$MAKE" clean > /dev/null 2>&1
 		rm -f adhoc.cpp > /dev/null 2>&1
 
-		CXXFLAGS="-DNDEBUG -g -xO2 ${SUNCC_SSE_CXXFLAGS[@]}"
+		CXXFLAGS="-DNDEBUG -g -xO2 $SUNCC_SSE_CXXFLAGS"
 		CXX="/opt/solstudio12.2/bin/CC" CXXFLAGS="$CXXFLAGS" "$MAKE" "${MAKEARGS[@]}" static dynamic cryptest.exe 2>&1 | tee -a "$TEST_RESULTS"
 
 		if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
@@ -3564,14 +3893,29 @@ if [[ "$IS_SOLARIS" -ne "0" ]]; then
 	fi
 
 	############################################
-	# Sun Studio 12.3
+	# Sun Studio 12.3/SunCC 5.12
 	if [[ (-e "/opt/solarisstudio12.3/bin/CC") ]]; then
+
+		# More workarounds... SunCC 5.12 only does SSE4, http://github.com/weidai11/cryptopp/issues/228
+		SUNCC_SSE_CXXFLAGS=$(echo -n "${SUNCC_CXXFLAGS[@]}" | "$AWK" '/__(SSE2|SSE3|SSSE3|SSE4_1|SSE4_2)__/' ORS=' ' RS=' ')
+
+		if [[ $(echo -n "$SUNCC_SSE_CXXFLAGS" | "$GREP" -i -c "sse4_2") != "0" ]]; then
+			SUNCC_SSE_CXXFLAGS="$SUNCC_SSE_CXXFLAGS -xarch=sse4_2";
+		elif [[ $(echo -n "$SUNCC_SSE_CXXFLAGS" | "$GREP" -i -c "sse4_1") != "0" ]]; then
+			SUNCC_SSE_CXXFLAGS="$SUNCC_SSE_CXXFLAGS -xarch=sse4_1";
+		elif [[ $(echo -n "$SUNCC_SSE_CXXFLAGS" | "$GREP" -i -c "ssse3") != "0" ]]; then
+			SUNCC_SSE_CXXFLAGS="$SUNCC_SSE_CXXFLAGS -xarch=ssse3";
+		elif [[ $(echo -n "$SUNCC_SSE_CXXFLAGS" | "$GREP" -i -c "sse3") != "0" ]]; then
+			SUNCC_SSE_CXXFLAGS="$SUNCC_SSE_CXXFLAGS -xarch=sse3";
+		else
+			SUNCC_SSE_CXXFLAGS="$SUNCC_SSE_CXXFLAGS -xarch=sse2";
+		fi
 
 		############################################
 		# Debug build
 		echo
 		echo "************************************" | tee -a "$TEST_RESULTS"
-		echo "Testing: Sun Studio 12.3, debug, default CXXFLAGS" | tee -a "$TEST_RESULTS"
+		echo "Testing: Sun Studio 12.3, debug, platform CXXFLAGS" | tee -a "$TEST_RESULTS"
 		echo
 
 		"$MAKE" clean > /dev/null 2>&1
@@ -3597,7 +3941,7 @@ if [[ "$IS_SOLARIS" -ne "0" ]]; then
 		# Release build
 		echo
 		echo "************************************" | tee -a "$TEST_RESULTS"
-		echo "Testing: Sun Studio 12.3, release, default CXXFLAGS" | tee -a "$TEST_RESULTS"
+		echo "Testing: Sun Studio 12.3, release, platform CXXFLAGS" | tee -a "$TEST_RESULTS"
 		echo
 
 		"$MAKE" clean > /dev/null 2>&1
@@ -3621,15 +3965,17 @@ if [[ "$IS_SOLARIS" -ne "0" ]]; then
 	fi
 
 	############################################
-	# Sun Studio 12.4
+	# Sun Studio 12.4/SunCC 5.13
 	if [[ (-e "/opt/solarisstudio12.4/bin/CC") ]]; then
 
 		############################################
 		# Debug build
 		echo
 		echo "************************************" | tee -a "$TEST_RESULTS"
-		echo "Testing: Sun Studio 12.4, debug, default CXXFLAGS" | tee -a "$TEST_RESULTS"
+		echo "Testing: Sun Studio 12.4, debug, platform CXXFLAGS" | tee -a "$TEST_RESULTS"
 		echo
+
+		# No workarounds... SunCC 5.13 does AES, PCLMUL, RDRAND, AVX, BMI, ADX...
 
 		"$MAKE" clean > /dev/null 2>&1
 		rm -f adhoc.cpp > /dev/null 2>&1
@@ -3654,7 +4000,7 @@ if [[ "$IS_SOLARIS" -ne "0" ]]; then
 		# Release build
 		echo
 		echo "************************************" | tee -a "$TEST_RESULTS"
-		echo "Testing: Sun Studio 12.4, release, default CXXFLAGS" | tee -a "$TEST_RESULTS"
+		echo "Testing: Sun Studio 12.4, release, platform CXXFLAGS" | tee -a "$TEST_RESULTS"
 		echo
 
 		"$MAKE" clean > /dev/null 2>&1
@@ -3678,15 +4024,17 @@ if [[ "$IS_SOLARIS" -ne "0" ]]; then
 	fi
 
 	############################################
-	# Sun Studio 12.5
+	# Sun Studio 12.5/SunCC 5.14
 	if [[ (-e "/opt/developerstudio12.5/bin/CC") ]]; then
 
 		############################################
 		# Debug build
 		echo
 		echo "************************************" | tee -a "$TEST_RESULTS"
-		echo "Testing: Sun Studio 12.5, debug, default CXXFLAGS" | tee -a "$TEST_RESULTS"
+		echo "Testing: Sun Studio 12.5, debug, platform CXXFLAGS" | tee -a "$TEST_RESULTS"
 		echo
+
+		# No workarounds... SunCC 5.14 does AES, PCLMUL, RDRAND, AVX, BMI, ADX...
 
 		"$MAKE" clean > /dev/null 2>&1
 		rm -f adhoc.cpp > /dev/null 2>&1
@@ -3711,7 +4059,7 @@ if [[ "$IS_SOLARIS" -ne "0" ]]; then
 		# Release build
 		echo
 		echo "************************************" | tee -a "$TEST_RESULTS"
-		echo "Testing: Sun Studio 12.5, release, default CXXFLAGS" | tee -a "$TEST_RESULTS"
+		echo "Testing: Sun Studio 12.5, release, platform CXXFLAGS" | tee -a "$TEST_RESULTS"
 		echo
 
 		"$MAKE" clean > /dev/null 2>&1
@@ -3797,7 +4145,7 @@ fi
 
 ############################################
 # Darwin, c++03, libc++
-if [[ ("$IS_DARWIN" -ne "0") && ("$HAVE_CXX03" -ne "0") ]]; then
+if [[ ("$IS_DARWIN" -ne "0") && ("$HAVE_CXX03" -ne "0" && "$CLANG_COMPILER" -ne "0") ]]; then
 	echo
 	echo "************************************" | tee -a "$TEST_RESULTS"
 	echo "Testing: Darwin, c++03, libc++ (LLVM)" | tee -a "$TEST_RESULTS"
@@ -3853,7 +4201,7 @@ fi
 
 ############################################
 # Darwin, c++11, libc++
-if [[ ("$IS_DARWIN" -ne "0" && "$HAVE_CXX11" -ne "0") ]]; then
+if [[ ("$IS_DARWIN" -ne "0" && "$HAVE_CXX11" -ne "0" && "$CLANG_COMPILER" -ne "0") ]]; then
 	echo
 	echo "************************************" | tee -a "$TEST_RESULTS"
 	echo "Testing: Darwin, c++11, libc++ (LLVM)" | tee -a "$TEST_RESULTS"
@@ -3909,7 +4257,7 @@ fi
 
 ############################################
 # Darwin, c++14, libc++
-if [[ ("$IS_DARWIN" -ne "0" && "$HAVE_CXX14" -ne "0") ]]; then
+if [[ ("$IS_DARWIN" -ne "0" && "$HAVE_CXX14" -ne "0" && "$CLANG_COMPILER" -ne "0") ]]; then
 	echo
 	echo "************************************" | tee -a "$TEST_RESULTS"
 	echo "Testing: Darwin, c++14, libc++ (LLVM)" | tee -a "$TEST_RESULTS"
@@ -3965,7 +4313,7 @@ fi
 
 ############################################
 # Darwin, c++17, libc++
-if [[ ("$IS_DARWIN" -ne "0" && "$HAVE_CXX17" -ne "0") ]]; then
+if [[ ("$IS_DARWIN" -ne "0" && "$HAVE_CXX17" -ne "0" && "$CLANG_COMPILER" -ne "0") ]]; then
 	echo
 	echo "************************************" | tee -a "$TEST_RESULTS"
 	echo "Testing: Darwin, c++17, libc++ (LLVM)" | tee -a "$TEST_RESULTS"
@@ -4359,7 +4707,10 @@ if [[ ("$HAVE_X86_AES" -ne "0" || "$HAVE_X86_RDRAND" -ne "0" || "$HAVE_X86_RDSEE
 	echo "Testing: AES, RDRAND and RDSEED" | tee -a "$TEST_RESULTS"
 	echo
 
-	OPTS=("-march=native")
+	OPTS=()
+	if [[ ("$GCC_COMPILER" -ne "0") ]]; then
+		OPTS=("-march=native")
+	fi
 	if [[ "$HAVE_X86_AES" -ne "0" ]]; then
 		OPTS+=("-maes")
 	fi
@@ -5228,7 +5579,7 @@ if [[ ("$IS_CYGWIN" -eq "0") && ("$IS_MINGW" -eq "0") ]]; then
 			echo "************************************" | tee -a "$TEST_RESULTS" "$INSTALL_RESULTS"
 			echo "Testing: Install (benchmarks)" | tee -a "$TEST_RESULTS" "$INSTALL_RESULTS"
 			echo
-			./cryptest.exe b 1 2.4+1e9 2>&1 | tee -a "$TEST_RESULTS" "$INSTALL_RESULTS"
+			./cryptest.exe b 1 "$CPU_FREQ" 2>&1 | tee -a "$TEST_RESULTS" "$INSTALL_RESULTS"
 			if [[ ("${PIPESTATUS[0]}" -ne "0") ]]; then
 				echo "ERROR: failed to execute benchmarks" | tee -a "$TEST_RESULTS" "$INSTALL_RESULTS"
 			fi

@@ -46,6 +46,10 @@ cryptopp-test.exe
 cryptopp-test.s
 cryptopp.mac.done
 GNUmakefile.deps
+TestData/
+TestScripts/
+TestVectors/
+*.zip
 
 ##############
 ## Patch files
