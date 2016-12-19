@@ -958,7 +958,7 @@ public:
 class VersionCommand : public CommandBase
 {
 private:
-    const char* version = "0.5.4";
+    const char* version = "0.6.0";
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
