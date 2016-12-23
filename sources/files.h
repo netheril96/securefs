@@ -1,4 +1,5 @@
 #pragma once
+
 #include "myutils.h"
 #include "platform.h"
 #include "streams.h"
@@ -35,24 +36,30 @@ private:
 
 private:
     void read_header();
+
     [[noreturn]] void throw_invalid_cast(int to_type);
 
 protected:
     std::shared_ptr<StreamBase> m_stream;
 
     uint32_t get_root_page() const noexcept { return m_flags[4]; }
+
     void set_root_page(uint32_t value) noexcept
     {
         m_flags[4] = value;
         m_dirty = true;
     }
+
     uint32_t get_start_free_page() const noexcept { return m_flags[5]; }
+
     void set_start_free_page(uint32_t value) noexcept
     {
         m_flags[5] = value;
         m_dirty = true;
     }
+
     uint32_t get_num_free_page() const noexcept { return m_flags[6]; }
+
     void set_num_free_page(uint32_t value) noexcept
     {
         m_flags[6] = value;
@@ -86,6 +93,7 @@ public:
     }
 
     static mode_t mode_for_type(int type) noexcept { return type << 12; }
+
     static int type_for_mode(mode_t mode) noexcept { return mode >> 12; }
 
     static const char* type_name(int type) noexcept
@@ -111,45 +119,59 @@ public:
                       unsigned block_size,
                       unsigned iv_size,
                       bool store_time = false);
+
     virtual ~FileBase();
     DISABLE_COPY_MOVE(FileBase)
 
     // --Begin of getters and setters for stats---
     uint32_t get_mode() const noexcept { return m_flags[0]; }
+
     void set_mode(uint32_t value) noexcept
     {
         if (get_mode() == value)
             return;
         m_flags[0] = value;
+        update_ctime_helper();
         m_dirty = true;
     }
+
     uint32_t get_uid() const noexcept { return m_flags[1]; }
+
     void set_uid(uint32_t value) noexcept
     {
         if (get_uid() == value)
             return;
         m_flags[1] = value;
+        update_ctime_helper();
         m_dirty = true;
     }
+
     uint32_t get_gid() const noexcept { return m_flags[2]; }
+
     void set_gid(uint32_t value) noexcept
     {
         if (get_gid() == value)
             return;
         m_flags[2] = value;
+        update_ctime_helper();
         m_dirty = true;
     }
+
     uint32_t get_nlink() const noexcept { return m_flags[3]; }
+
     void set_nlink(uint32_t value) noexcept
     {
         if (get_nlink() == value)
             return;
         m_flags[3] = value;
+        update_ctime_helper();
         m_dirty = true;
     }
 
     void get_atime(timespec& out) const noexcept { out = m_atime; }
+
     void get_mtime(timespec& out) const noexcept { out = m_mtime; }
+
     void get_ctime(timespec& out) const noexcept { out = m_ctime; }
 
     void set_atime(const timespec& in) noexcept
@@ -157,31 +179,67 @@ public:
         m_atime = in;
         m_dirty = true;
     }
+
     void set_mtime(const timespec& in) noexcept
     {
         m_mtime = in;
         m_dirty = true;
     }
+
     void set_ctime(const timespec& in) noexcept
     {
         m_ctime = in;
         m_dirty = true;
     }
 
+    void update_atime_helper()
+    {
+        if (m_store_time && (m_atime.tv_sec < m_mtime.tv_sec || m_atime.tv_sec < m_ctime.tv_sec))
+        {
+            OSService::get_current_time(m_atime);
+            m_dirty = true;
+        }
+    }
+
+    void update_mtime_helper()
+    {
+        if (m_store_time)
+        {
+            OSService::get_current_time(m_mtime);
+            m_ctime = m_mtime;
+            m_dirty = true;
+        }
+    }
+
+    void update_ctime_helper()
+    {
+        if (m_store_time)
+        {
+            OSService::get_current_time(m_ctime);
+            m_dirty = true;
+        }
+    }
+
     // --End of getters and setters for stats---
 
     const id_type& get_id() const { return m_id; }
+
     const key_type& get_key() const { return m_key; }
 
     ptrdiff_t incref() noexcept { return ++m_refcount; }
+
     ptrdiff_t decref() noexcept { return --m_refcount; }
+
     ptrdiff_t getref() const noexcept { return m_refcount; }
+
     void setref(ptrdiff_t value) noexcept { m_refcount = value; }
 
     virtual int type() const noexcept { return FileBase::BASE; }
+
     int get_real_type();
 
     bool is_unlinked() const noexcept { return get_nlink() <= 0; }
+
     void unlink()
     {
         auto nlink = get_nlink();
@@ -190,18 +248,23 @@ public:
     }
 
     void flush();
+
     void fsync()
     {
         m_data_stream->fsync();
         m_meta_stream->fsync();
     }
+
     void utimens(const struct timespec ts[2]);
+
     void stat(FUSE_STAT* st);
 
     ssize_t listxattr(char* buffer, size_t size);
 
     ssize_t getxattr(const char* name, char* value, size_t size);
+
     void setxattr(const char* name, const char* value, size_t size, int flags);
+
     void removexattr(const char* name);
 
     template <class T>
@@ -222,17 +285,28 @@ public:
     explicit RegularFile(Args&&... args) : FileBase(std::forward<Args>(args)...)
     {
     }
+
     int type() const noexcept override { return class_type(); }
+
     length_type read(void* output, offset_type off, length_type len)
     {
+        update_atime_helper();
         return this->m_stream->read(output, off, len);
     }
+
     void write(const void* input, offset_type off, length_type len)
     {
+        update_mtime_helper();
         return this->m_stream->write(input, off, len);
     }
+
     length_type size() const noexcept { return m_stream->size(); }
-    void truncate(length_type new_size) { return m_stream->resize(new_size); }
+
+    void truncate(length_type new_size)
+    {
+        update_mtime_helper();
+        return m_stream->resize(new_size);
+    }
 };
 
 class Symlink : public FileBase
@@ -244,15 +318,23 @@ public:
     explicit Symlink(Args&&... args) : FileBase(std::forward<Args>(args)...)
     {
     }
+
     int type() const noexcept override { return class_type(); }
+
     std::string get()
     {
         std::string result(m_stream->size(), 0);
         auto rc = m_stream->read(&result[0], 0, result.size());
         result.resize(rc);
+        update_atime_helper();
         return result;
     }
-    void set(const std::string& path) { m_stream->write(path.data(), 0, path.size()); }
+
+    void set(const std::string& path)
+    {
+        update_mtime_helper();
+        m_stream->write(path.data(), 0, path.size());
+    }
 };
 
 class Directory : public FileBase
@@ -270,22 +352,57 @@ public:
 
     int type() const noexcept override { return class_type(); }
 
-    virtual bool get_entry(const std::string& name, id_type& id, int& type) = 0;
-    virtual bool add_entry(const std::string& name, const id_type& id, int type) = 0;
+public:
+    typedef std::function<bool(const std::string&, const id_type&, int)> callback;
+
+    bool get_entry(const std::string& name, id_type& id, int& type)
+    {
+        update_atime_helper();
+        return get_entry_impl(name, id, type);
+    }
+
+    bool add_entry(const std::string& name, const id_type& id, int type)
+    {
+        update_mtime_helper();
+        return add_entry_impl(name, id, type);
+    }
 
     /**
      * Removes the entry while also report the info of said entry.
      * Returns false when the entry is not found.
      */
-    virtual bool remove_entry(const std::string& name, id_type& id, int& type) = 0;
+    bool remove_entry(const std::string& name, id_type& id, int& type)
+    {
+        update_mtime_helper();
+        return remove_entry_impl(name, id, type);
+    }
 
-    typedef std::function<bool(const std::string&, const id_type&, int)> callback;
     /**
      * When callback returns false, the iteration will be terminated
      */
-    virtual void iterate_over_entries(const callback& cb) = 0;
+    void iterate_over_entries(const callback& cb)
+    {
+        update_atime_helper();
+        return iterate_over_entries_impl(cb);
+    }
 
     virtual bool empty() = 0;
+
+protected:
+    virtual bool get_entry_impl(const std::string& name, id_type& id, int& type) = 0;
+
+    virtual bool add_entry_impl(const std::string& name, const id_type& id, int type) = 0;
+
+    /**
+     * Removes the entry while also report the info of said entry.
+     * Returns false when the entry is not found.
+     */
+    virtual bool remove_entry_impl(const std::string& name, id_type& id, int& type) = 0;
+
+    /**
+     * When callback returns false, the iteration will be terminated
+     */
+    virtual void iterate_over_entries_impl(const callback& cb) = 0;
 };
 
 class SimpleDirectory : public Directory
@@ -304,15 +421,15 @@ public:
         initialize();
     }
 
-    bool get_entry(const std::string& name, id_type& id, int& type) override;
+    bool get_entry_impl(const std::string& name, id_type& id, int& type) override;
 
-    bool add_entry(const std::string& name, const id_type& id, int type) override;
+    bool add_entry_impl(const std::string& name, const id_type& id, int type) override;
 
-    bool remove_entry(const std::string& name, id_type& id, int& type) override;
+    bool remove_entry_impl(const std::string& name, id_type& id, int& type) override;
 
     void subflush() override;
 
-    void iterate_over_entries(const callback& cb) override
+    void iterate_over_entries_impl(const callback& cb) override
     {
         for (const auto& pair : m_table)
         {

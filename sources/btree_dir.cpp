@@ -341,7 +341,7 @@ BtreeNode* BtreeDirectory::get_root_node()
     return retrieve_node(INVALID_PAGE, pg);
 }
 
-bool BtreeDirectory::get_entry(const std::string& name, id_type& id, int& type)
+bool BtreeDirectory::get_entry_impl(const std::string& name, id_type& id, int& type)
 {
     if (name.size() > MAX_FILENAME_LENGTH)
         throw OSException(ENAMETOOLONG);
@@ -381,7 +381,7 @@ void BtreeDirectory::write_node(uint32_t num, const BtreeDirectory::Node& n)
     m_stream->write(buffer, num * BLOCK_SIZE, BLOCK_SIZE);
 }
 
-bool BtreeDirectory::add_entry(const std::string& name, const id_type& id, int type)
+bool BtreeDirectory::add_entry_impl(const std::string& name, const id_type& id, int type)
 {
     if (name.size() > MAX_FILENAME_LENGTH)
         throw OSException(ENAMETOOLONG);
@@ -591,7 +591,7 @@ void BtreeDirectory::balance_up(BtreeNode* n, int depth)
     balance_up(parent, depth + 1);
 }
 
-bool BtreeDirectory::remove_entry(const std::string& name, id_type& id, int& type)
+bool BtreeDirectory::remove_entry_impl(const std::string& name, id_type& id, int& type)
 {
     if (name.size() > MAX_FILENAME_LENGTH)
         throw OSException(ENAMETOOLONG);
@@ -705,7 +705,7 @@ void BtreeDirectory::mutable_recursive_iterate(BtreeNode* n, const Callback& cb,
         mutable_recursive_iterate(retrieve_node(n->page_number(), c), cb, depth + 1);
 }
 
-void BtreeDirectory::iterate_over_entries(const BtreeDirectory::callback& cb)
+void BtreeDirectory::iterate_over_entries_impl(const BtreeDirectory::callback& cb)
 {
     auto root = get_root_node();
     if (root)

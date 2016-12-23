@@ -48,9 +48,9 @@ inline int write(int fd, const void* data, int size) { return ::_write(fd, data,
 #else
 typedef struct stat FUSE_STAT;
 
+#include <fcntl.h>
 #include <sys/time.h>
 #include <unistd.h>
-#include <fcntl.h>
 #endif    // WIN32
 
 namespace securefs

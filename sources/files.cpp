@@ -127,6 +127,13 @@ void FileBase::read_header()
     if (!rc)
     {
         set_num_free_page(0);
+        if (m_store_time)
+        {
+            OSService::get_current_time(m_atime);
+            m_mtime = m_atime;
+            m_ctime = m_atime;
+            m_dirty = true;
+        }
     }
     else
     {
@@ -345,7 +352,7 @@ void SimpleDirectory::initialize()
     }
 }
 
-bool SimpleDirectory::get_entry(const std::string& name, id_type& id, int& type)
+bool SimpleDirectory::get_entry_impl(const std::string& name, id_type& id, int& type)
 {
     auto it = m_table.find(name);
     if (it == m_table.end())
@@ -355,7 +362,7 @@ bool SimpleDirectory::get_entry(const std::string& name, id_type& id, int& type)
     return true;
 }
 
-bool SimpleDirectory::add_entry(const std::string& name, const id_type& id, int type)
+bool SimpleDirectory::add_entry_impl(const std::string& name, const id_type& id, int type)
 {
     if (name.size() > MAX_FILENAME_LENGTH)
         throw OSException(ENAMETOOLONG);
@@ -365,7 +372,7 @@ bool SimpleDirectory::add_entry(const std::string& name, const id_type& id, int 
     return rv.second;
 }
 
-bool SimpleDirectory::remove_entry(const std::string& name, id_type& id, int& type)
+bool SimpleDirectory::remove_entry_impl(const std::string& name, id_type& id, int& type)
 {
     auto it = m_table.find(name);
     if (it == m_table.end())

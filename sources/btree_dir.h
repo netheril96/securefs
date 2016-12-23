@@ -168,13 +168,18 @@ public:
     {
     }
     ~BtreeDirectory();
-    virtual bool get_entry(const std::string& name, id_type& id, int& type) override;
-    virtual bool add_entry(const std::string& name, const id_type& id, int type) override;
-    virtual bool remove_entry(const std::string& name, id_type& id, int& type) override;
-    virtual void iterate_over_entries(const callback&) override;
+
+protected:
+    virtual bool get_entry_impl(const std::string& name, id_type& id, int& type) override;
+    virtual bool add_entry_impl(const std::string& name, const id_type& id, int type) override;
+    virtual bool remove_entry_impl(const std::string& name, id_type& id, int& type) override;
+    virtual void iterate_over_entries_impl(const callback&) override;
+
+public:
     virtual bool empty() override;
     void rebuild();
 
+public:
     bool validate_free_list();
     bool validate_btree_structure();
     void to_dot_graph(const char* filename);
