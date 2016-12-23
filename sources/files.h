@@ -15,20 +15,25 @@ namespace securefs
 class FileBase
 {
 private:
+    static const size_t NUM_FLAGS = 7, HEADER_SIZE = 8 * 4, EXTENDED_HEADER_SIZE = 64,
+            ATIME_OFFSET = NUM_FLAGS * sizeof(uint32_t), MTIME_OFFSET = ATIME_OFFSET + sizeof(uint64_t) + sizeof(uint32_t),
+            CTIME_OFFSET = MTIME_OFFSET + sizeof(uint64_t) + sizeof(uint32_t);
+
+    static_assert(CTIME_OFFSET + sizeof(uint64_t) + sizeof(uint32_t) == EXTENDED_HEADER_SIZE, "Constants are wrong!");
+
+private:
     ptrdiff_t m_refcount;
     std::shared_ptr<HeaderBase> m_header;
     key_type m_key;
     id_type m_id;
-    uint32_t m_flags[16];
+    uint32_t m_flags[NUM_FLAGS];
+    timespec m_atime, m_mtime, m_ctime;
     std::shared_ptr<FileStream> m_data_stream, m_meta_stream;
     bool m_dirty, m_check, m_store_time;
 
 private:
     void read_header();
     [[noreturn]] void throw_invalid_cast(int to_type);
-
-    static void convert_timespec_to_flags(uint32_t flags[3], const timespec& spec) noexcept;
-    static void convert_flags_to_timespec(const uint32_t flags[3], timespec& spec) noexcept;
 
 protected:
     std::shared_ptr<StreamBase> m_stream;
@@ -141,23 +146,23 @@ public:
         m_dirty = true;
     }
 
-    void get_atime(timespec& out) const noexcept { convert_flags_to_timespec(m_flags + 7, out); }
-    void get_mtime(timespec& out) const noexcept { convert_flags_to_timespec(m_flags + 10, out); }
-    void get_ctime(timespec& out) const noexcept { convert_flags_to_timespec(m_flags + 13, out); }
+    void get_atime(timespec& out) const noexcept { out = m_atime; }
+    void get_mtime(timespec& out) const noexcept { out = m_mtime; }
+    void get_ctime(timespec& out) const noexcept { out = m_ctime; }
 
     void set_atime(const timespec& in) noexcept
     {
-        convert_timespec_to_flags(m_flags + 7, in);
+        m_atime = in;
         m_dirty = true;
     }
     void set_mtime(const timespec& in) noexcept
     {
-        convert_timespec_to_flags(m_flags + 10, in);
+        m_mtime = in;
         m_dirty = true;
     }
     void set_ctime(const timespec& in) noexcept
     {
-        convert_timespec_to_flags(m_flags + 13, in);
+        m_ctime = in;
         m_dirty = true;
     }
 
@@ -188,7 +193,7 @@ public:
         m_data_stream->fsync();
         m_meta_stream->fsync();
     }
-    void utimens(const struct timespec ts[2]) { m_data_stream->utimens(ts); }
+    void utimens(const struct timespec ts[2]);
     void stat(FUSE_STAT* st);
 
     ssize_t listxattr(char* buffer, size_t size);

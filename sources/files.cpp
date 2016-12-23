@@ -115,7 +115,7 @@ FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
                                           check,
                                           block_size,
                                           iv_size,
-                                          store_time ? 64 : 32);
+                                          store_time ? EXTENDED_HEADER_SIZE : HEADER_SIZE);
     // The header size when time extension is enabled is enlarged by the space required by st_atime,
     // st_ctime and st_mtime
 
@@ -127,7 +127,7 @@ FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
 void FileBase::read_header()
 {
     memset(m_flags, 0xFF, sizeof(m_flags));
-    size_t header_size = m_store_time ? 64 : 32;
+    size_t header_size = m_store_time ? EXTENDED_HEADER_SIZE : HEADER_SIZE;
     auto header = make_unique_array<byte>(header_size);
     auto rc = m_header->read_header(header.get(), header_size);
     if (!rc)
@@ -136,24 +136,20 @@ void FileBase::read_header()
     }
     else
     {
-        for (size_t i = 0; i < header_size / sizeof(uint32_t); ++i)
+        for (size_t i = 0; i < NUM_FLAGS; ++i)
         {
             m_flags[i] = from_little_endian<uint32_t>(&header[i * sizeof(uint32_t)]);
         }
+        if (m_store_time)
+        {
+            m_atime.tv_sec = from_little_endian<uint64_t>(&header[ATIME_OFFSET]);
+            m_atime.tv_nsec = from_little_endian<uint32_t>(&header[ATIME_OFFSET + sizeof(uint64_t)]);
+            m_mtime.tv_sec = from_little_endian<uint64_t>(&header[MTIME_OFFSET]);
+            m_mtime.tv_nsec = from_little_endian<uint32_t>(&header[MTIME_OFFSET + sizeof(uint64_t)]);
+            m_ctime.tv_sec = from_little_endian<uint64_t>(&header[CTIME_OFFSET]);
+            m_ctime.tv_nsec = from_little_endian<uint32_t>(&header[CTIME_OFFSET + sizeof(uint64_t)]);
+        }
     }
-}
-
-void FileBase::convert_flags_to_timespec(const uint32_t flags[3], timespec& spec) noexcept
-{
-    spec.tv_sec = static_cast<uint64_t>(flags[0]) + (static_cast<uint64_t>(flags[1]) << 32);
-    spec.tv_nsec = flags[2];
-}
-
-void FileBase::convert_timespec_to_flags(uint32_t* flags, const timespec& spec) noexcept
-{
-    flags[0] = static_cast<uint32_t>(spec.tv_sec);
-    flags[1] = static_cast<uint32_t>(spec.tv_sec >> 32);
-    flags[2] = static_cast<uint32_t>(flags[2]);
 }
 
 int FileBase::get_real_type() { return type_for_mode(get_mode() & S_IFMT); }
@@ -193,11 +189,21 @@ void FileBase::flush()
     this->subflush();
     if (m_dirty)
     {
-        size_t header_size = m_store_time ? 64 : 32;
+        size_t header_size = m_store_time ? EXTENDED_HEADER_SIZE : HEADER_SIZE;
         auto header = make_unique_array<byte>(header_size);
-        for (size_t i = 0; i < header_size / sizeof(uint32_t); ++i)
+        memset(header.get(), 0, header_size);
+        for (size_t i = 0; i < NUM_FLAGS; ++i)
         {
             to_little_endian<uint32_t>(m_flags[i], &header[i * sizeof(uint32_t)]);
+        }
+        if (m_store_time)
+        {
+            to_little_endian<uint64_t>(m_atime.tv_sec, &header[ATIME_OFFSET]);
+            to_little_endian<uint32_t>(m_atime.tv_nsec, &header[ATIME_OFFSET + sizeof(uint64_t)]);
+            to_little_endian<uint64_t>(m_mtime.tv_sec, &header[MTIME_OFFSET]);
+            to_little_endian<uint32_t>(m_mtime.tv_nsec, &header[MTIME_OFFSET + sizeof(uint64_t)]);
+            to_little_endian<uint64_t>(m_ctime.tv_sec, &header[CTIME_OFFSET]);
+            to_little_endian<uint32_t>(m_ctime.tv_nsec, &header[CTIME_OFFSET + sizeof(uint64_t)]);
         }
         m_header->write_header(header.get(), header_size);
         m_dirty = false;
