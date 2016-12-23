@@ -14,8 +14,8 @@
 #include <sys/statvfs.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <unistd.h>
 #include <time.h>
+#include <unistd.h>
 
 #ifdef __APPLE__
 #include <sys/xattr.h>

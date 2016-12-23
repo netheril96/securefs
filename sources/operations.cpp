@@ -97,8 +97,7 @@ namespace internal
         return true;
     }
 
-    template <class Initializer>
-    FileGuard create(FileSystemContext* fs, const char* path, int type, const Initializer& init)
+    FileGuard create(FileSystemContext* fs, const char* path, int type, uint32_t mode, uint32_t uid, uint32_t gid)
     {
         std::string last_component;
         auto dir = open_base_dir(fs, path, last_component);
@@ -106,7 +105,7 @@ namespace internal
         generate_random(id.data(), id.size());
 
         FileGuard result(&fs->table, fs->table.create_as(id, type));
-        init(result.get());
+        result->initialize_empty(mode, uid, gid);
 
         try
         {
@@ -312,13 +311,7 @@ namespace operations
         {
             if (internal::is_readonly(ctx))
                 return -EROFS;
-            auto init_file = [=](FileBase* fb) {
-                fb->set_uid(ctx->uid);
-                fb->set_gid(ctx->gid);
-                fb->set_nlink(1);
-                fb->set_mode(mode);
-            };
-            auto fg = internal::create(fs, path, FileBase::REGULAR_FILE, init_file);
+            auto fg = internal::create(fs, path, FileBase::REGULAR_FILE, mode, ctx->uid, ctx->gid);
             if (fg->type() != FileBase::REGULAR_FILE)
                 return -EPERM;
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
@@ -528,13 +521,7 @@ namespace operations
         {
             if (internal::is_readonly(ctx))
                 return -EROFS;
-            auto init_dir = [=](FileBase* fb) {
-                fb->set_uid(ctx->uid);
-                fb->set_gid(ctx->gid);
-                fb->set_nlink(1);
-                fb->set_mode(mode);
-            };
-            auto fg = internal::create(fs, path, FileBase::DIRECTORY, init_dir);
+            auto fg = internal::create(fs, path, FileBase::DIRECTORY, mode, ctx->uid, ctx->gid);
             if (fg->type() != FileBase::DIRECTORY)
                 return -ENOTDIR;
             return 0;
@@ -586,16 +573,10 @@ namespace operations
         {
             if (internal::is_readonly(ctx))
                 return -EROFS;
-            auto init_symlink = [=](FileBase* fb) {
-                fb->set_uid(ctx->uid);
-                fb->set_gid(ctx->gid);
-                fb->set_nlink(1);
-                fb->set_mode(S_IFLNK | 0755);
-                static_cast<Symlink*>(fb)->set(to);
-            };
-            auto fg = internal::create(fs, from, FileBase::SYMLINK, init_symlink);
+            auto fg = internal::create(fs, from, FileBase::SYMLINK, S_IFLNK | 0755, ctx->uid, ctx->gid);
             if (fg->type() != FileBase::SYMLINK)
                 return -EINVAL;
+            fg.get_as<Symlink>()->set(to);
             return 0;
         }
         catch (const CommonException& e)

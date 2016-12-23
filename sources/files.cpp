@@ -69,6 +69,29 @@ since epoch, and last one is the number of nanoseconds.
 
 namespace securefs
 {
+void FileBase::initialize_empty(uint32_t mode, uint32_t uid, uint32_t gid)
+{
+    m_flags[0] = mode;
+    m_flags[1] = uid;
+    m_flags[2] = gid;
+    m_flags[3] = 1;
+    m_flags[4] = static_cast<uint32_t>(-1);
+    m_flags[5] = static_cast<uint32_t>(-1);
+    m_flags[6] = 0;
+
+    if (m_store_time)
+    {
+        OSService::get_current_time(m_atime);
+        m_mtime = m_atime;
+        m_ctime = m_atime;
+    }
+    else
+    {
+        memset(&m_atime, 0, sizeof(m_atime));
+        memset(&m_mtime, 0, sizeof(m_mtime));
+        memset(&m_ctime, 0, sizeof(m_ctime));
+    }
+}
 
 FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
                    std::shared_ptr<FileStream> meta_stream,
@@ -127,13 +150,6 @@ void FileBase::read_header()
     if (!rc)
     {
         set_num_free_page(0);
-        if (m_store_time)
-        {
-            OSService::get_current_time(m_atime);
-            m_mtime = m_atime;
-            m_ctime = m_atime;
-            m_dirty = true;
-        }
     }
     else
     {

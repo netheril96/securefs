@@ -123,6 +123,8 @@ public:
     virtual ~FileBase();
     DISABLE_COPY_MOVE(FileBase)
 
+    void initialize_empty(uint32_t mode, uint32_t uid, uint32_t gid);
+
     // --Begin of getters and setters for stats---
     uint32_t get_mode() const noexcept { return m_flags[0]; }
 
@@ -332,7 +334,6 @@ public:
 
     void set(const std::string& path)
     {
-        update_mtime_helper();
         m_stream->write(path.data(), 0, path.size());
     }
 };

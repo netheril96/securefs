@@ -521,7 +521,10 @@ private:
         "", "format", "The filesystem format version (1,2,3)", false, 2, "integer"};
     TCLAP::ValueArg<unsigned int> iv_size{
         "", "iv-size", "The IV size (ignored for fs format 1)", false, 12, "integer"};
-    TCLAP::SwitchArg store_time {"", "store_time", "alias for \"--format 3\", enables the extension where timestamp are stored and encrypted"};
+    TCLAP::SwitchArg store_time{
+        "",
+        "store_time",
+        "alias for \"--format 3\", enables the extension where timestamp are stored and encrypted"};
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
