@@ -157,6 +157,7 @@ FileTable::FileTable(int version,
         m_fio.reset(new FileTableIOVersion1(root, is_readonly()));
         break;
     case 2:
+    case 3:
         m_fio.reset(new FileTableIOVersion2(root, is_readonly()));
         break;
     default:

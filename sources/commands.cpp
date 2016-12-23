@@ -265,7 +265,7 @@ Json::Value generate_config(int version,
 
     config["encrypted_key"] = std::move(encrypted_key);
 
-    if (version == 2)
+    if (version >= 2)
     {
         config["block_size"] = block_size;
         config["iv_size"] = iv_size;
@@ -288,7 +288,7 @@ bool parse_config(const Json::Value& config,
         block_size = 4096;
         iv_size = 32;
     }
-    else if (version == 2)
+    else if (version == 2 || version == 3)
     {
         block_size = config["block_size"].asUInt();
         iv_size = config["iv_size"].asUInt();
@@ -517,10 +517,11 @@ private:
         false,
         0,
         "integer"};
-    TCLAP::ValueArg<unsigned int> version{
-        "", "ver", "The format version (1 or 2)", false, 2, "integer"};
+    TCLAP::ValueArg<unsigned int> format{
+        "", "format", "The filesystem format version (1,2,3)", false, 2, "integer"};
     TCLAP::ValueArg<unsigned int> iv_size{
         "", "iv-size", "The IV size (ignored for fs format 1)", false, 12, "integer"};
+    TCLAP::SwitchArg store_time {"", "store_time", "alias for \"--format 3\", enables the extension where timestamp are stored and encrypted"};
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
@@ -531,8 +532,9 @@ public:
         cmdline.add(&rounds);
         cmdline.add(&data_dir);
         cmdline.add(&config_path);
-        cmdline.add(&version);
+        cmdline.add(&format);
         cmdline.add(&pass);
+        cmdline.add(&store_time);
         cmdline.parse(argc, argv);
 
         if (pass.isSet())
@@ -556,10 +558,24 @@ public:
 
     int execute() override
     {
+        if (format.isSet() && store_time.isSet())
+        {
+            fprintf(stderr, "Conflicting flags --format and --store_time are specified together\n");
+            return 1;
+        }
+
+        if (format.isSet() && format.getValue() == 1 && iv_size.isSet())
+        {
+            fprintf(stderr, "IV size option are not available for filesystem format 1");
+            return 1;
+        }
+
+        int format_version = store_time.isSet() ? 3 : format.getValue();
+
         OSService::get_default().ensure_directory(data_dir.getValue(), 0755);
         FSConfig config;
         config.iv_size = iv_size.getValue();
-        config.version = version.getValue();
+        config.version = format_version;
         config.block_size = 4096;
 
         auto config_stream
@@ -570,12 +586,12 @@ public:
         config_stream.reset();
 
         operations::MountOptions opt;
-        opt.version = version.getValue();
+        opt.version = format_version;
         opt.root = std::make_shared<OSService>(data_dir.getValue());
         opt.master_key = config.master_key;
-        opt.flags = 0;
+        opt.flags = format_version < 3 ? 0 : FileTable::STORE_TIME;
         opt.block_size = 4096;
-        opt.iv_size = version.getValue() == 1 ? 32 : iv_size.getValue();
+        opt.iv_size = format_version == 1 ? 32 : iv_size.getValue();
 
         operations::FileSystemContext fs(opt);
         auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
@@ -627,6 +643,7 @@ public:
     {
         auto original_path = get_real_config_path();
         byte buffer[16];
+        generate_random(buffer, sizeof(buffer));
         auto tmp_path = original_path + hexify(buffer, sizeof(buffer));
         auto stream = OSService::get_default().open_file_stream(original_path, O_RDONLY, 0644);
         auto config = read_config(stream.get(), old_password.data(), old_password.size());
@@ -793,7 +810,7 @@ public:
         fsopt.iv_size = config.iv_size;
         fsopt.version = config.version;
         fsopt.master_key = config.master_key;
-        fsopt.flags = 0;
+        fsopt.flags = config.version < 3 ? 0 : FileTable::STORE_TIME;
         if (insecure.getValue())
             fsopt.flags.value() |= FileTable::NO_AUTHENTICATION;
         if (uid_override.isSet())

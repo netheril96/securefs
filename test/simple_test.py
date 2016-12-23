@@ -26,19 +26,25 @@ else:
     xattr = None
 
 
+class TimeoutException(BaseException):
+    def __init__(self):
+        BaseException.__init__(self, "Operation timeout")
+
+
 def securefs_mount(data_dir, mount_point, password):
     p = subprocess.Popen([SECUREFS_BINARY, 'mount', '--stdinpass', '--background', data_dir, mount_point],
                          stdin=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate(input=password + '\n')
     if p.returncode:
         raise RuntimeError(err)
-    while 1:
+    for i in xrange(100):
         time.sleep(0.05)
         try:
             if os.path.ismount(mount_point):
-                break
+                return
         except EnvironmentError:
             traceback.print_exc()
+    raise TimeoutException()
 
 
 def securefs_unmount(mount_point):
@@ -46,17 +52,18 @@ def securefs_unmount(mount_point):
     out, err = p.communicate()
     if p.returncode:
         raise RuntimeError(err)
-    while 1:
+    for i in xrange(100):
         time.sleep(0.05)
         try:
             if not os.path.ismount(mount_point):
-                break
+                return
         except EnvironmentError:
             traceback.print_exc()
+    raise TimeoutException()
 
 
 def securefs_create(data_dir, password, version):
-    p = subprocess.Popen([SECUREFS_BINARY, 'create', '--stdinpass', '--ver', str(version), data_dir, '--rounds', '1'],
+    p = subprocess.Popen([SECUREFS_BINARY, 'create', '--stdinpass', '--format', str(version), data_dir, '--rounds', '1'],
                          stdin=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate(input=password + '\n')
     if p.returncode:
@@ -226,6 +233,25 @@ def make_test_case(format_version):
             for dn in dir_names:
                 shutil.rmtree(os.path.join(self.mount_point, dn))
 
+        if format_version == 3:
+            def test_time(self):
+                rand_dirname = os.path.join(self.mount_point, str(uuid.uuid4()))
+                os.mkdir(rand_dirname)
+                st = os.stat(rand_dirname)
+                self.assertTrue(st.st_atime == st.st_ctime and st.st_ctime == st.st_mtime)
+                self.assertAlmostEqual(st.st_atime, time.time(), delta=10)
+                rand_filename = os.path.join(rand_dirname, 'abc')
+                with open(rand_filename, 'w') as f:
+                    f.write('1')
+                os.utime(rand_filename, (1000., 1000.))
+                st = os.stat(rand_filename)
+                self.assertEqual(st.st_mtime, 1000)
+                with open(rand_filename, 'w') as f:
+                    f.write('1')
+                st = os.stat(rand_filename)
+                self.assertAlmostEqual(st.st_ctime, time.time(), delta=10)
+
+
     return SimpleSecureFSTestBase
 
 
@@ -234,6 +260,10 @@ class TestVersion1(make_test_case(1)):
 
 
 class TestVersion2(make_test_case(2)):
+    pass
+
+
+class TestVersion3(make_test_case(3)):
     pass
 
 

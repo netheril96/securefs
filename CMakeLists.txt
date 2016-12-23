@@ -43,7 +43,9 @@ endif()
 
 add_definitions(-D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE)
 
-set (CMAKE_BUILD_TYPE Release)
+if (NOT CMAKE_BUILD_TYPE)
+    set (CMAKE_BUILD_TYPE Release)
+endif()
 
 include(FeatureDetection)
 
