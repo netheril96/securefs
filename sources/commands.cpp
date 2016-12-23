@@ -433,7 +433,7 @@ namespace securefs
 
 std::shared_ptr<FileStream> CommandBase::open_config_stream(const std::string& path, int flags)
 {
-    return FileSystemService::get_default().open_file_stream(path, flags, 0644);
+    return OSService::get_default().open_file_stream(path, flags, 0644);
 }
 
 FSConfig CommandBase::read_config(StreamBase* stream, const void* password, size_t pass_len)
@@ -543,7 +543,7 @@ public:
         }
 
         password.resize(MAX_PASS_LEN);
-        if (!FileSystemService::isatty(0))
+        if (!OSService::isatty(0))
         {
             password.resize(
                 insecure_read_password(stdin, nullptr, password.data(), password.size()));
@@ -556,7 +556,7 @@ public:
 
     int execute() override
     {
-        FileSystemService::get_default().ensure_directory(data_dir.getValue(), 0755);
+        OSService::get_default().ensure_directory(data_dir.getValue(), 0755);
         FSConfig config;
         config.iv_size = iv_size.getValue();
         config.version = version.getValue();
@@ -571,7 +571,7 @@ public:
 
         operations::FSOptions opt;
         opt.version = version.getValue();
-        opt.root = std::make_shared<FileSystemService>(data_dir.getValue());
+        opt.root = std::make_shared<OSService>(data_dir.getValue());
         opt.master_key = config.master_key;
         opt.flags = 0;
         opt.block_size = 4096;
@@ -579,8 +579,8 @@ public:
 
         operations::FileSystem fs(opt);
         auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
-        root->set_uid(securefs::FileSystemService::getuid());
-        root->set_gid(securefs::FileSystemService::getgid());
+        root->set_uid(securefs::OSService::getuid());
+        root->set_gid(securefs::OSService::getgid());
         root->set_mode(S_IFDIR | 0755);
         root->set_nlink(1);
         root->flush();
@@ -628,15 +628,14 @@ public:
         auto original_path = get_real_config_path();
         byte buffer[16];
         auto tmp_path = original_path + hexify(buffer, sizeof(buffer));
-        auto stream
-            = FileSystemService::get_default().open_file_stream(original_path, O_RDONLY, 0644);
+        auto stream = OSService::get_default().open_file_stream(original_path, O_RDONLY, 0644);
         auto config = read_config(stream.get(), old_password.data(), old_password.size());
-        stream = FileSystemService::get_default().open_file_stream(
+        stream = OSService::get_default().open_file_stream(
             tmp_path, O_WRONLY | O_CREAT | O_EXCL, 0644);
         write_config(
             stream.get(), config, new_password.data(), new_password.size(), rounds.getValue());
         stream.reset();
-        FileSystemService::get_default().rename(tmp_path, original_path);
+        OSService::get_default().rename(tmp_path, original_path);
         return 0;
     }
 
@@ -722,7 +721,7 @@ public:
         }
 
         password.resize(MAX_PASS_LEN);
-        if (!FileSystemService::isatty(0))
+        if (!OSService::isatty(0))
         {
             password.resize(
                 insecure_read_password(stdin, nullptr, password.data(), password.size()));
@@ -752,7 +751,7 @@ public:
 
     int execute() override
     {
-        FileSystemService::get_default().ensure_directory(mount_point.getValue(), 0755);
+        OSService::get_default().ensure_directory(mount_point.getValue(), 0755);
         std::shared_ptr<FileStream> config_stream;
         try
         {
@@ -776,7 +775,7 @@ public:
         generate_random(password.data(), password.size());    // Erase user input
 
         operations::FSOptions fsopt;
-        fsopt.root = std::make_shared<FileSystemService>(data_dir.getValue());
+        fsopt.root = std::make_shared<OSService>(data_dir.getValue());
         try
         {
             fsopt.root->lock();
@@ -813,8 +812,7 @@ public:
         }
         else if (background.getValue())
         {
-            log_filename
-                = FileSystemService::temp_name(std::string(get_tmp_dir()) + "/securefs_", ".log");
+            log_filename = OSService::temp_name(std::string(get_tmp_dir()) + "/securefs_", ".log");
             fprintf(stderr,
                     "Setting %s as the log file since the user specifies none\n",
                     log_filename.c_str());
@@ -845,7 +843,7 @@ public:
         {
             fprintf(stderr,
                     "Raising the number of file descriptor limit to %d\n",
-                    FileSystemService::raise_fd_limit());
+                    OSService::raise_fd_limit());
         }
         catch (const ExceptionBase& e)
         {
@@ -907,7 +905,7 @@ public:
         cmdline.parse(argc, argv);
 
         password.resize(MAX_PASS_LEN);
-        if (!FileSystemService::isatty(0))
+        if (!OSService::isatty(0))
         {
             password.resize(
                 insecure_read_password(stdin, nullptr, password.data(), password.size()));
@@ -931,7 +929,7 @@ public:
         generate_random(password.data(), password.size());    // Erase user input
 
         operations::FSOptions fsopt;
-        fsopt.root = std::make_shared<FileSystemService>(data_dir.getValue());
+        fsopt.root = std::make_shared<OSService>(data_dir.getValue());
         fsopt.root->lock();
         fsopt.block_size = config.block_size;
         fsopt.iv_size = config.iv_size;

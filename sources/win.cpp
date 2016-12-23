@@ -29,11 +29,11 @@ static std::wstring from_utf8(const std::string& str)
 
 static void filetime_to_unix_time(const FILETIME* ft, struct timespec* out)
 {
-    long long ll = (static_cast<long long>(ft->dwHighDateTime) << 32) + 
-						static_cast<long long>(ft->dwLowDateTime) - 116444736000000000LL;
-	static const long long FACTOR = 10000000LL;
-	out->tv_sec = ll / FACTOR;
-	out->tv_nsec = (ll % FACTOR) * 100;
+    long long ll = (static_cast<long long>(ft->dwHighDateTime) << 32)
+        + static_cast<long long>(ft->dwLowDateTime) - 116444736000000000LL;
+    static const long long FACTOR = 10000000LL;
+    out->tv_sec = ll / FACTOR;
+    out->tv_nsec = (ll % FACTOR) * 100;
 }
 
 static FILETIME unix_time_to_filetime(const timespec* t)
@@ -212,17 +212,17 @@ public:
     }
     void utimens(const struct timespec ts[2]) override
     {
-		FILETIME access_time, mod_time;
-		if (!ts)
-		{
-			GetSystemTimeAsFileTime(&access_time);
-			mod_time = access_time;
-		}
-		else
-		{
-			access_time = unix_time_to_filetime(ts + 0);
-			mod_time = unix_time_to_filetime(ts + 1);
-		}
+        FILETIME access_time, mod_time;
+        if (!ts)
+        {
+            GetSystemTimePreciseAsFileTime(&access_time);
+            mod_time = access_time;
+        }
+        else
+        {
+            access_time = unix_time_to_filetime(ts + 0);
+            mod_time = unix_time_to_filetime(ts + 1);
+        }
         if (SetFileTime(m_handle, nullptr, &access_time, &mod_time) == 0)
             throw WindowsException(GetLastError(), "SetFileTime");
     }
@@ -232,14 +232,14 @@ public:
         BY_HANDLE_FILE_INFORMATION info;
         if (GetFileInformationByHandle(m_handle, &info) == 0)
             throw WindowsException(GetLastError(), "GetFileInformationByHandle");
-		filetime_to_unix_time(&info.ftLastAccessTime, &st->st_atim);
+        filetime_to_unix_time(&info.ftLastAccessTime, &st->st_atim);
         filetime_to_unix_time(&info.ftLastWriteTime, &st->st_mtim);
         filetime_to_unix_time(&info.ftCreationTime, &st->st_birthtim);
-		st->st_ctim = st->st_mtim;
+        st->st_ctim = st->st_mtim;
     }
 };
 
-class FileSystemService::Impl
+class OSService::Impl
 {
 public:
     std::wstring dir_name;
@@ -256,34 +256,34 @@ public:
     }
 };
 
-FileSystemService::FileSystemService() : impl(new Impl()) {}
+OSService::OSService() : impl(new Impl()) {}
 
-FileSystemService::~FileSystemService() {}
+OSService::~OSService() {}
 
-FileSystemService::FileSystemService(const std::string& path) : impl(new Impl())
+OSService::OSService(const std::string& path) : impl(new Impl())
 {
     impl->dir_name = from_utf8(path);
 }
 
 std::shared_ptr<FileStream>
-FileSystemService::open_file_stream(const std::string& path, int flags, unsigned mode) const
+OSService::open_file_stream(const std::string& path, int flags, unsigned mode) const
 {
     return std::make_shared<WindowsFileStream>(impl->norm_path(path), flags, mode);
 }
 
-bool FileSystemService::remove_file(const std::string& path) const noexcept
+bool OSService::remove_file(const std::string& path) const noexcept
 {
     return DeleteFileW(impl->norm_path(path).c_str());
 }
 
-bool FileSystemService::remove_directory(const std::string& path) const noexcept
+bool OSService::remove_directory(const std::string& path) const noexcept
 {
     return RemoveDirectoryW(impl->norm_path(path).c_str());
 }
 
-void FileSystemService::lock() const {}
+void OSService::lock() const {}
 
-void FileSystemService::ensure_directory(const std::string& path, unsigned mode) const
+void OSService::ensure_directory(const std::string& path, unsigned mode) const
 {
     if (CreateDirectoryW(impl->norm_path(path).c_str(), nullptr) == 0)
     {
@@ -293,7 +293,7 @@ void FileSystemService::ensure_directory(const std::string& path, unsigned mode)
     }
 }
 
-void FileSystemService::statfs(struct statvfs* fs_info) const
+void OSService::statfs(struct statvfs* fs_info) const
 {
     memset(fs_info, 0, sizeof(*fs_info));
     ULARGE_INTEGER FreeBytesAvailable, TotalNumberOfBytes, TotalNumberOfFreeBytes;
@@ -314,7 +314,7 @@ void FileSystemService::statfs(struct statvfs* fs_info) const
     fs_info->f_favail = maximum;
 }
 
-void FileSystemService::rename(const std::string& a, const std::string& b) const
+void OSService::rename(const std::string& a, const std::string& b) const
 {
     auto wa = impl->norm_path(a);
     auto wb = impl->norm_path(b);
@@ -323,7 +323,7 @@ void FileSystemService::rename(const std::string& a, const std::string& b) const
         throw WindowsException(GetLastError(), "MoveFileW");
 }
 
-int FileSystemService::raise_fd_limit()
+int OSService::raise_fd_limit()
 {
     return 65535;
     // The handle limit on Windows is high enough that no adjustments are necessary
@@ -339,11 +339,18 @@ std::string format_current_time()
     return from_utf16(buffer);
 }
 
-uint32_t FileSystemService::getuid() noexcept { return 0; }
+uint32_t OSService::getuid() noexcept { return 0; }
 
-uint32_t FileSystemService::getgid() noexcept { return 0; }
+uint32_t OSService::getgid() noexcept { return 0; }
 
-bool FileSystemService::isatty(int fd) noexcept { return ::_isatty(fd) != 0; }
+bool OSService::isatty(int fd) noexcept { return ::_isatty(fd) != 0; }
+
+void OSService::get_current_time(timespec& current_time)
+{
+    FILETIME fm;
+    GetSystemTimePreciseAsFileTime(&fm);
+    filetime_to_unix_time(&fm, &current_time);
+}
 }
 
 #endif

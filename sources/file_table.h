@@ -36,7 +36,7 @@ private:
     std::unique_ptr<FileTableIO> m_fio;
     uint32_t m_flags;
     unsigned m_block_size, m_iv_size;
-    std::shared_ptr<FileSystemService> m_root;
+    std::shared_ptr<OSService> m_root;
 
 private:
     void eject();
@@ -47,7 +47,7 @@ public:
 
 public:
     explicit FileTable(int version,
-                       std::shared_ptr<FileSystemService> root,
+                       std::shared_ptr<OSService> root,
                        const key_type& master_key,
                        uint32_t flags,
                        unsigned block_size,

@@ -105,7 +105,7 @@ TEST_CASE("Test BtreeDirectory")
     securefs::key_type null_key{};
     securefs::id_type null_id{};
 
-    securefs::FileSystemService service("tmp");
+    securefs::OSService service("tmp");
     auto tmp1 = service.temp_name("btree", "1");
     auto tmp2 = service.temp_name("btree", "2");
     auto tmp3 = service.temp_name("btree", "3");

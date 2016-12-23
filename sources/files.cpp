@@ -6,13 +6,7 @@
 #include <utility>
 
 #include <cryptopp/secblock.h>
-
 #include <sys/types.h>
-
-#ifdef __MACH__
-#include <mach/clock.h>
-#include <mach/mach.h>
-#endif
 
 /**
 
@@ -143,11 +137,14 @@ void FileBase::read_header()
         if (m_store_time)
         {
             m_atime.tv_sec = from_little_endian<uint64_t>(&header[ATIME_OFFSET]);
-            m_atime.tv_nsec = from_little_endian<uint32_t>(&header[ATIME_OFFSET + sizeof(uint64_t)]);
+            m_atime.tv_nsec
+                = from_little_endian<uint32_t>(&header[ATIME_OFFSET + sizeof(uint64_t)]);
             m_mtime.tv_sec = from_little_endian<uint64_t>(&header[MTIME_OFFSET]);
-            m_mtime.tv_nsec = from_little_endian<uint32_t>(&header[MTIME_OFFSET + sizeof(uint64_t)]);
+            m_mtime.tv_nsec
+                = from_little_endian<uint32_t>(&header[MTIME_OFFSET + sizeof(uint64_t)]);
             m_ctime.tv_sec = from_little_endian<uint64_t>(&header[CTIME_OFFSET]);
-            m_ctime.tv_nsec = from_little_endian<uint32_t>(&header[CTIME_OFFSET + sizeof(uint64_t)]);
+            m_ctime.tv_nsec
+                = from_little_endian<uint32_t>(&header[CTIME_OFFSET + sizeof(uint64_t)]);
         }
     }
 }
@@ -268,17 +265,6 @@ void FileBase::utimens(const struct timespec* ts)
     if (m_store_time)
     {
         struct timespec current_time;
-#ifdef __MACH__    // OS X does not have clock_gettime, use clock_get_time
-        clock_serv_t cclock;
-        mach_timespec_t mts;
-        host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
-        clock_get_time(cclock, &mts);
-        mach_port_deallocate(mach_task_self(), cclock);
-        current_time.tv_sec = mts.tv_sec;
-        current_time.tv_nsec = mts.tv_nsec;
-#else
-        clock_gettime(CLOCK_REALTIME, &current_time);
-#endif
 
         if (ts)
         {

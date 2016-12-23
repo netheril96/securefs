@@ -5,15 +5,6 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-#ifdef WIN32
-#include <Windows.h>
-#else
-#include <fcntl.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <unistd.h>
-#endif
-
 namespace securefs
 {
 void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
@@ -21,29 +12,14 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
     if (level < this->get_level())
         return;
 
-#ifdef WIN32
-    SYSTEMTIME tm;
-    GetSystemTime(&tm);
-    int size1 = snprintf(buffer.data(),
-                         buffer.size(),
-                         "[%s] [%d-%02d-%02dT%02d:%02d:%02d.%03dZ]    ",
-                         stringify(level),
-                         tm.wYear,
-                         tm.wMonth,
-                         tm.wDay,
-                         tm.wHour,
-                         tm.wMinute,
-                         tm.wSecond,
-                         tm.wMilliseconds);
-#else
-    struct timeval now;
-    gettimeofday(&now, nullptr);
+    struct timespec now;
+    OSService::get_current_time(now);
     struct tm tm;
     gmtime_r(&now.tv_sec, &tm);
 
     int size1 = snprintf(buffer.data(),
                          buffer.size(),
-                         "[%s] [%d-%02d-%02dT%02d:%02d:%02d.%06dZ]    ",
+                         "[%s] [%d-%02d-%02d %02d:%02d:%02d.%09d UTC]    ",
                          stringify(level),
                          tm.tm_year + 1900,
                          tm.tm_mon + 1,
@@ -51,8 +27,7 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
                          tm.tm_hour,
                          tm.tm_min,
                          tm.tm_sec,
-                         static_cast<int>(now.tv_usec));
-#endif
+                         static_cast<int>(now.tv_nsec));
 
     if (size1 < 0 || static_cast<size_t>(size1) >= buffer.size())
         return;

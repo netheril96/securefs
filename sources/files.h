@@ -16,10 +16,12 @@ class FileBase
 {
 private:
     static const size_t NUM_FLAGS = 7, HEADER_SIZE = 8 * 4, EXTENDED_HEADER_SIZE = 64,
-            ATIME_OFFSET = NUM_FLAGS * sizeof(uint32_t), MTIME_OFFSET = ATIME_OFFSET + sizeof(uint64_t) + sizeof(uint32_t),
-            CTIME_OFFSET = MTIME_OFFSET + sizeof(uint64_t) + sizeof(uint32_t);
+                        ATIME_OFFSET = NUM_FLAGS * sizeof(uint32_t),
+                        MTIME_OFFSET = ATIME_OFFSET + sizeof(uint64_t) + sizeof(uint32_t),
+                        CTIME_OFFSET = MTIME_OFFSET + sizeof(uint64_t) + sizeof(uint32_t);
 
-    static_assert(CTIME_OFFSET + sizeof(uint64_t) + sizeof(uint32_t) == EXTENDED_HEADER_SIZE, "Constants are wrong!");
+    static_assert(CTIME_OFFSET + sizeof(uint64_t) + sizeof(uint32_t) == EXTENDED_HEADER_SIZE,
+                  "Constants are wrong!");
 
 private:
     ptrdiff_t m_refcount;

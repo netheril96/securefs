@@ -46,8 +46,11 @@ inline int open(const char* fn, int flags, int mode) { return ::_open(fn, flags,
 inline int close(int fd) { return ::_close(fd); }
 inline int write(int fd, const void* data, int size) { return ::_write(fd, data, size); }
 #else
-
 typedef struct stat FUSE_STAT;
+
+#include <sys/time.h>
+#include <unistd.h>
+#include <fcntl.h>
 #endif    // WIN32
 
 namespace securefs
@@ -59,28 +62,24 @@ public:
     virtual void fsync() = 0;
     virtual void utimens(const struct timespec ts[2]) = 0;
     virtual void fstat(FUSE_STAT*) = 0;
-
     virtual ssize_t listxattr(char*, size_t) { throw OSException(ENOTSUP); }
-
     virtual ssize_t getxattr(const char*, void*, size_t) { throw OSException(ENOTSUP); }
-
     virtual void setxattr(const char*, void*, size_t, int) { throw OSException(ENOTSUP); }
-
     virtual void removexattr(const char*) { throw OSException(ENOTSUP); }
 };
 
-class FileSystemService
+class OSService
 {
 private:
     class Impl;
     std::unique_ptr<Impl> impl;
 
 private:
-    FileSystemService();
+    OSService();
 
 public:
-    FileSystemService(const std::string& path);
-    ~FileSystemService();
+    OSService(const std::string& path);
+    ~OSService();
     std::shared_ptr<FileStream>
     open_file_stream(const std::string& path, int flags, unsigned mode) const;
     bool remove_file(const std::string& path) const noexcept;
@@ -97,17 +96,17 @@ public:
     static bool isatty(int fd) noexcept;
 
     static std::string temp_name(const std::string& prefix, const std::string& suffix);
-    static const FileSystemService& get_default();
+    static const OSService& get_default();
+    static void get_current_time(timespec& out);
 };
 
-inline const FileSystemService& FileSystemService::get_default()
+inline const OSService& OSService::get_default()
 {
-    static const FileSystemService service;
+    static const OSService service;
     return service;
 }
 
-inline std::string FileSystemService::temp_name(const std::string& prefix,
-                                                const std::string& suffix)
+inline std::string OSService::temp_name(const std::string& prefix, const std::string& suffix)
 {
     return prefix + random_hex_string(16) + suffix;
 }

@@ -4,7 +4,7 @@
 
 int main(int argc, char** argv)
 {
-    securefs::FileSystemService::get_default().ensure_directory("tmp", 0755);
+    securefs::OSService::get_default().ensure_directory("tmp", 0755);
     Catch::Session s;
     return s.run(argc, argv);
 }

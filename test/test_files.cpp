@@ -12,8 +12,8 @@
 TEST_CASE("File table")
 {
     using namespace securefs;
-    auto base_dir = FileSystemService::temp_name("tmp/file_table", ".dir");
-    FileSystemService::get_default().ensure_directory(base_dir, 0755);
+    auto base_dir = OSService::temp_name("tmp/file_table", ".dir");
+    OSService::get_default().ensure_directory(base_dir, 0755);
 
     key_type master_key;
     id_type null_id, file_id;
@@ -24,7 +24,7 @@ TEST_CASE("File table")
     const securefs::PODArray<char, 32> xattr_value(0x11);
 
     {
-        auto root = std::make_shared<FileSystemService>(base_dir);
+        auto root = std::make_shared<OSService>(base_dir);
         FileTable table(2, root, master_key, 0, 3000, 16);
         auto dir = dynamic_cast<Directory*>(table.create_as(null_id, FileBase::DIRECTORY));
         table.create_as(file_id, FileBase::REGULAR_FILE);
@@ -52,7 +52,7 @@ TEST_CASE("File table")
 #endif
 
     {
-        auto root = std::make_shared<FileSystemService>(base_dir);
+        auto root = std::make_shared<OSService>(base_dir);
         FileTable table(2, root, master_key, 0, 3000, 16);
         auto dir = dynamic_cast<Directory*>(table.open_as(null_id, FileBase::DIRECTORY));
         securefs::PODArray<char, 32> xattr_test_value(0);

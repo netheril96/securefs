@@ -299,44 +299,44 @@ size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size
 size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length)
 {
 #ifdef WIN32
-	if (!fp || !password)
-		NULL_EXCEPT();
+    if (!fp || !password)
+        NULL_EXCEPT();
 
-	if (fp != stdin)
-		return insecure_read_password(fp, prompt, password, max_length);
+    if (fp != stdin)
+        return insecure_read_password(fp, prompt, password, max_length);
 
-	if (prompt)
-	{
-		fputs(prompt, stderr);
-		fflush(stderr);
-	}
+    if (prompt)
+    {
+        fputs(prompt, stderr);
+        fflush(stderr);
+    }
 
-	size_t actual_read = 0;
-	auto output = static_cast<unsigned char*>(password);
+    size_t actual_read = 0;
+    auto output = static_cast<unsigned char*>(password);
 
-	while (actual_read < max_length)
-	{
-		int ch = _getch();
-		if (ch == EOF)
-		{
-			if (feof(fp))
-				break;
-			if (ferror(fp))
-				throw OSException(errno);
-		}
-		if (ch == '\0' || ch == '\n' || ch == '\r')
-			break;
-		*output = static_cast<unsigned char>(ch);
-		++output;
-		++actual_read;
-	}
-	putc('\n', stdout);
+    while (actual_read < max_length)
+    {
+        int ch = _getch();
+        if (ch == EOF)
+        {
+            if (feof(fp))
+                break;
+            if (ferror(fp))
+                throw OSException(errno);
+        }
+        if (ch == '\0' || ch == '\n' || ch == '\r')
+            break;
+        *output = static_cast<unsigned char>(ch);
+        ++output;
+        ++actual_read;
+    }
+    putc('\n', stdout);
 
-	if (actual_read >= max_length)
-		fprintf(stderr,
-			"Warning: password is longer than %llu and therefore truncated\n",
-			static_cast<unsigned long long>(max_length));
-	return actual_read;
+    if (actual_read >= max_length)
+        fprintf(stderr,
+                "Warning: password is longer than %llu and therefore truncated\n",
+                static_cast<unsigned long long>(max_length));
+    return actual_read;
 #else
     if (!fp || !password)
         NULL_EXCEPT();

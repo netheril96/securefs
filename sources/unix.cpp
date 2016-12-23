@@ -17,6 +17,8 @@
 #include <unistd.h>
 
 #ifdef __APPLE__
+#include <mach/clock.h>
+#include <mach/mach.h>
 #include <sys/xattr.h>
 #endif
 
@@ -153,7 +155,7 @@ public:
 #endif
 };
 
-class FileSystemService::Impl
+class OSService::Impl
 {
 public:
     std::string dir_name;
@@ -169,15 +171,15 @@ public:
     }
 };
 
-FileSystemService::FileSystemService() : impl(new Impl()) { impl->dir_fd = AT_FDCWD; }
+OSService::OSService() : impl(new Impl()) { impl->dir_fd = AT_FDCWD; }
 
-FileSystemService::~FileSystemService()
+OSService::~OSService()
 {
     if (impl->dir_fd >= 0)
         ::close(impl->dir_fd);
 }
 
-FileSystemService::FileSystemService(const std::string& path) : impl(new Impl())
+OSService::OSService(const std::string& path) : impl(new Impl())
 {
     impl->dir_name = path;
     int dir_fd = ::open(path.c_str(), O_RDONLY);
@@ -187,7 +189,7 @@ FileSystemService::FileSystemService(const std::string& path) : impl(new Impl())
 }
 
 std::shared_ptr<FileStream>
-FileSystemService::open_file_stream(const std::string& path, int flags, unsigned mode) const
+OSService::open_file_stream(const std::string& path, int flags, unsigned mode) const
 {
 #ifdef HAS_AT_FUNCTIONS
     int fd = ::openat(impl->dir_fd, path.c_str(), flags, mode);
@@ -200,7 +202,7 @@ FileSystemService::open_file_stream(const std::string& path, int flags, unsigned
     return std::make_shared<UnixFileStream>(fd);
 }
 
-bool FileSystemService::remove_file(const std::string& path) const noexcept
+bool OSService::remove_file(const std::string& path) const noexcept
 {
 #ifdef HAS_AT_FUNCTIONS
     return ::unlinkat(impl->dir_fd, path.c_str(), 0) == 0;
@@ -209,7 +211,7 @@ bool FileSystemService::remove_file(const std::string& path) const noexcept
 #endif
 }
 
-bool FileSystemService::remove_directory(const std::string& path) const noexcept
+bool OSService::remove_directory(const std::string& path) const noexcept
 {
 #ifdef HAS_AT_FUNCTIONS
     return ::unlinkat(impl->dir_fd, path.c_str(), AT_REMOVEDIR) == 0;
@@ -218,7 +220,7 @@ bool FileSystemService::remove_directory(const std::string& path) const noexcept
 #endif
 }
 
-void FileSystemService::lock() const
+void OSService::lock() const
 {
     int rc = ::flock(impl->dir_fd, LOCK_NB | LOCK_EX);
     if (rc < 0)
@@ -226,7 +228,7 @@ void FileSystemService::lock() const
             errno, strprintf("Fail to obtain exclusive lock on %s", impl->dir_name.c_str()));
 }
 
-void FileSystemService::ensure_directory(const std::string& path, unsigned mode) const
+void OSService::ensure_directory(const std::string& path, unsigned mode) const
 {
 #ifdef HAS_AT_FUNCTIONS
     int rc = ::mkdirat(impl->dir_fd, path.c_str(), mode);
@@ -238,14 +240,14 @@ void FileSystemService::ensure_directory(const std::string& path, unsigned mode)
             errno, strprintf("Fail to create directory %s", impl->norm_path(path).c_str()));
 }
 
-void FileSystemService::statfs(struct statvfs* fs_info) const
+void OSService::statfs(struct statvfs* fs_info) const
 {
     int rc = ::fstatvfs(impl->dir_fd, fs_info);
     if (rc < 0)
         throw POSIXException(errno, "statvfs");
 }
 
-void FileSystemService::rename(const std::string& a, const std::string& b) const
+void OSService::rename(const std::string& a, const std::string& b) const
 {
 #ifdef HAS_AT_FUNCTIONS
     int rc = ::renameat(impl->dir_fd, a.c_str(), impl->dir_fd, b.c_str());
@@ -259,10 +261,10 @@ void FileSystemService::rename(const std::string& a, const std::string& b) const
                                        impl->norm_path(b).c_str()));
 }
 
-uint32_t FileSystemService::getuid() noexcept { return ::getuid(); }
-uint32_t FileSystemService::getgid() noexcept { return ::getgid(); }
+uint32_t OSService::getuid() noexcept { return ::getuid(); }
+uint32_t OSService::getgid() noexcept { return ::getgid(); }
 
-int FileSystemService::raise_fd_limit()
+int OSService::raise_fd_limit()
 {
     struct rlimit rl;
     int rc = ::getrlimit(RLIMIT_NOFILE, &rl);
@@ -279,16 +281,31 @@ int FileSystemService::raise_fd_limit()
     if (rc < 0)
         throw POSIXException(errno, "setrlimit");
 
-    for (int lim = rl.rlim_cur * 2 - 1, bound = rl.rlim_cur; lim >= bound; --lim)
+    for (auto lim = rl.rlim_cur * 2 - 1, bound = rl.rlim_cur; lim >= bound; --lim)
     {
         rl.rlim_cur = lim;
         rc = ::setrlimit(RLIMIT_NOFILE, &rl);
         if (rc == 0)
-            return lim;
+            return static_cast<int>(lim);
     }
     throw POSIXException(errno, "setrlimit");
 }
 
-bool FileSystemService::isatty(int fd) noexcept { return ::isatty(fd); }
+bool OSService::isatty(int fd) noexcept { return ::isatty(fd) != 0; }
+
+void OSService::get_current_time(timespec& current_time)
+{
+#ifdef __MACH__    // OS X does not have clock_gettime, use clock_get_time
+    clock_serv_t cclock;
+    mach_timespec_t mts;
+    host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
+    clock_get_time(cclock, &mts);
+    mach_port_deallocate(mach_task_self(), cclock);
+    current_time.tv_sec = mts.tv_sec;
+    current_time.tv_nsec = mts.tv_nsec;
+#else
+    clock_gettime(CLOCK_REALTIME, &current_time);
+#endif
+}
 }
 #endif
