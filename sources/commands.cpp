@@ -48,7 +48,7 @@ enum class NLinkFixPhase
     FixingNLink
 };
 
-void fix_hardlink_count(operations::FileSystem* fs,
+void fix_hardlink_count(operations::FileSystemContext* fs,
                         Directory* dir,
                         std::unordered_map<id_type, int, id_hash>* nlink_map,
                         NLinkFixPhase phase)
@@ -95,7 +95,7 @@ void fix_hardlink_count(operations::FileSystem* fs,
     }
 }
 
-void fix_helper(operations::FileSystem* fs,
+void fix_helper(operations::FileSystemContext* fs,
                 Directory* dir,
                 const std::string& dir_name,
                 std::unordered_set<id_type, id_hash>* all_ids)
@@ -170,7 +170,7 @@ void fix_helper(operations::FileSystem* fs,
     }
 }
 
-void fix(const std::string& basedir, operations::FileSystem* fs)
+void fix(const std::string& basedir, operations::FileSystemContext* fs)
 {
     std::unordered_set<id_type, id_hash> all_ids{fs->root_id};
     AutoClosedFileBase root_dir = open_as(fs->table, fs->root_id, FileBase::DIRECTORY);
@@ -569,7 +569,7 @@ public:
             config_stream.get(), config, password.data(), password.size(), rounds.getValue());
         config_stream.reset();
 
-        operations::FSOptions opt;
+        operations::MountOptions opt;
         opt.version = version.getValue();
         opt.root = std::make_shared<OSService>(data_dir.getValue());
         opt.master_key = config.master_key;
@@ -577,7 +577,7 @@ public:
         opt.block_size = 4096;
         opt.iv_size = version.getValue() == 1 ? 32 : iv_size.getValue();
 
-        operations::FileSystem fs(opt);
+        operations::FileSystemContext fs(opt);
         auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
         root->set_uid(securefs::OSService::getuid());
         root->set_gid(securefs::OSService::getgid());
@@ -774,7 +774,7 @@ public:
 
         generate_random(password.data(), password.size());    // Erase user input
 
-        operations::FSOptions fsopt;
+        operations::MountOptions fsopt;
         fsopt.root = std::make_shared<OSService>(data_dir.getValue());
         try
         {
@@ -928,7 +928,7 @@ public:
 
         generate_random(password.data(), password.size());    // Erase user input
 
-        operations::FSOptions fsopt;
+        operations::MountOptions fsopt;
         fsopt.root = std::make_shared<OSService>(data_dir.getValue());
         fsopt.root->lock();
         fsopt.block_size = config.block_size;
@@ -937,7 +937,7 @@ public:
         fsopt.master_key = config.master_key;
         fsopt.flags = 0;
 
-        operations::FileSystem fs(fsopt);
+        operations::FileSystemContext fs(fsopt);
         fix(data_dir.getValue(), &fs);
         return 0;
 #endif

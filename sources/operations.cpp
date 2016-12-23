@@ -14,20 +14,20 @@
 #include <sys/xattr.h>
 #endif
 
-using securefs::operations::FileSystem;
+using securefs::operations::FileSystemContext;
 
 namespace securefs
 {
 namespace internal
 {
-    inline FileSystem* get_fs(struct fuse_context* ctx)
+    inline FileSystemContext* get_fs(struct fuse_context* ctx)
     {
-        return static_cast<FileSystem*>(ctx->private_data);
+        return static_cast<FileSystemContext*>(ctx->private_data);
     }
 
     typedef AutoClosedFileBase FileGuard;
 
-    FileGuard open_base_dir(FileSystem* fs, const char* path, std::string& last_component)
+    FileGuard open_base_dir(FileSystemContext* fs, const char* path, std::string& last_component)
     {
 #ifdef WIN32
         std::string norm_path(path);
@@ -63,7 +63,7 @@ namespace internal
         return result;
     }
 
-    FileGuard open_all(FileSystem* fs, const char* path)
+    FileGuard open_all(FileSystemContext* fs, const char* path)
     {
         std::string last_component;
         auto fg = open_base_dir(fs, path, last_component);
@@ -79,7 +79,7 @@ namespace internal
     }
 
     // Specialization of `open_all` since `OSException(ENOENT)` occurs too frequently
-    bool open_all(FileSystem* fs, const char* path, FileGuard& fg)
+    bool open_all(FileSystemContext* fs, const char* path, FileGuard& fg)
     {
         std::string last_component;
         fg = open_base_dir(fs, path, last_component);
@@ -98,7 +98,7 @@ namespace internal
     }
 
     template <class Initializer>
-    FileGuard create(FileSystem* fs, const char* path, int type, const Initializer& init)
+    FileGuard create(FileSystemContext* fs, const char* path, int type, const Initializer& init)
     {
         std::string last_component;
         auto dir = open_base_dir(fs, path, last_component);
@@ -122,7 +122,7 @@ namespace internal
         return result;
     }
 
-    void remove(FileSystem* fs, const id_type& id, int type)
+    void remove(FileSystemContext* fs, const id_type& id, int type)
     {
         try
         {
@@ -136,7 +136,7 @@ namespace internal
         }
     }
 
-    void remove(FileSystem* fs, const char* path)
+    void remove(FileSystemContext* fs, const char* path)
     {
         std::string last_component;
         auto dir_guard = open_base_dir(fs, path, last_component);
@@ -168,7 +168,7 @@ namespace internal
 namespace operations
 {
 
-    FileSystem::FileSystem(const FSOptions& opt)
+    FileSystemContext::FileSystemContext(const MountOptions& opt)
         : table(opt.version.value(),
                 opt.root,
                 opt.master_key.value(),
@@ -183,7 +183,7 @@ namespace operations
         block_size = opt.block_size.value();
     }
 
-    FileSystem::~FileSystem() {}
+    FileSystemContext::~FileSystemContext() {}
 
 #define COMMON_PROLOGUE                                                                            \
     auto ctx = fuse_get_context();                                                                 \
@@ -205,8 +205,8 @@ namespace operations
 
     void* init(struct fuse_conn_info*)
     {
-        auto args = static_cast<FSOptions*>(fuse_get_context()->private_data);
-        auto fs = new FileSystem(*args);
+        auto args = static_cast<MountOptions*>(fuse_get_context()->private_data);
+        auto fs = new FileSystemContext(*args);
         fs->logger->log(LoggingLevel::VERBOSE, "%s", __FUNCTION__);
         fputs("Filesystem mounted successfully\n", stderr);
         return fs;
@@ -214,7 +214,7 @@ namespace operations
 
     void destroy(void* data)
     {
-        auto fs = static_cast<FileSystem*>(data);
+        auto fs = static_cast<FileSystemContext*>(data);
         fs->logger->log(LoggingLevel::VERBOSE, "%s", __FUNCTION__);
         delete fs;
         fputs("Filesystem unmounted successfully\n", stderr);

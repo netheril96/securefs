@@ -11,7 +11,7 @@ namespace securefs
 {
 namespace operations
 {
-    struct FSOptions
+    struct MountOptions
     {
         optional<int> version;
         std::shared_ptr<OSService> root;
@@ -24,7 +24,7 @@ namespace operations
         std::shared_ptr<Logger> logger;
     };
 
-    struct FileSystem
+    struct FileSystemContext
     {
     public:
         FileTable table;
@@ -34,9 +34,9 @@ namespace operations
         optional<uid_t> uid_override;
         optional<gid_t> gid_override;
 
-        explicit FileSystem(const FSOptions& opt);
+        explicit FileSystemContext(const MountOptions& opt);
 
-        ~FileSystem();
+        ~FileSystemContext();
     };
 
     int statfs(const char*, struct statvfs*);
