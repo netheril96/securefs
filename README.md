@@ -1,6 +1,6 @@
 # securefs
 
-`securefs` is a filesystem in userspace (FUSE) that transparently encrypts and authenticates data stored. It is particularly designed to secure data stored in the cloud.
+`securefs` is a filesystem in userspace (FUSE) with transparent encryption (when writing) and decryption (when reading).
 
 `securefs` mounts a regular directory onto a mount point. The mount point appears as a regular filesystem, where one can read/write/create files, directories and symbolic links. The underlying directory will be automatically updated to contain the encrypted and authenticated contents.
 
@@ -11,7 +11,6 @@ From sensitive financial records to personal diaries and collection of guilty pl
 Security, however, is often at odds with convenience, and people easily grow tired of the hassle and revert to no protection at all. Consider the case of protecting our files either locally or in the cloud: we have to encrypt the files before committing to the cloud and decrypt it every time we need to read and write. Worse still, such actions leave unencrypted traces on our hard drive. If we store data in the cloud, another issue arise: manual encryption and decryption prevent files from being synced efficiently.
 
 `securefs` is intended to make the experience as smooth as possible so that the security and convenience do not conflict. After mounting the virtual filesystem, everything just works&#8482;.
-
 
 
 ## Install
@@ -36,7 +35,7 @@ brew install homebrew/fuse/securefs
 
 ### Manual Build
 
-Run `cmake .` then `make install`. The compiler must be new enough (g++ >= 4.8, clang >= 3.4, Visual Studio >= 2015). If you encounter build errors and the compiler is new enough, try `cmake -DDISABLE_ASM=1 .` instead.
+Run `cmake .` then `make install`. The compiler must be new enough (g++ >= 4.8, clang >= 3.4, Visual Studio >= 2015). If you encounter build errors and the compiler is new enough, try `cmake -DDISABLE_ASM=1 .` instead. Windows support is now only experimental.
 
 ## Basic usage
 
