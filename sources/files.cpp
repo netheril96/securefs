@@ -63,6 +63,13 @@ The layout becomes
  ctime
 
  ----
+
+ birthtime
+
+ ----
+ (unused)
+ ----
+
  Each time field is composed of three 32-bit integers, the first two compose the time in seconds
 since epoch, and last one is the number of nanoseconds.
 **/
@@ -84,12 +91,14 @@ void FileBase::initialize_empty(uint32_t mode, uint32_t uid, uint32_t gid)
         OSService::get_current_time(m_atime);
         m_mtime = m_atime;
         m_ctime = m_atime;
+        m_birthtime = m_atime;
     }
     else
     {
         memset(&m_atime, 0, sizeof(m_atime));
         memset(&m_mtime, 0, sizeof(m_mtime));
         memset(&m_ctime, 0, sizeof(m_ctime));
+        memset(&m_birthtime, 0, sizeof(m_birthtime));
     }
 }
 
@@ -168,6 +177,8 @@ void FileBase::read_header()
             m_ctime.tv_sec = from_little_endian<uint64_t>(&header[CTIME_OFFSET]);
             m_ctime.tv_nsec
                 = from_little_endian<uint32_t>(&header[CTIME_OFFSET + sizeof(uint64_t)]);
+            m_birthtime.tv_sec = from_little_endian<uint64_t>(&header[BTIME_OFFSET]);
+            m_birthtime.tv_nsec = from_little_endian<uint32_t>(&header[BTIME_OFFSET + sizeof(uint64_t)]);
         }
     }
 }
@@ -194,10 +205,14 @@ void FileBase::stat(FUSE_STAT* st)
         get_atime(st->st_atimespec);
         get_mtime(st->st_mtimespec);
         get_ctime(st->st_ctimespec);
+        get_birthtime(st->st_birthtimespec);
 #else
         get_atime(st->st_atim);
         get_mtime(st->st_mtim);
         get_ctime(st->st_ctim);
+#ifndef __linux__
+        get_birthtime(st->st_birthtim);
+#endif
 #endif
     }
 }
@@ -224,6 +239,8 @@ void FileBase::flush()
             to_little_endian<uint32_t>(m_mtime.tv_nsec, &header[MTIME_OFFSET + sizeof(uint64_t)]);
             to_little_endian<uint64_t>(m_ctime.tv_sec, &header[CTIME_OFFSET]);
             to_little_endian<uint32_t>(m_ctime.tv_nsec, &header[CTIME_OFFSET + sizeof(uint64_t)]);
+            to_little_endian<uint64_t>(m_birthtime.tv_sec, &header[BTIME_OFFSET]);
+            to_little_endian<uint32_t>(m_birthtime.tv_nsec, &header[BTIME_OFFSET + sizeof(uint64_t)]);
         }
         m_header->write_header(header.get(), header_size);
         m_dirty = false;

@@ -16,12 +16,13 @@ namespace securefs
 class FileBase
 {
 private:
-    static const size_t NUM_FLAGS = 7, HEADER_SIZE = 8 * 4, EXTENDED_HEADER_SIZE = 64,
+    static const size_t NUM_FLAGS = 7, HEADER_SIZE = 32, EXTENDED_HEADER_SIZE = 80,
                         ATIME_OFFSET = NUM_FLAGS * sizeof(uint32_t),
                         MTIME_OFFSET = ATIME_OFFSET + sizeof(uint64_t) + sizeof(uint32_t),
-                        CTIME_OFFSET = MTIME_OFFSET + sizeof(uint64_t) + sizeof(uint32_t);
+                        CTIME_OFFSET = MTIME_OFFSET + sizeof(uint64_t) + sizeof(uint32_t),
+                        BTIME_OFFSET = CTIME_OFFSET + sizeof(uint64_t) + sizeof(uint32_t);
 
-    static_assert(CTIME_OFFSET + sizeof(uint64_t) + sizeof(uint32_t) == EXTENDED_HEADER_SIZE,
+    static_assert(BTIME_OFFSET + sizeof(uint64_t) + sizeof(uint32_t) <= EXTENDED_HEADER_SIZE,
                   "Constants are wrong!");
 
 private:
@@ -30,7 +31,7 @@ private:
     key_type m_key;
     id_type m_id;
     uint32_t m_flags[NUM_FLAGS];
-    timespec m_atime, m_mtime, m_ctime;
+    timespec m_atime, m_mtime, m_ctime, m_birthtime;
     std::shared_ptr<FileStream> m_data_stream, m_meta_stream;
     bool m_dirty, m_check, m_store_time;
 
@@ -175,6 +176,8 @@ public:
     void get_mtime(timespec& out) const noexcept { out = m_mtime; }
 
     void get_ctime(timespec& out) const noexcept { out = m_ctime; }
+
+    void get_birthtime(timespec& out) const noexcept {out = m_birthtime;}
 
     void set_atime(const timespec& in) noexcept
     {
