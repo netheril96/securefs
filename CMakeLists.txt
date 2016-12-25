@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.5 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 
 option(PORTABLE_BUILD "Build for the general architecture instead of this cpu" OFF)
 if (PORTABLE_BUILD)
@@ -13,20 +13,15 @@ if (UNIX)
     find_package(FUSE REQUIRED)
     include_directories(${FUSE_INCLUDE_DIR})
     link_libraries(${FUSE_LIBRARIES})
-    set(CMAKE_CXX_FLAGS "-std=c++11 -Wall -Wextra -pedantic")
+    add_compile_options("-std=c++11 -Wall -Wextra -pedantic")
 
-    option(SANITIZE "Turn on sanitization" OFF)
-
-    if (${SANITIZE})
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
-    endif ()
 
     if (NOT ${PORTABLE_BUILD})
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -mtune=native")
+        add_compile_options("-march=native -mtune=native")
     endif ()
 
     if (APPLE)
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-dead_strip")
+        link_libraries("-Wl,-dead_strip")
     endif ()
     link_libraries(${CMAKE_DL_LIBS})
 else ()
@@ -39,6 +34,7 @@ else ()
     include_directories(${DOKAN_PREFIX}/include/fuse)
     link_libraries(${DOKAN_PREFIX}/lib/dokan1.lib)
     link_libraries(${DOKAN_PREFIX}/lib/dokanfuse1.lib)
+    add_compile_options(/MP)
 endif ()
 
 add_definitions(-D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE)
@@ -56,10 +52,6 @@ include_directories(${EXTERNAL_DIR})
 set(CRYPTOPP_DIR ${EXTERNAL_DIR}/cryptopp)
 add_subdirectory(${CRYPTOPP_DIR})
 link_libraries(cryptopp-static)
-
-if (DISABLE_ASM)
-    add_definitions(-DCRYPTOPP_DISABLE_ASM)
-endif ()
 
 file(GLOB SOURCES ${PROJECT_SOURCE_DIR}/sources/*.cpp ${PROJECT_SOURCE_DIR}/sources/*.h ${EXTERNAL_DIR}/*.h ${EXTERNAL_DIR}/*.hpp ${EXTERNAL_DIR}/*.cpp)
 file(GLOB TEST_SOURCES ${PROJECT_SOURCE_DIR}/test/*.cpp)
