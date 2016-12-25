@@ -9,19 +9,20 @@ endif ()
 project(securefs)
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
+set (CMAKE_CXX_STANDARD 11)
+
 if (UNIX)
     find_package(FUSE REQUIRED)
     include_directories(${FUSE_INCLUDE_DIR})
     link_libraries(${FUSE_LIBRARIES})
-    add_compile_options("-std=c++11 -Wall -Wextra -pedantic")
-
+    add_compile_options(-Wall -Wextra -pedantic)
 
     if (NOT ${PORTABLE_BUILD})
-        add_compile_options("-march=native -mtune=native")
+        add_compile_options(-march=native -mtune=native)
     endif ()
 
     if (APPLE)
-        link_libraries("-Wl,-dead_strip")
+        link_libraries(-Wl,-dead_strip)
     endif ()
     link_libraries(${CMAKE_DL_LIBS})
 else ()
