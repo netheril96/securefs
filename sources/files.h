@@ -335,10 +335,7 @@ public:
         return result;
     }
 
-    void set(const std::string& path)
-    {
-        m_stream->write(path.data(), 0, path.size());
-    }
+    void set(const std::string& path) { m_stream->write(path.data(), 0, path.size()); }
 };
 
 class Directory : public FileBase

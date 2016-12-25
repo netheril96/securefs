@@ -15,7 +15,13 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
     struct timespec now;
     OSService::get_current_time(now);
     struct tm tm;
+
+#ifndef WIN32
     gmtime_r(&now.tv_sec, &tm);
+#else
+    time_t t = now.tv_sec;
+    gmtime_s(&tm, &t);
+#endif
 
     int size1 = snprintf(buffer.data(),
                          buffer.size(),

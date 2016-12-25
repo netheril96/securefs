@@ -97,7 +97,12 @@ namespace internal
         return true;
     }
 
-    FileGuard create(FileSystemContext* fs, const char* path, int type, uint32_t mode, uint32_t uid, uint32_t gid)
+    FileGuard create(FileSystemContext* fs,
+                     const char* path,
+                     int type,
+                     uint32_t mode,
+                     uint32_t uid,
+                     uint32_t gid)
     {
         std::string last_component;
         auto dir = open_base_dir(fs, path, last_component);
@@ -573,7 +578,8 @@ namespace operations
         {
             if (internal::is_readonly(ctx))
                 return -EROFS;
-            auto fg = internal::create(fs, from, FileBase::SYMLINK, S_IFLNK | 0755, ctx->uid, ctx->gid);
+            auto fg
+                = internal::create(fs, from, FileBase::SYMLINK, S_IFLNK | 0755, ctx->uid, ctx->gid);
             if (fg->type() != FileBase::SYMLINK)
                 return -EINVAL;
             fg.get_as<Symlink>()->set(to);
