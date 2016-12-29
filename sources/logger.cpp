@@ -19,8 +19,8 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
 #ifndef WIN32
     gmtime_r(&now.tv_sec, &tm);
 #else
-    time_t t = now.tv_sec;
-    gmtime_s(&tm, &t);
+    time_t now_in_seconds = now.tv_sec;
+    gmtime_s(&tm, &now_in_seconds);
 #endif
 
     int size1 = snprintf(buffer.data(),

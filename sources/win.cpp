@@ -326,9 +326,7 @@ bool OSService::isatty(int fd) noexcept { return ::_isatty(fd) != 0; }
 
 void OSService::get_current_time(timespec& current_time)
 {
-    FILETIME fm;
-	GetSystemTimeAsFileTime(&fm);
-    filetime_to_unix_time(&fm, &current_time);
+	timespec_get(&current_time, TIME_UTC);
 }
 }
 
