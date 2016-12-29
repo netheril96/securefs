@@ -61,15 +61,15 @@ public:
     int error_number() const noexcept override { return EPERM; }
     std::string message() const override
     {
-        char buffer[256] = "UNKNOWN ERROR";
+        char buffer[2048] = "UNKNOWN ERROR";
 
-        FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                       NULL,
+        FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM,
+                       nullptr,
                        err,
                        0,
                        buffer,
-                       256,
-                       NULL);
+                       sizeof(buffer),
+                       nullptr);
 
         return strprintf("%s: %s", buffer, msg.c_str());
     }
@@ -215,7 +215,7 @@ public:
         FILETIME access_time, mod_time;
         if (!ts)
         {
-            GetSystemTimePreciseAsFileTime(&access_time);
+            GetSystemTimeAsFileTime(&access_time);
             mod_time = access_time;
         }
         else
@@ -329,16 +329,6 @@ int OSService::raise_fd_limit()
     // The handle limit on Windows is high enough that no adjustments are necessary
 }
 
-std::string format_current_time()
-{
-    wchar_t buffer[256];
-    if (GetTimeFormatEx(
-            LOCALE_NAME_USER_DEFAULT, TIME_FORCE24HOURFORMAT, nullptr, nullptr, buffer, 256)
-        == 0)
-        return "UNKNOWN TIME";
-    return from_utf16(buffer);
-}
-
 uint32_t OSService::getuid() noexcept { return 0; }
 
 uint32_t OSService::getgid() noexcept { return 0; }
@@ -348,7 +338,7 @@ bool OSService::isatty(int fd) noexcept { return ::_isatty(fd) != 0; }
 void OSService::get_current_time(timespec& current_time)
 {
     FILETIME fm;
-    GetSystemTimePreciseAsFileTime(&fm);
+	GetSystemTimeAsFileTime(&fm);
     filetime_to_unix_time(&fm, &current_time);
 }
 }

@@ -56,9 +56,9 @@ public:
     FileBase* open_as(const id_type& id, int type);
     FileBase* create_as(const id_type& id, int type);
     void close(FileBase*);
-    bool is_readonly() const noexcept { return m_flags & READ_ONLY; }
-    bool is_auth_enabled() const noexcept { return !(m_flags & NO_AUTHENTICATION); }
-    bool is_time_stored() const noexcept { return m_flags & STORE_TIME; }
+    bool is_readonly() const noexcept { return bool(m_flags & READ_ONLY); }
+    bool is_auth_enabled() const noexcept { return bool(!(m_flags & NO_AUTHENTICATION)); }
+    bool is_time_stored() const noexcept { return bool(m_flags & STORE_TIME); }
     void gc();
     void statfs(struct statvfs* fs_info) { m_root->statfs(fs_info); }
 };

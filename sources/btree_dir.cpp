@@ -567,7 +567,7 @@ void BtreeDirectory::balance_up(BtreeNode* n, int depth)
         return;
 
     Node* parent = retrieve_existing_node(n->parent_page_number());
-    dir_check(parent);
+    dir_check(parent != nullptr);
 
     ptrdiff_t entry_index;
     BtreeNode* sibling;
