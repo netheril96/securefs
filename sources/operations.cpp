@@ -30,13 +30,7 @@ namespace internal
     FileGuard open_base_dir(FileSystemContext* fs, const char* path, std::string& last_component)
     {
 #ifdef WIN32
-        std::string norm_path(path);
-        for (char& c : norm_path)
-        {
-            if (c >= 'A' && c <= 'Z')
-                c -= 'A' - 'a';
-        }
-        auto components = split(norm_path.c_str(), '/');
+        auto components = split(normalize_to_lower_case(path).c_str(), '/');
 #else
         auto components = split(path, '/');
 #endif

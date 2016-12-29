@@ -1,5 +1,6 @@
 #include "catch.hpp"
 #include "myutils.h"
+#include "platform.h"
 
 TEST_CASE("Test endian")
 {
@@ -28,6 +29,11 @@ TEST_CASE("Test string")
     REQUIRE(securefs::strprintf("%s %04d", "rsy", 9) == "rsy 0009");
     std::string long_string(2000, 'r');
     REQUIRE(securefs::strprintf("%s", long_string.c_str()) == long_string);
+
+#ifdef WIN32
+	REQUIRE(securefs::normalize_to_lower_case("ABCd") == "abcd");
+	REQUIRE(securefs::normalize_to_lower_case("\xce\x91 \xce\xb1") == "\xce\xb1 \xce\xb1");
+#endif
 }
 
 TEST_CASE("Test conversion of hex")

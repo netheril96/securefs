@@ -57,7 +57,8 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
 	if ((m_fd == 1 || m_fd == 2) && securefs::OSService::isatty(m_fd))
 	{
 		wchar_t wide_buffer[8000];
-		int sz = MultiByteToWideChar(CP_UTF8, 0, buffer.data(), std::min<int>(buffer.size(), total_size + 1), wide_buffer, 8000);
+		int sz = MultiByteToWideChar(CP_UTF8, 0, buffer.data(), 
+			std::min<int>(buffer.size(), total_size + 1), wide_buffer, 8000);
 		HANDLE hd = GetStdHandle(m_fd == 1 ? STD_OUTPUT_HANDLE : STD_ERROR_HANDLE);
 		WriteConsoleW(hd, wide_buffer, sz, nullptr, nullptr);
 		return;
