@@ -2,9 +2,6 @@
 #include "platform.h"
 
 #include <cerrno>
-#include <codecvt>
-#include <iomanip>
-#include <iostream>
 #include <limits>
 #include <memory>
 #include <stdint.h>
@@ -14,18 +11,6 @@
 #include <Windows.h>
 #include <io.h>
 #include <sddl.h>
-
-static std::string from_utf16(const std::wstring& str)
-{
-    std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
-    return converter.to_bytes(str);
-}
-
-static std::wstring from_utf8(const std::string& str)
-{
-    std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
-    return converter.from_bytes(str);
-}
 
 static void filetime_to_unix_time(const FILETIME* ft, struct timespec* out)
 {
@@ -90,40 +75,40 @@ private:
     }
 
 public:
-    explicit WindowsFileStream(const std::wstring& path, int flags, unsigned mode)
+    explicit WindowsFileStream(const std::string& path, int flags, unsigned mode)
     {
-        DWORD access = GENERIC_READ;
+        DWORD access_flags = GENERIC_READ;
         if (flags & O_WRONLY)
-            access = GENERIC_WRITE;
+            access_flags = GENERIC_WRITE;
         if (flags & O_RDWR)
-            access = GENERIC_READ | GENERIC_WRITE;
+            access_flags = GENERIC_READ | GENERIC_WRITE;
 
-        DWORD create = 0;
+        DWORD create_flags = 0;
         if (flags & O_CREAT)
         {
             if (flags & O_EXCL)
-                create = CREATE_NEW;
+                create_flags = CREATE_NEW;
             else
-                create = OPEN_ALWAYS;
+                create_flags = OPEN_ALWAYS;
         }
         else if (flags & O_TRUNC)
         {
-            create = TRUNCATE_EXISTING;
+            create_flags = TRUNCATE_EXISTING;
         }
         else
         {
-            create = OPEN_EXISTING;
+            create_flags = OPEN_EXISTING;
         }
 
-        m_handle = CreateFileW(path.c_str(),
-                               access,
+        m_handle = CreateFileA(path.c_str(),
+                               access_flags,
                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                                nullptr,
-                               create,
+                               create_flags,
                                FILE_ATTRIBUTE_NORMAL,
                                nullptr);
         if (m_handle == INVALID_HANDLE_VALUE)
-            throw WindowsException(GetLastError(), "CreateFileW");
+            throw WindowsException(GetLastError(), "CreateFile");
     }
 
     ~WindowsFileStream() { CloseHandle(m_handle); }
@@ -242,16 +227,16 @@ public:
 class OSService::Impl
 {
 public:
-    std::wstring dir_name;
+    std::string dir_name;
 
-    std::wstring norm_path(const std::string& path) const
+    std::string norm_path(const std::string& path) const
     {
         if (dir_name.empty() || (path.size() > 0 && (path[0] == '/' || path[0] == '\\'))
             || (path.size() > 2 && path[1] == ':'))
-            return from_utf8(path);
+            return path;
         else
         {
-            return dir_name + L'\\' + from_utf8(path);
+            return dir_name + '\\' + path;
         }
     }
 };
@@ -262,7 +247,7 @@ OSService::~OSService() {}
 
 OSService::OSService(const std::string& path) : impl(new Impl())
 {
-    impl->dir_name = from_utf8(path);
+    impl->dir_name = path;
 }
 
 std::shared_ptr<FileStream>
@@ -273,23 +258,27 @@ OSService::open_file_stream(const std::string& path, int flags, unsigned mode) c
 
 bool OSService::remove_file(const std::string& path) const noexcept
 {
-    return DeleteFileW(impl->norm_path(path).c_str());
+    return DeleteFileA(impl->norm_path(path).c_str()) != 0;
 }
 
 bool OSService::remove_directory(const std::string& path) const noexcept
 {
-    return RemoveDirectoryW(impl->norm_path(path).c_str());
+    return RemoveDirectoryA(impl->norm_path(path).c_str()) != 0;
 }
 
-void OSService::lock() const {}
+void OSService::lock() const 
+{
+	fprintf(stderr, "Warning: Windows does not support directory locking. "
+		"Be careful not to mount the same data directory multiple times!\n");
+}
 
 void OSService::ensure_directory(const std::string& path, unsigned mode) const
 {
-    if (CreateDirectoryW(impl->norm_path(path).c_str(), nullptr) == 0)
+    if (CreateDirectoryA(impl->norm_path(path).c_str(), nullptr) == 0)
     {
         DWORD err = GetLastError();
         if (err != ERROR_ALREADY_EXISTS)
-            throw WindowsException(err, "CreateDirectoryW");
+            throw WindowsException(err, "CreateDirectory");
     }
 }
 
@@ -297,12 +286,12 @@ void OSService::statfs(struct statvfs* fs_info) const
 {
     memset(fs_info, 0, sizeof(*fs_info));
     ULARGE_INTEGER FreeBytesAvailable, TotalNumberOfBytes, TotalNumberOfFreeBytes;
-    if (GetDiskFreeSpaceExW(impl->dir_name.c_str(),
+    if (GetDiskFreeSpaceExA(impl->dir_name.c_str(),
                             &FreeBytesAvailable,
                             &TotalNumberOfBytes,
                             &TotalNumberOfFreeBytes)
         == 0)
-        throw WindowsException(GetLastError(), "GetDiskFreeSpaceExW");
+        throw WindowsException(GetLastError(), "GetDiskFreeSpaceEx");
     auto maximum = static_cast<unsigned>(-1);
     fs_info->f_bsize = 4096;
     fs_info->f_frsize = fs_info->f_bsize;
@@ -318,9 +307,9 @@ void OSService::rename(const std::string& a, const std::string& b) const
 {
     auto wa = impl->norm_path(a);
     auto wb = impl->norm_path(b);
-    DeleteFileW(wb.c_str());
-    if (MoveFileW(wa.c_str(), wb.c_str()) == 0)
-        throw WindowsException(GetLastError(), "MoveFileW");
+    DeleteFileA(wb.c_str());
+    if (MoveFileA(wa.c_str(), wb.c_str()) == 0)
+        throw WindowsException(GetLastError(), "MoveFile");
 }
 
 int OSService::raise_fd_limit()
