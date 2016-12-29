@@ -5,6 +5,11 @@
 #include <stdarg.h>
 #include <stdio.h>
 
+#ifdef WIN32
+#include <Windows.h>
+#endif
+
+
 namespace securefs
 {
 void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
@@ -47,6 +52,17 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
         buffer[total_size] = '\n';
     else
         buffer.back() = '\n';
+
+#ifdef WIN32
+	if ((m_fd == 1 || m_fd == 2) && securefs::OSService::isatty(m_fd))
+	{
+		wchar_t wide_buffer[8000];
+		int sz = MultiByteToWideChar(CP_UTF8, 0, buffer.data(), std::min<int>(buffer.size(), total_size + 1), wide_buffer, 8000);
+		HANDLE hd = GetStdHandle(m_fd == 1 ? STD_OUTPUT_HANDLE : STD_ERROR_HANDLE);
+		WriteConsoleW(hd, wide_buffer, sz, nullptr, nullptr);
+		return;
+	}
+#endif
 
     (void)write(m_fd, buffer.data(), std::min<int>(buffer.size(), total_size + 1));
 }
