@@ -34,29 +34,26 @@ static const int MAX_SINGLE_BLOCK = 1 << 30;
 
 namespace securefs
 {
-class WindowsException : public SeriousException
-{
-private:
-    DWORD err;
-    std::string msg;
+	class WindowsException : public SeriousException
+	{
+	private:
+		DWORD err;
+		std::string msg;
 
-public:
-    explicit WindowsException(DWORD err, std::string msg) : err(err), msg(std::move(msg)) {}
-    const char* type_name() const noexcept override { return "WindowsException"; }
-    std::string message() const override
-    {
-        char buffer[2048] = "UNKNOWN ERROR";
+	public:
+		explicit WindowsException(DWORD err, std::string msg) : err(err), msg(std::move(msg)) {}
+		const char* type_name() const noexcept override { return "WindowsException"; }
+		std::string message() const override
+		{
+			const int WIDE_BUFSIZE = 1000;
+			wchar_t wide_buffer[WIDE_BUFSIZE];
+			char buffer[WIDE_BUFSIZE * 2];
 
-        FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM,
-                       nullptr,
-                       err,
-                       0,
-                       buffer,
-                       sizeof(buffer),
-                       nullptr);
-
-        return strprintf("%s: %s", buffer, msg.c_str());
-    }
+			if (!FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, nullptr, err, 0, wide_buffer, WIDE_BUFSIZE, nullptr)
+				|| !WideCharToMultiByte(CP_UTF8, 0, wide_buffer, -1, buffer, WIDE_BUFSIZE * 2, nullptr, nullptr))
+				return strprintf("error %d (%s)", static_cast<int>(err), msg.c_str());
+			return strprintf("error %d (%s) %s", static_cast<int>(err), msg.c_str(), buffer);
+		}
 };
 
 class WindowsFileStream : public FileStream
