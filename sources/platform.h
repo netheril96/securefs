@@ -48,7 +48,7 @@ inline int write(int fd, const void* data, int size) { return ::_write(fd, data,
 
 namespace securefs
 {
-	std::string normalize_to_lower_case(const char* input);
+std::string normalize_to_lower_case(const char* input);
 }
 #else
 typedef struct stat FUSE_STAT;

@@ -34,26 +34,28 @@ static const int MAX_SINGLE_BLOCK = 1 << 30;
 
 namespace securefs
 {
-	class WindowsException : public SeriousException
-	{
-	private:
-		DWORD err;
-		std::string msg;
+class WindowsException : public SeriousException
+{
+private:
+    DWORD err;
+    std::string msg;
 
-	public:
-		explicit WindowsException(DWORD err, std::string msg) : err(err), msg(std::move(msg)) {}
-		const char* type_name() const noexcept override { return "WindowsException"; }
-		std::string message() const override
-		{
-			const int WIDE_BUFSIZE = 1000;
-			wchar_t wide_buffer[WIDE_BUFSIZE];
-			char buffer[WIDE_BUFSIZE * 2];
+public:
+    explicit WindowsException(DWORD err, std::string msg) : err(err), msg(std::move(msg)) {}
+    const char* type_name() const noexcept override { return "WindowsException"; }
+    std::string message() const override
+    {
+        const int WIDE_BUFSIZE = 1000;
+        wchar_t wide_buffer[WIDE_BUFSIZE];
+        char buffer[WIDE_BUFSIZE * 2];
 
-			if (!FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, nullptr, err, 0, wide_buffer, WIDE_BUFSIZE, nullptr)
-				|| !WideCharToMultiByte(CP_UTF8, 0, wide_buffer, -1, buffer, WIDE_BUFSIZE * 2, nullptr, nullptr))
-				return strprintf("error %d (%s)", static_cast<int>(err), msg.c_str());
-			return strprintf("error %d (%s) %s", static_cast<int>(err), msg.c_str(), buffer);
-		}
+        if (!FormatMessageW(
+                FORMAT_MESSAGE_FROM_SYSTEM, nullptr, err, 0, wide_buffer, WIDE_BUFSIZE, nullptr)
+            || !WideCharToMultiByte(
+                   CP_UTF8, 0, wide_buffer, -1, buffer, WIDE_BUFSIZE * 2, nullptr, nullptr))
+            return strprintf("error %d (%s)", static_cast<int>(err), msg.c_str());
+        return strprintf("error %d (%s) %s", static_cast<int>(err), msg.c_str(), buffer);
+    }
 };
 
 class WindowsFileStream : public FileStream
@@ -241,10 +243,7 @@ OSService::OSService() : impl(new Impl()) {}
 
 OSService::~OSService() {}
 
-OSService::OSService(const std::string& path) : impl(new Impl())
-{
-    impl->dir_name = path;
-}
+OSService::OSService(const std::string& path) : impl(new Impl()) { impl->dir_name = path; }
 
 std::shared_ptr<FileStream>
 OSService::open_file_stream(const std::string& path, int flags, unsigned mode) const
@@ -262,10 +261,11 @@ bool OSService::remove_directory(const std::string& path) const noexcept
     return RemoveDirectoryA(impl->norm_path(path).c_str()) != 0;
 }
 
-void OSService::lock() const 
+void OSService::lock() const
 {
-	fprintf(stderr, "Warning: Windows does not support directory locking. "
-		"Be careful not to mount the same data directory multiple times!\n");
+    fprintf(stderr,
+            "Warning: Windows does not support directory locking. "
+            "Be careful not to mount the same data directory multiple times!\n");
 }
 
 void OSService::ensure_directory(const std::string& path, unsigned mode) const
@@ -320,29 +320,28 @@ uint32_t OSService::getgid() noexcept { return 0; }
 
 bool OSService::isatty(int fd) noexcept { return ::_isatty(fd) != 0; }
 
-void OSService::get_current_time(timespec& current_time)
-{
-	timespec_get(&current_time, TIME_UTC);
-}
+void OSService::get_current_time(timespec& current_time) { timespec_get(&current_time, TIME_UTC); }
 
 std::string normalize_to_lower_case(const char* input)
 {
-	size_t len = strlen(input);
-	std::vector<wchar_t> buffer(len);
-	if (len > std::numeric_limits<int>::max())
-		throw InvalidArgumentException("String size too large");
-	int wide_count = MultiByteToWideChar(CP_UTF8, 0, input, static_cast<int>(len),
-						buffer.data(), static_cast<int>(buffer.size()));
-	if (wide_count == 0)
-		throw WindowsException(GetLastError(), "MultiByteToWideChar");
-	if (CharLowerBuffW(buffer.data(), wide_count) != wide_count)
-		throw WindowsException(GetLastError(), "CharLowerBuff");
-	int narrow_count = WideCharToMultiByte(CP_UTF8, 0, buffer.data(), wide_count, nullptr, 0, nullptr, nullptr);
-	if (narrow_count == 0)
-		throw WindowsException(GetLastError(), "MultiByteToWideChar");
-	std::string output(narrow_count, '\0');
-	WideCharToMultiByte(CP_UTF8, 0, buffer.data(), wide_count, &output[0], narrow_count, nullptr, nullptr);
-	return output;
+    size_t len = strlen(input);
+    std::vector<wchar_t> buffer(len);
+    if (len > std::numeric_limits<int>::max())
+        throw InvalidArgumentException("String size too large");
+    int wide_count = MultiByteToWideChar(
+        CP_UTF8, 0, input, static_cast<int>(len), buffer.data(), static_cast<int>(buffer.size()));
+    if (wide_count == 0)
+        throw WindowsException(GetLastError(), "MultiByteToWideChar");
+    if (CharLowerBuffW(buffer.data(), wide_count) != wide_count)
+        throw WindowsException(GetLastError(), "CharLowerBuff");
+    int narrow_count
+        = WideCharToMultiByte(CP_UTF8, 0, buffer.data(), wide_count, nullptr, 0, nullptr, nullptr);
+    if (narrow_count == 0)
+        throw WindowsException(GetLastError(), "MultiByteToWideChar");
+    std::string output(narrow_count, '\0');
+    WideCharToMultiByte(
+        CP_UTF8, 0, buffer.data(), wide_count, &output[0], narrow_count, nullptr, nullptr);
+    return output;
 }
 }
 

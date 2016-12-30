@@ -31,8 +31,8 @@ TEST_CASE("Test string")
     REQUIRE(securefs::strprintf("%s", long_string.c_str()) == long_string);
 
 #ifdef WIN32
-	REQUIRE(securefs::normalize_to_lower_case("ABCd") == "abcd");
-	REQUIRE(securefs::normalize_to_lower_case("\xce\x91 \xce\xb1") == "\xce\xb1 \xce\xb1");
+    REQUIRE(securefs::normalize_to_lower_case("ABCd") == "abcd");
+    REQUIRE(securefs::normalize_to_lower_case("\xce\x91 \xce\xb1") == "\xce\xb1 \xce\xb1");
 #endif
 }
 

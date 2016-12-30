@@ -178,7 +178,8 @@ void FileBase::read_header()
             m_ctime.tv_nsec
                 = from_little_endian<uint32_t>(&header[CTIME_OFFSET + sizeof(uint64_t)]);
             m_birthtime.tv_sec = from_little_endian<uint64_t>(&header[BTIME_OFFSET]);
-            m_birthtime.tv_nsec = from_little_endian<uint32_t>(&header[BTIME_OFFSET + sizeof(uint64_t)]);
+            m_birthtime.tv_nsec
+                = from_little_endian<uint32_t>(&header[BTIME_OFFSET + sizeof(uint64_t)]);
         }
     }
 }
@@ -240,7 +241,8 @@ void FileBase::flush()
             to_little_endian<uint64_t>(m_ctime.tv_sec, &header[CTIME_OFFSET]);
             to_little_endian<uint32_t>(m_ctime.tv_nsec, &header[CTIME_OFFSET + sizeof(uint64_t)]);
             to_little_endian<uint64_t>(m_birthtime.tv_sec, &header[BTIME_OFFSET]);
-            to_little_endian<uint32_t>(m_birthtime.tv_nsec, &header[BTIME_OFFSET + sizeof(uint64_t)]);
+            to_little_endian<uint32_t>(m_birthtime.tv_nsec,
+                                       &header[BTIME_OFFSET + sizeof(uint64_t)]);
         }
         m_header->write_header(header.get(), header_size);
         m_dirty = false;

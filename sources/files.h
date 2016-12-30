@@ -177,7 +177,7 @@ public:
 
     void get_ctime(timespec& out) const noexcept { out = m_ctime; }
 
-    void get_birthtime(timespec& out) const noexcept {out = m_birthtime;}
+    void get_birthtime(timespec& out) const noexcept { out = m_birthtime; }
 
     void set_atime(const timespec& in) noexcept
     {

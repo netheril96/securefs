@@ -1067,26 +1067,29 @@ int commands_main(int argc, const char* const* argv)
     }
     catch (const TCLAP::ArgException& e)
     {
-		Logger l(LoggingLevel::VERBOSE, 2, false);
-        l.log(LoggingLevel::ERROR, "Error parsing arguments: %s at %s\n", e.error().c_str(), e.argId().c_str());
+        Logger l(LoggingLevel::VERBOSE, 2, false);
+        l.log(LoggingLevel::ERROR,
+              "Error parsing arguments: %s at %s\n",
+              e.error().c_str(),
+              e.argId().c_str());
         return 5;
     }
     catch (const std::runtime_error& e)
     {
-		Logger l(LoggingLevel::VERBOSE, 2, false);
-		l.log(LoggingLevel::ERROR, "%s\n", e.what());
+        Logger l(LoggingLevel::VERBOSE, 2, false);
+        l.log(LoggingLevel::ERROR, "%s\n", e.what());
         return 1;
     }
     catch (const securefs::ExceptionBase& e)
     {
-		Logger l(LoggingLevel::VERBOSE, 2, false);
-		l.log(LoggingLevel::ERROR, "%s: %s\n", e.type_name(), e.what());
+        Logger l(LoggingLevel::VERBOSE, 2, false);
+        l.log(LoggingLevel::ERROR, "%s: %s\n", e.type_name(), e.what());
         return 2;
     }
     catch (const std::exception& e)
     {
-		Logger l(LoggingLevel::VERBOSE, 2, false);
-		l.log(LoggingLevel::ERROR, "%s: %s\n", typeid(e).name(), e.what());
+        Logger l(LoggingLevel::VERBOSE, 2, false);
+        l.log(LoggingLevel::ERROR, "%s: %s\n", typeid(e).name(), e.what());
         return 3;
     }
 }
