@@ -19,11 +19,13 @@ Security, however, is often at odds with convenience, and people easily grow tir
 
 ### Dependency: FUSE
 
-On OS X, you need [`osxfuse`](https://osxfuse.github.io).
+On OS X, you need [osxfuse](https://osxfuse.github.io).
 
 On Debian based Linux distro, `sudo apt-get install fuse libfuse-dev`. 
 
 On RPM based Linux, `sudo yum install fuse fuse-devel`.
+
+On Windows, you need [dokany](https://github.com/dokan-dev/dokany/releases).
 
 ### Install with Homebrew
 
@@ -35,7 +37,7 @@ brew install homebrew/fuse/securefs
 
 ### Manual Build
 
-Run `cmake .` then `make install`. The compiler must be new enough (g++ >= 4.8, clang >= 3.4, Visual Studio >= 2015). If you encounter build errors and the compiler is new enough, try `cmake -DDISABLE_ASM=1 .` instead. Windows support is now only experimental.
+Run `cmake .` then `make install`. The compiler must be new enough (g++ >= 4.8, clang >= 3.4, Visual Studio >= 2015). If you encounter build errors and the compiler is new enough, try `cmake -DPORTABLE_BUILD=ON .` instead. Windows support is now only experimental.
 
 ## Basic usage
 
