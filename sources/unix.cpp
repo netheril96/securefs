@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <vector>
 
+#include <dirent.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <sys/file.h>
@@ -258,6 +259,50 @@ void OSService::rename(const std::string& a, const std::string& b) const
                              strprintf("Renaming from %s to %s",
                                        impl->norm_path(a).c_str(),
                                        impl->norm_path(b).c_str()));
+}
+
+void OSService::recursive_traverse(const std::string& dir, const traverse_callback& callback) const
+{
+    struct DirGuard
+    {
+        DIR* dir;
+
+        explicit DirGuard(DIR* dir_) : dir(dir_) {}
+        ~DirGuard()
+        {
+            if (dir)
+                ::closedir(dir);
+        }
+    };
+
+    DirGuard dirGuard(::opendir(impl->norm_path(dir).c_str()));
+
+    if (!dirGuard.dir)
+        throw POSIXException(errno, "opendir");
+
+    while (1)
+    {
+        errno = 0;
+        struct dirent* d = ::readdir(dirGuard.dir);
+        if (!d)
+        {
+            if (errno)
+                throw POSIXException(errno, "readdir");
+            else
+                break;
+        }
+        if (strcmp(d->d_name, ".") == 0 || strcmp(d->d_name, "..") == 0)
+            continue;
+
+        if (d->d_type & DT_DIR)
+        {
+            recursive_traverse(dir + '/' + d->d_name, callback);
+        }
+        else if (!callback(dir, d->d_name))
+        {
+            return;
+        }
+    }
 }
 
 uint32_t OSService::getuid() noexcept { return ::getuid(); }
