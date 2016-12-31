@@ -4,6 +4,7 @@
 #include "streams.h"
 
 #include <fcntl.h>
+#include <functional>
 #include <memory>
 #include <stddef.h>
 #include <stdint.h>
@@ -93,6 +94,9 @@ public:
     void lock() const;
     void ensure_directory(const std::string& path, unsigned mode) const;
     void statfs(struct statvfs*) const;
+
+    typedef std::function<bool(const std::string&, const std::string&)> traverse_callback;
+    void recursive_traverse(const std::string& dir, const traverse_callback& callback) const;
 
 public:
     static uint32_t getuid() noexcept;

@@ -324,12 +324,10 @@ namespace operations
     {
         COMMON_PROLOGUE
 
-        // bool rdonly = info->flags & O_RDONLY;
-        bool rdwr = info->flags & O_RDWR;
-        bool wronly = info->flags & O_WRONLY;
-        bool append = info->flags & O_APPEND;
-        // bool require_read = rdonly | rdwr;
-        bool require_write = wronly | append | rdwr;
+        int rdwr = info->flags & O_RDWR;
+        int wronly = info->flags & O_WRONLY;
+        int append = info->flags & O_APPEND;
+        int require_write = wronly | append | rdwr;
 
         try
         {

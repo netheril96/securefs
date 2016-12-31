@@ -1,5 +1,6 @@
 #include "myutils.h"
 #include "exceptions.h"
+#include "platform.h"
 
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
@@ -17,12 +18,6 @@
 #include <vector>
 
 #ifndef WIN32
-#include <dirent.h>
-#include <fcntl.h>
-#include <pthread.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <sys/types.h>
 #include <termios.h>
 #include <unistd.h>
 #else
@@ -361,46 +356,18 @@ size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t
 #endif
 }
 
-#ifndef WIN32
 static void find_ids_helper(const std::string& current_dir,
                             std::unordered_set<id_type, id_hash>& result)
 {
-    struct DirGuard
-    {
-        DIR* dp = nullptr;
-
-        DirGuard() {}
-        ~DirGuard() { ::closedir(dp); }
-    };
-
-    DIR* dp = ::opendir(current_dir.c_str());
-    if (!dp)
-    {
-        if (errno == ENOTDIR)
-            return;
-        throw POSIXException(errno, strprintf("Opening dir %s", current_dir.c_str()));
-    }
-
-    DirGuard guard;
-    guard.dp = dp;
     id_type id;
     std::string hex(id_type::size() * 2, 0);
-
-    while (true)
-    {
-        errno = 0;
-        dirent* dr = ::readdir(dp);
-        if (!dr && errno)
-            throw POSIXException(errno, strprintf("Reading dir %s", current_dir.c_str()));
-        if (!dr)
-            break;
-        std::string name(dr->d_name);
+    OSService::traverse_callback callback
+        = [&id, &result, &hex](const std::string& dir, const std::string& name) -> bool {
         if (name == "." || name == "..")
-            continue;
-        if (dr->d_type == DT_REG && ends_with(name.data(), name.size(), ".meta", strlen(".meta")))
+            return true;
+        if (ends_with(name.data(), name.size(), ".meta", strlen(".meta")))
         {
-            std::string total_name
-                = current_dir + '/' + name.substr(0, name.size() - strlen(".meta"));
+            std::string total_name = dir + '/' + name.substr(0, name.size() - strlen(".meta"));
             hex.assign(hex.size(), 0);
             ptrdiff_t i = hex.size() - 1, j = total_name.size() - 1;
             while (i >= 0 && j >= 0)
@@ -411,7 +378,7 @@ static void find_ids_helper(const std::string& current_dir,
                     hex[i] = namechar;
                     --i;
                 }
-                else if (namechar != '/')
+                else if (namechar != '/' && namechar != '\\')
                 {
                     throw std::runtime_error(
                         strprintf("File \"%s\" has extension .meta, but not a valid securefs "
@@ -423,11 +390,10 @@ static void find_ids_helper(const std::string& current_dir,
             parse_hex(hex, id.data(), id.size());
             result.insert(id);
         }
-        else if (dr->d_type == DT_DIR)
-        {
-            find_ids_helper(current_dir + '/' + name, result);
-        }
-    }
+        return true;
+    };
+
+    OSService::get_default().recursive_traverse(current_dir, callback);
 }
 
 std::unordered_set<id_type, id_hash> find_all_ids(const std::string& basedir)
@@ -436,7 +402,6 @@ std::unordered_set<id_type, id_hash> find_all_ids(const std::string& basedir)
     find_ids_helper(basedir, result);
     return result;
 }
-#endif
 
 std::string get_user_input_until_enter()
 {

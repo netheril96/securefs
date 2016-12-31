@@ -314,6 +314,46 @@ int OSService::raise_fd_limit()
     // The handle limit on Windows is high enough that no adjustments are necessary
 }
 
+void OSService::recursive_traverse(const std::string& dir, const traverse_callback& callback) const
+{
+    struct Finder
+    {
+        HANDLE handle;
+
+        explicit Finder(HANDLE h) : handle(h) {}
+        ~Finder()
+        {
+            if (handle != INVALID_HANDLE_VALUE)
+                FindClose(handle);
+        }
+    };
+
+    WIN32_FIND_DATAA data;
+    auto find_pattern = impl->norm_path(dir) + "\\*";
+    Finder finder(FindFirstFileA(find_pattern.c_str(), &data));
+
+    if (finder.handle == INVALID_HANDLE_VALUE)
+        throw WindowsException(GetLastError(), "FindFirstFile on pattern " + find_pattern);
+
+    do
+    {
+        if (strcmp(data.cFileName, ".") == 0 || strcmp(data.cFileName, "..") == 0)
+            continue;
+        if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+        {
+            recursive_traverse(dir + '\\' + data.cFileName, callback);
+        }
+        else
+        {
+            if (!callback(dir, data.cFileName))
+                return;
+        }
+    } while (FindNextFileA(finder.handle, &data));
+
+    if (GetLastError() != ERROR_NO_MORE_FILES)
+        throw WindowsException(GetLastError(), "FindNextFile");
+}
+
 uint32_t OSService::getuid() noexcept { return 0; }
 
 uint32_t OSService::getgid() noexcept { return 0; }
