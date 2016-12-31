@@ -17,7 +17,11 @@ private:
     // Mutable fields are not thread safe in `const` functions.
     // But who accesses exception objects concurrently anyway?
 
+protected:
+    ExceptionBase();
+
 public:
+    virtual ~ExceptionBase();
     virtual const char* type_name() const noexcept = 0;
     virtual std::string message() const = 0;
     virtual int error_number() const noexcept { return EPERM; }
@@ -121,6 +125,7 @@ private:
 
 public:
     explicit OSException(int errc) : m_errno(errc) {}
+    ~OSException();
 
     const char* type_name() const noexcept override { return "OSException"; }
 
@@ -128,6 +133,8 @@ public:
 
     std::string message() const override { return sane_strerror(m_errno); }
 };
+
+[[noreturn]] void throwOSException(int errc);
 
 class POSIXException : public SeriousException
 {
@@ -137,6 +144,7 @@ private:
 
 public:
     explicit POSIXException(int errc, std::string msg) : m_errno(errc), m_msg(std::move(msg)) {}
+    ~POSIXException();
 
     const char* type_name() const noexcept override { return "POSIXException"; }
 
@@ -144,6 +152,8 @@ public:
 
     std::string message() const override { return sane_strerror(m_errno) + " # " + m_msg; }
 };
+
+[[noreturn]] void throwPOSIXException(int errc, std::string msg);
 
 class VerificationException : public SeriousException
 {
@@ -160,13 +170,15 @@ private:
 
 public:
     explicit InvalidArgumentException(std::string why) { m_msg.swap(why); }
-
+    ~InvalidArgumentException();
     const char* type_name() const noexcept override { return "InvalidArgumentException"; }
 
     std::string message() const override { return m_msg; }
 
     int error_number() const noexcept override { return EINVAL; }
 };
+
+[[noreturn]] void throwInvalidArgumentException(std::string why);
 
 class CorruptedMetaDataException : public InvalidFormatException
 {

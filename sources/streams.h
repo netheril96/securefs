@@ -129,7 +129,7 @@ public:
         if (!m_stream)
             throw NullPointerException(__FUNCTION__, __FILE__, __LINE__);
         if (m_block_size < 1)
-            throw InvalidArgumentException("Too small block size");
+            throwInvalidArgumentException("Too small block size");
     }
 
     length_type read(void* output, offset_type offset, length_type length) override;

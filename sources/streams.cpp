@@ -510,7 +510,7 @@ namespace internal
         bool read_header(void* output, length_type length) override
         {
             if (length > get_header_size())
-                throw InvalidArgumentException("Header too long");
+                throwInvalidArgumentException("Header too long");
             if (length == get_header_size())
                 return unchecked_read_header(output) == length;
 
@@ -525,7 +525,7 @@ namespace internal
         void write_header(const void* input, length_type length) override
         {
             if (length > get_header_size())
-                throw InvalidArgumentException("Header too long");
+                throwInvalidArgumentException("Header too long");
 
             if (length == get_header_size())
                 return unchecked_write_header(input);

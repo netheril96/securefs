@@ -48,9 +48,9 @@ namespace internal
         {
             bool exists = result.get_as<Directory>()->get_entry(components[i], id, type);
             if (!exists)
-                throw OSException(ENOENT);
+                throwOSException(ENOENT);
             if (type != FileBase::DIRECTORY)
-                throw OSException(ENOTDIR);
+                throwOSException(ENOTDIR);
             result.reset(fs->table.open_as(id, type));
         }
         last_component = components.back();
@@ -67,7 +67,7 @@ namespace internal
         int type;
         bool exists = fg.get_as<Directory>()->get_entry(last_component, id, type);
         if (!exists)
-            throw OSException(ENOENT);
+            throwOSException(ENOENT);
         fg.reset(fs->table.open_as(id, type));
         return fg;
     }
@@ -110,7 +110,7 @@ namespace internal
         {
             bool success = dir.get_as<Directory>()->add_entry(last_component, id, type);
             if (!success)
-                throw OSException(EEXIST);
+                throwOSException(EEXIST);
         }
         catch (...)
         {
@@ -140,20 +140,20 @@ namespace internal
         auto dir_guard = open_base_dir(fs, path, last_component);
         auto dir = dir_guard.get_as<Directory>();
         if (last_component.empty())
-            throw OSException(EPERM);
+            throwOSException(EPERM);
         id_type id;
         int type;
         while (true)
         {
             if (!dir->get_entry(last_component, id, type))
-                throw OSException(ENOENT);
+                throwOSException(ENOENT);
 
             auto&& table = fs->table;
             FileGuard inner_guard(&table, table.open_as(id, type));
             auto inner_fb = inner_guard.get();
             if (inner_fb->type() == FileBase::DIRECTORY
                 && !static_cast<Directory*>(inner_fb)->empty())
-                throw OSException(ENOTEMPTY);
+                throwOSException(ENOTEMPTY);
             dir->remove_entry(last_component, id, type);
             inner_fb->unlink();
             break;

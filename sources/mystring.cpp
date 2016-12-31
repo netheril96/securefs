@@ -14,7 +14,7 @@ std::string vstrprintf(const char* format, va_list args)
     int size = vsnprintf(buffer, sizeof(buffer), format, copied_args);
     va_end(copied_args);
     if (size < 0)
-        throw POSIXException(errno, "vsnprintf");
+        throwPOSIXException(errno, "vsnprintf");
     if (size <= MAX_SIZE)
         return std::string(buffer, size);
     std::string result(static_cast<std::string::size_type>(size), '\0');
@@ -53,9 +53,9 @@ std::string to_lower(const std::string& str)
 void parse_hex(const std::string& hex, byte* output, size_t len)
 {
     if (hex.size() % 2 != 0)
-        throw InvalidArgumentException("Hex string must have an even length");
+        throwInvalidArgumentException("Hex string must have an even length");
     if (hex.size() / 2 != len)
-        throw InvalidArgumentException("Mismatch hex and raw length");
+        throwInvalidArgumentException("Mismatch hex and raw length");
 
     for (size_t i = 0; i < hex.size(); i += 2, ++output)
     {
@@ -110,7 +110,7 @@ void parse_hex(const std::string& hex, byte* output, size_t len)
             *output = 0xf0;
             break;
         default:
-            throw InvalidArgumentException("Invalid character in hexadecimal string");
+            throwInvalidArgumentException("Invalid character in hexadecimal string");
         }
         switch (hex[i + 1])
         {
@@ -163,7 +163,7 @@ void parse_hex(const std::string& hex, byte* output, size_t len)
             *output += 0xf;
             break;
         default:
-            throw InvalidArgumentException("Invalid character in hexadecimal string");
+            throwInvalidArgumentException("Invalid character in hexadecimal string");
         }
     }
 }

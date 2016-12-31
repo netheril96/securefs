@@ -38,11 +38,11 @@ public:
     explicit UnixFileStream(int fd) : m_fd(fd)
     {
         if (fd < 0)
-            throw OSException(EBADF);
+            throwOSException(EBADF);
         struct stat st;
         int rc = ::fstat(m_fd, &st);
         if (rc < 0)
-            throw POSIXException(errno, "fstat");
+            throwPOSIXException(errno, "fstat");
         m_size = st.st_size;
     }
 
@@ -52,23 +52,23 @@ public:
     {
         int rc = ::fsync(m_fd);
         if (rc < 0)
-            throw POSIXException(errno, "fsync");
+            throwPOSIXException(errno, "fsync");
     }
 
     void fstat(struct stat* out) override
     {
         if (!out)
-            throw OSException(EFAULT);
+            throwOSException(EFAULT);
 
         if (::fstat(m_fd, out) < 0)
-            throw POSIXException(errno, "fstat");
+            throwPOSIXException(errno, "fstat");
     }
 
     length_type read(void* output, offset_type offset, length_type length) override
     {
         auto rc = ::pread(m_fd, output, length, offset);
         if (rc < 0)
-            throw POSIXException(errno, "pread");
+            throwPOSIXException(errno, "pread");
         return rc;
     }
 
@@ -76,9 +76,9 @@ public:
     {
         auto rc = ::pwrite(m_fd, input, length, offset);
         if (rc < 0)
-            throw POSIXException(errno, "pwrite");
+            throwPOSIXException(errno, "pwrite");
         if (static_cast<length_type>(rc) != length)
-            throw OSException(EIO);
+            throwOSException(EIO);
         if (offset + length > m_size)
             m_size = offset + length;
     }
@@ -89,7 +89,7 @@ public:
     {
         auto rc = ::ftruncate(m_fd, new_length);
         if (rc < 0)
-            POSIXException(errno, "truncate");
+            throwPOSIXException(errno, "truncate");
         m_size = new_length;
     }
 
@@ -118,7 +118,7 @@ public:
         }
 #endif
         if (rc < 0)
-            throw POSIXException(errno, "utimens");
+            throwPOSIXException(errno, "utimens");
     }
 
 #ifdef __APPLE__
@@ -127,14 +127,14 @@ public:
     {
         auto rc = ::fremovexattr(m_fd, name, 0);
         if (rc < 0)
-            throw POSIXException(errno, "fremovexattr");
+            throwPOSIXException(errno, "fremovexattr");
     }
 
     ssize_t getxattr(const char* name, void* value, size_t size) override
     {
         ssize_t rc = ::fgetxattr(m_fd, name, value, size, 0, 0);
         if (rc < 0)
-            throw POSIXException(errno, "fgetxattr");
+            throwPOSIXException(errno, "fgetxattr");
         return rc;
     }
 
@@ -142,7 +142,7 @@ public:
     {
         auto rc = ::flistxattr(m_fd, buffer, size, 0);
         if (rc < 0)
-            throw POSIXException(errno, "flistxattr");
+            throwPOSIXException(errno, "flistxattr");
         return rc;
     }
 
@@ -150,7 +150,7 @@ public:
     {
         auto rc = ::fsetxattr(m_fd, name, value, size, 0, flags);
         if (rc < 0)
-            throw POSIXException(errno, "fsetxattr");
+            throwPOSIXException(errno, "fsetxattr");
     }
 #endif
 };
@@ -184,7 +184,7 @@ OSService::OSService(const std::string& path) : impl(new Impl())
     impl->dir_name = path;
     int dir_fd = ::open(path.c_str(), O_RDONLY);
     if (dir_fd < 0)
-        throw POSIXException(errno, "Opening directory " + path);
+        throwPOSIXException(errno, "Opening directory " + path);
     impl->dir_fd = dir_fd;
 }
 
@@ -197,7 +197,7 @@ OSService::open_file_stream(const std::string& path, int flags, unsigned mode) c
     int fd = ::open(impl->norm_path(path).c_str(), flags, mode);
 #endif
     if (fd < 0)
-        throw POSIXException(
+        throwPOSIXException(
             errno, strprintf("Opening %s with flags %#o", impl->norm_path(path).c_str(), flags));
     return std::make_shared<UnixFileStream>(fd);
 }
@@ -224,7 +224,7 @@ void OSService::lock() const
 {
     int rc = ::flock(impl->dir_fd, LOCK_NB | LOCK_EX);
     if (rc < 0)
-        throw POSIXException(
+        throwPOSIXException(
             errno, strprintf("Fail to obtain exclusive lock on %s", impl->dir_name.c_str()));
 }
 
@@ -236,7 +236,7 @@ void OSService::ensure_directory(const std::string& path, unsigned mode) const
     int rc = ::mkdir(impl->norm_path(path).c_str(), mode);
 #endif
     if (rc < 0 && errno != EEXIST)
-        throw POSIXException(
+        throwPOSIXException(
             errno, strprintf("Fail to create directory %s", impl->norm_path(path).c_str()));
 }
 
@@ -244,7 +244,7 @@ void OSService::statfs(struct statvfs* fs_info) const
 {
     int rc = ::fstatvfs(impl->dir_fd, fs_info);
     if (rc < 0)
-        throw POSIXException(errno, "statvfs");
+        throwPOSIXException(errno, "statvfs");
 }
 
 void OSService::rename(const std::string& a, const std::string& b) const
@@ -255,10 +255,10 @@ void OSService::rename(const std::string& a, const std::string& b) const
     int rc = ::rename(impl->norm_path(a).c_str(), impl->norm_path(b).c_str());
 #endif
     if (rc < 0)
-        throw POSIXException(errno,
-                             strprintf("Renaming from %s to %s",
-                                       impl->norm_path(a).c_str(),
-                                       impl->norm_path(b).c_str()));
+        throwPOSIXException(errno,
+                            strprintf("Renaming from %s to %s",
+                                      impl->norm_path(a).c_str(),
+                                      impl->norm_path(b).c_str()));
 }
 
 void OSService::recursive_traverse(const std::string& dir, const traverse_callback& callback) const
@@ -278,7 +278,7 @@ void OSService::recursive_traverse(const std::string& dir, const traverse_callba
     DirGuard dirGuard(::opendir(impl->norm_path(dir).c_str()));
 
     if (!dirGuard.dir)
-        throw POSIXException(errno, "opendir");
+        throwPOSIXException(errno, "opendir");
 
     while (1)
     {
@@ -287,7 +287,7 @@ void OSService::recursive_traverse(const std::string& dir, const traverse_callba
         if (!d)
         {
             if (errno)
-                throw POSIXException(errno, "readdir");
+                throwPOSIXException(errno, "readdir");
             else
                 break;
         }
@@ -313,7 +313,7 @@ int OSService::raise_fd_limit()
     struct rlimit rl;
     int rc = ::getrlimit(RLIMIT_NOFILE, &rl);
     if (rc < 0)
-        throw POSIXException(errno, "getrlimit");
+        throwPOSIXException(errno, "getrlimit");
 
     rl.rlim_cur = 10240 * 16;
     do
@@ -323,7 +323,7 @@ int OSService::raise_fd_limit()
     } while (rc < 0 && rl.rlim_cur >= 1024);
 
     if (rc < 0)
-        throw POSIXException(errno, "setrlimit");
+        throwPOSIXException(errno, "setrlimit");
 
     for (auto lim = rl.rlim_cur * 2 - 1, bound = rl.rlim_cur; lim >= bound; --lim)
     {
@@ -332,7 +332,7 @@ int OSService::raise_fd_limit()
         if (rc == 0)
             return static_cast<int>(lim);
     }
-    throw POSIXException(errno, "setrlimit");
+    throwPOSIXException(errno, "setrlimit");
 }
 
 bool OSService::isatty(int fd) noexcept { return ::isatty(fd) != 0; }

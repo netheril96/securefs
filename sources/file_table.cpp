@@ -161,7 +161,7 @@ FileTable::FileTable(int version,
         m_fio.reset(new FileTableIOVersion2(root, is_readonly()));
         break;
     default:
-        throw InvalidArgumentException("Unknown version");
+        throwInvalidArgumentException("Unknown version");
     }
 }
 
@@ -179,7 +179,7 @@ FileBase* FileTable::open_as(const id_type& id, int type)
     if (it != m_opened.end())
     {
         if (it->second->type() != type)
-            throw OSException(FileBase::error_number_for_not(type));
+            throwOSException(FileBase::error_number_for_not(type));
         it->second->incref();
         return it->second.get();
     }
@@ -220,9 +220,9 @@ FileBase* FileTable::open_as(const id_type& id, int type)
 FileBase* FileTable::create_as(const id_type& id, int type)
 {
     if (is_readonly())
-        throw OSException(EROFS);
+        throwOSException(EROFS);
     if (m_opened.find(id) != m_opened.end() || m_closed.find(id) != m_closed.end())
-        throw OSException(EEXIST);
+        throwOSException(EEXIST);
 
     std::shared_ptr<FileStream> data_fd, meta_fd;
     std::tie(data_fd, meta_fd) = m_fio->create(id);
@@ -247,7 +247,7 @@ void FileTable::close(FileBase* fb)
 
     auto fb_shared = m_opened.at(fb->get_id());
     if (fb_shared.get() != fb)
-        throw InvalidArgumentException("ID does not match the table");
+        throwInvalidArgumentException("ID does not match the table");
 
     if (fb->decref() <= 0)
     {

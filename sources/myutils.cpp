@@ -40,7 +40,7 @@ public:
     {
         int rc = pthread_key_create(&m_pkey, [](void* ptr) { delete static_cast<T*>(ptr); });
         if (rc)
-            throw POSIXException(rc, "Fail to initialize pthread TLS");
+            throwPOSIXException(rc, "Fail to initialize pthread TLS");
     }
 
     ~ThreadLocalStorage() { pthread_key_delete(m_pkey); }
@@ -53,7 +53,7 @@ public:
             ptr = new T();
             int rc = pthread_setspecific(m_pkey, ptr);
             if (rc)
-                throw POSIXException(rc, "Fail to set TLS value");
+                throwPOSIXException(rc, "Fail to set TLS value");
         }
         return static_cast<T*>(ptr);
     }
@@ -214,7 +214,7 @@ static void hkdf_expand(const void* distilled_key,
 {
     typedef CryptoPP::HMAC<CryptoPP::SHA256> hmac_type;
     if (out_len > 255 * hmac_type::DIGESTSIZE)
-        throw InvalidArgumentException("Output length too large");
+        throwInvalidArgumentException("Output length too large");
     hmac_type calculator(static_cast<const byte*>(distilled_key), dis_len);
     byte* out = static_cast<byte*>(output);
     size_t i = 0, j = 0;
@@ -275,7 +275,7 @@ size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size
             if (feof(fp))
                 break;
             if (ferror(fp))
-                throw OSException(errno);
+                throwPOSIXException(errno, "getc");
         }
         if (ch == '\0' || ch == '\n' || ch == '\r')
             break;
@@ -317,7 +317,7 @@ size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t
             if (feof(fp))
                 break;
             if (ferror(fp))
-                throw OSException(errno);
+                throwOSException(errno);
         }
         if (ch == '\0' || ch == '\n' || ch == '\r')
             break;
@@ -340,16 +340,16 @@ size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t
     struct termios old_termios, new_termios;
     int rc = ::tcgetattr(fd, &old_termios);
     if (rc < 0)
-        throw OSException(errno);
+        throwPOSIXException(errno, "tcgetattr");
     if (!(old_termios.c_lflag & ECHO))
-        throw InvalidArgumentException("Unechoed terminal");
+        throwInvalidArgumentException("Unechoed terminal");
 
     memcpy(&new_termios, &old_termios, sizeof(old_termios));
     new_termios.c_lflag &= ~ECHO;
     new_termios.c_lflag |= ECHONL;
     rc = ::tcsetattr(fd, TCSAFLUSH, &new_termios);
     if (rc < 0)
-        throw OSException(errno);
+        throwOSException(errno);
     auto retval = insecure_read_password(fp, prompt, password, max_length);
     (void)::tcsetattr(fd, TCSAFLUSH, &old_termios);
     return retval;

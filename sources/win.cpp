@@ -58,6 +58,11 @@ public:
     }
 };
 
+[[noreturn]] void throwWindowsException(DWORD err, std::string msg)
+{
+    throw WindowsException(err, std::move(msg));
+}
+
 class WindowsFileStream : public FileStream
 {
 private:
@@ -69,7 +74,7 @@ private:
         _LARGE_INTEGER POS;
         POS.QuadPart = pos;
         if (SetFilePointerEx(m_handle, POS, nullptr, FILE_BEGIN) == 0)
-            throw WindowsException(GetLastError(), "SetFilePointerEx");
+            throwWindowsException(GetLastError(), "SetFilePointerEx");
     }
 
 public:
@@ -106,7 +111,7 @@ public:
                                FILE_ATTRIBUTE_NORMAL,
                                nullptr);
         if (m_handle == INVALID_HANDLE_VALUE)
-            throw WindowsException(GetLastError(), "CreateFile");
+            throwWindowsException(GetLastError(), "CreateFile");
     }
 
     ~WindowsFileStream() { CloseHandle(m_handle); }
@@ -120,7 +125,7 @@ public:
             DWORD cur;
             if (ReadFile(m_handle, output, static_cast<DWORD>(MAX_SINGLE_BLOCK), &cur, nullptr)
                 == 0)
-                throw WindowsException(GetLastError(), "ReadFile");
+                throwWindowsException(GetLastError(), "ReadFile");
             if (cur == 0)
                 return total;
             total += cur;
@@ -130,7 +135,7 @@ public:
 
         DWORD cur;
         if (ReadFile(m_handle, output, static_cast<DWORD>(length), &cur, nullptr) == 0)
-            throw WindowsException(GetLastError(), "ReadFile");
+            throwWindowsException(GetLastError(), "ReadFile");
         total += cur;
         return total;
     }
@@ -144,9 +149,9 @@ public:
             DWORD cur;
             if (WriteFile(m_handle, input, static_cast<DWORD>(MAX_SINGLE_BLOCK), &cur, nullptr)
                 == 0)
-                throw WindowsException(GetLastError(), "WriteFile");
+                throwWindowsException(GetLastError(), "WriteFile");
             if (cur == 0)
-                throw OSException(EIO);
+                throwOSException(EIO);
             total += cur;
             length -= MAX_SINGLE_BLOCK;
             input = static_cast<const char*>(input) + MAX_SINGLE_BLOCK;
@@ -154,17 +159,17 @@ public:
 
         DWORD cur;
         if (WriteFile(m_handle, input, static_cast<DWORD>(length), &cur, nullptr) == 0)
-            throw WindowsException(GetLastError(), "WriteFile");
+            throwWindowsException(GetLastError(), "WriteFile");
         total += cur;
         if (total != length)
-            throw OSException(EIO);
+            throwOSException(EIO);
     }
 
     length_type size() const override
     {
         _LARGE_INTEGER SIZE;
         if (GetFileSizeEx(m_handle, &SIZE) == 0)
-            throw WindowsException(GetLastError(), "GetFileSizeEx");
+            throwWindowsException(GetLastError(), "GetFileSizeEx");
         return SIZE.QuadPart;
     }
 
@@ -182,7 +187,7 @@ public:
         {
             seek(len);
             if (SetEndOfFile(m_handle) == 0)
-                throw WindowsException(GetLastError(), "SetEndOfFile");
+                throwWindowsException(GetLastError(), "SetEndOfFile");
         }
     }
 
@@ -191,7 +196,7 @@ public:
     void fsync() override
     {
         if (FlushFileBuffers(m_handle) == 0)
-            throw WindowsException(GetLastError(), "FlushFileBuffers");
+            throwWindowsException(GetLastError(), "FlushFileBuffers");
     }
     void utimens(const struct timespec ts[2]) override
     {
@@ -207,14 +212,14 @@ public:
             mod_time = unix_time_to_filetime(ts + 1);
         }
         if (SetFileTime(m_handle, nullptr, &access_time, &mod_time) == 0)
-            throw WindowsException(GetLastError(), "SetFileTime");
+            throwWindowsException(GetLastError(), "SetFileTime");
     }
     void fstat(FUSE_STAT* st) override
     {
         memset(st, 0, sizeof(*st));
         BY_HANDLE_FILE_INFORMATION info;
         if (GetFileInformationByHandle(m_handle, &info) == 0)
-            throw WindowsException(GetLastError(), "GetFileInformationByHandle");
+            throwWindowsException(GetLastError(), "GetFileInformationByHandle");
         filetime_to_unix_time(&info.ftLastAccessTime, &st->st_atim);
         filetime_to_unix_time(&info.ftLastWriteTime, &st->st_mtim);
         filetime_to_unix_time(&info.ftCreationTime, &st->st_birthtim);
@@ -274,7 +279,7 @@ void OSService::ensure_directory(const std::string& path, unsigned mode) const
     {
         DWORD err = GetLastError();
         if (err != ERROR_ALREADY_EXISTS)
-            throw WindowsException(err, "CreateDirectory");
+            throwWindowsException(err, "CreateDirectory");
     }
 }
 
@@ -287,7 +292,7 @@ void OSService::statfs(struct statvfs* fs_info) const
                             &TotalNumberOfBytes,
                             &TotalNumberOfFreeBytes)
         == 0)
-        throw WindowsException(GetLastError(), "GetDiskFreeSpaceEx");
+        throwWindowsException(GetLastError(), "GetDiskFreeSpaceEx");
     auto maximum = static_cast<unsigned>(-1);
     fs_info->f_bsize = 4096;
     fs_info->f_frsize = fs_info->f_bsize;
@@ -305,7 +310,7 @@ void OSService::rename(const std::string& a, const std::string& b) const
     auto wb = impl->norm_path(b);
     DeleteFileA(wb.c_str());
     if (MoveFileA(wa.c_str(), wb.c_str()) == 0)
-        throw WindowsException(GetLastError(), "MoveFile");
+        throwWindowsException(GetLastError(), "MoveFile");
 }
 
 int OSService::raise_fd_limit()
@@ -333,7 +338,7 @@ void OSService::recursive_traverse(const std::string& dir, const traverse_callba
     Finder finder(FindFirstFileA(find_pattern.c_str(), &data));
 
     if (finder.handle == INVALID_HANDLE_VALUE)
-        throw WindowsException(GetLastError(), "FindFirstFile on pattern " + find_pattern);
+        throwWindowsException(GetLastError(), "FindFirstFile on pattern " + find_pattern);
 
     do
     {
@@ -351,7 +356,7 @@ void OSService::recursive_traverse(const std::string& dir, const traverse_callba
     } while (FindNextFileA(finder.handle, &data));
 
     if (GetLastError() != ERROR_NO_MORE_FILES)
-        throw WindowsException(GetLastError(), "FindNextFile");
+        throwWindowsException(GetLastError(), "FindNextFile");
 }
 
 uint32_t OSService::getuid() noexcept { return 0; }
@@ -367,17 +372,17 @@ std::string normalize_to_lower_case(const char* input)
     size_t len = strlen(input);
     std::vector<wchar_t> buffer(len);
     if (len > std::numeric_limits<int>::max())
-        throw InvalidArgumentException("String size too large");
+        throwInvalidArgumentException("String size too large");
     int wide_count = MultiByteToWideChar(
         CP_UTF8, 0, input, static_cast<int>(len), buffer.data(), static_cast<int>(buffer.size()));
     if (wide_count == 0)
-        throw WindowsException(GetLastError(), "MultiByteToWideChar");
+        throwWindowsException(GetLastError(), "MultiByteToWideChar");
     if (CharLowerBuffW(buffer.data(), wide_count) != wide_count)
-        throw WindowsException(GetLastError(), "CharLowerBuff");
+        throwWindowsException(GetLastError(), "CharLowerBuff");
     int narrow_count
         = WideCharToMultiByte(CP_UTF8, 0, buffer.data(), wide_count, nullptr, 0, nullptr, nullptr);
     if (narrow_count == 0)
-        throw WindowsException(GetLastError(), "MultiByteToWideChar");
+        throwWindowsException(GetLastError(), "MultiByteToWideChar");
     std::string output(narrow_count, '\0');
     WideCharToMultiByte(
         CP_UTF8, 0, buffer.data(), wide_count, &output[0], narrow_count, nullptr, nullptr);

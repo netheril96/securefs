@@ -293,7 +293,7 @@ bool parse_config(const Json::Value& config,
     }
     else
     {
-        throw InvalidArgumentException(strprintf("Unsupported version %u", version));
+        throwInvalidArgumentException(strprintf("Unsupported version %u", version));
     }
 
     unsigned iterations = config["iterations"].asUInt();
