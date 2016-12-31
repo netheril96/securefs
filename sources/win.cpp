@@ -365,7 +365,14 @@ uint32_t OSService::getgid() noexcept { return 0; }
 
 bool OSService::isatty(int fd) noexcept { return ::_isatty(fd) != 0; }
 
-void OSService::get_current_time(timespec& current_time) { timespec_get(&current_time, TIME_UTC); }
+void OSService::get_current_time(timespec& current_time)
+{
+#ifdef HAS_CLOCK_GETTIME
+    clock_gettime(CLOCK_REALTIME, &current_time);
+#else
+    timespec_get(&current_time, TIME_UTC);
+#endif
+}
 
 std::string normalize_to_lower_case(const char* input)
 {

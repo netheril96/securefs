@@ -17,7 +17,6 @@ struct statvfs;
 struct timespec;
 
 #ifdef WIN32
-#define __STDC__ 1
 
 #include <fuse_win.h>
 #include <io.h>
@@ -42,6 +41,10 @@ typedef ptrdiff_t ssize_t;
 #define O_NOINHERIT _O_NOINHERIT
 #define O_SEQUENTIAL _O_SEQUENTIAL
 #define O_RANDOM _O_RANDOM
+
+#ifndef S_IFLNK
+#define S_IFLNK 0120000
+#endif
 
 inline int open(const char* fn, int flags, int mode) { return ::_open(fn, flags, mode); }
 inline int close(int fd) { return ::_close(fd); }
