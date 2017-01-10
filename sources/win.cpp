@@ -30,7 +30,7 @@ static FILETIME unix_time_to_filetime(const timespec* t)
     return res;
 }
 
-static const int MAX_SINGLE_BLOCK = 1 << 30;
+static const DWORD MAX_SINGLE_BLOCK = std::numeric_limits<DWORD>::max();
 
 namespace securefs
 {
@@ -53,29 +53,21 @@ public:
                 FORMAT_MESSAGE_FROM_SYSTEM, nullptr, err, 0, wide_buffer, WIDE_BUFSIZE, nullptr)
             || !WideCharToMultiByte(
                    CP_UTF8, 0, wide_buffer, -1, buffer, WIDE_BUFSIZE * 2, nullptr, nullptr))
-            return strprintf("error %d (%s)", static_cast<int>(err), msg.c_str());
-        return strprintf("error %d (%s) %s", static_cast<int>(err), msg.c_str(), buffer);
+            return strprintf("error %lu (%s)", err, msg.c_str());
+        return strprintf("error %lu (%s) %s", err, msg.c_str(), buffer);
     }
 };
 
 [[noreturn]] void throwWindowsException(DWORD err, std::string msg)
 {
-    throw WindowsException(err, std::move(msg));
+    if (err != 0)
+        throw WindowsException(err, std::move(msg));
 }
 
 class WindowsFileStream : public FileStream
 {
 private:
     HANDLE m_handle;
-
-private:
-    void seek(long long pos)
-    {
-        _LARGE_INTEGER POS;
-        POS.QuadPart = pos;
-        if (SetFilePointerEx(m_handle, POS, nullptr, FILE_BEGIN) == 0)
-            throwWindowsException(GetLastError(), "SetFilePointerEx");
-    }
 
 public:
     explicit WindowsFileStream(const std::string& path, int flags, unsigned mode)
@@ -116,53 +108,65 @@ public:
 
     ~WindowsFileStream() { CloseHandle(m_handle); }
 
+    length_type read32(void* output, offset_type offset, DWORD length)
+    {
+        OVERLAPPED ol;
+        memset(&ol, 0, sizeof(ol));
+        ol.Offset = static_cast<DWORD>(offset);
+        ol.OffsetHigh = static_cast<DWORD>(offset >> 32);
+
+        DWORD readlen;
+        if (!ReadFile(m_handle, output, length, &readlen, &ol))
+        {
+            DWORD err = GetLastError();
+            if (err == ERROR_HANDLE_EOF)
+                return 0;
+            throwWindowsException(err, "ReadFile");
+        }
+        return readlen;
+    }
+
+    void write32(const void* input, offset_type offset, DWORD length)
+    {
+        OVERLAPPED ol;
+        memset(&ol, 0, sizeof(ol));
+        ol.Offset = static_cast<DWORD>(offset);
+        ol.OffsetHigh = static_cast<DWORD>(offset >> 32);
+
+        DWORD writelen;
+        if (!WriteFile(m_handle, input, length, &writelen, &ol))
+            throwWindowsException(GetLastError(), "WriteFile");
+        if (writelen != length)
+            throwOSException(EIO);
+    }
+
     length_type read(void* output, offset_type offset, length_type length) override
     {
-        seek(offset);
         length_type total = 0;
         while (length > MAX_SINGLE_BLOCK)
         {
-            DWORD cur;
-            if (ReadFile(m_handle, output, static_cast<DWORD>(MAX_SINGLE_BLOCK), &cur, nullptr)
-                == 0)
-                throwWindowsException(GetLastError(), "ReadFile");
-            if (cur == 0)
+            length_type readlen = read32(output, offset, MAX_SINGLE_BLOCK);
+            if (readlen == 0)
                 return total;
-            total += cur;
-            length -= MAX_SINGLE_BLOCK;
-            output = static_cast<char*>(output) + MAX_SINGLE_BLOCK;
+            length -= readlen;
+            offset += readlen;
+            output = static_cast<char*>(output) + readlen;
+            total += readlen;
         }
-
-        DWORD cur;
-        if (ReadFile(m_handle, output, static_cast<DWORD>(length), &cur, nullptr) == 0)
-            throwWindowsException(GetLastError(), "ReadFile");
-        total += cur;
+        total += read32(output, offset, static_cast<DWORD>(length));
         return total;
     }
 
     void write(const void* input, offset_type offset, length_type length) override
     {
-        seek(offset);
-        length_type total = 0;
         while (length > MAX_SINGLE_BLOCK)
         {
-            DWORD cur;
-            if (WriteFile(m_handle, input, static_cast<DWORD>(MAX_SINGLE_BLOCK), &cur, nullptr)
-                == 0)
-                throwWindowsException(GetLastError(), "WriteFile");
-            if (cur == 0)
-                throwOSException(EIO);
-            total += cur;
+            write32(input, offset, MAX_SINGLE_BLOCK);
             length -= MAX_SINGLE_BLOCK;
+            offset += MAX_SINGLE_BLOCK;
             input = static_cast<const char*>(input) + MAX_SINGLE_BLOCK;
         }
-
-        DWORD cur;
-        if (WriteFile(m_handle, input, static_cast<DWORD>(length), &cur, nullptr) == 0)
-            throwWindowsException(GetLastError(), "WriteFile");
-        total += cur;
-        if (total != length)
-            throwOSException(EIO);
+        write32(input, offset, static_cast<DWORD>(length));
     }
 
     length_type size() const override
@@ -185,8 +189,11 @@ public:
         }
         else if (len < sz)
         {
-            seek(len);
-            if (SetEndOfFile(m_handle) == 0)
+            LARGE_INTEGER llen;
+            llen.QuadPart = len;
+            if (!SetFilePointerEx(m_handle, llen, nullptr, FILE_BEGIN))
+                throwWindowsException(GetLastError(), "SetFilePointerEx");
+            if (!SetEndOfFile(m_handle))
                 throwWindowsException(GetLastError(), "SetEndOfFile");
         }
     }
@@ -224,6 +231,12 @@ public:
         filetime_to_unix_time(&info.ftLastWriteTime, &st->st_mtim);
         filetime_to_unix_time(&info.ftCreationTime, &st->st_birthtim);
         st->st_ctim = st->st_mtim;
+
+        st->st_nlink = 1;
+        st->st_mode = 0644;
+        st->st_size = size();
+        st->st_blksize = 4096;
+        st->st_blocks = (st->st_size + 4095) / 4096 * (4096 / 512);
     }
 };
 
@@ -302,6 +315,7 @@ void OSService::statfs(struct statvfs* fs_info) const
     fs_info->f_files = maximum;
     fs_info->f_ffree = maximum;
     fs_info->f_favail = maximum;
+    fs_info->f_namemax = 255;
 }
 
 void OSService::rename(const std::string& a, const std::string& b) const
@@ -377,23 +391,26 @@ void OSService::get_current_time(timespec& current_time)
 std::string normalize_to_lower_case(const char* input)
 {
     size_t len = strlen(input);
-    std::vector<wchar_t> buffer(len);
     if (len > std::numeric_limits<int>::max())
         throwInvalidArgumentException("String size too large");
     int wide_count = MultiByteToWideChar(
-        CP_UTF8, 0, input, static_cast<int>(len), buffer.data(), static_cast<int>(buffer.size()));
-    if (wide_count == 0)
+        CP_UTF8, MB_ERR_INVALID_CHARS, input, static_cast<int>(len), nullptr, 0);
+    if (wide_count <= 0)
         throwWindowsException(GetLastError(), "MultiByteToWideChar");
-    if (CharLowerBuffW(buffer.data(), wide_count) != wide_count)
+    std::vector<wchar_t> wide_buffer(wide_count);
+    MultiByteToWideChar(CP_UTF8, 0, input, static_cast<int>(len), wide_buffer.data(), wide_count);
+
+    if (CharLowerBuffW(wide_buffer.data(), wide_count) != wide_count)
         throwWindowsException(GetLastError(), "CharLowerBuff");
     int narrow_count
-        = WideCharToMultiByte(CP_UTF8, 0, buffer.data(), wide_count, nullptr, 0, nullptr, nullptr);
-    if (narrow_count == 0)
+        = WideCharToMultiByte(CP_UTF8, 0, wide_buffer.data(), wide_count, nullptr, 0, 0, nullptr);
+    if (narrow_count <= 0)
         throwWindowsException(GetLastError(), "MultiByteToWideChar");
-    std::string output(narrow_count, '\0');
+
+    std::string result(narrow_count, '\0');
     WideCharToMultiByte(
-        CP_UTF8, 0, buffer.data(), wide_count, &output[0], narrow_count, nullptr, nullptr);
-    return output;
+        CP_UTF8, 0, wide_buffer.data(), wide_count, &result[0], narrow_count, 0, nullptr);
+    return result;
 }
 }
 
