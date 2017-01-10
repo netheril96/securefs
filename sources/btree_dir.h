@@ -1,5 +1,6 @@
 #pragma once
 #include "files.h"
+#include "myutils.h"
 
 #include <memory>
 #include <stdio.h>
@@ -186,18 +187,18 @@ public:
 };
 
 template <class... Args>
-inline std::shared_ptr<FileBase> btree_make_file_from_type(int type, Args&&... args)
+inline std::unique_ptr<FileBase> btree_make_file_from_type(int type, Args&&... args)
 {
     switch (type)
     {
     case FileBase::REGULAR_FILE:
-        return std::make_shared<RegularFile>(std::forward<Args>(args)...);
+        return securefs::make_unique<RegularFile>(std::forward<Args>(args)...);
     case FileBase::SYMLINK:
-        return std::make_shared<Symlink>(std::forward<Args>(args)...);
+        return securefs::make_unique<Symlink>(std::forward<Args>(args)...);
     case FileBase::DIRECTORY:
-        return std::make_shared<BtreeDirectory>(std::forward<Args>(args)...);
+        return securefs::make_unique<BtreeDirectory>(std::forward<Args>(args)...);
     case FileBase::BASE:
-        return std::make_shared<FileBase>(std::forward<Args>(args)...);
+        return securefs::make_unique<FileBase>(std::forward<Args>(args)...);
     }
     throwInvalidArgumentException("Unrecognized file type");
 }

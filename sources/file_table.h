@@ -5,10 +5,7 @@
 #include "platform.h"
 #include "streams.h"
 
-#include <algorithm>
-#include <chrono>
 #include <memory>
-#include <queue>
 #include <string.h>
 #include <unordered_map>
 #include <utility>
@@ -24,15 +21,15 @@ class FileTable
     DISABLE_COPY_MOVE(FileTable)
 
 private:
-    typedef std::unordered_map<id_type, std::shared_ptr<FileBase>, id_hash> table_type;
+    typedef std::unordered_map<id_type, std::unique_ptr<FileBase>, id_hash> table_type;
 
 private:
     static const int MAX_NUM_CLOSED = 101, NUM_EJECT = 8;
 
 private:
     key_type m_master_key;
-    table_type m_opened, m_closed;
-    std::queue<id_type> m_closed_ids;
+    table_type m_files;
+    std::vector<id_type> m_closed_ids;
     std::unique_ptr<FileTableIO> m_fio;
     uint32_t m_flags;
     unsigned m_block_size, m_iv_size;
@@ -40,7 +37,7 @@ private:
 
 private:
     void eject();
-    void finalize(FileBase*);
+    void finalize(std::unique_ptr<FileBase>&);
 
 public:
     static const uint32_t READ_ONLY = 0x1, NO_AUTHENTICATION = 0x2, STORE_TIME = 0x4;

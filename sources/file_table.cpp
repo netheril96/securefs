@@ -167,37 +167,26 @@ FileTable::FileTable(int version,
 
 FileTable::~FileTable()
 {
-    for (auto&& pair : m_opened)
-        finalize(pair.second.get());
-    for (auto&& pair : m_closed)
-        finalize(pair.second.get());
+    for (auto&& pair : m_files)
+        finalize(pair.second);
 }
 
 FileBase* FileTable::open_as(const id_type& id, int type)
 {
-    auto it = m_opened.find(id);
-    if (it != m_opened.end())
+    auto it = m_files.find(id);
+    if (it != m_files.end())
     {
-        if (it->second->type() != type)
-            throwVFSException(FileBase::error_number_for_not(type));
-        it->second->incref();
-        return it->second.get();
-    }
+        // Remove the marking that this id is closed
+        auto closed_id_iter = std::find(m_closed_ids.begin(), m_closed_ids.end(), id);
+        if (closed_id_iter != m_closed_ids.end())
+            m_closed_ids.erase(closed_id_iter);
 
-    it = m_closed.find(id);
-    if (it != m_closed.end())
-    {
         if (it->second->type() != type)
-        {
-            m_closed.erase(it);
-        }
+            m_files.erase(it);
         else
         {
-            auto fb = it->second;
-            m_opened.emplace(*it);
-            m_closed.erase(it);
-            fb->setref(1);
-            return fb.get();
+            it->second->incref();
+            return it->second.get();
         }
     }
 
@@ -212,16 +201,17 @@ FileBase* FileTable::open_as(const id_type& id, int type)
                                         m_block_size,
                                         m_iv_size,
                                         is_time_stored());
-    m_opened.emplace(id, fb);
     fb->setref(1);
-    return fb.get();
+    auto result = fb.get();
+    m_files.emplace(id, std::move(fb));
+    return result;
 }
 
 FileBase* FileTable::create_as(const id_type& id, int type)
 {
     if (is_readonly())
         throwVFSException(EROFS);
-    if (m_opened.find(id) != m_opened.end() || m_closed.find(id) != m_closed.end())
+    if (m_files.find(id) != m_files.end())
         throwVFSException(EEXIST);
 
     std::shared_ptr<FileStream> data_fd, meta_fd;
@@ -235,9 +225,10 @@ FileBase* FileTable::create_as(const id_type& id, int type)
                                         m_block_size,
                                         m_iv_size,
                                         is_time_stored());
-    m_opened.emplace(id, fb);
     fb->setref(1);
-    return fb.get();
+    auto result = fb.get();
+    m_files.emplace(id, std::move(fb));
+    return result;
 }
 
 void FileTable::close(FileBase* fb)
@@ -245,43 +236,50 @@ void FileTable::close(FileBase* fb)
     if (!fb)
         NULL_EXCEPT();
 
-    auto fb_shared = m_opened.at(fb->get_id());
-    if (fb_shared.get() != fb)
+    auto iter = m_files.find(fb->get_id());
+    if (iter == m_files.end() || iter->second.get() != fb)
         throwInvalidArgumentException("ID does not match the table");
+
+    if (fb->getref() <= 0)
+        throwInvalidArgumentException("Closing an closed file");
 
     if (fb->decref() <= 0)
     {
-        m_opened.erase(fb->get_id());
-        finalize(fb);
-
-        if (fb->is_unlinked())
-            return;
-        m_closed.emplace(fb->get_id(), fb_shared);
-        m_closed_ids.push(fb->get_id());
-        gc();
+        finalize(iter->second);
+        if (iter->second)
+        {
+            // This means the file is not deleted
+            // The handle shall remain in the cache
+            m_closed_ids.push_back(iter->second->get_id());
+            gc();
+        }
+        else
+        {
+            m_files.erase(iter);
+        }
     }
 }
 
 void FileTable::eject()
 {
-    size_t ejected = 0;
-    while (ejected < NUM_EJECT)
+    auto num_eject = std::min<size_t>(NUM_EJECT, m_closed_ids.size());
+    for (size_t i = 0; i < num_eject; ++i)
     {
-        if (m_closed_ids.empty())
-            break;
-        ejected += m_closed.erase(m_closed_ids.front());
-        m_closed_ids.pop();
+        m_files.erase(m_closed_ids[i]);
     }
+    m_closed_ids.erase(m_closed_ids.begin(), m_closed_ids.begin() + num_eject);
 }
 
-void FileTable::finalize(FileBase* fb)
+void FileTable::finalize(std::unique_ptr<FileBase>& fb)
 {
     if (!fb)
         return;
 
     if (fb->is_unlinked())
     {
-        m_fio->unlink(fb->get_id());
+        id_type id = fb->get_id();
+        fb.reset();
+        m_fio->unlink(id);
     }
     else
     {
@@ -291,7 +289,7 @@ void FileTable::finalize(FileBase* fb)
 
 void FileTable::gc()
 {
-    if (m_closed.size() >= MAX_NUM_CLOSED)
+    if (m_closed_ids.size() >= MAX_NUM_CLOSED)
         eject();
 }
 }
