@@ -118,23 +118,23 @@ public:
 
 #define UNREACHABLE() throw securefs::UnreachableCodeException(__FUNCTION__, __FILE__, __LINE__)
 
-class OSException : public CommonException
+class VFSException : public CommonException
 {
 private:
     int m_errno;
 
 public:
-    explicit OSException(int errc) : m_errno(errc) {}
-    ~OSException();
+    explicit VFSException(int errc) : m_errno(errc) {}
+    ~VFSException();
 
-    const char* type_name() const noexcept override { return "OSException"; }
+    const char* type_name() const noexcept override { return "VFSException"; }
 
     int error_number() const noexcept override { return m_errno; }
 
     std::string message() const override { return sane_strerror(m_errno); }
 };
 
-[[noreturn]] void throwOSException(int errc);
+[[noreturn]] void throwVFSException(int errc);
 
 class POSIXException : public SeriousException
 {

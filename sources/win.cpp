@@ -137,7 +137,7 @@ public:
         if (!WriteFile(m_handle, input, length, &writelen, &ol))
             throwWindowsException(GetLastError(), "WriteFile");
         if (writelen != length)
-            throwOSException(EIO);
+            throwVFSException(EIO);
     }
 
     length_type read(void* output, offset_type offset, length_type length) override

@@ -48,9 +48,9 @@ namespace internal
         {
             bool exists = result.get_as<Directory>()->get_entry(components[i], id, type);
             if (!exists)
-                throwOSException(ENOENT);
+                throwVFSException(ENOENT);
             if (type != FileBase::DIRECTORY)
-                throwOSException(ENOTDIR);
+                throwVFSException(ENOTDIR);
             result.reset(fs->table.open_as(id, type));
         }
         last_component = components.back();
@@ -67,12 +67,12 @@ namespace internal
         int type;
         bool exists = fg.get_as<Directory>()->get_entry(last_component, id, type);
         if (!exists)
-            throwOSException(ENOENT);
+            throwVFSException(ENOENT);
         fg.reset(fs->table.open_as(id, type));
         return fg;
     }
 
-    // Specialization of `open_all` since `OSException(ENOENT)` occurs too frequently
+    // Specialization of `open_all` since `VFSException(ENOENT)` occurs too frequently
     bool open_all(FileSystemContext* fs, const char* path, FileGuard& fg)
     {
         std::string last_component;
@@ -110,7 +110,7 @@ namespace internal
         {
             bool success = dir.get_as<Directory>()->add_entry(last_component, id, type);
             if (!success)
-                throwOSException(EEXIST);
+                throwVFSException(EEXIST);
         }
         catch (...)
         {
@@ -140,20 +140,20 @@ namespace internal
         auto dir_guard = open_base_dir(fs, path, last_component);
         auto dir = dir_guard.get_as<Directory>();
         if (last_component.empty())
-            throwOSException(EPERM);
+            throwVFSException(EPERM);
         id_type id;
         int type;
         while (true)
         {
             if (!dir->get_entry(last_component, id, type))
-                throwOSException(ENOENT);
+                throwVFSException(ENOENT);
 
             auto&& table = fs->table;
             FileGuard inner_guard(&table, table.open_as(id, type));
             auto inner_fb = inner_guard.get();
             if (inner_fb->type() == FileBase::DIRECTORY
                 && !static_cast<Directory*>(inner_fb)->empty())
-                throwOSException(ENOTEMPTY);
+                throwVFSException(ENOTEMPTY);
             dir->remove_entry(last_component, id, type);
             inner_fb->unlink();
             break;

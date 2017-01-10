@@ -221,7 +221,7 @@ void BtreeNode::to_buffer(byte* buffer, size_t size) const
     for (auto&& e : m_entries)
     {
         if (e.filename.size() > Directory::MAX_FILENAME_LENGTH)
-            throwOSException(ENAMETOOLONG);
+            throwVFSException(ENAMETOOLONG);
         std::array<char, Directory::MAX_FILENAME_LENGTH + 1> filename;
         filename.fill(0);
         std::copy(e.filename.begin(), e.filename.end(), filename.begin());
@@ -344,7 +344,7 @@ BtreeNode* BtreeDirectory::get_root_node()
 bool BtreeDirectory::get_entry_impl(const std::string& name, id_type& id, int& type)
 {
     if (name.size() > MAX_FILENAME_LENGTH)
-        throwOSException(ENAMETOOLONG);
+        throwVFSException(ENAMETOOLONG);
 
     BtreeNode* node;
     ptrdiff_t entry_index;
@@ -384,7 +384,7 @@ void BtreeDirectory::write_node(uint32_t num, const BtreeDirectory::Node& n)
 bool BtreeDirectory::add_entry_impl(const std::string& name, const id_type& id, int type)
 {
     if (name.size() > MAX_FILENAME_LENGTH)
-        throwOSException(ENAMETOOLONG);
+        throwVFSException(ENAMETOOLONG);
 
     BtreeNode* node;
     bool is_equal;
@@ -594,7 +594,7 @@ void BtreeDirectory::balance_up(BtreeNode* n, int depth)
 bool BtreeDirectory::remove_entry_impl(const std::string& name, id_type& id, int& type)
 {
     if (name.size() > MAX_FILENAME_LENGTH)
-        throwOSException(ENAMETOOLONG);
+        throwVFSException(ENAMETOOLONG);
 
     BtreeNode* node;
     ptrdiff_t entry_index;
@@ -643,13 +643,13 @@ void BtreeDirectory::to_dot_graph(const char* filename)
         return;
     FILE* fp = fopen(filename, "w");
     if (!fp)
-        throwOSException(errno);
+        throwVFSException(errno);
     fputs("digraph Btree{\nrankdir=BT;\n", fp);
     write_dot_graph(root, fp);
     fputs("\n}\n", fp);
     if (feof(fp))
     {
-        OSException err(errno);
+        VFSException err(errno);
         fclose(fp);
         throw err;
     }

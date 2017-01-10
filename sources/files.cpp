@@ -267,7 +267,7 @@ ssize_t FileBase::listxattr(char* buffer, size_t size)
 ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
 {
     if (!name)
-        throwOSException(EFAULT);
+        throwVFSException(EFAULT);
 
     auto true_size = m_data_stream->getxattr(name, value, size);
     if (!value)
@@ -275,7 +275,7 @@ ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
 
     byte meta[XATTR_IV_LENGTH + XATTR_MAC_LENGTH];
     if (m_meta_stream->getxattr(name, meta, sizeof(meta)) != sizeof(meta))
-        throwOSException(EIO);
+        throwVFSException(EIO);
 
     auto name_len = strlen(name);
     auto header = make_unique_array<byte>(name_len + ID_LENGTH);
@@ -330,7 +330,7 @@ void FileBase::utimens(const struct timespec* ts)
 void FileBase::setxattr(const char* name, const char* value, size_t size, int flags)
 {
     if (!name || !value)
-        throwOSException(EFAULT);
+        throwVFSException(EFAULT);
 
     auto buffer = make_unique_array<byte>(size);
     byte* ciphertext = buffer.get();
@@ -400,7 +400,7 @@ bool SimpleDirectory::get_entry_impl(const std::string& name, id_type& id, int& 
 bool SimpleDirectory::add_entry_impl(const std::string& name, const id_type& id, int type)
 {
     if (name.size() > MAX_FILENAME_LENGTH)
-        throwOSException(ENAMETOOLONG);
+        throwVFSException(ENAMETOOLONG);
     auto rv = m_table.emplace(name, std::make_pair(id, type));
     if (rv.second)
         m_dirty = true;

@@ -38,7 +38,7 @@ public:
     explicit UnixFileStream(int fd) : m_fd(fd)
     {
         if (fd < 0)
-            throwOSException(EBADF);
+            throwVFSException(EBADF);
         struct stat st;
         int rc = ::fstat(m_fd, &st);
         if (rc < 0)
@@ -58,7 +58,7 @@ public:
     void fstat(struct stat* out) override
     {
         if (!out)
-            throwOSException(EFAULT);
+            throwVFSException(EFAULT);
 
         if (::fstat(m_fd, out) < 0)
             throwPOSIXException(errno, "fstat");
@@ -78,7 +78,7 @@ public:
         if (rc < 0)
             throwPOSIXException(errno, "pwrite");
         if (static_cast<length_type>(rc) != length)
-            throwOSException(EIO);
+            throwVFSException(EIO);
         if (offset + length > m_size)
             m_size = offset + length;
     }

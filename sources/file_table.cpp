@@ -179,7 +179,7 @@ FileBase* FileTable::open_as(const id_type& id, int type)
     if (it != m_opened.end())
     {
         if (it->second->type() != type)
-            throwOSException(FileBase::error_number_for_not(type));
+            throwVFSException(FileBase::error_number_for_not(type));
         it->second->incref();
         return it->second.get();
     }
@@ -220,9 +220,9 @@ FileBase* FileTable::open_as(const id_type& id, int type)
 FileBase* FileTable::create_as(const id_type& id, int type)
 {
     if (is_readonly())
-        throwOSException(EROFS);
+        throwVFSException(EROFS);
     if (m_opened.find(id) != m_opened.end() || m_closed.find(id) != m_closed.end())
-        throwOSException(EEXIST);
+        throwVFSException(EEXIST);
 
     std::shared_ptr<FileStream> data_fd, meta_fd;
     std::tie(data_fd, meta_fd) = m_fio->create(id);
