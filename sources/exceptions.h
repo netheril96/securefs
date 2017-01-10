@@ -286,4 +286,18 @@ public:
         return strprintf("Invalid cast from %s to %s", from_name, to_name);
     }
 };
+
+class FileTypeInconsistencyException : public SeriousException
+{
+public:
+    const char* type_name() const noexcept override { return "InvalidCastException"; }
+
+    std::string message() const override
+    {
+        return "A file object has inconsistent type. This indicates that a bug or corruption in "
+               "the filesystem has happened.";
+    }
+};
+
+[[noreturn]] void throwFileTypeInconsistencyException();
 }

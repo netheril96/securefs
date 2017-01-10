@@ -13,6 +13,10 @@
 
 namespace securefs
 {
+class RegularFile;
+class Directory;
+class Symlink;
+
 class FileBase
 {
 private:
@@ -275,7 +279,10 @@ public:
     template <class T>
     T* cast_as()
     {
-        if (type() != T::class_type())
+        int type_ = type();
+        if (type_ != FileBase::BASE && mode_for_type(type_) != (get_mode() & S_IFMT))
+            throwFileTypeInconsistencyException();
+        if (type_ != T::class_type())
             throw_invalid_cast(T::class_type());
         return static_cast<T*>(this);
     }

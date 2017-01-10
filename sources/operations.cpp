@@ -84,7 +84,6 @@ namespace internal
         bool exists = fg.get_as<Directory>()->get_entry(last_component, id, type);
         if (!exists)
         {
-            fg.reset(nullptr);
             return false;
         }
         fg.reset(fs->table.open_as(id, type));
@@ -143,21 +142,16 @@ namespace internal
             throwVFSException(EPERM);
         id_type id;
         int type;
-        while (true)
-        {
-            if (!dir->get_entry(last_component, id, type))
-                throwVFSException(ENOENT);
+        if (!dir->get_entry(last_component, id, type))
+            throwVFSException(ENOENT);
 
-            auto&& table = fs->table;
-            FileGuard inner_guard(&table, table.open_as(id, type));
-            auto inner_fb = inner_guard.get();
-            if (inner_fb->type() == FileBase::DIRECTORY
-                && !static_cast<Directory*>(inner_fb)->empty())
-                throwVFSException(ENOTEMPTY);
-            dir->remove_entry(last_component, id, type);
-            inner_fb->unlink();
-            break;
-        }
+        auto&& table = fs->table;
+        FileGuard inner_guard(&table, table.open_as(id, type));
+        auto inner_fb = inner_guard.get();
+        if (inner_fb->type() == FileBase::DIRECTORY && !static_cast<Directory*>(inner_fb)->empty())
+            throwVFSException(ENOTEMPTY);
+        dir->remove_entry(last_component, id, type);
+        inner_fb->unlink();
     }
 
     inline bool is_readonly(struct fuse_context* ctx) { return get_fs(ctx)->table.is_readonly(); }
@@ -294,7 +288,7 @@ namespace operations
                 st.st_mode = FileBase::mode_for_type(type);
                 return filler(buffer, name.c_str(), &st, 0) == 0;
             };
-            static_cast<Directory*>(fb)->iterate_over_entries(actions);
+            fb->cast_as<Directory>()->iterate_over_entries(actions);
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -311,8 +305,7 @@ namespace operations
             if (internal::is_readonly(ctx))
                 return -EROFS;
             auto fg = internal::create(fs, path, FileBase::REGULAR_FILE, mode, ctx->uid, ctx->gid);
-            if (fg->type() != FileBase::REGULAR_FILE)
-                return -EPERM;
+            fg->cast_as<RegularFile>();
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
 
             return 0;
@@ -334,11 +327,10 @@ namespace operations
             if (require_write && internal::is_readonly(ctx))
                 return -EROFS;
             auto fg = internal::open_all(fs, path);
-            if (fg->type() != FileBase::REGULAR_FILE)
-                return -EPERM;
+            RegularFile* file = fg->cast_as<RegularFile>();
             if (info->flags & O_TRUNC)
             {
-                fg.get_as<RegularFile>()->truncate(0);
+                file->truncate(0);
             }
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
 
@@ -379,10 +371,8 @@ namespace operations
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
-                return -EINVAL;
-            if (fb->type() != FileBase::REGULAR_FILE)
-                return -EPERM;
-            return static_cast<int>(static_cast<RegularFile*>(fb)->read(buffer, off, len));
+                return -EFAULT;
+            return static_cast<int>(fb->cast_as<RegularFile>()->read(buffer, off, len));
         }
         catch (const CommonException& e)
         {
@@ -418,10 +408,8 @@ namespace operations
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
-                return -EINVAL;
-            if (fb->type() != FileBase::REGULAR_FILE)
-                return -EPERM;
-            static_cast<RegularFile*>(fb)->write(buffer, off, len);
+                return -EFAULT;
+            fb->cast_as<RegularFile>()->write(buffer, off, len);
             return static_cast<int>(len);
         }
         catch (const CommonException& e)
@@ -451,10 +439,8 @@ namespace operations
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
-                return -EINVAL;
-            if (fb->type() != FileBase::REGULAR_FILE)
-                return -EPERM;
-            fb->flush();
+                return -EFAULT;
+            fb->cast_as<RegularFile>()->flush();
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -467,8 +453,6 @@ namespace operations
         try
         {
             auto fg = internal::open_all(fs, path);
-            if (fg->type() != FileBase::REGULAR_FILE)
-                return -EINVAL;
             fg.get_as<RegularFile>()->truncate(size);
             fg->flush();
             return 0;
@@ -484,10 +468,8 @@ namespace operations
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
-                return -EINVAL;
-            if (fb->type() != FileBase::REGULAR_FILE)
-                return -EINVAL;
-            static_cast<RegularFile*>(fb)->truncate(size);
+                return -EFAULT;
+            fb->cast_as<RegularFile>()->truncate(size);
             fb->flush();
             return 0;
         }
@@ -519,8 +501,7 @@ namespace operations
             if (internal::is_readonly(ctx))
                 return -EROFS;
             auto fg = internal::create(fs, path, FileBase::DIRECTORY, mode, ctx->uid, ctx->gid);
-            if (fg->type() != FileBase::DIRECTORY)
-                return -ENOTDIR;
+            fg->cast_as<Directory>();
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -572,8 +553,6 @@ namespace operations
                 return -EROFS;
             auto fg
                 = internal::create(fs, from, FileBase::SYMLINK, S_IFLNK | 0755, ctx->uid, ctx->gid);
-            if (fg->type() != FileBase::SYMLINK)
-                return -EINVAL;
             fg.get_as<Symlink>()->set(to);
             return 0;
         }
@@ -604,8 +583,6 @@ namespace operations
         try
         {
             auto fg = internal::open_all(fs, path);
-            if (fg->type() != FileBase::SYMLINK)
-                return -EINVAL;
             auto destination = fg.get_as<Symlink>()->get();
             memset(buf, 0, size);
             memcpy(buf, destination.data(), std::min(destination.size(), size - 1));
@@ -730,7 +707,7 @@ namespace operations
         {
             auto fb = reinterpret_cast<FileBase*>(fi->fh);
             if (!fb)
-                return -EINVAL;
+                return -EFAULT;
             fb->flush();
             fb->fsync();
             return 0;

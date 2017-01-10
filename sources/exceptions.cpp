@@ -21,3 +21,8 @@ securefs::VFSException::~VFSException() {}
 securefs::POSIXException::~POSIXException() {}
 
 securefs::InvalidArgumentException::~InvalidArgumentException() {}
+
+void securefs::throwFileTypeInconsistencyException()
+{
+    throw ::securefs::FileTypeInconsistencyException();
+}
