@@ -32,6 +32,8 @@ static FILETIME unix_time_to_filetime(const timespec* t)
 
 static const DWORD MAX_SINGLE_BLOCK = std::numeric_limits<DWORD>::max();
 
+static const int CONSOLE_CP_CHANGED = []() { return SetConsoleOutputCP(CP_UTF8); }();
+
 namespace securefs
 {
 class WindowsException : public SeriousException
