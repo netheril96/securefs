@@ -145,11 +145,23 @@ namespace internal
         if (!dir->get_entry(last_component, id, type))
             throwVFSException(ENOENT);
 
-        auto&& table = fs->table;
-        FileGuard inner_guard(&table, table.open_as(id, type));
+        FileGuard inner_guard = open_as(fs->table, id, type);
         auto inner_fb = inner_guard.get();
         if (inner_fb->type() == FileBase::DIRECTORY && !static_cast<Directory*>(inner_fb)->empty())
+        {
+            std::string contents;
+            static_cast<Directory*>(inner_fb)->iterate_over_entries(
+                [&contents](const std::string& str, const id_type&, int) -> bool {
+                    contents.push_back('\n');
+                    contents += str;
+                    return true;
+                });
+            fs->logger->log(LoggingLevel::WARNING,
+                            "Trying to remove a non-empty directory \"%s\" with contents: %s",
+                            path,
+                            contents.c_str());
             throwVFSException(ENOTEMPTY);
+        }
         dir->remove_entry(last_component, id, type);
         inner_fb->unlink();
     }
@@ -286,7 +298,12 @@ namespace operations
             memset(&st, 0, sizeof(st));
             auto actions = [&](const std::string& name, const id_type&, int type) -> bool {
                 st.st_mode = FileBase::mode_for_type(type);
-                return filler(buffer, name.c_str(), &st, 0) == 0;
+                bool success = filler(buffer, name.c_str(), &st, 0) == 0;
+                if (!success)
+                {
+                    fs->logger->log(LoggingLevel::WARNING, "Filling directory buffer failed");
+                }
+                return success;
             };
             fb->cast_as<Directory>()->iterate_over_entries(actions);
             return 0;
