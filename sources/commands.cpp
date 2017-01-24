@@ -893,6 +893,18 @@ public:
                 fuse_args.push_back(opt.c_str());
             }
         }
+#ifdef __APPLE__
+        const char* copyfile_disable = ::getenv("COPYFILE_DISABLE");
+        if (copyfile_disable)
+        {
+            fprintf(stderr,
+                    "Mounting without .DS_Store and other apple dot files because environmental "
+                    "variable COPYFILE_DISABLE is set to \"%s\"\n",
+                    copyfile_disable);
+            fuse_args.push_back("-o");
+            fuse_args.push_back("noappledouble");
+        }
+#endif
         fuse_args.push_back(mount_point.getValue().c_str());
 
         return fuse_main(
@@ -969,7 +981,7 @@ public:
 class VersionCommand : public CommandBase
 {
 private:
-    const char* version = "0.6.0";
+    const char* version_string = "0.6.1";
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
@@ -981,7 +993,8 @@ public:
     int execute() override
     {
         using namespace CryptoPP;
-        fprintf(stdout, "securefs %s (with Crypto++ %g)\n\n", version, CRYPTOPP_VERSION / 100.0);
+        fprintf(
+            stdout, "securefs %s (with Crypto++ %g)\n\n", version_string, CRYPTOPP_VERSION / 100.0);
 #ifdef CRYPTOPP_DISABLE_ASM
         fputs("Built without hardware acceleration\n", stdout);
 #else
