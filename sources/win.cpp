@@ -128,6 +128,12 @@ public:
         return readlen;
     }
 
+    void close() noexcept override
+    {
+        CloseHandle(m_handle);
+        m_handle = INVALID_HANDLE_VALUE;
+    }
+
     void write32(const void* input, offset_type offset, DWORD length)
     {
         OVERLAPPED ol;

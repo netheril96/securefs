@@ -9,12 +9,16 @@
 
 namespace securefs
 {
+class FileStream;
+
 namespace operations
 {
+    extern const std::string LOCK_FILENAME;
     struct MountOptions
     {
         optional<int> version;
         std::shared_ptr<OSService> root;
+        std::shared_ptr<FileStream> lock_stream;
         optional<key_type> master_key;
         optional<uint32_t> flags;
         optional<unsigned> block_size;
@@ -22,12 +26,17 @@ namespace operations
         optional<uid_t> uid_override;
         optional<gid_t> gid_override;
         std::shared_ptr<Logger> logger;
+
+        MountOptions();
+        ~MountOptions();
     };
 
     struct FileSystemContext
     {
     public:
         FileTable table;
+        std::shared_ptr<OSService> root;
+        std::shared_ptr<FileStream> lock_stream;
         id_type root_id;
         std::shared_ptr<Logger> logger;
         unsigned block_size;

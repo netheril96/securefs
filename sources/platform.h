@@ -71,6 +71,7 @@ public:
     virtual void fsync() = 0;
     virtual void utimens(const struct timespec ts[2]) = 0;
     virtual void fstat(FUSE_STAT*) = 0;
+    virtual void close() noexcept = 0;
     virtual ssize_t listxattr(char*, size_t) { throwVFSException(ENOTSUP); }
     virtual ssize_t getxattr(const char*, void*, size_t) { throwVFSException(ENOTSUP); }
     virtual void setxattr(const char*, void*, size_t, int) { throwVFSException(ENOTSUP); }

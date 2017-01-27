@@ -48,6 +48,12 @@ public:
 
     ~UnixFileStream() { ::close(m_fd); }
 
+    void close() noexcept override
+    {
+        ::close(m_fd);
+        m_fd = -1;
+    }
+
     void fsync() override
     {
         int rc = ::fsync(m_fd);

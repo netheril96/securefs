@@ -18,6 +18,16 @@ using securefs::operations::FileSystemContext;
 
 namespace securefs
 {
+namespace operations
+{
+    const std::string LOCK_FILENAME = ".securefs.lock";
+
+    MountOptions::MountOptions() {}
+    MountOptions::~MountOptions() {}
+}
+}
+namespace securefs
+{
 namespace internal
 {
     inline FileSystemContext* get_fs(struct fuse_context* ctx)
@@ -179,6 +189,8 @@ namespace operations
                 opt.flags.value(),
                 opt.block_size.value(),
                 opt.iv_size.value())
+        , root(opt.root)
+        , lock_stream(opt.lock_stream)
         , root_id()
         , logger(opt.logger)
         , uid_override(opt.uid_override)
@@ -187,7 +199,13 @@ namespace operations
         block_size = opt.block_size.value();
     }
 
-    FileSystemContext::~FileSystemContext() {}
+    FileSystemContext::~FileSystemContext()
+    {
+        if (!lock_stream)
+            return;
+        lock_stream->close();
+        root->remove_file(LOCK_FILENAME);
+    }
 
 #define COMMON_PROLOGUE                                                                            \
     auto ctx = fuse_get_context();                                                                 \

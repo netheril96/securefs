@@ -796,16 +796,22 @@ public:
         fsopt.root = std::make_shared<OSService>(data_dir.getValue());
         try
         {
-            fsopt.root->lock();
+            fsopt.lock_stream = fsopt.root->open_file_stream(
+                securefs::operations::LOCK_FILENAME, O_CREAT | O_EXCL | O_RDONLY, 0644);
         }
         catch (const ExceptionBase& e)
         {
-            fprintf(stderr,
-                    "%s: %s\nAnother securefs instance is probably already running on %s\n",
-                    e.type_name(),
-                    e.what(),
-                    data_dir.getValue().c_str());
-            return 19;
+            fprintf(
+                stderr,
+                "Encountering error %s when creating the lock file %s/%s.\n"
+                "Perhaps multiple securefs instances are trying to operate on a single directory.\n"
+                "Close other instances, including on other machines, and try again.\n"
+                "Or remove the lock file manually if you are sure no other instances are holding "
+                "the lock.",
+                e.what(),
+                data_dir.getValue().c_str(),
+                securefs::operations::LOCK_FILENAME.c_str());
+            return 18;
         }
         fsopt.block_size = config.block_size;
         fsopt.iv_size = config.iv_size;
