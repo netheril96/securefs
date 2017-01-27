@@ -82,6 +82,37 @@ std::shared_ptr<StreamBase> make_stream_hmac(const key_type& key_,
                                              std::shared_ptr<StreamBase> stream,
                                              bool check);
 
+class BlockBasedStream : public StreamBase
+{
+protected:
+    length_type m_block_size;
+
+protected:
+    virtual length_type read_block(offset_type block_number, void* output) = 0;
+    virtual void write_block(offset_type block_number, const void* input, length_type length) = 0;
+    virtual void adjust_logical_size(length_type length) = 0;
+
+private:
+    length_type
+    read_block(offset_type block_number, void* output, offset_type begin, offset_type end);
+    void read_then_write_block(offset_type block_number,
+                               const void* input,
+                               offset_type begin,
+                               offset_type end);
+
+    void unchecked_write(const void* input, offset_type offset, length_type length);
+    void zero_fill(offset_type offset, length_type length);
+
+public:
+    BlockBasedStream(length_type block_size) : m_block_size(block_size) {}
+    ~BlockBasedStream() {}
+
+    length_type read(void* output, offset_type offset, length_type length) override;
+    void write(const void* input, offset_type offset, length_type length) override;
+    void resize(length_type new_length) override;
+    length_type optimal_block_size() const noexcept override { return m_block_size; }
+};
+
 /**
  * Base classes for streams that encrypt and decrypt data transparently
  * The transformation is done in blocks,
@@ -92,11 +123,10 @@ std::shared_ptr<StreamBase> make_stream_hmac(const key_type& key_,
  * The CryptStream supports sparse streams if the subclass can tell whether all zero block
  * are ciphertext or sparse parts of the underlying stream.
  */
-class CryptStream : public StreamBase
+class CryptStream : public BlockBasedStream
 {
 protected:
     std::shared_ptr<StreamBase> m_stream;
-    const length_type m_block_size;
 
     // Both encrypt/decrypt should not change the length of the block.
     // input/output may alias.
@@ -109,22 +139,13 @@ protected:
         = 0;
 
 private:
-    length_type read_block(offset_type block_number, void* output);
-    length_type
-    read_block(offset_type block_number, void* output, offset_type begin, offset_type end);
-
-    void write_block(offset_type block_number, const void* input, length_type length);
-    void read_then_write_block(offset_type block_number,
-                               const void* input,
-                               offset_type begin,
-                               offset_type end);
-
-    void unchecked_write(const void* input, offset_type offset, length_type length);
-    void zero_fill(offset_type offset, length_type length);
+    length_type read_block(offset_type block_number, void* output) override;
+    void write_block(offset_type block_number, const void* input, length_type length) override;
+    void adjust_logical_size(length_type length) override { m_stream->resize(length); }
 
 public:
     explicit CryptStream(std::shared_ptr<StreamBase> stream, length_type block_size)
-        : m_stream(std::move(stream)), m_block_size(block_size)
+        : BlockBasedStream(block_size), m_stream(std::move(stream))
     {
         if (!m_stream)
             throw NullPointerException(__FUNCTION__, __FILE__, __LINE__);
@@ -132,12 +153,8 @@ public:
             throwInvalidArgumentException("Too small block size");
     }
 
-    length_type read(void* output, offset_type offset, length_type length) override;
-    void write(const void* input, offset_type offset, length_type length) override;
     void flush() override { m_stream->flush(); }
     length_type size() const override { return m_stream->size(); }
-    void resize(length_type new_length) override;
-    length_type optimal_block_size() const noexcept override { return m_block_size; }
 };
 
 /**

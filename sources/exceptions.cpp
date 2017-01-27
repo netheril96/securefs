@@ -11,6 +11,11 @@ void ::securefs::throwPOSIXException(int errc, std::string msg)
     throw POSIXException(errc, std::move(msg));
 }
 
+void ::securefs::throwInvalidArgumentException(const char* why)
+{
+    throw InvalidArgumentException(why);
+}
+
 void ::securefs::throwInvalidArgumentException(std::string why)
 {
     throw InvalidArgumentException(std::move(why));

@@ -178,6 +178,7 @@ public:
     int error_number() const noexcept override { return EINVAL; }
 };
 
+[[noreturn]] void throwInvalidArgumentException(const char* why);
 [[noreturn]] void throwInvalidArgumentException(std::string why);
 
 class CorruptedMetaDataException : public InvalidFormatException
