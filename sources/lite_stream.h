@@ -50,7 +50,7 @@ public:
                                    const key_type& master_key,
                                    const id_type& id,
                                    unsigned block_size = 4096,
-                                   iv_size = 12,
+                                   unsigned iv_size = 12,
                                    bool check = true);
     ~LiteAESGCMCryptStream();
 

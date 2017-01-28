@@ -2,8 +2,8 @@
 
 namespace securefs
 {
-std::string LiteCorruptedStreamException::message() const { return "Stream is corrupted;" }
-const char* LiteCorruptedStreamException::type_name() const
+std::string LiteCorruptedStreamException::message() const { return "Stream is corrupted"; }
+const char* LiteCorruptedStreamException::type_name() const noexcept
 {
     return "LiteCorruptedStreamException";
 }
@@ -69,7 +69,7 @@ length_type LiteAESGCMCryptStream::read_block(offset_type block_number, void* ou
 
     if (is_all_zeros(m_buffer.get(), rc))
     {
-        memset(output, 0, get_underlying_block_size());
+        memset(output, 0, get_block_size());
         return out_size;
     }
 
@@ -115,13 +115,12 @@ void LiteAESGCMCryptStream::write_block(offset_type block_number,
                     get_iv_size(),
                     m_buffer.get() + get_iv_size() + size,
                     get_mac_size(),
-                    m_buffer.get());
+                    m_buffer.get() + get_iv_size());
+
     m_stream->write(m_buffer.get(),
                     block_number * get_underlying_block_size() + get_header_size(),
                     size + get_iv_size() + get_mac_size());
 }
-
-bool LiteAESGCMCryptStream::is_sparse() const { return m_stream->is_sparse(); }
 
 length_type LiteAESGCMCryptStream::size() const
 {

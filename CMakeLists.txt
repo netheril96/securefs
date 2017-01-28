@@ -6,10 +6,16 @@ if (PORTABLE_BUILD)
     add_definitions(-DCRYPTOPP_DISABLE_ASM=1)
 endif ()
 
+option(SANITIZE "Turn on address sanitizer" OFF)
+if (SANITIZE)
+    add_compile_options(-fsanitize=address)
+    link_libraries(-fsanitize=address)
+endif ()
+
 project(securefs)
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
-set (CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 11)
 
 if (UNIX)
     find_package(FUSE REQUIRED)
@@ -39,7 +45,7 @@ else ()
     link_libraries(${DOKAN_PREFIX}/lib/dokanfuse1.lib)
     if (MSVC)
         add_compile_options(/MP)
-    endif()
+    endif ()
 endif ()
 
 add_definitions(-D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE)
