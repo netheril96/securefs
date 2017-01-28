@@ -143,8 +143,7 @@ void LiteAESGCMCryptStream::adjust_logical_size(length_type length)
 {
     auto new_blocks = length / get_block_size();
     auto residue = length % get_block_size();
-    m_stream->resize(get_header_size() + new_blocks * get_underlying_block_size() + residue > 0
-                         ? residue + get_iv_size() + get_mac_size()
-                         : 0);
+    m_stream->resize(get_header_size() + new_blocks * get_underlying_block_size()
+                     + (residue > 0 ? residue + get_iv_size() + get_mac_size() : 0));
 }
 }
