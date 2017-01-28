@@ -81,3 +81,5 @@ Unlike alternatives, `securefs` does not preallocate the underlying storage. So 
 
 In addition, the files are encrypted in blocks, so that binary diff update functionality (syncing only the modified part) of Dropbox, iCloud, Google Drive, etc, still works. Builtin version control of cloud services also works, albeit somewhat hard to use.
 
+*Note that under the current design, you cannot run multiple securefs instances on the same directory (either on the same machine or synchronized over different machines) or you will risk directory structure corruption. If it happens, you should run `securefs fix` to recover the data. The plan is to change the default filesystem format in the next revision to allow such usage.*
+
