@@ -8,17 +8,14 @@ const char* LiteCorruptedStreamException::type_name() const noexcept
     return "LiteCorruptedStreamException";
 }
 
+static const offset_type MAX_BLOCKS = 1ULL << 31;
+
 LiteAESGCMCryptStream::LiteAESGCMCryptStream(std::shared_ptr<StreamBase> stream,
                                              const key_type& master_key,
-                                             const id_type& id,
                                              unsigned int block_size,
                                              unsigned iv_size,
                                              bool check)
-    : BlockBasedStream(block_size)
-    , m_stream(std::move(stream))
-    , m_id(id)
-    , m_iv_size(iv_size)
-    , m_check(check)
+    : BlockBasedStream(block_size), m_stream(std::move(stream)), m_iv_size(iv_size), m_check(check)
 {
     if (m_iv_size < 12 || m_iv_size > 32)
         throwInvalidArgumentException("IV size too small or too large");
@@ -45,7 +42,6 @@ LiteAESGCMCryptStream::LiteAESGCMCryptStream(std::shared_ptr<StreamBase> stream,
     }
 
     m_buffer.reset(new byte[get_underlying_block_size()]);
-    m_aux_buffer.reset(new byte[get_auxiliary_buffer_size()]);
 }
 
 LiteAESGCMCryptStream::~LiteAESGCMCryptStream() {}
@@ -56,6 +52,10 @@ bool LiteAESGCMCryptStream::is_sparse() const noexcept { return m_stream->is_spa
 
 length_type LiteAESGCMCryptStream::read_block(offset_type block_number, void* output)
 {
+    if (block_number > MAX_BLOCKS)
+        throw StreamTooLongException(MAX_BLOCKS * get_block_size(),
+                                     block_number * get_block_size());
+
     length_type rc = m_stream->read(m_buffer.get(),
                                     get_header_size() + get_underlying_block_size() * block_number,
                                     get_underlying_block_size());
@@ -73,13 +73,13 @@ length_type LiteAESGCMCryptStream::read_block(offset_type block_number, void* ou
         return out_size;
     }
 
-    memcpy(m_aux_buffer.get(), m_id.data(), m_id.size());
-    to_little_endian<std::uint64_t>(block_number, m_aux_buffer.get() + m_id.size());
+    byte auxiliary[sizeof(std::uint32_t)];
+    to_little_endian(static_cast<std::uint32_t>(block_number), auxiliary);
 
     bool success = aes_gcm_decrypt(m_buffer.get() + get_iv_size(),
                                    out_size,
-                                   m_aux_buffer.get(),
-                                   get_auxiliary_buffer_size(),
+                                   auxiliary,
+                                   sizeof(auxiliary),
                                    m_session_key.data(),
                                    m_session_key.size(),
                                    m_buffer.get(),
@@ -88,7 +88,7 @@ length_type LiteAESGCMCryptStream::read_block(offset_type block_number, void* ou
                                    get_mac_size(),
                                    output);
     if (m_check && !success)
-        throw MessageVerificationException(m_id, block_number * get_block_size());
+        throw LiteMessageVerificationException();
 
     return out_size;
 }
@@ -97,8 +97,12 @@ void LiteAESGCMCryptStream::write_block(offset_type block_number,
                                         const void* input,
                                         length_type size)
 {
-    memcpy(m_aux_buffer.get(), m_id.data(), m_id.size());
-    to_little_endian<std::uint64_t>(block_number, m_aux_buffer.get() + m_id.size());
+    if (block_number > MAX_BLOCKS)
+        throw StreamTooLongException(MAX_BLOCKS * get_block_size(),
+                                     block_number * get_block_size());
+
+    byte auxiliary[sizeof(std::uint32_t)];
+    to_little_endian(static_cast<std::uint32_t>(block_number), auxiliary);
 
     do
     {
@@ -107,8 +111,8 @@ void LiteAESGCMCryptStream::write_block(offset_type block_number,
 
     aes_gcm_encrypt(input,
                     size,
-                    m_aux_buffer.get(),
-                    get_auxiliary_buffer_size(),
+                    auxiliary,
+                    sizeof(auxiliary),
                     m_session_key.data(),
                     m_session_key.size(),
                     m_buffer.get(),

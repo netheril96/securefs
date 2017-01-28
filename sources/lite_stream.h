@@ -16,9 +16,7 @@ class LiteAESGCMCryptStream : public BlockBasedStream
 private:
     std::shared_ptr<StreamBase> m_stream;
     std::unique_ptr<byte[]> m_buffer;
-    std::unique_ptr<byte[]> m_aux_buffer;
     key_type m_session_key;
-    id_type m_id;
     unsigned m_iv_size;
     bool m_check;
 
@@ -36,8 +34,6 @@ private:
         return get_block_size() + get_iv_size() + get_mac_size();
     }
 
-    unsigned get_auxiliary_buffer_size() const { return m_id.size() + sizeof(std::uint64_t); }
-
 protected:
     length_type read_block(offset_type block_number, void* output) override;
 
@@ -48,7 +44,6 @@ protected:
 public:
     explicit LiteAESGCMCryptStream(std::shared_ptr<StreamBase> stream,
                                    const key_type& master_key,
-                                   const id_type& id,
                                    unsigned block_size = 4096,
                                    unsigned iv_size = 12,
                                    bool check = true);

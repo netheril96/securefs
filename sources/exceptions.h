@@ -247,6 +247,14 @@ public:
     }
 };
 
+class LiteMessageVerificationException : public VerificationException
+{
+public:
+    const char* type_name() const noexcept override { return "LiteMessageVerificationException"; }
+
+    std::string message() const override { return "File content has invalid checksum"; }
+};
+
 class StreamTooLongException : public SeriousException
 {
 private:
