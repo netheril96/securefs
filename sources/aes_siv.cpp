@@ -24,12 +24,10 @@
 namespace securefs
 {
 
-static const size_t AES_BLOCK_SIZE = 16;
-
-static const byte aes256_siv_zero_block[AES_BLOCK_SIZE] = {
+static const byte aes256_siv_zero_block[AES_SIV::IV_SIZE] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
-static const byte aes256_cmac_Rb[AES_BLOCK_SIZE] = {
+static const byte aes256_cmac_Rb[AES_SIV::IV_SIZE] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x87};
 
 static const byte aes256_iso_pad = 0x80;    // 0b10000000
@@ -67,18 +65,18 @@ void AES_SIV::s2v(const void* plaintext,
                   size_t additional_len,
                   void* iv)
 {
-    byte D[AES_BLOCK_SIZE];
+    byte D[AES_SIV::IV_SIZE];
     m_cmac.CalculateDigest(D, aes256_siv_zero_block, sizeof(aes256_siv_zero_block));
 
     if (additional_data && additional_len)
     {
         aes256_siv_dbl(D);
-        byte add_mac[AES_BLOCK_SIZE];
+        byte add_mac[AES_SIV::IV_SIZE];
         m_cmac.CalculateDigest(add_mac, static_cast<const byte*>(additional_data), additional_len);
-        CryptoPP::xorbuf(D, add_mac, AES_BLOCK_SIZE);
+        CryptoPP::xorbuf(D, add_mac, AES_SIV::IV_SIZE);
     }
 
-    if (text_len >= AES_BLOCK_SIZE)
+    if (text_len >= AES_SIV::IV_SIZE)
     {
         CryptoPP::AlignedSecByteBlock T(static_cast<const byte*>(plaintext), text_len);
         CryptoPP::xorbuf(T.data() + text_len - sizeof(D), D, sizeof(D));
@@ -87,14 +85,14 @@ void AES_SIV::s2v(const void* plaintext,
     else
     {
         aes256_siv_dbl(D);
-        byte padded[AES_BLOCK_SIZE];
+        byte padded[AES_SIV::IV_SIZE];
         memcpy(padded, plaintext, text_len);
         padded[text_len] = aes256_iso_pad;
         for (size_t i = text_len + 1; i < sizeof(padded); ++i)
         {
             padded[i] = 0;
         }
-        CryptoPP::xorbuf(D, padded, AES_BLOCK_SIZE);
+        CryptoPP::xorbuf(D, padded, AES_SIV::IV_SIZE);
         m_cmac.CalculateDigest(static_cast<byte*>(iv), D, sizeof(D));
     }
 }
@@ -107,8 +105,8 @@ void AES_SIV::encrypt_and_authenticate(const void* plaintext,
                                        void* siv)
 {
     s2v(plaintext, text_len, additional_data, additional_len, siv);
-    byte modded_iv[AES_BLOCK_SIZE];
-    memcpy(modded_iv, siv, AES_BLOCK_SIZE);
+    byte modded_iv[AES_SIV::IV_SIZE];
+    memcpy(modded_iv, siv, AES_SIV::IV_SIZE);
 
     // Clear the 31st and 63rd bits in the IV.
     modded_iv[8] &= 0x7f;
@@ -126,8 +124,8 @@ bool AES_SIV::decrypt_and_verify(const void* ciphertext,
                                  void* plaintext,
                                  const void* siv)
 {
-    byte temp_iv[AES_BLOCK_SIZE];
-    memcpy(temp_iv, siv, AES_BLOCK_SIZE);
+    byte temp_iv[AES_SIV::IV_SIZE];
+    memcpy(temp_iv, siv, AES_SIV::IV_SIZE);
     // Clear the 31st and 63rd bits in the IV.
     temp_iv[8] &= 0x7f;
     temp_iv[12] &= 0x7f;
@@ -137,6 +135,6 @@ bool AES_SIV::decrypt_and_verify(const void* ciphertext,
         static_cast<byte*>(plaintext), static_cast<const byte*>(ciphertext), text_len);
 
     s2v(plaintext, text_len, additional_data, additional_len, temp_iv);
-    return CryptoPP::VerifyBufsEqual(static_cast<const byte*>(siv), temp_iv, AES_BLOCK_SIZE);
+    return CryptoPP::VerifyBufsEqual(static_cast<const byte*>(siv), temp_iv, AES_SIV::IV_SIZE);
 }
 }

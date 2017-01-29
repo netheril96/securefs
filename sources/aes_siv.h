@@ -22,6 +22,9 @@ private:
     CryptoPP::CTR_Mode<CryptoPP::AES>::Encryption m_ctr;
 
 public:
+    static constexpr size_t IV_SIZE = 16;
+
+public:
     explicit AES_SIV(const void* key, size_t size);
     ~AES_SIV();
 
@@ -30,12 +33,14 @@ public:
              const void* additional_data,
              size_t additional_len,
              void* iv);
+
     void encrypt_and_authenticate(const void* plaintext,
                                   size_t text_len,
                                   const void* additional_data,
                                   size_t additional_len,
                                   void* ciphertext,
                                   void* siv);
+
     bool decrypt_and_verify(const void* ciphertext,
                             size_t text_len,
                             const void* additional_data,
