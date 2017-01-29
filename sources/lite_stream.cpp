@@ -30,17 +30,17 @@ namespace lite
         if (block_size < 32)
             throwInvalidArgumentException("Block size too small");
 
-        key_type header;
+        CryptoPP::FixedSizeAlignedSecBlock<byte, securefs::KEY_LENGTH> header, session_key;
         auto rc = m_stream->read(header.data(), 0, header.size());
         if (rc == 0)
         {
-            generate_random(m_session_key.data(), m_session_key.size());
-            byte_xor(m_session_key.data(), master_key.data(), header.data(), header.size());
+            generate_random(session_key.data(), session_key.size());
+            byte_xor(session_key.data(), master_key.data(), header.data(), header.size());
             m_stream->write(header.data(), 0, header.size());
         }
         else if (rc == header.size())
         {
-            byte_xor(header.data(), master_key.data(), m_session_key.data(), m_session_key.size());
+            byte_xor(header.data(), master_key.data(), session_key.data(), session_key.size());
         }
         else
         {
@@ -48,6 +48,11 @@ namespace lite
         }
 
         m_buffer.reset(new byte[get_underlying_block_size()]);
+
+        // The null iv is only a placeholder; it will replaced during encryption and decryption
+        byte null_iv[12] = {0};
+        m_encryptor.SetKeyWithIV(session_key.data(), session_key.size(), null_iv, sizeof(null_iv));
+        m_decryptor.SetKeyWithIV(session_key.data(), session_key.size(), null_iv, sizeof(null_iv));
     }
 
     AESGCMCryptStream::~AESGCMCryptStream() {}
@@ -83,17 +88,16 @@ namespace lite
         byte auxiliary[sizeof(std::uint32_t)];
         to_little_endian(static_cast<std::uint32_t>(block_number), auxiliary);
 
-        bool success = aes_gcm_decrypt(m_buffer.get() + get_iv_size(),
-                                       out_size,
-                                       auxiliary,
-                                       sizeof(auxiliary),
-                                       m_session_key.data(),
-                                       m_session_key.size(),
-                                       m_buffer.get(),
-                                       get_iv_size(),
-                                       m_buffer.get() + rc - get_mac_size(),
-                                       get_mac_size(),
-                                       output);
+        bool success = m_decryptor.DecryptAndVerify(static_cast<byte*>(output),
+                                                    m_buffer.get() + rc - get_mac_size(),
+                                                    get_mac_size(),
+                                                    m_buffer.get(),
+                                                    static_cast<int>(get_iv_size()),
+                                                    auxiliary,
+                                                    sizeof(auxiliary),
+                                                    m_buffer.get() + get_iv_size(),
+                                                    out_size);
+
         if (m_check && !success)
             throw LiteMessageVerificationException();
 
@@ -115,17 +119,15 @@ namespace lite
             generate_random(m_buffer.get(), get_iv_size());
         } while (is_all_zeros(m_buffer.get(), get_iv_size()));
 
-        aes_gcm_encrypt(input,
-                        size,
-                        auxiliary,
-                        sizeof(auxiliary),
-                        m_session_key.data(),
-                        m_session_key.size(),
-                        m_buffer.get(),
-                        get_iv_size(),
-                        m_buffer.get() + get_iv_size() + size,
-                        get_mac_size(),
-                        m_buffer.get() + get_iv_size());
+        m_encryptor.EncryptAndAuthenticate(m_buffer.get() + get_iv_size(),
+                                           m_buffer.get() + get_iv_size() + size,
+                                           get_mac_size(),
+                                           m_buffer.get(),
+                                           static_cast<int>(get_iv_size()),
+                                           auxiliary,
+                                           sizeof(auxiliary),
+                                           static_cast<const byte*>(input),
+                                           size);
 
         m_stream->write(m_buffer.get(),
                         block_number * get_underlying_block_size() + get_header_size(),

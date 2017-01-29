@@ -2,6 +2,10 @@
 
 #include "streams.h"
 
+#include <cryptopp/aes.h>
+#include <cryptopp/gcm.h>
+#include <cryptopp/secblock.h>
+
 namespace securefs
 {
 namespace lite
@@ -17,9 +21,10 @@ namespace lite
     class AESGCMCryptStream : public BlockBasedStream
     {
     private:
+        CryptoPP::GCM<CryptoPP::AES>::Encryption m_encryptor;
+        CryptoPP::GCM<CryptoPP::AES>::Decryption m_decryptor;
         std::shared_ptr<StreamBase> m_stream;
         std::unique_ptr<byte[]> m_buffer;
-        key_type m_session_key;
         unsigned m_iv_size;
         bool m_check;
 
