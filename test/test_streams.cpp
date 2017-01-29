@@ -207,7 +207,7 @@ TEST_CASE("Test streams")
     {
         auto underlying_stream = OSService::get_default().open_file_stream(
             OSService::temp_name("tmp/", "litestream"), O_RDWR | O_CREAT | O_EXCL, 0644);
-        securefs::LiteAESGCMCryptStream lite_stream(underlying_stream, key);
+        securefs::lite::AESGCMCryptStream lite_stream(underlying_stream, key);
         const byte test_data[] = "Hello, world";
         byte output[4096];
         lite_stream.write(test_data, 0, sizeof(test_data));
