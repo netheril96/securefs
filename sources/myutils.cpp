@@ -449,12 +449,4 @@ void respond_to_user_action(
         break;
     }
 }
-
-void byte_xor(const byte* a, const byte* b, byte* c, size_t size)
-{
-    for (size_t i = 0; i < size; ++i)
-    {
-        c[i] = a[i] ^ b[i];
-    }
-}
 }

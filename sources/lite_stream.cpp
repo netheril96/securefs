@@ -35,12 +35,12 @@ namespace lite
         if (rc == 0)
         {
             generate_random(session_key.data(), session_key.size());
-            byte_xor(session_key.data(), master_key.data(), header.data(), header.size());
+            CryptoPP::xorbuf(header.data(), master_key.data(), session_key.data(), KEY_LENGTH);
             m_stream->write(header.data(), 0, header.size());
         }
         else if (rc == header.size())
         {
-            byte_xor(header.data(), master_key.data(), session_key.data(), session_key.size());
+            CryptoPP::xorbuf(session_key.data(), master_key.data(), header.data(), KEY_LENGTH);
         }
         else
         {
@@ -50,7 +50,7 @@ namespace lite
         m_buffer.reset(new byte[get_underlying_block_size()]);
 
         // The null iv is only a placeholder; it will replaced during encryption and decryption
-        byte null_iv[12] = {0};
+        const byte null_iv[12] = {0};
         m_encryptor.SetKeyWithIV(session_key.data(), session_key.size(), null_iv, sizeof(null_iv));
         m_decryptor.SetKeyWithIV(session_key.data(), session_key.size(), null_iv, sizeof(null_iv));
     }

@@ -216,8 +216,6 @@ unsigned int pbkdf_hmac_sha256(const void* password,
                                void* derived,
                                size_t derive_len);
 
-void byte_xor(const byte* a, const byte* b, byte* c, size_t size);
-
 size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length);
 size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length);
 

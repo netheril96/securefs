@@ -35,7 +35,7 @@ namespace lite
 
         static unsigned get_mac_size() noexcept { return 16; }
 
-        static length_type get_header_size() noexcept { return key_type{}.size(); }
+        static length_type get_header_size() noexcept { return KEY_LENGTH; }
 
         length_type get_underlying_block_size() const noexcept
         {
