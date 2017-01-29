@@ -24,15 +24,15 @@ namespace lite
         bool m_check;
 
     private:
-        unsigned get_block_size() const { return m_block_size; }
+        length_type get_block_size() const noexcept { return m_block_size; }
 
-        unsigned get_iv_size() const { return m_iv_size; }
+        length_type get_iv_size() const noexcept { return m_iv_size; }
 
-        unsigned get_mac_size() const { return 16; }
+        static unsigned get_mac_size() noexcept { return 16; }
 
-        unsigned get_header_size() const { return key_type{}.size(); }
+        static length_type get_header_size() noexcept { return key_type{}.size(); }
 
-        unsigned get_underlying_block_size() const
+        length_type get_underlying_block_size() const noexcept
         {
             return get_block_size() + get_iv_size() + get_mac_size();
         }
@@ -58,6 +58,10 @@ namespace lite
         virtual void flush() override;
 
         virtual bool is_sparse() const noexcept override;
+
+        static length_type calculate_real_size(length_type underlying_size,
+                                               length_type block_size,
+                                               length_type iv_size) noexcept;
     };
 }
 }

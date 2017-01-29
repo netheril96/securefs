@@ -134,15 +134,7 @@ namespace lite
 
     length_type AESGCMCryptStream::size() const
     {
-        auto underlying_size = m_stream->size();
-        if (underlying_size <= get_header_size())
-            return 0;
-        underlying_size -= get_header_size();
-        auto num_blocks = underlying_size / get_underlying_block_size();
-        auto residue = underlying_size % get_underlying_block_size();
-        return num_blocks * get_block_size() + (residue > (get_iv_size() + get_mac_size())
-                                                    ? residue - get_iv_size() - get_mac_size()
-                                                    : 0);
+        return calculate_real_size(m_stream->size(), get_block_size(), get_iv_size());
     }
 
     void AESGCMCryptStream::adjust_logical_size(length_type length)
@@ -151,6 +143,21 @@ namespace lite
         auto residue = length % get_block_size();
         m_stream->resize(get_header_size() + new_blocks * get_underlying_block_size()
                          + (residue > 0 ? residue + get_iv_size() + get_mac_size() : 0));
+    }
+
+    length_type AESGCMCryptStream::calculate_real_size(length_type underlying_size,
+                                                       length_type block_size,
+                                                       length_type iv_size) noexcept
+    {
+        auto header_size = get_header_size();
+        auto underlying_block_size = block_size + iv_size + get_mac_size();
+        if (underlying_size <= header_size)
+            return 0;
+        underlying_size -= header_size;
+        auto num_blocks = underlying_size / underlying_block_size;
+        auto residue = underlying_size % underlying_block_size;
+        return num_blocks * block_size
+            + (residue > (iv_size + get_mac_size()) ? residue - iv_size - get_mac_size() : 0);
     }
 }
 }
