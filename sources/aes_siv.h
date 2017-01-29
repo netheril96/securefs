@@ -35,12 +35,12 @@ public:
                                   const void* additional_data,
                                   size_t additional_len,
                                   void* ciphertext,
-                                  size_t cipher_len);
+                                  void* siv);
     bool decrypt_and_verify(const void* ciphertext,
-                            size_t cipher_len,
+                            size_t text_len,
                             const void* additional_data,
                             size_t additional_len,
                             void* plaintext,
-                            size_t text_len);
+                            const void* siv);
 };
 }

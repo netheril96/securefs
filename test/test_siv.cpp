@@ -14,11 +14,12 @@ static void test_siv_encryption(const void* key,
                                 const void* siv)
 {
     securefs::AES_SIV aes_siv(key, key_len);
-    std::vector<byte> our_ciphertext(text_len + 16);
+    std::vector<byte> our_ciphertext(text_len);
+    byte our_siv[16];
     aes_siv.encrypt_and_authenticate(
-        plaintext, text_len, header, header_len, our_ciphertext.data(), our_ciphertext.size());
-    REQUIRE(memcmp(siv, our_ciphertext.data(), 16) == 0);
-    REQUIRE(memcmp(ciphertext, our_ciphertext.data() + 16, text_len) == 0);
+        plaintext, text_len, header, header_len, our_ciphertext.data(), our_siv);
+    REQUIRE(memcmp(siv, our_siv, 16) == 0);
+    REQUIRE(memcmp(ciphertext, our_ciphertext.data(), text_len) == 0);
 }
 
 static void test_siv_decryption(const void* key,
@@ -31,16 +32,9 @@ static void test_siv_decryption(const void* key,
                                 const void* siv)
 {
     securefs::AES_SIV aes_siv(key, key_len);
-    std::vector<byte> our_ciphertext(text_len + 16);
-    memcpy(our_ciphertext.data(), siv, 16);
-    memcpy(our_ciphertext.data() + 16, ciphertext, text_len);
     std::vector<byte> our_plaintext(text_len);
-    REQUIRE(aes_siv.decrypt_and_verify(our_ciphertext.data(),
-                                       our_ciphertext.size(),
-                                       header,
-                                       header_len,
-                                       our_plaintext.data(),
-                                       our_plaintext.size()));
+    REQUIRE(aes_siv.decrypt_and_verify(
+        ciphertext, text_len, header, header_len, our_plaintext.data(), siv));
     REQUIRE(memcmp(our_plaintext.data(), plaintext, text_len) == 0);
 }
 

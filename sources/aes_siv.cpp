@@ -104,48 +104,39 @@ void AES_SIV::encrypt_and_authenticate(const void* plaintext,
                                        const void* additional_data,
                                        size_t additional_len,
                                        void* ciphertext,
-                                       size_t cipher_len)
+                                       void* siv)
 {
-    if (cipher_len != text_len + AES_BLOCK_SIZE)
-        throwInvalidArgumentException("Mismatch between ciphertext and plaintext size in AES-SIV");
-
-    s2v(plaintext, text_len, additional_data, additional_len, ciphertext);
+    s2v(plaintext, text_len, additional_data, additional_len, siv);
     byte modded_iv[AES_BLOCK_SIZE];
-    memcpy(modded_iv, ciphertext, AES_BLOCK_SIZE);
+    memcpy(modded_iv, siv, AES_BLOCK_SIZE);
 
     // Clear the 31st and 63rd bits in the IV.
     modded_iv[8] &= 0x7f;
     modded_iv[12] &= 0x7f;
 
     m_ctr.Resynchronize(modded_iv, sizeof(modded_iv));
-    m_ctr.ProcessData(static_cast<byte*>(ciphertext) + AES_BLOCK_SIZE,
-                      static_cast<const byte*>(plaintext),
-                      text_len);
+    m_ctr.ProcessData(
+        static_cast<byte*>(ciphertext), static_cast<const byte*>(plaintext), text_len);
 }
 
 bool AES_SIV::decrypt_and_verify(const void* ciphertext,
-                                 size_t cipher_len,
+                                 size_t text_len,
                                  const void* additional_data,
                                  size_t additional_len,
                                  void* plaintext,
-                                 size_t text_len)
+                                 const void* siv)
 {
-    if (cipher_len != text_len + AES_BLOCK_SIZE)
-        throwInvalidArgumentException("Mismatch between ciphertext and plaintext size in AES-SIV");
-
-    byte modded_iv[AES_BLOCK_SIZE];
-    memcpy(modded_iv, ciphertext, AES_BLOCK_SIZE);
+    byte temp_iv[AES_BLOCK_SIZE];
+    memcpy(temp_iv, siv, AES_BLOCK_SIZE);
     // Clear the 31st and 63rd bits in the IV.
-    modded_iv[8] &= 0x7f;
-    modded_iv[12] &= 0x7f;
+    temp_iv[8] &= 0x7f;
+    temp_iv[12] &= 0x7f;
 
-    m_ctr.Resynchronize(modded_iv, sizeof(modded_iv));
-    m_ctr.ProcessData(static_cast<byte*>(plaintext),
-                      static_cast<const byte*>(ciphertext) + AES_BLOCK_SIZE,
-                      text_len);
+    m_ctr.Resynchronize(temp_iv, sizeof(temp_iv));
+    m_ctr.ProcessData(
+        static_cast<byte*>(plaintext), static_cast<const byte*>(ciphertext), text_len);
 
-    byte siv[AES_BLOCK_SIZE];
-    s2v(plaintext, text_len, additional_data, additional_len, siv);
-    return CryptoPP::VerifyBufsEqual(static_cast<const byte*>(ciphertext), siv, AES_BLOCK_SIZE);
+    s2v(plaintext, text_len, additional_data, additional_len, temp_iv);
+    return CryptoPP::VerifyBufsEqual(static_cast<const byte*>(siv), temp_iv, AES_BLOCK_SIZE);
 }
 }
