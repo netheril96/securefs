@@ -208,22 +208,26 @@ OSService::open_file_stream(const std::string& path, int flags, unsigned mode) c
     return std::make_shared<UnixFileStream>(fd);
 }
 
-bool OSService::remove_file(const std::string& path) const noexcept
+void OSService::remove_file(const std::string& path) const
 {
 #ifdef HAS_AT_FUNCTIONS
-    return ::unlinkat(impl->dir_fd, path.c_str(), 0) == 0;
+    int rc = ::unlinkat(impl->dir_fd, path.c_str(), 0) == 0;
 #else
-    return ::unlink(impl->norm_path(path).c_str()) == 0;
+    int rc = ::unlink(impl->norm_path(path).c_str()) == 0;
 #endif
+    if (rc < 0)
+        throwPOSIXException(errno, "unlinking " + impl->norm_path(path));
 }
 
-bool OSService::remove_directory(const std::string& path) const noexcept
+void OSService::remove_directory(const std::string& path) const
 {
 #ifdef HAS_AT_FUNCTIONS
-    return ::unlinkat(impl->dir_fd, path.c_str(), AT_REMOVEDIR) == 0;
+    int rc = ::unlinkat(impl->dir_fd, path.c_str(), AT_REMOVEDIR);
 #else
-    return ::rmdir(impl->norm_path(path).c_str()) == 0;
+    int rc = ::rmdir(impl->norm_path(path).c_str()) == 0;
 #endif
+    if (rc < 0)
+        throwPOSIXException(errno, "removing directory " + impl->norm_path(path));
 }
 
 void OSService::lock() const
@@ -234,18 +238,30 @@ void OSService::lock() const
             errno, strprintf("Fail to obtain exclusive lock on %s", impl->dir_name.c_str()));
 }
 
-void OSService::ensure_directory(const std::string& path, unsigned mode) const
+void OSService::mkdir(const std::string& path, unsigned mode) const
 {
 #ifdef HAS_AT_FUNCTIONS
     int rc = ::mkdirat(impl->dir_fd, path.c_str(), mode);
 #else
     int rc = ::mkdir(impl->norm_path(path).c_str(), mode);
 #endif
-    if (rc < 0 && errno != EEXIST)
+    if (rc < 0)
         throwPOSIXException(
             errno, strprintf("Fail to create directory %s", impl->norm_path(path).c_str()));
 }
 
+void OSService::symlink(const std::string& to, const std::string& from)
+{
+#ifdef HAS_AT_FUNCTIONS
+    int rc = ::symlinkat(to.c_str(), impl->dir_fd, from.c_str());
+#else
+    int rc = ::symlink(to.c_str(), impl->norm_path(from).c_str());
+#endif
+    if (rc < 0)
+        throwPOSIXException(
+            errno,
+            strprintf("symlink to=%s and from=%s", to.c_str(), impl->norm_path(from).c_str()));
+}
 void OSService::statfs(struct statvfs* fs_info) const
 {
     int rc = ::fstatvfs(impl->dir_fd, fs_info);
@@ -276,6 +292,20 @@ void OSService::stat(const std::string& path, FUSE_STAT* stat)
 #endif
     if (rc < 0)
         throwPOSIXException(errno, strprintf("stating %s", impl->norm_path(path).c_str()));
+}
+
+ssize_t OSService::readlink(const std::string& path, char* output, size_t size)
+{
+#ifdef HAS_AT_FUNCTIONS
+    ssize_t rc = ::readlinkat(impl->dir_fd, path.c_str(), output, size);
+#else
+    ssize_t rc = ::readlink(impl->norm_path(path).c_str(), output, size);
+#endif
+    if (rc < 0)
+        throwPOSIXException(
+            errno,
+            strprintf("readlink %s with buffer size=%zu", impl->norm_path(path).c_str(), size));
+    return rc;
 }
 
 void OSService::recursive_traverse(const std::string& dir, const traverse_callback& callback) const

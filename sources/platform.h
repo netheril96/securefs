@@ -92,13 +92,52 @@ public:
     ~OSService();
     std::shared_ptr<FileStream>
     open_file_stream(const std::string& path, int flags, unsigned mode) const;
-    bool remove_file(const std::string& path) const noexcept;
-    bool remove_directory(const std::string& path) const noexcept;
+    bool remove_file_nothrow(const std::string& path) const noexcept
+    {
+        try
+        {
+            remove_file(path);
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+    bool remove_directory_nothrow(const std::string& path) const noexcept
+    {
+        try
+        {
+            remove_directory(path);
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+    void remove_file(const std::string& path) const;
+    void remove_directory(const std::string& path) const;
+
     void rename(const std::string& a, const std::string& b) const;
     void lock() const;
-    void ensure_directory(const std::string& path, unsigned mode) const;
+    void ensure_directory(const std::string& path, unsigned mode) const
+    {
+        try
+        {
+            mkdir(path, mode);
+        }
+        catch (const ExceptionBase& e)
+        {
+            if (e.error_number() != EEXIST)
+                throw;
+        }
+    }
+    void mkdir(const std::string& path, unsigned mode) const;
     void statfs(struct statvfs*) const;
     void stat(const std::string& path, FUSE_STAT* stat);
+    ssize_t readlink(const std::string& path, char* output, size_t size);
+    void symlink(const std::string& to, const std::string& from);
 
     typedef std::function<bool(const std::string&, const std::string&)> traverse_callback;
     void recursive_traverse(const std::string& dir, const traverse_callback& callback) const;

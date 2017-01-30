@@ -83,10 +83,10 @@ public:
     {
         std::string first_level_dir, second_level_dir, filename, metaname;
         calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
-        m_root->remove_file(filename);
-        m_root->remove_file(metaname);
-        m_root->remove_directory(second_level_dir);
-        m_root->remove_directory(second_level_dir);
+        m_root->remove_file_nothrow(filename);
+        m_root->remove_file_nothrow(metaname);
+        m_root->remove_directory_nothrow(second_level_dir);
+        m_root->remove_directory_nothrow(second_level_dir);
     }
 };
 
@@ -136,9 +136,9 @@ public:
     {
         std::string dir, filename, metaname;
         calculate_paths(id, dir, filename, metaname);
-        m_root->remove_file(filename);
-        m_root->remove_file(metaname);
-        m_root->remove_directory(dir);
+        m_root->remove_file_nothrow(filename);
+        m_root->remove_file_nothrow(metaname);
+        m_root->remove_directory_nothrow(dir);
     }
 };
 

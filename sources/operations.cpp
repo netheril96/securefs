@@ -204,7 +204,7 @@ namespace operations
         if (!lock_stream)
             return;
         lock_stream->close();
-        root->remove_file(LOCK_FILENAME);
+        root->remove_file_nothrow(LOCK_FILENAME);
     }
 
 #define COMMON_PROLOGUE                                                                            \

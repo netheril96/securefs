@@ -13,7 +13,7 @@ namespace lite
                unsigned iv_size,
                bool check)
         : m_crypt_stream(file_stream, master_key, block_size, iv_size, check)
-        , m_name(name)
+        , m_name(std::move(name))
         , m_file_stream(file_stream)
         , m_open_count(0)
     {
@@ -49,20 +49,17 @@ namespace lite
 
     FileSystemContext::~FileSystemContext() {}
 
-#define PLACE_LOCK_GUARD() std::lock_guard<FileSystemContext> lkgd(*this)
-
     void FileSystemContext::close(File* f)
     {
         if (!f)
             return;
 
-        PLACE_LOCK_GUARD();
-        auto iter = m_opened_files.find(f->name());
-        if (iter == m_opened_files.end())
-            throwInvalidArgumentException("Closing a file not in the filesystem");
-        if (iter->second.decrease_open_count() <= 0)
+        if (f->decrease_open_count() <= 0)
         {
-            m_opened_files.erase(iter);
+            auto iter = m_opened_files.find(f->name());
+            if (iter != m_opened_files.end())
+                m_opened_files.erase(iter);
+            delete f;
         }
     }
 
@@ -169,13 +166,122 @@ namespace lite
         return lite::decrypt_path(m_name_encryptor, path);
     }
 
-    AutoClosedFile FileSystemContext::open(const std::string& path, int flags, int mode)
+    AutoClosedFile FileSystemContext::open(const std::string& path, int flags)
     {
+        if ((flags & O_CREAT) | (flags & O_APPEND))
+            throwVFSException(ENOTSUP);
+
+        AutoClosedFile result(nullptr, FSCCloser(this));
         auto iter = m_opened_files.find(path);
         if (iter != m_opened_files.end())
         {
-            return AutoClosedFile(&iter->second, FSCCloser(this));
+            iter->second->increase_open_count();
+            result.reset(iter->second);
         }
+        else
+        {
+            auto file_stream = m_root->open_file_stream(encrypt_path(path), O_RDWR, 0644);
+            auto fp = securefs::make_unique<File>(
+                path, file_stream, m_content_key, m_block_size, m_iv_size, m_check);
+            fp->increase_open_count();
+            File* fp_pointer = fp.get();
+            m_opened_files[path] = fp.release();
+            result.reset(fp_pointer);
+        }
+        if (flags & O_TRUNC)
+            result->resize(0);
+        return result;
+    }
+
+    AutoClosedFile FileSystemContext::create(const std::string& path, mode_t mode)
+    {
+        if (m_opened_files.find(path) != m_opened_files.end())
+            throwVFSException(EEXIST);
+        auto file_stream
+            = m_root->open_file_stream(encrypt_path(path), O_RDWR | O_EXCL | O_CREAT, mode);
+        auto fp = securefs::make_unique<File>(
+            path, file_stream, m_content_key, m_block_size, m_iv_size, m_check);
+        fp->increase_open_count();
+        File* fp_pointer = fp.get();
+        m_opened_files[path] = fp.release();
+        return AutoClosedFile(fp_pointer, FSCCloser(this));
+    }
+
+    void FileSystemContext::stat(const std::string& path, FUSE_STAT* buf)
+    {
+        auto enc_path = encrypt_path(path);
+        m_root->stat(enc_path, buf);
+        if (buf->st_size <= 0)
+            return;
+        if (buf->st_mode & S_IFLNK)
+        {
+            auto iter = m_resolved_symlinks.find(path);
+            if (iter != m_resolved_symlinks.end())
+            {
+                buf->st_size = iter->second.size();
+            }
+            else
+            {
+                std::string buffer(buf->st_size, '\0');
+                if (m_root->readlink(enc_path, &buffer[0], buffer.size()) != buf->st_size)
+                    throwVFSException(EIO);
+                auto resolved = decrypt_path(buffer);
+                buf->st_size = resolved.size();
+                m_resolved_symlinks.emplace(path, std::move(resolved));
+            }
+        }
+        else if (buf->st_mode & S_IFDIR)
+        {
+            // pass
+        }
+        else if (buf->st_mode & S_IFREG)
+        {
+            buf->st_size
+                = AESGCMCryptStream::calculate_real_size(buf->st_size, m_block_size, m_iv_size);
+        }
+        else
+        {
+            throwVFSException(ENOTSUP);
+        }
+    }
+
+    void FileSystemContext::mkdir(const std::string& path, mode_t mode)
+    {
+        m_root->mkdir(encrypt_path(path), mode);
+    }
+
+    void FileSystemContext::rmdir(const std::string& path)
+    {
+        m_root->remove_directory(encrypt_path(path));
+    }
+
+    void FileSystemContext::rename(const std::string& from, const std::string& to)
+    {
+        m_root->rename(encrypt_path(from), encrypt_path(to));
+    }
+
+    void FileSystemContext::symlink(const std::string& to, const std::string& from)
+    {
+        m_root->symlink(encrypt_path(to), encrypt_path(from));
+    }
+
+    void FileSystemContext::utimens(const std::string& path, const timespec* tm)
+    {
+        AutoClosedFile fp = open(path, O_RDONLY);
+        std::lock_guard<File> lg(*fp);
+        fp->utimens(ts);
+    }
+
+    void FileSystemContext::unlink(const std::string& path)
+    {
+        m_root->remove_file(encrypt_path(path));
+    }
+
+    void FileSystemContext::truncate(const std::string& path, offset_type len)
+    {
+        AutoClosedFile fp = open(path, O_RDONLY);
+        std::lock_guard<File> lg(*fp);
+        fp->resize(len);
     }
 }
 }

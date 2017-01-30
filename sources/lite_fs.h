@@ -52,20 +52,9 @@ namespace lite
             return m_crypt_stream.write(input, off, len);
         }
         void fstat(FUSE_STAT* stat);
+        void utimens(const timespec ts[2]) { m_file_stream->utimens(ts); }
         int increase_open_count() noexcept { return ++m_open_count; }
         int decrease_open_count() noexcept { return --m_open_count; }
-
-        ssize_t listxattr(char* out, size_t sz) { return m_file_stream->listxattr(out, sz); }
-        ssize_t getxattr(const char* name, void* out, size_t sz)
-        {
-            return m_file_stream->getxattr(name, out, sz);
-        }
-        void setxattr(const char* name, void* input, size_t sz, int pos)
-        {
-            return m_file_stream->setxattr(name, input, sz, pos);
-        }
-        void removexattr(const char* name) { return m_file_stream->removexattr(name); }
-
         void lock() { m_mutex.lock(); }
         void unlock() { m_mutex.unlock(); }
         bool try_lock() { return m_mutex.try_lock(); }
@@ -107,7 +96,7 @@ namespace lite
         DISABLE_COPY_MOVE(FileSystemContext)
 
     private:
-        std::map<std::string, File> m_opened_files;
+        std::map<std::string, File*> m_opened_files;
         std::map<std::string, std::string> m_resolved_symlinks;
         std::mutex m_mutex;
         AES_SIV m_name_encryptor;
@@ -133,16 +122,16 @@ namespace lite
         void unlock() { m_mutex.unlock(); }
         bool try_lock() { return m_mutex.try_lock(); }
         void close(File* f);
-        AutoClosedFile open(const std::string& path, int flags, int mode);
-        AutoClosedFile create(const std::string& path, int mode);
+        AutoClosedFile open(const std::string& path, int flags);
+        AutoClosedFile create(const std::string& path, mode_t mode);
         void stat(const std::string& path, FUSE_STAT* buf);
-        void mkdir(const std::string& path);
+        void mkdir(const std::string& path, mode_t mode);
         void rmdir(const std::string& path);
         void rename(const std::string& from, const std::string& to);
         void unlink(const std::string& path);
-        void symlink(const std::string& from, const std::string& to);
+        void symlink(const std::string& to, const std::string& from);
         void utimens(const std::string& path, const timespec tm[2]);
-        void truncate(const std::string& path, std::uint64_t len);
+        void truncate(const std::string& path, offset_type len);
     };
 
     inline void FSCCloser::operator()(File* file) { m_ctx->close(file); }
