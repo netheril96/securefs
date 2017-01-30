@@ -1,7 +1,7 @@
 #include "lite_operations.h"
+#include "lite_fs.h"
+#include "lite_stream.h"
 #include "logger.h"
-
-#include <stdlib.h>
 
 namespace securefs
 {
@@ -27,6 +27,19 @@ namespace lite
     {
         FileSystem filesystem;
         std::shared_ptr<securefs::Logger> logger;
+
+        explicit FileSystemContext(const MountOptions& opt)
+            : filesystem(opt.root,
+                         opt.name_key,
+                         opt.content_key,
+                         opt.xattr_key,
+                         opt.block_size.value(),
+                         opt.iv_size.value(),
+                         true)
+            , logger(opt.logger)
+        {
+        }
+        ~FileSystemContext() {}
     };
 
 #define SINGLE_COMMON_PROLOGUE                                                                     \
@@ -49,6 +62,21 @@ namespace lite
                          get_type_name(e),                                                         \
                          e.what());                                                                \
         return -get_error_number(e);                                                               \
+    }
+
+    void* init(struct fuse_conn_info*)
+    {
+        auto args = static_cast<MountOptions*>(fuse_get_context()->private_data);
+        auto fsctx = new FileSystemContext(*args);
+        args->logger->log(LoggingLevel::VERBOSE, "init");
+        return fsctx;
+    }
+
+    void destroy(void* ptr)
+    {
+        auto fsctx = static_cast<FileSystemContext*>(ptr);
+        fsctx->logger->log(LoggingLevel::VERBOSE, "destroy");
+        delete fsctx;
     }
 
     int statfs(const char* path, struct statvfs* buf)
@@ -97,10 +125,10 @@ namespace lite
         SINGLE_COMMON_EPILOGUE
     }
 
-    int open(const char* path, int flags, struct fuse_file_info* info)
+    int open(const char* path, struct fuse_file_info* info)
     {
         SINGLE_COMMON_PROLOGUE
-        AutoClosedFile file = ctx->filesystem.open(path, flags);
+        AutoClosedFile file = ctx->filesystem.open(path, info->flags);
         info->fh = reinterpret_cast<uintptr_t>(file.release());
         return 0;
         SINGLE_COMMON_EPILOGUE
@@ -395,6 +423,40 @@ namespace lite
         ctx->filesystem.utimens(path, ts);
         return 0;
         SINGLE_COMMON_EPILOGUE
+    }
+
+    void init_fuse_operations(fuse_operations* opt,
+                              const std::string& data_dir,
+                              const std::string& mount_dir)
+    {
+        (void)data_dir;
+        (void)mount_dir;
+
+        memset(opt, 0, sizeof(*opt));
+
+        opt->init = &::securefs::lite::init;
+        opt->destroy = &::securefs::lite::destroy;
+        opt->getattr = &::securefs::lite::getattr;
+        opt->opendir = &::securefs::lite::opendir;
+        opt->releasedir = &::securefs::lite::releasedir;
+        opt->readdir = &::securefs::lite::readdir;
+        opt->create = &::securefs::lite::create;
+        opt->open = &::securefs::lite::open;
+        opt->release = &::securefs::lite::release;
+        opt->read = &::securefs::lite::read;
+        opt->write = &::securefs::lite::write;
+        opt->flush = &::securefs::lite::flush;
+        opt->truncate = &::securefs::lite::truncate;
+        opt->ftruncate = &::securefs::lite::ftruncate;
+        opt->unlink = &::securefs::lite::unlink;
+        opt->mkdir = &::securefs::lite::mkdir;
+        opt->rmdir = &::securefs::lite::rmdir;
+        opt->chmod = &::securefs::lite::chmod;
+        opt->symlink = &::securefs::lite::symlink;
+        opt->readlink = &::securefs::lite::readlink;
+        opt->rename = &::securefs::lite::rename;
+        opt->fsync = &::securefs::lite::fsync;
+        opt->utimens = &::securefs::lite::utimens;
     }
 }
 }

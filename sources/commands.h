@@ -3,6 +3,7 @@
 #include "myutils.h"
 #include "platform.h"
 
+#include <cryptopp/secblock.h>
 #include <string>
 
 namespace securefs
@@ -13,7 +14,7 @@ extern std::string process_name;    // Store the process name during startup to 
 
 struct FSConfig
 {
-    key_type master_key;
+    CryptoPP::AlignedSecByteBlock master_key;
     unsigned block_size;
     unsigned iv_size;
     unsigned version;

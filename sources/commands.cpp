@@ -6,6 +6,7 @@
 #include "streams.h"
 
 #include <cryptopp/cpu.h>
+#include <cryptopp/osrng.h>
 #include <cryptopp/secblock.h>
 #include <fuse.h>
 #include <json/json.h>
@@ -34,7 +35,7 @@ using namespace securefs;
 namespace
 {
 
-static const char* VERSION_HEADER = "version=1";
+static const char* VERSION_HEADER = "version=1";    // This is left for historical purpose
 static const std::string CONFIG_FILE_NAME = ".securefs.json";
 static const unsigned MIN_ITERATIONS = 20000;
 static const unsigned MIN_DERIVE_SECONDS = 1;
@@ -219,7 +220,7 @@ void fix(const std::string& basedir, operations::FileSystemContext* fs)
 }
 
 Json::Value generate_config(int version,
-                            const securefs::key_type& master_key,
+                            const CryptoPP::AlignedSecByteBlock& master_key,
                             const securefs::key_type& salt,
                             const void* password,
                             size_t pass_len,
@@ -229,7 +230,9 @@ Json::Value generate_config(int version,
 {
     Json::Value config;
     config["version"] = version;
-    securefs::key_type key_to_encrypt, encrypted_master_key;
+    securefs::key_type key_to_encrypt;
+    CryptoPP::AlignedSecByteBlock encrypted_master_key(nullptr, master_key.size());
+
     config["iterations"] = securefs::pbkdf_hmac_sha256(password,
                                                        pass_len,
                                                        salt.data(),
@@ -274,7 +277,7 @@ Json::Value generate_config(int version,
 bool parse_config(const Json::Value& config,
                   const void* password,
                   size_t pass_len,
-                  securefs::key_type& master_key,
+                  CryptoPP::AlignedSecByteBlock& master_key,
                   unsigned& block_size,
                   unsigned& iv_size)
 {
@@ -300,7 +303,8 @@ bool parse_config(const Json::Value& config,
 
     byte iv[CONFIG_IV_LENGTH];
     byte mac[CONFIG_MAC_LENGTH];
-    key_type salt, encrypted_key, key_to_encrypt_master_key;
+    key_type salt, key_to_encrypt_master_key;
+    CryptoPP::AlignedSecByteBlock encrypted_key;
 
     std::string salt_hex = config["salt"].asString();
     auto&& encrypted_key_json_value = config["encrypted_key"];
@@ -311,7 +315,10 @@ bool parse_config(const Json::Value& config,
     parse_hex(salt_hex, salt.data(), salt.size());
     parse_hex(iv_hex, iv, sizeof(iv));
     parse_hex(mac_hex, mac, sizeof(mac));
+
+    encrypted_key.resize(ekey_hex.size() / 2);
     parse_hex(ekey_hex, encrypted_key.data(), encrypted_key.size());
+    master_key.resize(encrypted_key.size());
 
     pbkdf_hmac_sha256(password,
                       pass_len,
@@ -453,6 +460,19 @@ FSConfig CommandBase::read_config(StreamBase* stream, const void* password, size
     return result;
 }
 
+static void copy_key(const CryptoPP::AlignedSecByteBlock& in_key, key_type* out_key)
+{
+    if (in_key.size() != out_key->size())
+        throw std::runtime_error("Invalid key size");
+    memcmp(out_key->data(), in_key.data(), out_key->size());
+}
+
+static void copy_key(const CryptoPP::AlignedSecByteBlock& in_key, optional<key_type>* out_key)
+{
+    out_key->emplace();
+    copy_key(in_key, &(**out_key));
+}
+
 void CommandBase::write_config(StreamBase* stream,
                                const FSConfig& config,
                                const void* password,
@@ -571,10 +591,14 @@ public:
             return 1;
         }
 
-        int format_version = store_time.isSet() ? 3 : format.getValue();
+        unsigned format_version = store_time.isSet() ? 3 : format.getValue();
 
         OSService::get_default().ensure_directory(data_dir.getValue(), 0755);
         FSConfig config;
+        config.master_key.resize(KEY_LENGTH);
+
+        CryptoPP::BlockingRng blockingRng;
+        blockingRng.GenerateBlock(config.master_key.data(), config.master_key.size());
         config.iv_size = iv_size.getValue();
         config.version = format_version;
         config.block_size = 4096;
@@ -589,7 +613,7 @@ public:
         operations::MountOptions opt;
         opt.version = format_version;
         opt.root = std::make_shared<OSService>(data_dir.getValue());
-        opt.master_key = config.master_key;
+        copy_key(config.master_key, &opt.master_key);
         opt.flags = format_version < 3 ? 0 : FileTable::STORE_TIME;
         opt.block_size = 4096;
         opt.iv_size = format_version == 1 ? 32 : iv_size.getValue();
@@ -816,7 +840,8 @@ public:
         fsopt.block_size = config.block_size;
         fsopt.iv_size = config.iv_size;
         fsopt.version = config.version;
-        fsopt.master_key = config.master_key;
+
+        copy_key(config.master_key, &fsopt.master_key);
         fsopt.flags = config.version < 3 ? 0 : FileTable::STORE_TIME;
         if (insecure.getValue())
             fsopt.flags.value() |= FileTable::NO_AUTHENTICATION;
@@ -966,7 +991,7 @@ public:
         fsopt.block_size = config.block_size;
         fsopt.iv_size = config.iv_size;
         fsopt.version = config.version;
-        fsopt.master_key = config.master_key;
+        copy_key(config.master_key, &fsopt.master_key);
         fsopt.flags = 0;
 
         operations::FileSystemContext fs(fsopt);
@@ -987,7 +1012,7 @@ public:
 class VersionCommand : public CommandBase
 {
 private:
-    const char* version_string = "0.6.1";
+    const char* version_string = "0.7.0";
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override

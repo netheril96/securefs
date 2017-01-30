@@ -3,7 +3,9 @@
 #pragma once
 #define FUSE_USE_VERSION 27
 
-#include "lite_fs.h"
+#include "logger.h"
+#include "myutils.h"
+#include "platform.h"
 
 #include <fuse.h>
 
@@ -11,6 +13,18 @@ namespace securefs
 {
 namespace lite
 {
+    struct MountOptions
+    {
+        std::shared_ptr<securefs::OSService> root;
+        key_type name_key, content_key, xattr_key;
+        optional<unsigned> block_size, iv_size;
+        std::shared_ptr<securefs::Logger> logger;
+    };
+
+    void init_fuse_operations(fuse_operations* opt,
+                              const std::string& data_dir,
+                              const std::string& mount_dir);
+
     int statfs(const char*, struct statvfs*);
 
     void* init(struct fuse_conn_info*);
