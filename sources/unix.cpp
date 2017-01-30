@@ -267,6 +267,17 @@ void OSService::rename(const std::string& a, const std::string& b) const
                                       impl->norm_path(b).c_str()));
 }
 
+void OSService::stat(const std::string& path, FUSE_STAT* stat)
+{
+#ifdef HAS_AT_FUNCTIONS
+    int rc = ::fstatat(impl->dir_fd, path.c_str(), stat, AT_SYMLINK_NOFOLLOW);
+#else
+    int rc = ::lstat(impl->norm_path(path).c_str(), stat);
+#endif
+    if (rc < 0)
+        throwPOSIXException(errno, strprintf("stating %s", impl->norm_path(path).c_str()));
+}
+
 void OSService::recursive_traverse(const std::string& dir, const traverse_callback& callback) const
 {
     struct DirGuard

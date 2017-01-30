@@ -28,7 +28,7 @@ namespace lite
         unsigned m_iv_size;
         bool m_check;
 
-    private:
+    public:
         length_type get_block_size() const noexcept { return m_block_size; }
 
         length_type get_iv_size() const noexcept { return m_iv_size; }
