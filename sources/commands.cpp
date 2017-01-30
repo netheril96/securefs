@@ -464,13 +464,13 @@ static void copy_key(const CryptoPP::AlignedSecByteBlock& in_key, key_type* out_
 {
     if (in_key.size() != out_key->size())
         throw std::runtime_error("Invalid key size");
-    memcmp(out_key->data(), in_key.data(), out_key->size());
+    memcpy(out_key->data(), in_key.data(), out_key->size());
 }
 
 static void copy_key(const CryptoPP::AlignedSecByteBlock& in_key, optional<key_type>* out_key)
 {
     out_key->emplace();
-    copy_key(in_key, &(**out_key));
+    copy_key(in_key, &(out_key->value()));
 }
 
 void CommandBase::write_config(StreamBase* stream,
@@ -813,6 +813,17 @@ public:
         }
         auto config = read_config(config_stream.get(), password.data(), password.size());
         config_stream.reset();
+
+        if (config.master_key.size() == KEY_LENGTH
+            && std::count(config.master_key.begin(), config.master_key.end(), (byte)0) >= 20)
+        {
+            fprintf(
+                stderr,
+                "Your filesystem is created by a vulnerable version of securefs.\n"
+                "Please immediate migrate your old data to a newly created securefs filesystem,\n"
+                "and remove all traces of old data to avoid data leakage!\n");
+            return 200;
+        }
 
         generate_random(password.data(), password.size());    // Erase user input
 
