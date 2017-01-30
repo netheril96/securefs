@@ -294,6 +294,18 @@ void OSService::stat(const std::string& path, FUSE_STAT* stat)
         throwPOSIXException(errno, strprintf("stating %s", impl->norm_path(path).c_str()));
 }
 
+void OSService::chmod(const std::string& path, mode_t mode)
+{
+#ifdef HAS_AT_FUNCTIONS
+    int rc = ::fchmodat(impl->dir_fd, path.c_str(), mode, AT_SYMLINK_NOFOLLOW);
+#else
+    int rc = ::lchmod(impl->norm_path(path).c_str(), mode);
+#endif
+    if (rc < 0)
+        throwPOSIXException(
+            errno, strprintf("chmod %s with mode=0%o", impl->norm_path(path).c_str(), mode));
+}
+
 ssize_t OSService::readlink(const std::string& path, char* output, size_t size)
 {
 #ifdef HAS_AT_FUNCTIONS

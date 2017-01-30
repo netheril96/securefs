@@ -49,8 +49,6 @@ namespace lite
 
     int chmod(const char*, mode_t);
 
-    int chown(const char* path, uid_t uid, gid_t gid);
-
     int symlink(const char* to, const char* from);
 
     int readlink(const char* path, char* buf, size_t size);
@@ -58,8 +56,6 @@ namespace lite
     int rename(const char*, const char*);
 
     int fsync(const char* path, int isdatasync, struct fuse_file_info* fi);
-
-    int fsyncdir(const char* path, int isdatasync, struct fuse_file_info* fi);
 
     int utimens(const char* path, const struct timespec ts[2]);
 

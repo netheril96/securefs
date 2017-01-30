@@ -262,9 +262,32 @@ namespace lite
         m_root->rename(encrypt_path(from), encrypt_path(to));
     }
 
+    void FileSystem::chmod(const std::string& path, mode_t mode)
+    {
+        m_root->chmod(encrypt_path(path), mode);
+    }
+
+    size_t FileSystem::readlink(const std::string& path, char* buf, size_t size)
+    {
+        auto iter = m_resolved_symlinks.find(path);
+        if (iter == m_resolved_symlinks.end())
+        {
+            FUSE_STAT st;
+            this->stat(path, &st);
+            iter = m_resolved_symlinks.find(path);
+            if (iter == m_resolved_symlinks.end())
+                throwVFSException(EIO);
+        }
+
+        memcpy(buf, iter->second.data(), std::min(iter->second.size(), size));
+        return std::min(iter->second.size(), size);
+    }
+
     void FileSystem::symlink(const std::string& to, const std::string& from)
     {
-        m_root->symlink(encrypt_path(to), encrypt_path(from));
+        auto eto = encrypt_path(to), efrom = encrypt_path(from);
+        m_root->symlink(eto, efrom);
+        m_resolved_symlinks[efrom] = std::move(eto);
     }
 
     void FileSystem::utimens(const std::string& path, const timespec* ts)

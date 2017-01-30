@@ -103,6 +103,7 @@ public:
     void mkdir(const std::string& path, unsigned mode) const;
     void statfs(struct statvfs*) const;
     void stat(const std::string& path, FUSE_STAT* stat);
+    void chmod(const std::string& path, mode_t mode);
     ssize_t readlink(const std::string& path, char* output, size_t size);
     void symlink(const std::string& to, const std::string& from);
 

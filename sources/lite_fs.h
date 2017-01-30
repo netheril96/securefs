@@ -52,6 +52,7 @@ namespace lite
             return m_crypt_stream.write(input, off, len);
         }
         void fstat(FUSE_STAT* stat);
+        void fsync() { m_file_stream->fsync(); }
         void utimens(const timespec ts[2]) { m_file_stream->utimens(ts); }
         int increase_open_count() noexcept { return ++m_open_count; }
         int decrease_open_count() noexcept { return --m_open_count; }
@@ -79,7 +80,7 @@ namespace lite
     std::string encrypt_path(AES_SIV& encryptor, const std::string& path);
     std::string decrypt_path(AES_SIV& decryptor, const std::string& path);
 
-    class InvalidFilenameException : public ExceptionBase
+    class InvalidFilenameException : public VerificationException
     {
     private:
         std::string m_filename;
@@ -89,6 +90,7 @@ namespace lite
         ~InvalidFilenameException();
         const char* type_name() const noexcept override { return "InvalidFilenameException"; }
         std::string message() const override;
+        int error_number() const noexcept override { return EINVAL; }
     };
 
     class FileSystem
@@ -127,9 +129,11 @@ namespace lite
         void stat(const std::string& path, FUSE_STAT* buf);
         void mkdir(const std::string& path, mode_t mode);
         void rmdir(const std::string& path);
+        void chmod(const std::string& path, mode_t mode);
         void rename(const std::string& from, const std::string& to);
         void unlink(const std::string& path);
         void symlink(const std::string& to, const std::string& from);
+        size_t readlink(const std::string& path, char* buf, size_t size);
         void utimens(const std::string& path, const timespec tm[2]);
         void truncate(const std::string& path, offset_type len);
         void statvfs(struct statvfs* buf);
