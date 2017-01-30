@@ -87,6 +87,21 @@ namespace lite
 
     typedef std::unique_ptr<File, FSCCloser> AutoClosedFile;
 
+    std::string encrypt_path(AES_SIV& encryptor, const std::string& path);
+    std::string decrypt_path(AES_SIV& decryptor, const std::string& path);
+
+    class InvalidFilenameException : public ExceptionBase
+    {
+    private:
+        std::string m_filename;
+
+    public:
+        explicit InvalidFilenameException(std::string filename) : m_filename(filename) {}
+        ~InvalidFilenameException();
+        const char* type_name() const noexcept override { return "InvalidFilenameException"; }
+        std::string message() const override;
+    };
+
     class FileSystemContext
     {
         DISABLE_COPY_MOVE(FileSystemContext)
@@ -112,6 +127,8 @@ namespace lite
                           unsigned iv_size,
                           bool check);
         ~FileSystemContext();
+        std::string encrypt_path(const std::string& path);
+        std::string decrypt_path(const std::string& path);
         void lock() { m_mutex.lock(); }
         void unlock() { m_mutex.unlock(); }
         bool try_lock() { return m_mutex.try_lock(); }
