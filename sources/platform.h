@@ -92,55 +92,26 @@ public:
     ~OSService();
     std::shared_ptr<FileStream>
     open_file_stream(const std::string& path, int flags, unsigned mode) const;
-    bool remove_file_nothrow(const std::string& path) const noexcept
-    {
-        try
-        {
-            remove_file(path);
-            return true;
-        }
-        catch (...)
-        {
-            return false;
-        }
-    }
-    bool remove_directory_nothrow(const std::string& path) const noexcept
-    {
-        try
-        {
-            remove_directory(path);
-            return true;
-        }
-        catch (...)
-        {
-            return false;
-        }
-    }
+    bool remove_file_nothrow(const std::string& path) const noexcept;
+    bool remove_directory_nothrow(const std::string& path) const noexcept;
     void remove_file(const std::string& path) const;
     void remove_directory(const std::string& path) const;
 
     void rename(const std::string& a, const std::string& b) const;
     void lock() const;
-    void ensure_directory(const std::string& path, unsigned mode) const
-    {
-        try
-        {
-            mkdir(path, mode);
-        }
-        catch (const ExceptionBase& e)
-        {
-            if (e.error_number() != EEXIST)
-                throw;
-        }
-    }
+    void ensure_directory(const std::string& path, unsigned mode) const;
     void mkdir(const std::string& path, unsigned mode) const;
     void statfs(struct statvfs*) const;
     void stat(const std::string& path, FUSE_STAT* stat);
     ssize_t readlink(const std::string& path, char* output, size_t size);
     void symlink(const std::string& to, const std::string& from);
 
-    typedef std::function<bool(const std::string&, const std::string&)> traverse_callback;
-    void recursive_traverse(const std::string& dir, const traverse_callback& callback) const;
+    typedef std::function<void(const std::string&, const std::string&)> recursive_traverse_callback;
+    void recursive_traverse(const std::string& dir,
+                            const recursive_traverse_callback& callback) const;
+
+    typedef std::function<bool(const std::string&, mode_t)> traverse_callback;
+    void traverse(const std::string& dir, const traverse_callback& callback) const;
 
 public:
     static uint32_t getuid() noexcept;
@@ -152,15 +123,4 @@ public:
     static const OSService& get_default();
     static void get_current_time(timespec& out);
 };
-
-inline const OSService& OSService::get_default()
-{
-    static const OSService service;
-    return service;
-}
-
-inline std::string OSService::temp_name(const std::string& prefix, const std::string& suffix)
-{
-    return prefix + random_hex_string(16) + suffix;
-}
 }

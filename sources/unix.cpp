@@ -308,7 +308,7 @@ ssize_t OSService::readlink(const std::string& path, char* output, size_t size)
     return rc;
 }
 
-void OSService::recursive_traverse(const std::string& dir, const traverse_callback& callback) const
+void OSService::traverse(const std::string& dir, const traverse_callback& callback) const
 {
     struct DirGuard
     {
@@ -336,19 +336,31 @@ void OSService::recursive_traverse(const std::string& dir, const traverse_callba
             if (errno)
                 throwPOSIXException(errno, "readdir");
             else
-                break;
+                return;
         }
         if (strcmp(d->d_name, ".") == 0 || strcmp(d->d_name, "..") == 0)
             continue;
 
+        mode_t file_mode = 0;
         if (d->d_type & DT_DIR)
         {
-            recursive_traverse(dir + '/' + d->d_name, callback);
+            file_mode = S_IFDIR;
         }
-        else if (!callback(dir, d->d_name))
+        else if (d->d_type & DT_REG)
         {
-            return;
+            file_mode = S_IFREG;
         }
+        else if (d->d_type & DT_LNK)
+        {
+            file_mode = S_IFLNK;
+        }
+        else
+        {
+            throwVFSException(ENOTSUP);
+        }
+
+        if (!callback(d->d_name, file_mode))
+            return;
     }
 }
 
@@ -395,5 +407,12 @@ void OSService::get_current_time(timespec& current_time)
     current_time.tv_nsec = tv.tv_usec * 1000;
 #endif
 }
+
+std::string WindowsException::message() const
+{
+    return strprintf("Win32 error %ld (%s)", m_err, m_msg.c_str());
+}
+
+int WindowsException::error_number() const noexcept { return EPERM; }
 }
 #endif

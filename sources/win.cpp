@@ -341,7 +341,8 @@ int OSService::raise_fd_limit()
     // The handle limit on Windows is high enough that no adjustments are necessary
 }
 
-void OSService::recursive_traverse(const std::string& dir, const traverse_callback& callback) const
+void OSService::recursive_traverse(const std::string& dir,
+                                   const recursive_traverse_callback& callback) const
 {
     struct Finder
     {

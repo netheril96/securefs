@@ -28,13 +28,13 @@ namespace lite
             stat->st_size, m_crypt_stream.get_block_size(), m_crypt_stream.get_iv_size());
     }
 
-    FileSystemContext::FileSystemContext(std::shared_ptr<securefs::OSService> root,
-                                         const key_type& name_key,
-                                         const key_type& content_key,
-                                         const key_type& xattr_key,
-                                         unsigned block_size,
-                                         unsigned iv_size,
-                                         bool check)
+    FileSystem::FileSystem(std::shared_ptr<securefs::OSService> root,
+                           const key_type& name_key,
+                           const key_type& content_key,
+                           const key_type& xattr_key,
+                           unsigned block_size,
+                           unsigned iv_size,
+                           bool check)
         : m_name_encryptor(name_key.data(), name_key.size())
         , m_content_key(content_key)
         , m_root(std::move(root))
@@ -47,9 +47,9 @@ namespace lite
         m_xattr_dec.SetKeyWithIV(xattr_key.data(), xattr_key.size(), null_iv, sizeof(null_iv));
     }
 
-    FileSystemContext::~FileSystemContext() {}
+    FileSystem::~FileSystem() {}
 
-    void FileSystemContext::close(File* f)
+    void FileSystem::close(File* f)
     {
         if (!f)
             return;
@@ -135,6 +135,8 @@ namespace lite
                     auto decoded_size = decoder.MaxRetrievable();
                     if (decoded_size > sizeof(buffer))
                         throwVFSException(ENAMETOOLONG);
+                    if (decoded_size <= AES_SIV::IV_SIZE)
+                        throwVFSException(EINVAL);
                     decoder.Get(buffer, decoded_size);
 
                     bool success = decryptor.decrypt_and_verify(buffer + AES_SIV::IV_SIZE,
@@ -156,17 +158,17 @@ namespace lite
         return result;
     }
 
-    std::string FileSystemContext::encrypt_path(const std::string& path)
+    std::string FileSystem::encrypt_path(const std::string& path)
     {
         return lite::encrypt_path(m_name_encryptor, path);
     }
 
-    std::string FileSystemContext::decrypt_path(const std::string& path)
+    std::string FileSystem::decrypt_path(const std::string& path)
     {
         return lite::decrypt_path(m_name_encryptor, path);
     }
 
-    AutoClosedFile FileSystemContext::open(const std::string& path, int flags)
+    AutoClosedFile FileSystem::open(const std::string& path, int flags)
     {
         if ((flags & O_CREAT) | (flags & O_APPEND))
             throwVFSException(ENOTSUP);
@@ -193,7 +195,7 @@ namespace lite
         return result;
     }
 
-    AutoClosedFile FileSystemContext::create(const std::string& path, mode_t mode)
+    AutoClosedFile FileSystem::create(const std::string& path, mode_t mode)
     {
         if (m_opened_files.find(path) != m_opened_files.end())
             throwVFSException(EEXIST);
@@ -207,7 +209,7 @@ namespace lite
         return AutoClosedFile(fp_pointer, FSCCloser(this));
     }
 
-    void FileSystemContext::stat(const std::string& path, FUSE_STAT* buf)
+    void FileSystem::stat(const std::string& path, FUSE_STAT* buf)
     {
         auto enc_path = encrypt_path(path);
         m_root->stat(enc_path, buf);
@@ -245,43 +247,93 @@ namespace lite
         }
     }
 
-    void FileSystemContext::mkdir(const std::string& path, mode_t mode)
+    void FileSystem::mkdir(const std::string& path, mode_t mode)
     {
         m_root->mkdir(encrypt_path(path), mode);
     }
 
-    void FileSystemContext::rmdir(const std::string& path)
+    void FileSystem::rmdir(const std::string& path)
     {
         m_root->remove_directory(encrypt_path(path));
     }
 
-    void FileSystemContext::rename(const std::string& from, const std::string& to)
+    void FileSystem::rename(const std::string& from, const std::string& to)
     {
         m_root->rename(encrypt_path(from), encrypt_path(to));
     }
 
-    void FileSystemContext::symlink(const std::string& to, const std::string& from)
+    void FileSystem::symlink(const std::string& to, const std::string& from)
     {
         m_root->symlink(encrypt_path(to), encrypt_path(from));
     }
 
-    void FileSystemContext::utimens(const std::string& path, const timespec* tm)
+    void FileSystem::utimens(const std::string& path, const timespec* ts)
     {
         AutoClosedFile fp = open(path, O_RDONLY);
         std::lock_guard<File> lg(*fp);
         fp->utimens(ts);
     }
 
-    void FileSystemContext::unlink(const std::string& path)
-    {
-        m_root->remove_file(encrypt_path(path));
-    }
+    void FileSystem::unlink(const std::string& path) { m_root->remove_file(encrypt_path(path)); }
 
-    void FileSystemContext::truncate(const std::string& path, offset_type len)
+    void FileSystem::truncate(const std::string& path, offset_type len)
     {
         AutoClosedFile fp = open(path, O_RDONLY);
         std::lock_guard<File> lg(*fp);
         fp->resize(len);
+    }
+
+    void FileSystem::statvfs(struct statvfs* buf) { m_root->statfs(buf); }
+
+    void FileSystem::traverse_directory(
+        const std::string& path,
+        const OSService::traverse_callback& callback,
+        const std::function<void(const std::string&)> decoding_error_handler)
+    {
+        if (path.empty())
+            return;
+        const std::string& prefix = (path.back() == '/' ? path : path + '/');
+
+        auto wrapped_callback = [&callback, &decoding_error_handler, &prefix, this](
+            const std::string& name, mode_t mode) -> bool {
+            if (name.empty() || name.front() == '.')
+                return true;
+            try
+            {
+                CryptoPP::Base32Decoder decoder;
+                decoder.Put(reinterpret_cast<const byte*>(name.data()), name.size());
+                decoder.MessageEnd();
+
+                byte buffer[2000];
+                auto size = decoder.MaxRetrievable();
+                if (size > sizeof(buffer) || size <= AES_SIV::IV_SIZE)
+                {
+                    decoding_error_handler(name);
+                    return true;
+                }
+                decoder.Get(buffer, sizeof(buffer));
+                std::string decoded_name(size - AES_SIV::IV_SIZE, '\0');
+                bool success = this->m_name_encryptor.decrypt_and_verify(buffer + AES_SIV::IV_SIZE,
+                                                                         size - AES_SIV::IV_SIZE,
+                                                                         prefix.data(),
+                                                                         prefix.size(),
+                                                                         &decoded_name[0],
+                                                                         buffer);
+                if (!success)
+                {
+                    decoding_error_handler(name);
+                    return true;
+                }
+                return callback(decoded_name, mode);
+            }
+            catch (...)
+            {
+                decoding_error_handler(name);
+                return true;
+            }
+        };
+
+        m_root->traverse(encrypt_path(path), wrapped_callback);
     }
 }
 }

@@ -361,7 +361,7 @@ static void find_ids_helper(const std::string& current_dir,
 {
     id_type id;
     std::string hex(id_type::size() * 2, 0);
-    OSService::traverse_callback callback
+    OSService::recursive_traverse_callback callback
         = [&id, &result, &hex](const std::string& dir, const std::string& name) -> bool {
         if (name == "." || name == "..")
             return true;

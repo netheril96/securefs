@@ -61,15 +61,15 @@ namespace lite
         const std::string& name() const noexcept { return m_name; }
     };
 
-    class FileSystemContext;
+    class FileSystem;
 
     struct FSCCloser
     {
     private:
-        FileSystemContext* m_ctx;
+        FileSystem* m_ctx;
 
     public:
-        explicit FSCCloser(FileSystemContext* ctx) : m_ctx(ctx) {}
+        explicit FSCCloser(FileSystem* ctx) : m_ctx(ctx) {}
         ~FSCCloser() {}
         void operator()(File* file);
     };
@@ -91,9 +91,9 @@ namespace lite
         std::string message() const override;
     };
 
-    class FileSystemContext
+    class FileSystem
     {
-        DISABLE_COPY_MOVE(FileSystemContext)
+        DISABLE_COPY_MOVE(FileSystem)
 
     private:
         std::map<std::string, File*> m_opened_files;
@@ -108,14 +108,14 @@ namespace lite
         bool m_check;
 
     public:
-        FileSystemContext(std::shared_ptr<securefs::OSService> root,
-                          const key_type& name_key,
-                          const key_type& content_key,
-                          const key_type& xattr_key,
-                          unsigned block_size,
-                          unsigned iv_size,
-                          bool check);
-        ~FileSystemContext();
+        FileSystem(std::shared_ptr<securefs::OSService> root,
+                   const key_type& name_key,
+                   const key_type& content_key,
+                   const key_type& xattr_key,
+                   unsigned block_size,
+                   unsigned iv_size,
+                   bool check);
+        ~FileSystem();
         std::string encrypt_path(const std::string& path);
         std::string decrypt_path(const std::string& path);
         void lock() { m_mutex.lock(); }
@@ -132,6 +132,11 @@ namespace lite
         void symlink(const std::string& to, const std::string& from);
         void utimens(const std::string& path, const timespec tm[2]);
         void truncate(const std::string& path, offset_type len);
+        void statvfs(struct statvfs* buf);
+        void
+        traverse_directory(const std::string& path,
+                           const OSService::traverse_callback& callback,
+                           const std::function<void(const std::string&)> decoding_error_handler);
     };
 
     inline void FSCCloser::operator()(File* file) { m_ctx->close(file); }

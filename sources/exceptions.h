@@ -136,7 +136,11 @@ public:
 
 [[noreturn]] void throwVFSException(int errc);
 
-class POSIXException : public SeriousException
+class SystemException : public SeriousException
+{
+};
+
+class POSIXException : public SystemException
 {
 private:
     int m_errno;
@@ -151,6 +155,22 @@ public:
     int error_number() const noexcept override { return m_errno; }
 
     std::string message() const override { return sane_strerror(m_errno) + " # " + m_msg; }
+};
+
+class WindowsException : public SystemException
+{
+private:
+    unsigned long m_err;
+    std::string m_msg;
+
+public:
+    explicit WindowsException(unsigned long err, std::string msg)
+        : m_err(err), m_msg(std::move(msg))
+    {
+    }
+    const char* type_name() const noexcept override { return "WindowsException"; }
+    std::string message() const override;
+    int error_number() const noexcept override;
 };
 
 [[noreturn]] void throwPOSIXException(int errc, std::string msg);
