@@ -417,6 +417,21 @@ namespace lite
         }
     }
 
+    int truncate(const char* path, off_t len)
+    {
+        if (len < 0)
+            return -EINVAL;
+
+        SINGLE_COMMON_PROLOGUE
+
+        AutoClosedFile fp = ctx->filesystem.open(path, O_RDWR);
+        std::lock_guard<File> xguard(*fp);
+        fp->resize(static_cast<size_t>(len));
+        return 0;
+
+        SINGLE_COMMON_EPILOGUE
+    }
+
     int utimens(const char* path, const struct timespec ts[2])
     {
         SINGLE_COMMON_PROLOGUE

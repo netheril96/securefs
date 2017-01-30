@@ -32,7 +32,7 @@ class TimeoutException(BaseException):
 
 
 def securefs_mount(data_dir, mount_point, password):
-    p = subprocess.Popen([SECUREFS_BINARY, 'mount', '--stdinpass', '--background', data_dir, mount_point],
+    p = subprocess.Popen([SECUREFS_BINARY, 'mount', '--stdinpass', '--log', 'secfs.log', '--background', data_dir, mount_point],
                          stdin=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate(input=password + '\n')
     if p.returncode:
@@ -266,6 +266,8 @@ class TestVersion2(make_test_case(2)):
 class TestVersion3(make_test_case(3)):
     pass
 
+class TestVersion4(make_test_case(4)):
+    pass
 
 if __name__ == '__main__':
     unittest.main()

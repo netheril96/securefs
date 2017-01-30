@@ -297,7 +297,12 @@ namespace lite
         fp->utimens(ts);
     }
 
-    void FileSystem::unlink(const std::string& path) { m_root->remove_file(encrypt_path(path)); }
+    void FileSystem::unlink(const std::string& path)
+    {
+        m_root->remove_file(encrypt_path(path));
+        m_opened_files.erase(path);
+        m_resolved_symlinks.erase(path);
+    }
 
     void FileSystem::truncate(const std::string& path, offset_type len)
     {
