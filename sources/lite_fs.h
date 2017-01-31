@@ -128,7 +128,7 @@ namespace lite
         void close(File* f);
         AutoClosedFile open(const std::string& path, int flags);
         AutoClosedFile create(const std::string& path, mode_t mode);
-        void stat(const std::string& path, FUSE_STAT* buf);
+        bool stat(const std::string& path, FUSE_STAT* buf);
         void mkdir(const std::string& path, mode_t mode);
         void rmdir(const std::string& path);
         void chmod(const std::string& path, mode_t mode);

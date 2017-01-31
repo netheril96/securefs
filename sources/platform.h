@@ -102,7 +102,10 @@ public:
     void ensure_directory(const std::string& path, unsigned mode) const;
     void mkdir(const std::string& path, unsigned mode) const;
     void statfs(struct statvfs*) const;
-    void stat(const std::string& path, FUSE_STAT* stat);
+
+    // Returns false when the path does not exist; throw exceptions on other errors
+    // The ENOENT errors are too frequent so the API is redesigned
+    bool stat(const std::string& path, FUSE_STAT* stat);
     void chmod(const std::string& path, mode_t mode);
     ssize_t readlink(const std::string& path, char* output, size_t size);
     void symlink(const std::string& to, const std::string& from);

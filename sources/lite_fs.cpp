@@ -161,21 +161,31 @@ namespace lite
 
     std::string FileSystem::translate_path(const std::string& path, bool preserve_leading_slash)
     {
+        std::string result;
         if (path.empty())
-            return {};
-        if (path == "/")
+        {
+        }
+        else if (path == "/")
         {
             if (preserve_leading_slash)
-                return path;
-            return ".";
+            {
+                result = path;
+            }
+            else
+            {
+                result = ".";
+            }
         }
-        auto str = lite::encrypt_path(m_name_encryptor, path);
-        if (!preserve_leading_slash && !str.empty() && str[0] == '/')
+        else
         {
-            str.erase(str.begin());
+            result = lite::encrypt_path(m_name_encryptor, path);
+            if (!preserve_leading_slash && !result.empty() && result[0] == '/')
+            {
+                result.erase(result.begin());
+            }
         }
-        global_logger->trace("Translate path %s into %s", path.c_str(), str.c_str());
-        return str;
+        global_logger->trace("Translate path %s into %s", path.c_str(), result.c_str());
+        return result;
     }
 
     AutoClosedFile FileSystem::open(const std::string& path, int flags)
@@ -219,12 +229,13 @@ namespace lite
         return AutoClosedFile(fp_pointer, FSCCloser(this));
     }
 
-    void FileSystem::stat(const std::string& path, FUSE_STAT* buf)
+    bool FileSystem::stat(const std::string& path, FUSE_STAT* buf)
     {
         auto enc_path = translate_path(path, false);
-        m_root->stat(enc_path, buf);
+        if (!m_root->stat(enc_path, buf))
+            return false;
         if (buf->st_size <= 0)
-            return;
+            return true;
         switch (buf->st_mode & S_IFMT)
         {
         case S_IFLNK:
@@ -254,6 +265,7 @@ namespace lite
         default:
             throwVFSException(ENOTSUP);
         }
+        return true;
     }
 
     void FileSystem::mkdir(const std::string& path, mode_t mode)

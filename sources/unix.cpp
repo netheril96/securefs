@@ -1,5 +1,6 @@
 #ifndef WIN32
 #include "exceptions.h"
+#include "logger.h"
 #include "platform.h"
 #include "streams.h"
 
@@ -283,7 +284,7 @@ void OSService::rename(const std::string& a, const std::string& b) const
                                       impl->norm_path(b).c_str()));
 }
 
-void OSService::stat(const std::string& path, FUSE_STAT* stat)
+bool OSService::stat(const std::string& path, FUSE_STAT* stat)
 {
 #ifdef HAS_AT_FUNCTIONS
     int rc = ::fstatat(impl->dir_fd, path.c_str(), stat, AT_SYMLINK_NOFOLLOW);
@@ -291,7 +292,12 @@ void OSService::stat(const std::string& path, FUSE_STAT* stat)
     int rc = ::lstat(impl->norm_path(path).c_str(), stat);
 #endif
     if (rc < 0)
+    {
+        if (errno == ENOENT)
+            return false;
         throwPOSIXException(errno, strprintf("stating %s", impl->norm_path(path).c_str()));
+    }
+    return true;
 }
 
 void OSService::chmod(const std::string& path, mode_t mode)
@@ -334,10 +340,11 @@ void OSService::traverse(const std::string& dir, const traverse_callback& callba
         }
     };
 
-    DirGuard dirGuard(::opendir(impl->norm_path(dir).c_str()));
+    auto normed_path = impl->norm_path(dir);
+    DirGuard dirGuard(::opendir(normed_path.c_str()));
 
     if (!dirGuard.dir)
-        throwPOSIXException(errno, "opendir");
+        throwPOSIXException(errno, "opendir " + normed_path);
 
     while (1)
     {
@@ -346,7 +353,7 @@ void OSService::traverse(const std::string& dir, const traverse_callback& callba
         if (!d)
         {
             if (errno)
-                throwPOSIXException(errno, "readdir");
+                throwPOSIXException(errno, "readdir " + normed_path);
             else
                 return;
         }
@@ -354,21 +361,22 @@ void OSService::traverse(const std::string& dir, const traverse_callback& callba
             continue;
 
         mode_t file_mode = 0;
-        if (d->d_type & DT_DIR)
+        switch (d->d_type)
         {
+        case DT_DIR:
             file_mode = S_IFDIR;
-        }
-        else if (d->d_type & DT_REG)
-        {
+            break;
+        case DT_REG:
             file_mode = S_IFREG;
-        }
-        else if (d->d_type & DT_LNK)
-        {
+            break;
+        case DT_LNK:
             file_mode = S_IFLNK;
-        }
-        else
-        {
-            throwVFSException(ENOTSUP);
+            break;
+        default:
+            global_logger->warn(
+                "Skipping path %s since it is neither a regular file, directory or a symlink",
+                (normed_path + '/' + d->d_name).c_str());
+            continue;
         }
 
         if (!callback(d->d_name, file_mode))

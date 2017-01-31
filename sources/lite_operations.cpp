@@ -73,7 +73,8 @@ namespace lite
     int getattr(const char* path, FUSE_STAT* st)
     {
         SINGLE_COMMON_PROLOGUE
-        filesystem->stat(path, st);
+        if (!filesystem->stat(path, st))
+            return -ENOENT;
         return 0;
         SINGLE_COMMON_EPILOGUE
     }
