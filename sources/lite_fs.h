@@ -158,6 +158,10 @@ namespace lite
 #endif
     };
 
-    inline void FSCCloser::operator()(File* file) { m_ctx->close(file); }
+    inline void FSCCloser::operator()(File* file)
+    {
+        if (file)
+            m_ctx->close(file);
+    }
 }
 }
