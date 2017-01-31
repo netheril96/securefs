@@ -383,7 +383,7 @@ size_t try_read_password_with_confirmation(void* password, size_t length)
     return len1;
 }
 
-void init_fuse_operations(const char* underlying_path, struct fuse_operations& opt, bool xattr)
+void init_fuse_operations(const char* underlying_path, struct fuse_operations& opt, bool noxattr)
 {
     memset(&opt, 0, sizeof(opt));
     opt.getattr = &securefs::operations::getattr;
@@ -414,11 +414,9 @@ void init_fuse_operations(const char* underlying_path, struct fuse_operations& o
     opt.utimens = &securefs::operations::utimens;
     opt.statfs = &securefs::operations::statfs;
 
-    (void)xattr;
-
-#ifdef __APPLE__
-    if (!xattr)
+    if (noxattr)
         return;
+#ifdef __APPLE__
     auto rc = ::listxattr(underlying_path, nullptr, 0, 0);
     if (rc < 0)
     {
@@ -830,6 +828,11 @@ public:
 
     int execute() override
     {
+        if (data_dir.getValue() == mount_point.getValue())
+        {
+            global_logger->warn("Mounting a directory on itself may cause securefs to hang");
+        }
+
         recreate_logger();
         OSService::get_default().ensure_directory(mount_point.getValue(), 0755);
         std::shared_ptr<FileStream> config_stream;
@@ -952,7 +955,7 @@ public:
             }
             struct fuse_operations operations;
 
-            init_fuse_operations(data_dir.getValue().c_str(), operations, !noxattr.getValue());
+            init_fuse_operations(data_dir.getValue().c_str(), operations, noxattr.getValue());
 
             return fuse_main(static_cast<int>(fuse_args.size()),
                              const_cast<char**>(fuse_args.data()),
@@ -980,7 +983,7 @@ public:
             memcpy(fsopt.xattr_key.data(), config.master_key.data() + 2 * KEY_LENGTH, KEY_LENGTH);
 
             struct fuse_operations operations;
-            lite::init_fuse_operations(&operations, data_dir.getValue(), mount_point.getValue());
+            lite::init_fuse_operations(&operations, data_dir.getValue(), noxattr.getValue());
             return fuse_main(static_cast<int>(fuse_args.size()),
                              const_cast<char**>(fuse_args.data()),
                              &operations,

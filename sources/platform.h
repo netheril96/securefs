@@ -126,6 +126,15 @@ public:
 
     std::unique_ptr<DirectoryTraverser> create_traverser(const std::string& dir) const;
 
+#ifdef __APPLE__
+    // These APIs, unlike all others, report errors through negative error numbers as defined in
+    // <errno.h>
+    ssize_t listxattr(const char* path, char* buf, size_t size) const noexcept;
+    ssize_t getxattr(const char* path, const char* name, void* buf, size_t size) const noexcept;
+    int setxattr(const char* path, const char* name, void* buf, size_t size, int flags) const
+        noexcept;
+    int removexattr(const char* path, const char* name) const noexcept;
+#endif
 public:
     static uint32_t getuid() noexcept;
     static uint32_t getgid() noexcept;

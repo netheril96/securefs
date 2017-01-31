@@ -3,6 +3,8 @@
 
 #include <cryptopp/base32.h>
 
+#include <cerrno>
+
 namespace securefs
 {
 namespace lite
@@ -421,6 +423,91 @@ namespace lite
             path.back() == '/' ? path : path + '/',
             m_root->create_traverser(translate_path(path, false)),
             &this->m_name_encryptor);
+    }
+
+    ssize_t
+    FileSystem::getxattr(const char* path, const char* name, void* buf, size_t size) noexcept
+    {
+        if (!buf)
+        {
+            return m_root->getxattr(translate_path(path, false).c_str(), name, nullptr, 0);
+        }
+
+        try
+        {
+            auto iv_size = m_iv_size;
+            auto mac_size = AESGCMCryptStream::get_mac_size();
+            auto underbuf = securefs::make_unique_array<byte>(size + iv_size + mac_size);
+            ssize_t readlen = m_root->getxattr(translate_path(path, false).c_str(),
+                                               name,
+                                               underbuf.get(),
+                                               size + iv_size + mac_size);
+            if (readlen <= 0)
+                return readlen;
+            if (readlen <= iv_size + mac_size)
+                return -EIO;
+            bool success
+                = m_xattr_dec.DecryptAndVerify(static_cast<byte*>(buf),
+                                               underbuf.get() + readlen - mac_size,
+                                               mac_size,
+                                               underbuf.get(),
+                                               static_cast<int>(iv_size),
+                                               nullptr,
+                                               0,
+                                               underbuf.get() + iv_size,
+                                               static_cast<size_t>(readlen) - iv_size - mac_size);
+            if (!success)
+            {
+                global_logger->error("Encrypted extended attribute for file %s and name %s fails "
+                                     "ciphertext integrity check",
+                                     path,
+                                     name);
+                return -EIO;
+            }
+            return readlen - iv_size - mac_size;
+        }
+        catch (const std::exception& e)
+        {
+            global_logger->error("Error decrypting extended attribute for file %s and name %s (%s)",
+                                 path,
+                                 name,
+                                 e.what());
+            return -EIO;
+        }
+    }
+
+    int FileSystem::setxattr(
+        const char* path, const char* name, void* buf, size_t size, int flags) noexcept
+    {
+        try
+        {
+            auto iv_size = m_iv_size;
+            auto mac_size = AESGCMCryptStream::get_mac_size();
+            auto underbuf = securefs::make_unique_array<byte>(size + iv_size + mac_size);
+            generate_random(underbuf.get(), iv_size);
+            m_xattr_enc.EncryptAndAuthenticate(underbuf.get() + iv_size,
+                                               underbuf.get() + iv_size + size,
+                                               mac_size,
+                                               underbuf.get(),
+                                               static_cast<int>(iv_size),
+                                               nullptr,
+                                               0,
+                                               static_cast<const byte*>(buf),
+                                               size);
+            return m_root->setxattr(translate_path(path, false).c_str(),
+                                    name,
+                                    underbuf.get(),
+                                    size + iv_size + mac_size,
+                                    flags);
+        }
+        catch (const std::exception& e)
+        {
+            global_logger->error("Error encrypting extended attribute for file %s and name %s (%s)",
+                                 path,
+                                 name,
+                                 e.what());
+            return -EIO;
+        }
     }
 }
 }

@@ -1,4 +1,5 @@
 #ifndef WIN32
+#define _DARWIN_BETTER_REALPATH 1
 #include "exceptions.h"
 #include "logger.h"
 #include "platform.h"
@@ -10,6 +11,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/file.h>
 #include <sys/resource.h>
@@ -444,5 +446,34 @@ std::string WindowsException::message() const
 }
 
 int WindowsException::error_number() const noexcept { return EPERM; }
+
+#ifdef __APPLE__
+
+ssize_t OSService::listxattr(const char* path, char* buf, size_t size) const noexcept
+{
+    auto rc = ::listxattr(impl->norm_path(path).c_str(), buf, size, XATTR_NOFOLLOW);
+    return rc < 0 ? -errno : rc;
+}
+
+ssize_t OSService::getxattr(const char* path, const char* name, void* buf, size_t size) const
+    noexcept
+{
+    auto rc = ::getxattr(impl->norm_path(path).c_str(), name, buf, size, 0, XATTR_NOFOLLOW);
+    return rc < 0 ? -errno : rc;
+}
+
+int OSService::setxattr(const char* path, const char* name, void* buf, size_t size, int flags) const
+    noexcept
+{
+    auto rc = ::setxattr(impl->norm_path(path).c_str(), name, buf, size, 0, flags | XATTR_NOFOLLOW);
+    return rc < 0 ? -errno : rc;
+}
+
+int OSService::removexattr(const char* path, const char* name) const noexcept
+{
+    auto rc = ::removexattr(impl->norm_path(path).c_str(), name, XATTR_NOFOLLOW);
+    return rc < 0 ? -errno : rc;
+}
+#endif
 }
 #endif

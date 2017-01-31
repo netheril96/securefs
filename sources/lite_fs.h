@@ -140,6 +140,22 @@ namespace lite
         void truncate(const std::string& path, offset_type len);
         void statvfs(struct statvfs* buf);
         std::unique_ptr<DirectoryTraverser> create_traverser(const std::string& path);
+
+#ifdef __APPLE__
+        // These APIs, unlike all others, report errors through negative error numbers as defined in
+        // <errno.h>
+        ssize_t listxattr(const char* path, char* buf, size_t size) noexcept
+        {
+            return m_root->listxattr(translate_path(path, false).c_str(), buf, size);
+        }
+        ssize_t getxattr(const char* path, const char* name, void* buf, size_t size) noexcept;
+        int
+        setxattr(const char* path, const char* name, void* buf, size_t size, int flags) noexcept;
+        int removexattr(const char* path, const char* name) noexcept
+        {
+            return m_root->removexattr(translate_path(path, false).c_str(), name);
+        }
+#endif
     };
 
     inline void FSCCloser::operator()(File* file) { m_ctx->close(file); }

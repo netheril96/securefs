@@ -20,9 +20,7 @@ namespace lite
         optional<unsigned> block_size, iv_size;
     };
 
-    void init_fuse_operations(fuse_operations* opt,
-                              const std::string& data_dir,
-                              const std::string& mount_dir);
+    void init_fuse_operations(fuse_operations* opt, const std::string& data_dir, bool noxattr);
 
     int statfs(const char*, struct statvfs*);
 

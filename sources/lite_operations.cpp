@@ -413,12 +413,55 @@ namespace lite
         SINGLE_COMMON_EPILOGUE
     }
 
-    void init_fuse_operations(fuse_operations* opt,
-                              const std::string& data_dir,
-                              const std::string& mount_dir)
+#ifdef __APPLE__
+    int listxattr(const char* path, char* list, size_t size)
+    {
+        auto filesystem = static_cast<FileSystem*>(fuse_get_context()->private_data);
+        return static_cast<int>(filesystem->listxattr(path, list, size));
+    }
+
+    int getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position)
+    {
+        if (position != 0)
+            return -EINVAL;
+        if (strcmp(name, "com.apple.quarantine") == 0)
+            return -ENOATTR;    // workaround for the "XXX is damaged" bug on OS X
+        if (strcmp(name, "com.apple.FinderInfo") == 0)
+            return -ENOATTR;    // stupid Apple hardcodes the size of xattr values
+
+        auto filesystem = static_cast<FileSystem*>(fuse_get_context()->private_data);
+        return static_cast<int>(filesystem->getxattr(path, name, value, size));
+    }
+
+    int setxattr(const char* path,
+                 const char* name,
+                 const char* value,
+                 size_t size,
+                 int flags,
+                 uint32_t position)
+    {
+        if (position != 0)
+            return -EINVAL;
+        if (strcmp(name, "com.apple.quarantine") == 0)
+            return 0;    // workaround for the "XXX is damaged" bug on OS X
+        if (strcmp(name, "com.apple.FinderInfo") == 0)
+            return -EACCES;    // stupid Apple hardcodes the size of xattr values
+        if (!value || size == 0)
+            return 0;
+
+        auto filesystem = static_cast<FileSystem*>(fuse_get_context()->private_data);
+        return filesystem->setxattr(path, name, const_cast<char*>(value), size, flags);
+    }
+    int removexattr(const char* path, const char* name)
+    {
+        auto filesystem = static_cast<FileSystem*>(fuse_get_context()->private_data);
+        return filesystem->removexattr(path, name);
+    }
+#endif
+
+    void init_fuse_operations(fuse_operations* opt, const std::string& data_dir, bool noxattr)
     {
         (void)data_dir;
-        (void)mount_dir;
 
         memset(opt, 0, sizeof(*opt));
 
@@ -445,6 +488,26 @@ namespace lite
         opt->rename = &::securefs::lite::rename;
         opt->fsync = &::securefs::lite::fsync;
         opt->utimens = &::securefs::lite::utimens;
+
+        if (noxattr)
+            return;
+
+#ifdef __APPLE__
+        auto rc = OSService::get_default().listxattr(data_dir.c_str(), nullptr, 0);
+        if (rc < 0)
+        {
+            global_logger->warn("Underlying directory %s does not support extended attribute (%s)",
+                                data_dir.c_str(),
+                                sane_strerror(-static_cast<int>(rc)).c_str());
+            return;
+        }
+
+        opt->listxattr = &::securefs::lite::listxattr;
+        opt->getxattr = &::securefs::lite::getxattr;
+        opt->setxattr = &::securefs::lite::setxattr;
+        opt->removexattr = &::securefs::lite::removexattr;
+
+#endif
     }
 }
 }
