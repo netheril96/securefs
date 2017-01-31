@@ -23,29 +23,10 @@ namespace lite
         return EPERM;
     }
 
-    struct FileSystemContext
-    {
-        FileSystem filesystem;
-        std::shared_ptr<securefs::Logger> logger;
-
-        explicit FileSystemContext(const MountOptions& opt)
-            : filesystem(opt.root,
-                         opt.name_key,
-                         opt.content_key,
-                         opt.xattr_key,
-                         opt.block_size.value(),
-                         opt.iv_size.value(),
-                         true)
-            , logger(opt.logger)
-        {
-        }
-        ~FileSystemContext() {}
-    };
-
 #define SINGLE_COMMON_PROLOGUE                                                                     \
-    auto ctx = static_cast<FileSystemContext*>(fuse_get_context()->private_data);                  \
-    ctx->logger->log(LoggingLevel::VERBOSE, "%s %s", __func__, path);                              \
-    std::lock_guard<FileSystem> xguard(ctx->filesystem);                                           \
+    auto filesystem = static_cast<FileSystem*>(fuse_get_context()->private_data);                  \
+    global_logger->trace("%s %s", __func__, path);                                                 \
+    std::lock_guard<FileSystem> xguard(*filesystem);                                               \
     try                                                                                            \
     {
 
@@ -55,34 +36,36 @@ namespace lite
     catch (const SystemException& e) { return -e.error_number(); }                                 \
     catch (const std::exception& e)                                                                \
     {                                                                                              \
-        ctx->logger->log(LoggingLevel::ERROR,                                                      \
-                         "%s %s encounters exception %s: %s",                                      \
-                         __func__,                                                                 \
-                         path,                                                                     \
-                         get_type_name(e),                                                         \
-                         e.what());                                                                \
+        global_logger->error(                                                                      \
+            "%s %s encounters exception %s: %s", __func__, path, get_type_name(e), e.what());      \
         return -get_error_number(e);                                                               \
     }
 
     void* init(struct fuse_conn_info*)
     {
         auto args = static_cast<MountOptions*>(fuse_get_context()->private_data);
-        auto fsctx = new FileSystemContext(*args);
-        args->logger->log(LoggingLevel::VERBOSE, "init");
-        return fsctx;
+        auto fs = new FileSystem(args->root,
+                                 args->name_key,
+                                 args->content_key,
+                                 args->xattr_key,
+                                 args->block_size.value(),
+                                 args->iv_size.value(),
+                                 true);
+        global_logger->info("init");
+        return fs;
     }
 
     void destroy(void* ptr)
     {
-        auto fsctx = static_cast<FileSystemContext*>(ptr);
-        fsctx->logger->log(LoggingLevel::VERBOSE, "destroy");
-        delete fsctx;
+        auto fs = static_cast<FileSystem*>(ptr);
+        global_logger->info("destroy");
+        delete fs;
     }
 
     int statfs(const char* path, struct statvfs* buf)
     {
         SINGLE_COMMON_PROLOGUE
-        ctx->filesystem.statvfs(buf);
+        filesystem->statvfs(buf);
         return 0;
         SINGLE_COMMON_EPILOGUE
     }
@@ -90,7 +73,7 @@ namespace lite
     int getattr(const char* path, FUSE_STAT* st)
     {
         SINGLE_COMMON_PROLOGUE
-        ctx->filesystem.stat(path, st);
+        filesystem->stat(path, st);
         return 0;
         SINGLE_COMMON_EPILOGUE
     }
@@ -100,17 +83,15 @@ namespace lite
     int readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t, struct fuse_file_info*)
     {
         SINGLE_COMMON_PROLOGUE
-        ctx->filesystem.traverse_directory(
+        filesystem->traverse_directory(
             path,
             [filler, buf](const std::string& name, mode_t mode) -> bool {
                 FUSE_STAT st = {};
                 st.st_mode = mode;
                 return filler(buf, name.c_str(), &st, 0) == 0;
             },
-            [ctx](const std::string& name) {
-                ctx->logger->log(LoggingLevel::WARNING,
-                                 "Encounters invalid encrypted filename: %s",
-                                 name.c_str());
+            [](const std::string& name) {
+                global_logger->warn("Encounters invalid encrypted filename: %s", name.c_str());
             });
         return 0;
         SINGLE_COMMON_EPILOGUE
@@ -119,7 +100,7 @@ namespace lite
     int create(const char* path, mode_t mode, struct fuse_file_info* info)
     {
         SINGLE_COMMON_PROLOGUE
-        AutoClosedFile file = ctx->filesystem.create(path, mode);
+        AutoClosedFile file = filesystem->create(path, mode);
         info->fh = reinterpret_cast<uintptr_t>(file.release());
         return 0;
         SINGLE_COMMON_EPILOGUE
@@ -128,7 +109,7 @@ namespace lite
     int open(const char* path, struct fuse_file_info* info)
     {
         SINGLE_COMMON_PROLOGUE
-        AutoClosedFile file = ctx->filesystem.open(path, info->flags);
+        AutoClosedFile file = filesystem->open(path, info->flags);
         info->fh = reinterpret_cast<uintptr_t>(file.release());
         return 0;
         SINGLE_COMMON_EPILOGUE
@@ -137,20 +118,15 @@ namespace lite
     int release(const char* path, struct fuse_file_info* info)
     {
         SINGLE_COMMON_PROLOGUE
-        ctx->filesystem.close(reinterpret_cast<File*>(info->fh));
+        filesystem->close(reinterpret_cast<File*>(info->fh));
         return 0;
         SINGLE_COMMON_EPILOGUE
     }
 
     int read(const char* path, char* buf, size_t size, off_t offset, struct fuse_file_info* info)
     {
-        auto ctx = static_cast<FileSystemContext*>(fuse_get_context()->private_data);
-        ctx->logger->log(LoggingLevel::VERBOSE,
-                         "%s %s (offset=%lld, size=%zu)",
-                         __func__,
-                         path,
-                         static_cast<long long>(offset),
-                         size);
+        global_logger->trace(
+            "%s %s (offset=%lld, size=%zu)", __func__, path, static_cast<long long>(offset), size);
         auto fp = reinterpret_cast<File*>(info->fh);
         std::lock_guard<File> xguard(*fp);
         try
@@ -167,14 +143,13 @@ namespace lite
         }
         catch (const std::exception& e)
         {
-            ctx->logger->log(LoggingLevel::ERROR,
-                             "%s %s (offset=%lld, size=%zu) encounters exception %s: %s",
-                             __func__,
-                             path,
-                             static_cast<long long>(offset),
-                             size,
-                             get_type_name(e),
-                             e.what());
+            global_logger->error("%s %s (offset=%lld, size=%zu) encounters exception %s: %s",
+                                 __func__,
+                                 path,
+                                 static_cast<long long>(offset),
+                                 size,
+                                 get_type_name(e),
+                                 e.what());
             return -get_error_number(e);
         }
     }
@@ -182,13 +157,8 @@ namespace lite
     int
     write(const char* path, const char* buf, size_t size, off_t offset, struct fuse_file_info* info)
     {
-        auto ctx = static_cast<FileSystemContext*>(fuse_get_context()->private_data);
-        ctx->logger->log(LoggingLevel::VERBOSE,
-                         "%s %s (offset=%lld, size=%zu)",
-                         __func__,
-                         path,
-                         static_cast<long long>(offset),
-                         size);
+        global_logger->trace(
+            "%s %s (offset=%lld, size=%zu)", __func__, path, static_cast<long long>(offset), size);
         auto fp = reinterpret_cast<File*>(info->fh);
         std::lock_guard<File> xguard(*fp);
         try
@@ -206,22 +176,20 @@ namespace lite
         }
         catch (const std::exception& e)
         {
-            ctx->logger->log(LoggingLevel::ERROR,
-                             "%s %s (offset=%lld, size=%zu) encounters exception %s: %s",
-                             __func__,
-                             path,
-                             static_cast<long long>(offset),
-                             size,
-                             get_type_name(e),
-                             e.what());
+            global_logger->error("%s %s (offset=%lld, size=%zu) encounters exception %s: %s",
+                                 __func__,
+                                 path,
+                                 static_cast<long long>(offset),
+                                 size,
+                                 get_type_name(e),
+                                 e.what());
             return -get_error_number(e);
         }
     }
 
     int flush(const char* path, struct fuse_file_info* info)
     {
-        auto ctx = static_cast<FileSystemContext*>(fuse_get_context()->private_data);
-        ctx->logger->log(LoggingLevel::VERBOSE, "%s %s", __func__, path);
+        global_logger->trace("%s %s", __func__, path);
         auto fp = reinterpret_cast<File*>(info->fh);
         std::lock_guard<File> xguard(*fp);
         try
@@ -239,24 +207,15 @@ namespace lite
         }
         catch (const std::exception& e)
         {
-            ctx->logger->log(LoggingLevel::ERROR,
-                             "%s %s encounters exception %s: %s",
-                             __func__,
-                             path,
-                             get_type_name(e),
-                             e.what());
+            global_logger->error(
+                "%s %s encounters exception %s: %s", __func__, path, get_type_name(e), e.what());
             return -get_error_number(e);
         }
     }
 
     int ftruncate(const char* path, off_t len, struct fuse_file_info* info)
     {
-        auto ctx = static_cast<FileSystemContext*>(fuse_get_context()->private_data);
-        ctx->logger->log(LoggingLevel::VERBOSE,
-                         "%s %s with length=%lld",
-                         __func__,
-                         path,
-                         static_cast<long long>(len));
+        global_logger->trace("%s %s with length=%lld", __func__, path, static_cast<long long>(len));
         auto fp = reinterpret_cast<File*>(info->fh);
         std::lock_guard<File> xguard(*fp);
         try
@@ -274,13 +233,12 @@ namespace lite
         }
         catch (const std::exception& e)
         {
-            ctx->logger->log(LoggingLevel::ERROR,
-                             "%s %s (length=%lld) encounters exception %s: %s",
-                             __func__,
-                             path,
-                             static_cast<long long>(len),
-                             get_type_name(e),
-                             e.what());
+            global_logger->error("%s %s (length=%lld) encounters exception %s: %s",
+                                 __func__,
+                                 path,
+                                 static_cast<long long>(len),
+                                 get_type_name(e),
+                                 e.what());
             return -get_error_number(e);
         }
     }
@@ -288,7 +246,7 @@ namespace lite
     int unlink(const char* path)
     {
         SINGLE_COMMON_PROLOGUE
-        ctx->filesystem.unlink(path);
+        filesystem->unlink(path);
         return 0;
         SINGLE_COMMON_EPILOGUE
     }
@@ -296,7 +254,7 @@ namespace lite
     int mkdir(const char* path, mode_t mode)
     {
         SINGLE_COMMON_PROLOGUE
-        ctx->filesystem.mkdir(path, mode);
+        filesystem->mkdir(path, mode);
         return 0;
         SINGLE_COMMON_EPILOGUE
     }
@@ -304,7 +262,7 @@ namespace lite
     int rmdir(const char* path)
     {
         SINGLE_COMMON_PROLOGUE
-        ctx->filesystem.rmdir(path);
+        filesystem->rmdir(path);
         return 0;
         SINGLE_COMMON_EPILOGUE
     }
@@ -312,19 +270,19 @@ namespace lite
     int chmod(const char* path, mode_t mode)
     {
         SINGLE_COMMON_PROLOGUE
-        ctx->filesystem.chmod(path, mode);
+        filesystem->chmod(path, mode);
         return 0;
         SINGLE_COMMON_EPILOGUE
     }
 
     int symlink(const char* to, const char* from)
     {
-        auto ctx = static_cast<FileSystemContext*>(fuse_get_context()->private_data);
-        ctx->logger->log(LoggingLevel::VERBOSE, "%s from=%s to=%s", __func__, from, to);
-        std::lock_guard<FileSystem> xguard(ctx->filesystem);
+        auto filesystem = static_cast<FileSystem*>(fuse_get_context()->private_data);
+        global_logger->trace("%s from=%s to=%s", __func__, from, to);
+        std::lock_guard<FileSystem> xguard(*filesystem);
         try
         {
-            ctx->filesystem.symlink(to, from);
+            filesystem->symlink(to, from);
             return 0;
         }
         catch (const CommonException& e)
@@ -337,32 +295,31 @@ namespace lite
         }
         catch (const std::exception& e)
         {
-            ctx->logger->log(LoggingLevel::ERROR,
-                             "%s from=%s to=%s encounters exception %s: %s",
-                             __func__,
-                             from,
-                             to,
-                             get_type_name(e),
-                             e.what());
+            global_logger->error("%s from=%s to=%s encounters exception %s: %s",
+                                 __func__,
+                                 from,
+                                 to,
+                                 get_type_name(e),
+                                 e.what());
             return -get_error_number(e);
         }
     }
 
     int readlink(const char* path, char* buf, size_t size)
     {
-        SINGLE_COMMON_PROLOGUE(void) ctx->filesystem.readlink(path, buf, size);
+        SINGLE_COMMON_PROLOGUE(void) filesystem->readlink(path, buf, size);
         return 0;
         SINGLE_COMMON_EPILOGUE
     }
 
     int rename(const char* from, const char* to)
     {
-        auto ctx = static_cast<FileSystemContext*>(fuse_get_context()->private_data);
-        ctx->logger->log(LoggingLevel::VERBOSE, "%s from=%s to=%s", __func__, from, to);
-        std::lock_guard<FileSystem> xguard(ctx->filesystem);
+        auto filesystem = static_cast<FileSystem*>(fuse_get_context()->private_data);
+        global_logger->trace("%s from=%s to=%s", __func__, from, to);
+        std::lock_guard<FileSystem> xguard(*filesystem);
         try
         {
-            ctx->filesystem.rename(from, to);
+            filesystem->rename(from, to);
             return 0;
         }
         catch (const CommonException& e)
@@ -375,21 +332,19 @@ namespace lite
         }
         catch (const std::exception& e)
         {
-            ctx->logger->log(LoggingLevel::ERROR,
-                             "%s from=%s to=%s encounters exception %s: %s",
-                             __func__,
-                             from,
-                             to,
-                             get_type_name(e),
-                             e.what());
+            global_logger->error("%s from=%s to=%s encounters exception %s: %s",
+                                 __func__,
+                                 from,
+                                 to,
+                                 get_type_name(e),
+                                 e.what());
             return -get_error_number(e);
         }
     }
 
     int fsync(const char* path, int, struct fuse_file_info* info)
     {
-        auto ctx = static_cast<FileSystemContext*>(fuse_get_context()->private_data);
-        ctx->logger->log(LoggingLevel::VERBOSE, "%s %s", __func__, path);
+        global_logger->trace("%s %s", __func__, path);
         auto fp = reinterpret_cast<File*>(info->fh);
         std::lock_guard<File> xguard(*fp);
         try
@@ -407,12 +362,8 @@ namespace lite
         }
         catch (const std::exception& e)
         {
-            ctx->logger->log(LoggingLevel::ERROR,
-                             "%s %s encounters exception %s: %s",
-                             __func__,
-                             path,
-                             get_type_name(e),
-                             e.what());
+            global_logger->error(
+                "%s %s encounters exception %s: %s", __func__, path, get_type_name(e), e.what());
             return -get_error_number(e);
         }
     }
@@ -424,7 +375,7 @@ namespace lite
 
         SINGLE_COMMON_PROLOGUE
 
-        AutoClosedFile fp = ctx->filesystem.open(path, O_RDWR);
+        AutoClosedFile fp = filesystem->open(path, O_RDWR);
         std::lock_guard<File> xguard(*fp);
         fp->resize(static_cast<size_t>(len));
         return 0;
@@ -435,7 +386,7 @@ namespace lite
     int utimens(const char* path, const struct timespec ts[2])
     {
         SINGLE_COMMON_PROLOGUE
-        ctx->filesystem.utimens(path, ts);
+        filesystem->utimens(path, ts);
         return 0;
         SINGLE_COMMON_EPILOGUE
     }

@@ -25,7 +25,6 @@ namespace operations
         optional<unsigned> iv_size;
         optional<uid_t> uid_override;
         optional<gid_t> gid_override;
-        std::shared_ptr<Logger> logger;
 
         MountOptions();
         ~MountOptions();
@@ -38,7 +37,6 @@ namespace operations
         std::shared_ptr<OSService> root;
         std::shared_ptr<FileStream> lock_stream;
         id_type root_id;
-        std::shared_ptr<Logger> logger;
         unsigned block_size;
         optional<uid_t> uid_override;
         optional<gid_t> gid_override;

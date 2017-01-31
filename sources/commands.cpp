@@ -724,8 +724,6 @@ private:
         "i", "insecure", "Disable all integrity verification (insecure mode)"};
     TCLAP::SwitchArg noxattr{"x", "noxattr", "Disable built-in xattr support"};
     TCLAP::SwitchArg trace{"", "trace", "Trace all calls into `securefs` (implies --info)"};
-    TCLAP::SwitchArg info{
-        "", "info", "Logs more information than warnings and errors"};    // Disabled for now
     TCLAP::ValueArg<std::string> log{
         "", "log", "Path of the log file (may contain sensitive information)", false, "", "path"};
     TCLAP::MultiArg<std::string> fuse_options{
@@ -813,45 +811,28 @@ public:
         return "/tmp";
     }
 
-    std::shared_ptr<Logger> create_logger()
+    void recreate_logger()
     {
-        std::string log_filename;
-        std::shared_ptr<Logger> result;
         if (log.isSet())
         {
-            log_filename.swap(log.getValue());
+            global_logger.reset(Logger::create_file_logger(log.getValue()));
         }
         else if (background.getValue())
         {
-            log_filename = OSService::temp_name(std::string(get_tmp_dir()) + "/securefs_", ".log");
+            auto log_filename
+                = OSService::temp_name(std::string(get_tmp_dir()) + "/securefs_", ".log");
             fprintf(stderr,
                     "Setting %s as the log file since the user specifies none\n",
                     log_filename.c_str());
+            global_logger.reset(Logger::create_file_logger(log_filename));
         }
-        if (log_filename.empty())
-        {
-            result = std::make_shared<Logger>(LoggingLevel::WARNING, 2, false);
-        }
-        else
-        {
-            int fd = ::open(log_filename.c_str(), O_CREAT | O_APPEND | O_WRONLY, 0600);
-            if (fd < 0)
-            {
-                throw std::runtime_error(strprintf("Failed to open file %s: %s\n",
-                                                   log_filename.c_str(),
-                                                   sane_strerror(errno).c_str()));
-            }
-            result = std::make_shared<Logger>(LoggingLevel::WARNING, fd, true);
-        }
-        if (info.getValue())
-            result->set_level(LoggingLevel::INFO);
         if (trace.getValue())
-            result->set_level(LoggingLevel::VERBOSE);
-        return result;
+            global_logger->set_level(kLogTrace);
     }
 
     int execute() override
     {
+        recreate_logger();
         OSService::get_default().ensure_directory(mount_point.getValue(), 0755);
         std::shared_ptr<FileStream> config_stream;
         try
@@ -959,7 +940,6 @@ public:
             fsopt.block_size = config.block_size;
             fsopt.iv_size = config.iv_size;
             fsopt.version = config.version;
-            fsopt.logger = create_logger();
 
             copy_key(config.master_key, &fsopt.master_key);
             fsopt.flags = config.version < 3 ? 0 : FileTable::STORE_TIME;
@@ -988,7 +968,6 @@ public:
             fsopt.root = std::make_shared<OSService>(data_dir.getValue());
             fsopt.block_size = config.block_size;
             fsopt.iv_size = config.iv_size;
-            fsopt.logger = create_logger();
 
             if (config.master_key.size() != 3 * KEY_LENGTH)
             {
@@ -1181,29 +1160,23 @@ int commands_main(int argc, const char* const* argv)
     }
     catch (const TCLAP::ArgException& e)
     {
-        Logger l(LoggingLevel::VERBOSE, 2, false);
-        l.log(LoggingLevel::ERROR,
-              "Error parsing arguments: %s at %s\n",
-              e.error().c_str(),
-              e.argId().c_str());
+        global_logger->error(
+            "Error parsing arguments: %s at %s\n", e.error().c_str(), e.argId().c_str());
         return 5;
     }
     catch (const std::runtime_error& e)
     {
-        Logger l(LoggingLevel::VERBOSE, 2, false);
-        l.log(LoggingLevel::ERROR, "%s\n", e.what());
+        global_logger->error("%s\n", e.what());
         return 1;
     }
     catch (const securefs::ExceptionBase& e)
     {
-        Logger l(LoggingLevel::VERBOSE, 2, false);
-        l.log(LoggingLevel::ERROR, "%s: %s\n", e.type_name(), e.what());
+        global_logger->error("%s: %s\n", e.type_name(), e.what());
         return 2;
     }
     catch (const std::exception& e)
     {
-        Logger l(LoggingLevel::VERBOSE, 2, false);
-        l.log(LoggingLevel::ERROR, "%s: %s\n", typeid(e).name(), e.what());
+        global_logger->error("%s: %s\n", typeid(e).name(), e.what());
         return 3;
     }
 }

@@ -7,13 +7,15 @@
 
 #ifdef WIN32
 #include <Windows.h>
+#else
+#include <pthread.h>
 #endif
 
 namespace securefs
 {
 void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
 {
-    if (level < this->get_level())
+    if (!m_fp || level < this->get_level())
         return;
 
     struct timespec now;
@@ -27,37 +29,27 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
     gmtime_s(&tm, &now_in_seconds);
 #endif
 
-    int size1 = snprintf(buffer.data(),
-                         buffer.size(),
-                         "[%s] [%d-%02d-%02d %02d:%02d:%02d.%09d UTC]    ",
-                         stringify(level),
-                         tm.tm_year + 1900,
-                         tm.tm_mon + 1,
-                         tm.tm_mday,
-                         tm.tm_hour,
-                         tm.tm_min,
-                         tm.tm_sec,
-                         static_cast<int>(now.tv_nsec));
-
-    if (size1 < 0 || static_cast<size_t>(size1) >= buffer.size())
-        return;
-
-    int size2 = vsnprintf(buffer.data() + size1, buffer.size() - size1, format, args);
-    if (size2 < 0)
-        return;
-
-    int total_size = size1 + size2;
-    if (static_cast<size_t>(total_size) < buffer.size())
-        buffer[total_size] = '\n';
-    else
-        buffer.back() = '\n';
-
-    (void)write(m_fd, buffer.data(), std::min<int>(buffer.size(), total_size + 1));
+    flockfile(m_fp);
+    fprintf(m_fp,
+            "[%s] [0x%zx] [%d-%02d-%02d %02d:%02d:%02d.%09d UTC]    ",
+            stringify(level),
+            reinterpret_cast<size_t>(pthread_self()),
+            tm.tm_year + 1900,
+            tm.tm_mon + 1,
+            tm.tm_mday,
+            tm.tm_hour,
+            tm.tm_min,
+            tm.tm_sec,
+            static_cast<int>(now.tv_nsec));
+    vfprintf(m_fp, format, args);
+    putc('\n', m_fp);
+    fflush(m_fp);
+    funlockfile(m_fp);
 }
 
 void Logger::log(LoggingLevel level, const char* format, ...) noexcept
 {
-    if (level < this->get_level())
+    if (!m_fp || level < this->get_level())
         return;
     va_list args;
     va_start(args, format);
@@ -65,14 +57,28 @@ void Logger::log(LoggingLevel level, const char* format, ...) noexcept
     va_end(args);
 }
 
-Logger::Logger(LoggingLevel level, int fd, bool close_on_exit)
-    : m_level(level), m_fd(fd), m_close_on_exit(close_on_exit), buffer(4000)
+Logger::Logger(FILE* fp, bool close_on_exit)
+    : m_level(kLogInfo), m_fp(fp), m_close_on_exit(close_on_exit)
 {
 }
 
 Logger::~Logger()
 {
     if (m_close_on_exit)
-        ::close(m_fd);
+        fclose(m_fp);
 }
+
+Logger* Logger::create_null_logger() { return new Logger(nullptr, false); }
+
+Logger* Logger::create_stderr_logger() { return new Logger(stderr, false); }
+
+Logger* Logger::create_file_logger(const std::string& path)
+{
+    FILE* fp = fopen(path.c_str(), "a");
+    if (!fp)
+        throwPOSIXException(errno, path);
+    return new Logger(fp, true);
+}
+
+std::unique_ptr<Logger> global_logger(Logger::create_stderr_logger());
 }

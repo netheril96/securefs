@@ -18,7 +18,6 @@ namespace lite
         std::shared_ptr<securefs::OSService> root;
         key_type name_key, content_key, xattr_key;
         optional<unsigned> block_size, iv_size;
-        std::shared_ptr<securefs::Logger> logger;
     };
 
     void init_fuse_operations(fuse_operations* opt,
