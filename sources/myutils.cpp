@@ -66,10 +66,10 @@ public:
 void generate_random(void* data, size_t size)
 {
 #ifndef HAS_THREAD_LOCAL
-    static ThreadLocalStorage<CryptoPP::NonblockingRng> rng;
+    static ThreadLocalStorage<CryptoPP::AutoSeededRandomPool> rng;
     return rng->GenerateBlock(static_cast<byte*>(data), size);
 #else
-    thread_local CryptoPP::NonblockingRng rng;
+    thread_local CryptoPP::AutoSeededRandomPool rng;
     return rng.GenerateBlock(static_cast<byte*>(data), size);
 #endif
 }

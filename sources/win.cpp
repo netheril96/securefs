@@ -99,7 +99,7 @@ public:
 
         m_handle = CreateFileA(path.c_str(),
                                access_flags,
-                               FILE_SHARE_DELETE,
+                               FILE_SHARE_READ | FILE_SHARE_DELETE,
                                nullptr,
                                create_flags,
                                FILE_ATTRIBUTE_NORMAL,

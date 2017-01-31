@@ -724,6 +724,10 @@ private:
     TCLAP::SwitchArg trace{"", "trace", "Trace all calls into `securefs` (implies --info)"};
     TCLAP::ValueArg<std::string> log{
         "", "log", "Path of the log file (may contain sensitive information)", false, "", "path"};
+    TCLAP::SwitchArg multithreaded{"m",
+                                   "multithread",
+                                   "Run in multithreaded mode. Only usable for lite filesystems. "
+                                   "Experimental at this point so enable it at your own risk!"};
     TCLAP::MultiArg<std::string> fuse_options{
         "o",
         "opt",
@@ -770,6 +774,7 @@ public:
         cmdline.add(&fuse_options);
         cmdline.add(&uid_override);
         cmdline.add(&gid_override);
+        cmdline.add(&multithreaded);
         cmdline.parse(argc, argv);
 
         if (pass.isSet() && !pass.getValue().empty())
@@ -884,7 +889,10 @@ public:
 
         std::vector<const char*> fuse_args;
         fuse_args.push_back("securefs");
-        fuse_args.push_back("-s");
+        if (config.version < 4 || !multithreaded.getValue())
+        {
+            fuse_args.push_back("-s");
+        }
         if (!background.getValue())
             fuse_args.push_back("-f");
         if (fuse_options.isSet())
