@@ -109,6 +109,9 @@ namespace lite
         unsigned m_block_size, m_iv_size;
         bool m_check;
 
+    private:
+        std::string translate_path(const std::string& path, bool preserve_leading_slash);
+
     public:
         FileSystem(std::shared_ptr<securefs::OSService> root,
                    const key_type& name_key,
@@ -118,8 +121,7 @@ namespace lite
                    unsigned iv_size,
                    bool check);
         ~FileSystem();
-        std::string encrypt_path(const std::string& path);
-        std::string decrypt_path(const std::string& path);
+
         void lock() { m_mutex.lock(); }
         void unlock() { m_mutex.unlock(); }
         bool try_lock() { return m_mutex.try_lock(); }

@@ -158,14 +158,22 @@ namespace lite
         return result;
     }
 
-    std::string FileSystem::encrypt_path(const std::string& path)
+    std::string FileSystem::translate_path(const std::string& path, bool preserve_leading_slash)
     {
-        return lite::encrypt_path(m_name_encryptor, path);
-    }
-
-    std::string FileSystem::decrypt_path(const std::string& path)
-    {
-        return lite::decrypt_path(m_name_encryptor, path);
+        if (path.empty())
+            return {};
+        if (path == "/")
+        {
+            if (preserve_leading_slash)
+                return path;
+            return ".";
+        }
+        auto str = lite::encrypt_path(m_name_encryptor, path);
+        if (!preserve_leading_slash && !str.empty() && str[0] == '/')
+        {
+            str.erase(str.begin());
+        }
+        return str;
     }
 
     AutoClosedFile FileSystem::open(const std::string& path, int flags)
@@ -182,7 +190,7 @@ namespace lite
         }
         else
         {
-            auto file_stream = m_root->open_file_stream(encrypt_path(path), O_RDWR, 0644);
+            auto file_stream = m_root->open_file_stream(translate_path(path, false), O_RDWR, 0644);
             auto fp = securefs::make_unique<File>(
                 path, file_stream, m_content_key, m_block_size, m_iv_size, m_check);
             fp->increase_open_count();
@@ -199,8 +207,8 @@ namespace lite
     {
         if (m_opened_files.find(path) != m_opened_files.end())
             throwVFSException(EEXIST);
-        auto file_stream
-            = m_root->open_file_stream(encrypt_path(path), O_RDWR | O_EXCL | O_CREAT, mode);
+        auto file_stream = m_root->open_file_stream(
+            translate_path(path, false), O_RDWR | O_EXCL | O_CREAT, mode);
         auto fp = securefs::make_unique<File>(
             path, file_stream, m_content_key, m_block_size, m_iv_size, m_check);
         fp->increase_open_count();
@@ -211,11 +219,13 @@ namespace lite
 
     void FileSystem::stat(const std::string& path, FUSE_STAT* buf)
     {
-        auto enc_path = encrypt_path(path);
+        auto enc_path = translate_path(path, false);
         m_root->stat(enc_path, buf);
         if (buf->st_size <= 0)
             return;
-        if (buf->st_mode & S_IFLNK)
+        switch (buf->st_mode & S_IFMT)
+        {
+        case S_IFLNK:
         {
             auto iter = m_resolved_symlinks.find(path);
             if (iter != m_resolved_symlinks.end())
@@ -227,48 +237,48 @@ namespace lite
                 std::string buffer(buf->st_size, '\0');
                 if (m_root->readlink(enc_path, &buffer[0], buffer.size()) != buf->st_size)
                     throwVFSException(EIO);
-                auto resolved = decrypt_path(buffer);
+                auto resolved = decrypt_path(m_name_encryptor, buffer);
                 buf->st_size = resolved.size();
                 m_resolved_symlinks.emplace(path, std::move(resolved));
             }
+            break;
         }
-        else if (buf->st_mode & S_IFDIR)
-        {
-            // pass
-        }
-        else if (buf->st_mode & S_IFREG)
-        {
+        case S_IFDIR:
+            break;
+        case S_IFREG:
             buf->st_size
                 = AESGCMCryptStream::calculate_real_size(buf->st_size, m_block_size, m_iv_size);
-        }
-        else
-        {
+            break;
+        default:
             throwVFSException(ENOTSUP);
         }
     }
 
     void FileSystem::mkdir(const std::string& path, mode_t mode)
     {
-        m_root->mkdir(encrypt_path(path), mode);
+        m_root->mkdir(translate_path(path, false), mode);
     }
 
     void FileSystem::rmdir(const std::string& path)
     {
-        m_root->remove_directory(encrypt_path(path));
+        m_root->remove_directory(translate_path(path, false));
     }
 
     void FileSystem::rename(const std::string& from, const std::string& to)
     {
-        m_root->rename(encrypt_path(from), encrypt_path(to));
+        m_root->rename(translate_path(from, false), translate_path(to, false));
     }
 
     void FileSystem::chmod(const std::string& path, mode_t mode)
     {
-        m_root->chmod(encrypt_path(path), mode);
+        m_root->chmod(translate_path(path, false), mode);
     }
 
     size_t FileSystem::readlink(const std::string& path, char* buf, size_t size)
     {
+        if (size <= 0)
+            return size;
+
         auto iter = m_resolved_symlinks.find(path);
         if (iter == m_resolved_symlinks.end())
         {
@@ -279,13 +289,15 @@ namespace lite
                 throwVFSException(EIO);
         }
 
-        memcpy(buf, iter->second.data(), std::min(iter->second.size(), size));
-        return std::min(iter->second.size(), size);
+        auto read_size = std::min(iter->second.size(), size - 1);
+        memcpy(buf, iter->second.data(), read_size);
+        buf[read_size] = '\0';
+        return read_size;
     }
 
     void FileSystem::symlink(const std::string& to, const std::string& from)
     {
-        auto eto = encrypt_path(to), efrom = encrypt_path(from);
+        auto eto = translate_path(to, true), efrom = translate_path(from, false);
         m_root->symlink(eto, efrom);
         m_resolved_symlinks[efrom] = std::move(eto);
     }
@@ -299,7 +311,7 @@ namespace lite
 
     void FileSystem::unlink(const std::string& path)
     {
-        m_root->remove_file(encrypt_path(path));
+        m_root->remove_file(translate_path(path, false));
         m_opened_files.erase(path);
         m_resolved_symlinks.erase(path);
     }
@@ -361,7 +373,7 @@ namespace lite
             }
         };
 
-        m_root->traverse(encrypt_path(path), wrapped_callback);
+        m_root->traverse(translate_path(path, false), wrapped_callback);
     }
 }
 }

@@ -32,7 +32,7 @@ class TimeoutException(BaseException):
 
 
 def securefs_mount(data_dir, mount_point, password):
-    p = subprocess.Popen([SECUREFS_BINARY, 'mount', '--stdinpass', '--log', 'secfs.log', '--background', data_dir, mount_point],
+    p = subprocess.Popen([SECUREFS_BINARY, 'mount', '--stdinpass', '--log', 'secfs.log', '--trace', '--background', data_dir, mount_point],
                          stdin=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate(input=password + '\n')
     if p.returncode:
@@ -129,34 +129,35 @@ def make_test_case(format_version):
                     except EnvironmentError:
                         pass
 
-        def test_hardlink(self):
-            data = os.urandom(16)
-            source = os.path.join(self.mount_point, str(uuid.uuid4()))
-            dest = os.path.join(self.mount_point, str(uuid.uuid4()))
-            try:
-                with open(source, 'wb') as f:
-                    f.write(data)
-                os.link(source, dest)
-                source_stat = os.stat(source)
-                dest_stat = os.stat(dest)
-                self.assertEqual(source_stat.st_mode, dest_stat.st_mode)
-                self.assertEqual(source_stat.st_mtime, dest_stat.st_mtime)
-                self.assertEqual(source_stat.st_size, dest_stat.st_size)
-                self.assertEqual(source_stat.st_nlink, 2)
-                with open(dest, 'rb') as f:
-                    self.assertEqual(data, f.read())
-                # Moving hard links onto each other is a no-op
-                os.rename(dest, source)
-                self.assertTrue(os.path.isfile(dest) and os.path.isfile(source))
-            finally:
+        if format_version < 4:
+            def test_hardlink(self):
+                data = os.urandom(16)
+                source = os.path.join(self.mount_point, str(uuid.uuid4()))
+                dest = os.path.join(self.mount_point, str(uuid.uuid4()))
                 try:
-                    os.remove(source)
-                except EnvironmentError:
-                    pass
-                try:
-                    os.remove(dest)
-                except EnvironmentError:
-                    pass
+                    with open(source, 'wb') as f:
+                        f.write(data)
+                    os.link(source, dest)
+                    source_stat = os.stat(source)
+                    dest_stat = os.stat(dest)
+                    self.assertEqual(source_stat.st_mode, dest_stat.st_mode)
+                    self.assertEqual(source_stat.st_mtime, dest_stat.st_mtime)
+                    self.assertEqual(source_stat.st_size, dest_stat.st_size)
+                    self.assertEqual(source_stat.st_nlink, 2)
+                    with open(dest, 'rb') as f:
+                        self.assertEqual(data, f.read())
+                    # Moving hard links onto each other is a no-op
+                    os.rename(dest, source)
+                    self.assertTrue(os.path.isfile(dest) and os.path.isfile(source))
+                finally:
+                    try:
+                        os.remove(source)
+                    except EnvironmentError:
+                        pass
+                    try:
+                        os.remove(dest)
+                    except EnvironmentError:
+                        pass
 
         def test_symlink(self):
             data = os.urandom(16)

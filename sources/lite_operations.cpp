@@ -350,8 +350,8 @@ namespace lite
 
     int readlink(const char* path, char* buf, size_t size)
     {
-        SINGLE_COMMON_PROLOGUE
-        return static_cast<int>(ctx->filesystem.readlink(path, buf, size));
+        SINGLE_COMMON_PROLOGUE(void) ctx->filesystem.readlink(path, buf, size);
+        return 0;
         SINGLE_COMMON_EPILOGUE
     }
 
