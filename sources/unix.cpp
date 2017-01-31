@@ -9,6 +9,7 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <sys/file.h>
 #include <sys/resource.h>
@@ -229,7 +230,7 @@ public:
             return path;
         if (path.size() > 0 && path[0] == '/')
             return path;
-        return dir_name + '/' + path;
+        return dir_name + path;
     }
 };
 
@@ -243,7 +244,14 @@ OSService::~OSService()
 
 OSService::OSService(const std::string& path) : impl(new Impl())
 {
-    impl->dir_name = path;
+    char buffer[PATH_MAX + 1] = {0};
+    char* rc = ::realpath(path.c_str(), buffer);
+    if (!rc)
+        throwPOSIXException(errno, "realpath on " + path);
+    impl->dir_name.reserve(strlen(buffer) + 1);
+    impl->dir_name.assign(buffer);
+    impl->dir_name.push_back('/');
+
     int dir_fd = ::open(path.c_str(), O_RDONLY);
     if (dir_fd < 0)
         throwPOSIXException(errno, "Opening directory " + path);
