@@ -401,6 +401,32 @@ ssize_t OSService::readlink(const std::string& path, char* output, size_t size)
     return rc;
 }
 
+void OSService::utimens(const std::string& path, const timespec* ts) const
+{
+#if defined(HAS_AT_FUNCTIONS) && defined(HAS_FUTIMENS)
+    int rc = ::utimensat(impl->dir_fd, path.c_str(), ts, AT_SYMLINK_NOFOLLOW);
+    if (rc < 0)
+        throwPOSIXException(errno, "utimensat");
+#else
+    int rc;
+    if (!ts)
+    {
+        rc = ::lutimes(impl->norm_path(path).c_str(), nullptr);
+    }
+    else
+    {
+        struct timeval tv[2];
+        tv[0].tv_sec = ts[0].tv_sec;
+        tv[0].tv_usec = ts[0].tv_nsec / 1000;
+        tv[1].tv_sec = ts[1].tv_sec;
+        tv[1].tv_usec = ts[1].tv_nsec / 1000;
+        rc = ::lutimes(impl->norm_path(path).c_str(), tv);
+    }
+    if (rc < 0)
+        throwPOSIXException(errno, "lutimes");
+#endif
+}
+
 std::unique_ptr<DirectoryTraverser> OSService::create_traverser(const std::string& dir) const
 {
     return securefs::make_unique<UnixDirectoryTraverser>(impl->norm_path(dir));

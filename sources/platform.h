@@ -112,6 +112,7 @@ public:
     void ensure_directory(const std::string& path, unsigned mode) const;
     void mkdir(const std::string& path, unsigned mode) const;
     void statfs(struct statvfs*) const;
+    void utimens(const std::string& path, const timespec ts[2]) const;
 
     // Returns false when the path does not exist; throw exceptions on other errors
     // The ENOENT errors are too frequent so the API is redesigned

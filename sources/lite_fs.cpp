@@ -320,9 +320,7 @@ namespace lite
 
     void FileSystem::utimens(const std::string& path, const timespec* ts)
     {
-        AutoClosedFile fp = open(path, O_RDONLY);
-        std::lock_guard<File> lg(*fp);
-        fp->utimens(ts);
+        m_root->utimens(translate_path(path, false), ts);
     }
 
     void FileSystem::unlink(const std::string& path)
