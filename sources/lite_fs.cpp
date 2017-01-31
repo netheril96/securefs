@@ -72,7 +72,7 @@ namespace lite
         return strprintf("Invalid filename \"%s\"", m_filename.c_str());
     }
 
-    std::string encrypt_path(AES_SIV& encryptor, const std::string& path)
+    std::string encrypt_path(AES_SIV& encryptor, StringRef path)
     {
         byte buffer[2032];
         std::string result;
@@ -114,7 +114,7 @@ namespace lite
         return result;
     }
 
-    std::string decrypt_path(AES_SIV& decryptor, const std::string& path)
+    std::string decrypt_path(AES_SIV& decryptor, StringRef path)
     {
         byte buffer[2032];
         byte string_buffer[2032];
@@ -149,7 +149,7 @@ namespace lite
                                                                 string_buffer,
                                                                 buffer);
                     if (!success)
-                        throw InvalidFilenameException(path);
+                        throw InvalidFilenameException(path.to_string());
                     result.append(reinterpret_cast<const char*>(string_buffer),
                                   decoded_size - AES_SIV::IV_SIZE);
                 }
@@ -161,17 +161,17 @@ namespace lite
         return result;
     }
 
-    std::string FileSystem::translate_path(const std::string& path, bool preserve_leading_slash)
+    std::string FileSystem::translate_path(StringRef path, bool preserve_leading_slash)
     {
         std::string result;
         if (path.empty())
         {
         }
-        else if (path == "/")
+        else if (path.size() == 1 && path[0] == '/')
         {
             if (preserve_leading_slash)
             {
-                result = path;
+                result = path.to_string();
             }
             else
             {
@@ -190,13 +190,14 @@ namespace lite
         return result;
     }
 
-    AutoClosedFile FileSystem::open(const std::string& path, int flags)
+    AutoClosedFile FileSystem::open(StringRef path, int flags)
     {
         if ((flags & O_CREAT) | (flags & O_APPEND))
             throwVFSException(ENOTSUP);
 
+        auto strpath = path.to_string();
         AutoClosedFile result(nullptr, FSCCloser(this));
-        auto iter = m_opened_files.find(path);
+        auto iter = m_opened_files.find(strpath);
         if (iter != m_opened_files.end())
         {
             iter->second->increase_open_count();
@@ -206,10 +207,10 @@ namespace lite
         {
             auto file_stream = m_root->open_file_stream(translate_path(path, false), O_RDWR, 0644);
             auto fp = securefs::make_unique<File>(
-                path, file_stream, m_content_key, m_block_size, m_iv_size, m_check);
+                path.to_string(), file_stream, m_content_key, m_block_size, m_iv_size, m_check);
             fp->increase_open_count();
             File* fp_pointer = fp.get();
-            m_opened_files[path] = fp.release();
+            m_opened_files[strpath] = fp.release();
             result.reset(fp_pointer);
         }
         if (flags & O_TRUNC)
@@ -217,21 +218,21 @@ namespace lite
         return result;
     }
 
-    AutoClosedFile FileSystem::create(const std::string& path, mode_t mode)
+    AutoClosedFile FileSystem::create(StringRef path, mode_t mode)
     {
-        if (m_opened_files.find(path) != m_opened_files.end())
+        if (m_opened_files.find(path.to_string()) != m_opened_files.end())
             throwVFSException(EEXIST);
         auto file_stream = m_root->open_file_stream(
             translate_path(path, false), O_RDWR | O_EXCL | O_CREAT, mode);
         auto fp = securefs::make_unique<File>(
-            path, file_stream, m_content_key, m_block_size, m_iv_size, m_check);
+            path.to_string(), file_stream, m_content_key, m_block_size, m_iv_size, m_check);
         fp->increase_open_count();
         File* fp_pointer = fp.get();
-        m_opened_files[path] = fp.release();
+        m_opened_files.emplace(path.to_string(), fp.release());
         return AutoClosedFile(fp_pointer, FSCCloser(this));
     }
 
-    bool FileSystem::stat(const std::string& path, FUSE_STAT* buf)
+    bool FileSystem::stat(StringRef path, FUSE_STAT* buf)
     {
         auto enc_path = translate_path(path, false);
         if (!m_root->stat(enc_path, buf))
@@ -242,7 +243,8 @@ namespace lite
         {
         case S_IFLNK:
         {
-            auto iter = m_resolved_symlinks.find(path);
+            auto strpath = path.to_string();
+            auto iter = m_resolved_symlinks.find(strpath);
             if (iter != m_resolved_symlinks.end())
             {
                 buf->st_size = iter->second.size();
@@ -254,7 +256,7 @@ namespace lite
                     throwVFSException(EIO);
                 auto resolved = decrypt_path(m_name_encryptor, buffer);
                 buf->st_size = resolved.size();
-                m_resolved_symlinks.emplace(path, std::move(resolved));
+                m_resolved_symlinks.emplace(strpath, std::move(resolved));
             }
             break;
         }
@@ -270,37 +272,38 @@ namespace lite
         return true;
     }
 
-    void FileSystem::mkdir(const std::string& path, mode_t mode)
+    void FileSystem::mkdir(StringRef path, mode_t mode)
     {
         m_root->mkdir(translate_path(path, false), mode);
     }
 
-    void FileSystem::rmdir(const std::string& path)
+    void FileSystem::rmdir(StringRef path)
     {
         m_root->remove_directory(translate_path(path, false));
     }
 
-    void FileSystem::rename(const std::string& from, const std::string& to)
+    void FileSystem::rename(StringRef from, StringRef to)
     {
         m_root->rename(translate_path(from, false), translate_path(to, false));
     }
 
-    void FileSystem::chmod(const std::string& path, mode_t mode)
+    void FileSystem::chmod(StringRef path, mode_t mode)
     {
         m_root->chmod(translate_path(path, false), mode);
     }
 
-    size_t FileSystem::readlink(const std::string& path, char* buf, size_t size)
+    size_t FileSystem::readlink(StringRef path, char* buf, size_t size)
     {
         if (size <= 0)
             return size;
 
-        auto iter = m_resolved_symlinks.find(path);
+        auto strpath = path.to_string();
+        auto iter = m_resolved_symlinks.find(strpath);
         if (iter == m_resolved_symlinks.end())
         {
             FUSE_STAT st;
             this->stat(path, &st);
-            iter = m_resolved_symlinks.find(path);
+            iter = m_resolved_symlinks.find(strpath);
             if (iter == m_resolved_symlinks.end())
                 throwVFSException(EIO);
         }
@@ -311,26 +314,27 @@ namespace lite
         return read_size;
     }
 
-    void FileSystem::symlink(const std::string& to, const std::string& from)
+    void FileSystem::symlink(StringRef to, StringRef from)
     {
         auto eto = translate_path(to, true), efrom = translate_path(from, false);
         m_root->symlink(eto, efrom);
         m_resolved_symlinks[efrom] = std::move(eto);
     }
 
-    void FileSystem::utimens(const std::string& path, const timespec* ts)
+    void FileSystem::utimens(StringRef path, const timespec* ts)
     {
         m_root->utimens(translate_path(path, false), ts);
     }
 
-    void FileSystem::unlink(const std::string& path)
+    void FileSystem::unlink(StringRef path)
     {
+        auto strpath = path.to_string();
         m_root->remove_file(translate_path(path, false));
-        m_opened_files.erase(path);
-        m_resolved_symlinks.erase(path);
+        m_opened_files.erase(strpath);
+        m_resolved_symlinks.erase(strpath);
     }
 
-    void FileSystem::truncate(const std::string& path, offset_type len)
+    void FileSystem::truncate(StringRef path, offset_type len)
     {
         AutoClosedFile fp = open(path, O_RDONLY);
         std::lock_guard<File> lg(*fp);
@@ -413,12 +417,12 @@ namespace lite
         }
     };
 
-    std::unique_ptr<DirectoryTraverser> FileSystem::create_traverser(const std::string& path)
+    std::unique_ptr<DirectoryTraverser> FileSystem::create_traverser(StringRef path)
     {
         if (path.empty())
             throwVFSException(EINVAL);
         return securefs::make_unique<LiteDirectoryTraverser>(
-            path.back() == '/' ? path : path + '/',
+            path.back() == '/' ? path.to_string() : path + StringRef("/"),
             m_root->create_traverser(translate_path(path, false)),
             &this->m_name_encryptor);
     }

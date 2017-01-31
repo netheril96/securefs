@@ -1,8 +1,10 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <stddef.h>
 #include <string>
 #include <vector>
 
@@ -10,6 +12,73 @@ typedef unsigned char byte;
 
 namespace securefs
 {
+template <class CharT>
+class BasicStringRef
+{
+private:
+    const CharT* m_buffer;
+    size_t m_size;
+
+public:
+    BasicStringRef() : m_buffer(nullptr), m_size(0) {}
+    BasicStringRef(const CharT* str) : m_buffer(str), m_size(std::char_traits<CharT>::length(str))
+    {
+    }
+    BasicStringRef(const std::basic_string<CharT>& str) : m_buffer(str.c_str()), m_size(str.size())
+    {
+    }
+    const CharT* data() const noexcept { return m_buffer; }
+    const CharT* c_str() const noexcept { return m_buffer; }
+    size_t size() const noexcept { return m_size; }
+    size_t length() const noexcept { return m_size; }
+    CharT operator[](size_t i) const noexcept { return m_buffer[i]; }
+    const CharT* begin() const noexcept { return data(); }
+    const CharT* end() const noexcept { return data() + size(); }
+    CharT front() const noexcept { return m_buffer[0]; }
+    CharT back() const noexcept { return m_buffer[m_size - 1]; }
+    bool empty() const noexcept { return size() == 0; }
+    std::basic_string<CharT> to_string() const { return {m_buffer, m_size}; }
+
+    bool starts_with(BasicStringRef<CharT> prefix) const noexcept
+    {
+        return size() >= prefix.size()
+            && std::char_traits<CharT>::compare(data(), prefix.data(), prefix.size()) == 0;
+    }
+
+    bool ends_with(BasicStringRef<CharT> suffix) const noexcept
+    {
+        return size() >= suffix.size()
+            && std::char_traits<CharT>::compare(
+                   data() + size() - suffix.size(), suffix.data(), suffix.size())
+            == 0;
+    }
+};
+
+template <class CharT>
+inline std::basic_string<CharT> operator+(BasicStringRef<CharT> a, BasicStringRef<CharT> b)
+{
+    std::basic_string<CharT> result;
+    result.reserve(a.size() + b.size());
+    result.insert(0, a.data(), a.size());
+    result.insert(a.size(), b.data(), b.size());
+    return result;
+}
+
+template <class CharT>
+bool operator==(BasicStringRef<CharT> a, BasicStringRef<CharT> b)
+{
+    return a.size() == b.size() && std::equal(a.begin(), a.end().b.begin());
+}
+
+template <class CharT>
+bool operator!=(BasicStringRef<CharT> a, BasicStringRef<CharT> b)
+{
+    return !(a == b);
+}
+
+using StringRef = BasicStringRef<char>;
+using WideStringRef = BasicStringRef<wchar_t>;
+
 std::string strprintf(const char* format, ...)
 #ifndef WIN32
     __attribute__((format(printf, 1, 2)))
@@ -17,22 +86,10 @@ std::string strprintf(const char* format, ...)
     ;
 std::string vstrprintf(const char* format, va_list args);
 
-bool ends_with(const char* str, size_t size, const char* suffix, size_t suffix_len);
-inline bool ends_with(const std::string& str, const std::string& suffix)
-{
-    return ends_with(str.data(), str.size(), suffix.data(), suffix.size());
-}
-
-bool starts_with(const char* str, size_t size, const char* prefix, size_t prefix_len);
-inline bool starts_with(const std::string& str, const std::string& prefix)
-{
-    return starts_with(str.data(), str.size(), prefix.data(), prefix.size());
-}
-
 std::vector<std::string> split(const char* str, char separator);
 
 std::string hexify(const byte* data, size_t length);
-void parse_hex(const std::string& hex, byte* output, size_t len);
+void parse_hex(StringRef hex, byte* output, size_t len);
 std::string sane_strerror(int error_number);
 std::string errno_to_string();
 

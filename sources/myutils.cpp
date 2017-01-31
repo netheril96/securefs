@@ -365,7 +365,7 @@ static void find_ids_helper(const std::string& current_dir,
         = [&id, &result, &hex](const std::string& dir, const std::string& name) -> bool {
         if (name == "." || name == "..")
             return true;
-        if (ends_with(name.data(), name.size(), ".meta", strlen(".meta")))
+        if (StringRef(name).ends_with(".meta"))
         {
             std::string total_name = dir + '/' + name.substr(0, name.size() - strlen(".meta"));
             hex.assign(hex.size(), 0);

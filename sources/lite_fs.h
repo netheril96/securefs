@@ -2,6 +2,7 @@
 
 #include "aes_siv.h"
 #include "lite_stream.h"
+#include "mystring.h"
 #include "myutils.h"
 #include "platform.h"
 
@@ -77,8 +78,8 @@ namespace lite
 
     typedef std::unique_ptr<File, FSCCloser> AutoClosedFile;
 
-    std::string encrypt_path(AES_SIV& encryptor, const std::string& path);
-    std::string decrypt_path(AES_SIV& decryptor, const std::string& path);
+    std::string encrypt_path(AES_SIV& encryptor, StringRef path);
+    std::string decrypt_path(AES_SIV& decryptor, StringRef path);
 
     class InvalidFilenameException : public VerificationException
     {
@@ -110,7 +111,7 @@ namespace lite
         bool m_check;
 
     private:
-        std::string translate_path(const std::string& path, bool preserve_leading_slash);
+        std::string translate_path(StringRef path, bool preserve_leading_slash);
 
     public:
         FileSystem(std::shared_ptr<securefs::OSService> root,
@@ -126,20 +127,20 @@ namespace lite
         void unlock() { m_mutex.unlock(); }
         bool try_lock() { return m_mutex.try_lock(); }
         void close(File* f);
-        AutoClosedFile open(const std::string& path, int flags);
-        AutoClosedFile create(const std::string& path, mode_t mode);
-        bool stat(const std::string& path, FUSE_STAT* buf);
-        void mkdir(const std::string& path, mode_t mode);
-        void rmdir(const std::string& path);
-        void chmod(const std::string& path, mode_t mode);
-        void rename(const std::string& from, const std::string& to);
-        void unlink(const std::string& path);
-        void symlink(const std::string& to, const std::string& from);
-        size_t readlink(const std::string& path, char* buf, size_t size);
-        void utimens(const std::string& path, const timespec tm[2]);
-        void truncate(const std::string& path, offset_type len);
+        AutoClosedFile open(StringRef path, int flags);
+        AutoClosedFile create(StringRef path, mode_t mode);
+        bool stat(StringRef path, FUSE_STAT* buf);
+        void mkdir(StringRef path, mode_t mode);
+        void rmdir(StringRef path);
+        void chmod(StringRef path, mode_t mode);
+        void rename(StringRef from, StringRef to);
+        void unlink(StringRef path);
+        void symlink(StringRef to, StringRef from);
+        size_t readlink(StringRef path, char* buf, size_t size);
+        void utimens(StringRef path, const timespec tm[2]);
+        void truncate(StringRef path, offset_type len);
         void statvfs(struct statvfs* buf);
-        std::unique_ptr<DirectoryTraverser> create_traverser(const std::string& path);
+        std::unique_ptr<DirectoryTraverser> create_traverser(StringRef path);
 
 #ifdef __APPLE__
         // These APIs, unlike all others, report errors through negative error numbers as defined in
