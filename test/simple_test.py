@@ -38,7 +38,7 @@ def securefs_mount(data_dir, mount_point, password):
     if p.returncode:
         raise RuntimeError(err)
     for i in xrange(100):
-        time.sleep(0.05)
+        time.sleep(0.1)
         try:
             if os.path.ismount(mount_point):
                 return
@@ -53,7 +53,7 @@ def securefs_unmount(mount_point):
     if p.returncode:
         raise RuntimeError(err)
     for i in xrange(100):
-        time.sleep(0.05)
+        time.sleep(0.1)
         try:
             if not os.path.ismount(mount_point):
                 return
@@ -92,8 +92,6 @@ def make_test_case(format_version):
             except:
                 if os.path.ismount(cls.mount_point):
                     raise  # Still mounted
-            shutil.rmtree(cls.data_dir)
-            shutil.rmtree(cls.mount_point)
 
         def mount(self):
             securefs_mount(self.data_dir, self.mount_point, self.password)

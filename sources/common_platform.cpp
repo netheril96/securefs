@@ -55,17 +55,22 @@ bool OSService::remove_directory_nothrow(const std::string& path) const noexcept
 void OSService::recursive_traverse(const std::string& dir,
                                    const recursive_traverse_callback& callback) const
 {
-    auto wrapped_callback = [&callback, &dir, this](const std::string& name, mode_t mode) -> bool {
-        if (mode & S_IFDIR)
+    auto traverser = create_traverser(dir);
+    std::string name;
+    mode_t mode;
+
+    while (traverser->next(&name, &mode))
+    {
+        if (mode == S_IFDIR)
         {
-            this->recursive_traverse(dir + '/' + name, callback);
+            recursive_traverse(dir + '/' + name, callback);
         }
         else
         {
             callback(dir, name);
         }
-        return true;
-    };
-    traverse(dir, wrapped_callback);
+    }
 }
+
+DirectoryTraverser::~DirectoryTraverser() {}
 }

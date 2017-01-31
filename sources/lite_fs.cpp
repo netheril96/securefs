@@ -339,55 +339,88 @@ namespace lite
 
     void FileSystem::statvfs(struct statvfs* buf) { m_root->statfs(buf); }
 
-    void FileSystem::traverse_directory(
-        const std::string& path,
-        const OSService::traverse_callback& callback,
-        const std::function<void(const std::string&)> decoding_error_handler)
+    class LiteDirectoryTraverser : public DirectoryTraverser
+    {
+    private:
+        std::string m_prefix;
+        std::unique_ptr<DirectoryTraverser> m_underlying_traverser;
+        AES_SIV* m_name_encryptor;
+
+    public:
+        explicit LiteDirectoryTraverser(std::string prefix,
+                                        std::unique_ptr<DirectoryTraverser> underlying_traverser,
+                                        AES_SIV* name_encryptor)
+            : m_prefix(std::move(prefix))
+            , m_underlying_traverser(std::move(underlying_traverser))
+            , m_name_encryptor(name_encryptor)
+        {
+        }
+        ~LiteDirectoryTraverser() {}
+
+        bool next(std::string* name, mode_t* type) override
+        {
+            std::string under_name;
+            byte buffer[2000];
+
+            while (1)
+            {
+                if (!m_underlying_traverser->next(&under_name, type))
+                    return false;
+                if (!name)
+                    return true;
+
+                if (under_name.empty() || under_name[0] == '.')
+                    continue;
+
+                try
+                {
+                    CryptoPP::Base32Decoder decoder;
+                    decoder.Put(reinterpret_cast<const byte*>(under_name.data()),
+                                under_name.size());
+                    decoder.MessageEnd();
+                    auto size = decoder.MaxRetrievable();
+                    if (size > sizeof(buffer) || size <= AES_SIV::IV_SIZE)
+                    {
+                        global_logger->warn("Skipping too large/small filename %s",
+                                            under_name.c_str());
+                        continue;
+                    }
+
+                    decoder.Get(buffer, sizeof(buffer));
+                    name->assign(size - AES_SIV::IV_SIZE, '\0');
+                    bool success = m_name_encryptor->decrypt_and_verify(buffer + AES_SIV::IV_SIZE,
+                                                                        size - AES_SIV::IV_SIZE,
+                                                                        m_prefix.data(),
+                                                                        m_prefix.size(),
+                                                                        &(*name)[0],
+                                                                        buffer);
+                    if (!success)
+                    {
+                        global_logger->warn("Skipping filename %s that does not decode properly",
+                                            under_name.c_str());
+                        continue;
+                    }
+                }
+                catch (const std::exception& e)
+                {
+                    global_logger->warn("Skipping filename %s due to exception in decoding: %s",
+                                        under_name.c_str(),
+                                        e.what());
+                    continue;
+                }
+                return true;
+            }
+        }
+    };
+
+    std::unique_ptr<DirectoryTraverser> FileSystem::create_traverser(const std::string& path)
     {
         if (path.empty())
-            return;
-        const std::string& prefix = (path.back() == '/' ? path : path + '/');
-
-        auto wrapped_callback = [&callback, &decoding_error_handler, &prefix, this](
-            const std::string& name, mode_t mode) -> bool {
-            if (name.empty() || name.front() == '.')
-                return true;
-            try
-            {
-                CryptoPP::Base32Decoder decoder;
-                decoder.Put(reinterpret_cast<const byte*>(name.data()), name.size());
-                decoder.MessageEnd();
-
-                byte buffer[2000];
-                auto size = decoder.MaxRetrievable();
-                if (size > sizeof(buffer) || size <= AES_SIV::IV_SIZE)
-                {
-                    decoding_error_handler(name);
-                    return true;
-                }
-                decoder.Get(buffer, sizeof(buffer));
-                std::string decoded_name(size - AES_SIV::IV_SIZE, '\0');
-                bool success = this->m_name_encryptor.decrypt_and_verify(buffer + AES_SIV::IV_SIZE,
-                                                                         size - AES_SIV::IV_SIZE,
-                                                                         prefix.data(),
-                                                                         prefix.size(),
-                                                                         &decoded_name[0],
-                                                                         buffer);
-                if (!success)
-                {
-                    decoding_error_handler(name);
-                    return true;
-                }
-                return callback(decoded_name, mode);
-            }
-            catch (...)
-            {
-                decoding_error_handler(name);
-                return true;
-            }
-        };
-
-        m_root->traverse(translate_path(path, false), wrapped_callback);
+            throwVFSException(EINVAL);
+        return securefs::make_unique<LiteDirectoryTraverser>(
+            path.back() == '/' ? path : path + '/',
+            m_root->create_traverser(translate_path(path, false)),
+            &this->m_name_encryptor);
     }
 }
 }

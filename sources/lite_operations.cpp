@@ -2,6 +2,9 @@
 #include "lite_fs.h"
 #include "lite_stream.h"
 #include "logger.h"
+#include "platform.h"
+
+#include <math.h>
 
 namespace securefs
 {
@@ -79,21 +82,39 @@ namespace lite
         SINGLE_COMMON_EPILOGUE
     }
 
-    int opendir(const char*, struct fuse_file_info*) { return 0; }
-    int releasedir(const char*, struct fuse_file_info*) { return 0; }
-    int readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t, struct fuse_file_info*)
+    int opendir(const char* path, struct fuse_file_info* info)
     {
         SINGLE_COMMON_PROLOGUE
-        filesystem->traverse_directory(
-            path,
-            [filler, buf](const std::string& name, mode_t mode) -> bool {
-                FUSE_STAT st = {};
-                st.st_mode = mode;
-                return filler(buf, name.c_str(), &st, 0) == 0;
-            },
-            [](const std::string& name) {
-                global_logger->warn("Encounters invalid encrypted filename: %s", name.c_str());
-            });
+        auto traverser = filesystem->create_traverser(path);
+        info->fh = reinterpret_cast<uintptr_t>(traverser.release());
+        return 0;
+        SINGLE_COMMON_EPILOGUE
+    }
+
+    int releasedir(const char* path, struct fuse_file_info* info)
+    {
+        SINGLE_COMMON_PROLOGUE
+        delete reinterpret_cast<DirectoryTraverser*>(info->fh);
+        return 0;
+        SINGLE_COMMON_EPILOGUE
+    }
+
+    int
+    readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t, struct fuse_file_info* info)
+    {
+        SINGLE_COMMON_PROLOGUE
+        auto traverser = reinterpret_cast<DirectoryTraverser*>(info->fh);
+        std::string name;
+        mode_t mode;
+        FUSE_STAT stbuf;
+        memset(&stbuf, 0, sizeof(stbuf));
+        while (traverser->next(&name, &mode))
+        {
+            stbuf.st_mode = mode;
+            int rc = filler(buf, name.c_str(), &stbuf, 0);
+            if (rc != 0)
+                return -abs(rc);
+        }
         return 0;
         SINGLE_COMMON_EPILOGUE
     }

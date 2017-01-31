@@ -139,10 +139,7 @@ namespace lite
         void utimens(const std::string& path, const timespec tm[2]);
         void truncate(const std::string& path, offset_type len);
         void statvfs(struct statvfs* buf);
-        void
-        traverse_directory(const std::string& path,
-                           const OSService::traverse_callback& callback,
-                           const std::function<void(const std::string&)> decoding_error_handler);
+        std::unique_ptr<DirectoryTraverser> create_traverser(const std::string& path);
     };
 
     inline void FSCCloser::operator()(File* file) { m_ctx->close(file); }

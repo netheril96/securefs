@@ -78,6 +78,16 @@ public:
     virtual void removexattr(const char*) { throwVFSException(ENOTSUP); }
 };
 
+class DirectoryTraverser
+{
+    DISABLE_COPY_MOVE(DirectoryTraverser)
+
+public:
+    DirectoryTraverser() {}
+    virtual ~DirectoryTraverser();
+    virtual bool next(std::string* name, mode_t* type) = 0;
+};
+
 class OSService
 {
 private:
@@ -114,8 +124,7 @@ public:
     void recursive_traverse(const std::string& dir,
                             const recursive_traverse_callback& callback) const;
 
-    typedef std::function<bool(const std::string&, mode_t)> traverse_callback;
-    void traverse(const std::string& dir, const traverse_callback& callback) const;
+    std::unique_ptr<DirectoryTraverser> create_traverser(const std::string& dir) const;
 
 public:
     static uint32_t getuid() noexcept;

@@ -162,6 +162,61 @@ public:
 #endif
 };
 
+class UnixDirectoryTraverser : public DirectoryTraverser
+{
+private:
+    DIR* m_dir;
+
+public:
+    explicit UnixDirectoryTraverser(const std::string& path)
+    {
+        m_dir = ::opendir(path.c_str());
+        if (!m_dir)
+            throwPOSIXException(errno, "opendir " + path);
+    }
+    ~UnixDirectoryTraverser() { ::closedir(m_dir); }
+
+    bool next(std::string* name, mode_t* type) override
+    {
+        while (1)
+        {
+            errno = 0;
+            auto entry = ::readdir(m_dir);
+            if (!entry)
+            {
+                if (errno)
+                    throwPOSIXException(errno, "readdir");
+                return false;
+            }
+            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+                continue;
+            if (type)
+            {
+                switch (entry->d_type)
+                {
+                case DT_DIR:
+                    *type = S_IFDIR;
+                    break;
+                case DT_LNK:
+                    *type = S_IFLNK;
+                    break;
+                case DT_REG:
+                    *type = S_IFREG;
+                    break;
+                default:
+                    *type = 0;
+                    break;
+                }
+            }
+            if (name)
+            {
+                *name = entry->d_name;
+            }
+            return true;
+        }
+    }
+};
+
 class OSService::Impl
 {
 public:
@@ -326,62 +381,9 @@ ssize_t OSService::readlink(const std::string& path, char* output, size_t size)
     return rc;
 }
 
-void OSService::traverse(const std::string& dir, const traverse_callback& callback) const
+std::unique_ptr<DirectoryTraverser> OSService::create_traverser(const std::string& dir) const
 {
-    struct DirGuard
-    {
-        DIR* dir;
-
-        explicit DirGuard(DIR* dir_) : dir(dir_) {}
-        ~DirGuard()
-        {
-            if (dir)
-                ::closedir(dir);
-        }
-    };
-
-    auto normed_path = impl->norm_path(dir);
-    DirGuard dirGuard(::opendir(normed_path.c_str()));
-
-    if (!dirGuard.dir)
-        throwPOSIXException(errno, "opendir " + normed_path);
-
-    while (1)
-    {
-        errno = 0;
-        struct dirent* d = ::readdir(dirGuard.dir);
-        if (!d)
-        {
-            if (errno)
-                throwPOSIXException(errno, "readdir " + normed_path);
-            else
-                return;
-        }
-        if (strcmp(d->d_name, ".") == 0 || strcmp(d->d_name, "..") == 0)
-            continue;
-
-        mode_t file_mode = 0;
-        switch (d->d_type)
-        {
-        case DT_DIR:
-            file_mode = S_IFDIR;
-            break;
-        case DT_REG:
-            file_mode = S_IFREG;
-            break;
-        case DT_LNK:
-            file_mode = S_IFLNK;
-            break;
-        default:
-            global_logger->warn(
-                "Skipping path %s since it is neither a regular file, directory or a symlink",
-                (normed_path + '/' + d->d_name).c_str());
-            continue;
-        }
-
-        if (!callback(d->d_name, file_mode))
-            return;
-    }
+    return securefs::make_unique<UnixDirectoryTraverser>(impl->norm_path(dir));
 }
 
 uint32_t OSService::getuid() noexcept { return ::getuid(); }
