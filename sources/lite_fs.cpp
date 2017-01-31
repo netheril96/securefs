@@ -1,4 +1,5 @@
 #include "lite_fs.h"
+#include "logger.h"
 
 #include <cryptopp/base32.h>
 
@@ -173,6 +174,7 @@ namespace lite
         {
             str.erase(str.begin());
         }
+        global_logger->trace("Translate path %s into %s", path.c_str(), str.c_str());
         return str;
     }
 

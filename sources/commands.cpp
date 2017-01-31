@@ -819,12 +819,10 @@ public:
         }
         else if (background.getValue())
         {
-            auto log_filename
-                = OSService::temp_name(std::string(get_tmp_dir()) + "/securefs_", ".log");
-            fprintf(stderr,
-                    "Setting %s as the log file since the user specifies none\n",
-                    log_filename.c_str());
-            global_logger.reset(Logger::create_file_logger(log_filename));
+            global_logger->warn("securefs is about to enter background without a log file. You "
+                                "won't be able to inspect what goes wrong. You can remount with "
+                                "option --log instead.");
+            global_logger.reset(Logger::create_null_logger());
         }
         if (trace.getValue())
             global_logger->set_level(kLogTrace);
@@ -843,10 +841,10 @@ public:
         {
             if (e.error_number() == ENOENT)
             {
-                fprintf(stderr,
-                        "Config file %s does not exist. Perhaps you forget to run `create` command "
-                        "first?\n",
-                        get_real_config_path().c_str());
+                global_logger->error(
+                    "Config file %s does not exist. Perhaps you forget to run `create` command "
+                    "first?",
+                    get_real_config_path().c_str());
                 return 19;
             }
             throw;
@@ -857,27 +855,28 @@ public:
         if (config.master_key.size() == KEY_LENGTH
             && std::count(config.master_key.begin(), config.master_key.end(), (byte)0) >= 20)
         {
-            fprintf(
-                stderr,
+            global_logger->warn(
+                "%s",
                 "Your filesystem is created by a vulnerable version of securefs.\n"
                 "Please immediate migrate your old data to a newly created securefs filesystem,\n"
-                "and remove all traces of old data to avoid data leakage!\n");
-            return 200;
+                "and remove all traces of old data to avoid information leakage!");
+            fputs("Do you wish to continue with mounting? (y/n)", stdout);
+            fflush(stdout);
+            if (getc(stdout) != 'y')
+                return 0;
         }
         generate_random(password.data(), password.size());    // Erase user input
 
         try
         {
-            fprintf(stderr,
-                    "Raising the number of file descriptor limit to %d\n",
-                    OSService::raise_fd_limit());
+            global_logger->info("Raising the number of file descriptor limit to %d",
+                                OSService::raise_fd_limit());
         }
         catch (const ExceptionBase& e)
         {
-            fprintf(stderr,
-                    "Warning: failure to raise the maximum file descriptor limit (%s: %s)\n",
-                    e.type_name(),
-                    e.what());
+            global_logger->warn("Failure to raise the maximum file descriptor limit (%s: %s)",
+                                e.type_name(),
+                                e.what());
         }
 
         std::vector<const char*> fuse_args;
@@ -897,21 +896,20 @@ public:
         const char* copyfile_disable = ::getenv("COPYFILE_DISABLE");
         if (copyfile_disable)
         {
-            fprintf(stderr,
-                    "Mounting without .DS_Store and other apple dot files because environmental "
-                    "variable COPYFILE_DISABLE is set to \"%s\"\n",
-                    copyfile_disable);
+            global_logger->info(
+                "Mounting without .DS_Store and other apple dot files because environmental "
+                "variable COPYFILE_DISABLE is set to \"%s\"",
+                copyfile_disable);
             fuse_args.push_back("-o");
             fuse_args.push_back("noappledouble");
         }
 #endif
         fuse_args.push_back(mount_point.getValue().c_str());
 
-        fprintf(stderr,
-                "Mounting filesystem stored at %s onto %s\nFormat version: %u\n",
-                data_dir.getValue().c_str(),
-                mount_point.getValue().c_str(),
-                config.version);
+        global_logger->info("Mounting filesystem stored at %s onto %s with format version: %u",
+                            data_dir.getValue().c_str(),
+                            mount_point.getValue().c_str(),
+                            config.version);
 
         if (config.version < 4)
         {
@@ -924,17 +922,16 @@ public:
             }
             catch (const ExceptionBase& e)
             {
-                fprintf(stderr,
-                        "Encountering error %s when creating the lock file %s/%s.\n"
-                        "Perhaps multiple securefs instances are trying to operate on a single "
-                        "directory.\n"
-                        "Close other instances, including on other machines, and try again.\n"
-                        "Or remove the lock file manually if you are sure no other instances are "
-                        "holding "
-                        "the lock.",
-                        e.what(),
-                        data_dir.getValue().c_str(),
-                        securefs::operations::LOCK_FILENAME.c_str());
+                global_logger->error(
+                    "Encountering error %s when creating the lock file %s/%s.\n"
+                    "Perhaps multiple securefs instances are trying to operate on a single "
+                    "directory.\n"
+                    "Close other instances, including on other machines, and try again.\n"
+                    "Or remove the lock file manually if you are sure no other instances are "
+                    "holding the lock.",
+                    e.what(),
+                    data_dir.getValue().c_str(),
+                    securefs::operations::LOCK_FILENAME.c_str());
                 return 18;
             }
             fsopt.block_size = config.block_size;
@@ -971,10 +968,10 @@ public:
 
             if (config.master_key.size() != 3 * KEY_LENGTH)
             {
-                fprintf(stderr,
-                        "The config file has an invalid master key size %zu (expect %zu)",
-                        config.master_key.size(),
-                        static_cast<size_t>(3 * KEY_LENGTH));
+                global_logger->error(
+                    "The config file has an invalid master key size %zu (expect %zu)",
+                    config.master_key.size(),
+                    static_cast<size_t>(3 * KEY_LENGTH));
                 return 100;
             }
 

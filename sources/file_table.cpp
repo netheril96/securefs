@@ -1,6 +1,7 @@
 #include "file_table.h"
 #include "btree_dir.h"
 #include "exceptions.h"
+#include "logger.h"
 #include "myutils.h"
 #include "platform.h"
 
@@ -266,6 +267,9 @@ void FileTable::eject()
     for (size_t i = 0; i < num_eject; ++i)
     {
         m_files.erase(m_closed_ids[i]);
+        if (global_logger->get_level() <= kLogTrace)
+            global_logger->trace("Evicting file with ID=%s from cache",
+                                 hexify(m_closed_ids[i]).c_str());
     }
     m_closed_ids.erase(m_closed_ids.begin(), m_closed_ids.begin() + num_eject);
 }
