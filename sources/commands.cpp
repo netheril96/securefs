@@ -614,8 +614,7 @@ public:
 
         FSConfig config;
         config.master_key.resize(format_version < 4 ? KEY_LENGTH : 3 * KEY_LENGTH);
-        CryptoPP::BlockingRng blockingRng;
-        blockingRng.GenerateBlock(config.master_key.data(), config.master_key.size());
+        CryptoPP::OS_GenerateRandomBlock(true, config.master_key.data(), config.master_key.size());
 
         config.iv_size = format_version == 1 ? 32 : iv_size.getValue();
         config.version = format_version;

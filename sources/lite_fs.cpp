@@ -423,6 +423,7 @@ namespace lite
             &this->m_name_encryptor);
     }
 
+#ifdef __APPLE__
     ssize_t
     FileSystem::getxattr(const char* path, const char* name, void* buf, size_t size) noexcept
     {
@@ -507,5 +508,6 @@ namespace lite
             return -EIO;
         }
     }
+#endif
 }
 }
