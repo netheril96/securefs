@@ -1,5 +1,6 @@
 #pragma once
 
+#include "mystring.h"
 #include "myutils.h"
 #include "streams.h"
 
@@ -98,34 +99,32 @@ private:
     OSService();
 
 public:
-    OSService(const std::string& path);
+    OSService(StringRef path);
     ~OSService();
-    std::shared_ptr<FileStream>
-    open_file_stream(const std::string& path, int flags, unsigned mode) const;
-    bool remove_file_nothrow(const std::string& path) const noexcept;
-    bool remove_directory_nothrow(const std::string& path) const noexcept;
-    void remove_file(const std::string& path) const;
-    void remove_directory(const std::string& path) const;
+    std::shared_ptr<FileStream> open_file_stream(StringRef path, int flags, unsigned mode) const;
+    bool remove_file_nothrow(StringRef path) const noexcept;
+    bool remove_directory_nothrow(StringRef path) const noexcept;
+    void remove_file(StringRef path) const;
+    void remove_directory(StringRef path) const;
 
-    void rename(const std::string& a, const std::string& b) const;
+    void rename(StringRef a, StringRef b) const;
     void lock() const;
-    void ensure_directory(const std::string& path, unsigned mode) const;
-    void mkdir(const std::string& path, unsigned mode) const;
+    void ensure_directory(StringRef path, unsigned mode) const;
+    void mkdir(StringRef path, unsigned mode) const;
     void statfs(struct statvfs*) const;
-    void utimens(const std::string& path, const timespec ts[2]) const;
+    void utimens(StringRef path, const timespec ts[2]) const;
 
     // Returns false when the path does not exist; throw exceptions on other errors
     // The ENOENT errors are too frequent so the API is redesigned
-    bool stat(const std::string& path, FUSE_STAT* stat);
-    void chmod(const std::string& path, mode_t mode);
-    ssize_t readlink(const std::string& path, char* output, size_t size);
-    void symlink(const std::string& to, const std::string& from);
+    bool stat(StringRef path, FUSE_STAT* stat);
+    void chmod(StringRef path, mode_t mode);
+    ssize_t readlink(StringRef path, char* output, size_t size);
+    void symlink(StringRef to, StringRef from);
 
-    typedef std::function<void(const std::string&, const std::string&)> recursive_traverse_callback;
-    void recursive_traverse(const std::string& dir,
-                            const recursive_traverse_callback& callback) const;
+    typedef std::function<void(StringRef, StringRef)> recursive_traverse_callback;
+    void recursive_traverse(StringRef dir, const recursive_traverse_callback& callback) const;
 
-    std::unique_ptr<DirectoryTraverser> create_traverser(const std::string& dir) const;
+    std::unique_ptr<DirectoryTraverser> create_traverser(StringRef dir) const;
 
 #ifdef __APPLE__
     // These APIs, unlike all others, report errors through negative error numbers as defined in
@@ -142,7 +141,7 @@ public:
     static int raise_fd_limit();
     static bool isatty(int fd) noexcept;
 
-    static std::string temp_name(const std::string& prefix, const std::string& suffix);
+    static std::string temp_name(StringRef prefix, StringRef suffix);
     static const OSService& get_default();
     static void get_current_time(timespec& out);
 };

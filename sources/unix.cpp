@@ -181,7 +181,7 @@ private:
     DIR* m_dir;
 
 public:
-    explicit UnixDirectoryTraverser(const std::string& path)
+    explicit UnixDirectoryTraverser(StringRef path)
     {
         m_dir = ::opendir(path.c_str());
         if (!m_dir)
@@ -236,12 +236,12 @@ public:
     std::string dir_name;
     int dir_fd;
 
-    std::string norm_path(const std::string& path) const
+    std::string norm_path(StringRef path) const
     {
         if (dir_fd < 0)
-            return path;
+            return path.to_string();
         if (path.size() > 0 && path[0] == '/')
-            return path;
+            return path.to_string();
         return dir_name + path;
     }
 };
@@ -254,7 +254,7 @@ OSService::~OSService()
         ::close(impl->dir_fd);
 }
 
-OSService::OSService(const std::string& path) : impl(new Impl())
+OSService::OSService(StringRef path) : impl(new Impl())
 {
     char buffer[PATH_MAX + 1] = {0};
     char* rc = ::realpath(path.c_str(), buffer);
@@ -271,7 +271,7 @@ OSService::OSService(const std::string& path) : impl(new Impl())
 }
 
 std::shared_ptr<FileStream>
-OSService::open_file_stream(const std::string& path, int flags, unsigned mode) const
+OSService::open_file_stream(StringRef path, int flags, unsigned mode) const
 {
 #ifdef HAS_AT_FUNCTIONS
     int fd = ::openat(impl->dir_fd, path.c_str(), flags, mode);
@@ -284,7 +284,7 @@ OSService::open_file_stream(const std::string& path, int flags, unsigned mode) c
     return std::make_shared<UnixFileStream>(fd);
 }
 
-void OSService::remove_file(const std::string& path) const
+void OSService::remove_file(StringRef path) const
 {
 #ifdef HAS_AT_FUNCTIONS
     int rc = ::unlinkat(impl->dir_fd, path.c_str(), 0) == 0;
@@ -295,7 +295,7 @@ void OSService::remove_file(const std::string& path) const
         throwPOSIXException(errno, "unlinking " + impl->norm_path(path));
 }
 
-void OSService::remove_directory(const std::string& path) const
+void OSService::remove_directory(StringRef path) const
 {
 #ifdef HAS_AT_FUNCTIONS
     int rc = ::unlinkat(impl->dir_fd, path.c_str(), AT_REMOVEDIR);
@@ -314,7 +314,7 @@ void OSService::lock() const
             errno, strprintf("Fail to obtain exclusive lock on %s", impl->dir_name.c_str()));
 }
 
-void OSService::mkdir(const std::string& path, unsigned mode) const
+void OSService::mkdir(StringRef path, unsigned mode) const
 {
 #ifdef HAS_AT_FUNCTIONS
     int rc = ::mkdirat(impl->dir_fd, path.c_str(), mode);
@@ -326,7 +326,7 @@ void OSService::mkdir(const std::string& path, unsigned mode) const
             errno, strprintf("Fail to create directory %s", impl->norm_path(path).c_str()));
 }
 
-void OSService::symlink(const std::string& to, const std::string& from)
+void OSService::symlink(StringRef to, StringRef from)
 {
 #ifdef HAS_AT_FUNCTIONS
     int rc = ::symlinkat(to.c_str(), impl->dir_fd, from.c_str());
@@ -345,7 +345,7 @@ void OSService::statfs(struct statvfs* fs_info) const
         throwPOSIXException(errno, "statvfs");
 }
 
-void OSService::rename(const std::string& a, const std::string& b) const
+void OSService::rename(StringRef a, StringRef b) const
 {
 #ifdef HAS_AT_FUNCTIONS
     int rc = ::renameat(impl->dir_fd, a.c_str(), impl->dir_fd, b.c_str());
@@ -359,7 +359,7 @@ void OSService::rename(const std::string& a, const std::string& b) const
                                       impl->norm_path(b).c_str()));
 }
 
-bool OSService::stat(const std::string& path, FUSE_STAT* stat)
+bool OSService::stat(StringRef path, FUSE_STAT* stat)
 {
 #ifdef HAS_AT_FUNCTIONS
     int rc = ::fstatat(impl->dir_fd, path.c_str(), stat, AT_SYMLINK_NOFOLLOW);
@@ -375,7 +375,7 @@ bool OSService::stat(const std::string& path, FUSE_STAT* stat)
     return true;
 }
 
-void OSService::chmod(const std::string& path, mode_t mode)
+void OSService::chmod(StringRef path, mode_t mode)
 {
 #ifdef HAS_AT_FUNCTIONS
     int rc = ::fchmodat(impl->dir_fd, path.c_str(), mode, AT_SYMLINK_NOFOLLOW);
@@ -387,7 +387,7 @@ void OSService::chmod(const std::string& path, mode_t mode)
             errno, strprintf("chmod %s with mode=0%o", impl->norm_path(path).c_str(), mode));
 }
 
-ssize_t OSService::readlink(const std::string& path, char* output, size_t size)
+ssize_t OSService::readlink(StringRef path, char* output, size_t size)
 {
 #ifdef HAS_AT_FUNCTIONS
     ssize_t rc = ::readlinkat(impl->dir_fd, path.c_str(), output, size);
@@ -401,7 +401,7 @@ ssize_t OSService::readlink(const std::string& path, char* output, size_t size)
     return rc;
 }
 
-void OSService::utimens(const std::string& path, const timespec* ts) const
+void OSService::utimens(StringRef path, const timespec* ts) const
 {
 #if defined(HAS_AT_FUNCTIONS) && defined(HAS_FUTIMENS)
     int rc = ::utimensat(impl->dir_fd, path.c_str(), ts, AT_SYMLINK_NOFOLLOW);
@@ -427,7 +427,7 @@ void OSService::utimens(const std::string& path, const timespec* ts) const
 #endif
 }
 
-std::unique_ptr<DirectoryTraverser> OSService::create_traverser(const std::string& dir) const
+std::unique_ptr<DirectoryTraverser> OSService::create_traverser(StringRef dir) const
 {
     return securefs::make_unique<UnixDirectoryTraverser>(impl->norm_path(dir));
 }

@@ -362,12 +362,12 @@ static void find_ids_helper(const std::string& current_dir,
     id_type id;
     std::string hex(id_type::size() * 2, 0);
     OSService::recursive_traverse_callback callback
-        = [&id, &result, &hex](const std::string& dir, const std::string& name) -> bool {
+        = [&id, &result, &hex](StringRef dir, StringRef name) -> bool {
         if (name == "." || name == "..")
             return true;
-        if (StringRef(name).ends_with(".meta"))
+        if (name.ends_with(".meta"))
         {
-            std::string total_name = dir + '/' + name.substr(0, name.size() - strlen(".meta"));
+            std::string total_name = dir + "/" + name.substr(0, name.size() - strlen(".meta"));
             hex.assign(hex.size(), 0);
             ptrdiff_t i = hex.size() - 1, j = total_name.size() - 1;
             while (i >= 0 && j >= 0)

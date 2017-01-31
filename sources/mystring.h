@@ -37,20 +37,25 @@ public:
     CharT front() const noexcept { return m_buffer[0]; }
     CharT back() const noexcept { return m_buffer[m_size - 1]; }
     bool empty() const noexcept { return size() == 0; }
-    std::basic_string<CharT> to_string() const { return {m_buffer, m_size}; }
-
+    std::basic_string<CharT> to_string() const
+    {
+        return std::basic_string<CharT>(m_buffer, m_size);
+    }
     bool starts_with(BasicStringRef<CharT> prefix) const noexcept
     {
         return size() >= prefix.size()
             && std::char_traits<CharT>::compare(data(), prefix.data(), prefix.size()) == 0;
     }
-
     bool ends_with(BasicStringRef<CharT> suffix) const noexcept
     {
         return size() >= suffix.size()
             && std::char_traits<CharT>::compare(
                    data() + size() - suffix.size(), suffix.data(), suffix.size())
             == 0;
+    }
+    std::basic_string<CharT> substr(size_t start, size_t count) const
+    {
+        return std::basic_string<CharT>(data() + start, std::min(size() - start, count));
     }
 };
 
@@ -65,9 +70,35 @@ inline std::basic_string<CharT> operator+(BasicStringRef<CharT> a, BasicStringRe
 }
 
 template <class CharT>
+inline std::basic_string<CharT> operator+(const CharT* a, BasicStringRef<CharT> b)
+{
+    return BasicStringRef<CharT>(a) + b;
+}
+
+template <class CharT>
+inline std::basic_string<CharT> operator+(BasicStringRef<CharT> a, const CharT* b)
+{
+    return a + BasicStringRef<CharT>(b);
+}
+
+template <class CharT>
+inline std::basic_string<CharT> operator+(const std::basic_string<CharT>& a,
+                                          BasicStringRef<CharT> b)
+{
+    return BasicStringRef<CharT>(a) + b;
+}
+
+template <class CharT>
+inline std::basic_string<CharT> operator+(BasicStringRef<CharT> a,
+                                          const std::basic_string<CharT>& b)
+{
+    return a + BasicStringRef<CharT>(b);
+}
+
+template <class CharT>
 bool operator==(BasicStringRef<CharT> a, BasicStringRef<CharT> b)
 {
-    return a.size() == b.size() && std::equal(a.begin(), a.end().b.begin());
+    return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin());
 }
 
 template <class CharT>
@@ -76,8 +107,20 @@ bool operator!=(BasicStringRef<CharT> a, BasicStringRef<CharT> b)
     return !(a == b);
 }
 
-using StringRef = BasicStringRef<char>;
-using WideStringRef = BasicStringRef<wchar_t>;
+template <class CharT>
+bool operator==(BasicStringRef<CharT> a, const char* b)
+{
+    return a == BasicStringRef<CharT>(b);
+}
+
+template <class CharT>
+bool operator!=(BasicStringRef<CharT> a, const char* b)
+{
+    return a != BasicStringRef<CharT>(b);
+}
+
+typedef BasicStringRef<char> StringRef;
+typedef BasicStringRef<wchar_t> WideStringRef;
 
 std::string strprintf(const char* format, ...)
 #ifndef WIN32
