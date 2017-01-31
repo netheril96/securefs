@@ -46,14 +46,24 @@ public:
         struct stat st;
         int rc = ::fstat(m_fd, &st);
         if (rc < 0)
+        {
+            ::close(fd);
             throwPOSIXException(errno, "fstat");
+        }
+        rc = ::flock(fd, LOCK_EX | LOCK_NB);
+        if (rc < 0)
+        {
+            ::close(fd);
+            throwPOSIXException(errno, "flock");
+        }
         m_size = st.st_size;
     }
 
-    ~UnixFileStream() { ::close(m_fd); }
+    ~UnixFileStream() { this->close(); }
 
     void close() noexcept override
     {
+        ::flock(m_fd, LOCK_UN);
         ::close(m_fd);
         m_fd = -1;
     }
