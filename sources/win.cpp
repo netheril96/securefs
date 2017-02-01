@@ -63,6 +63,236 @@ public:
             return strprintf("error %lu (%s)", err, exp);
         return strprintf("error %lu (%s) %s", err, exp, buffer);
     }
+    int error_number() const noexcept override
+    {
+        switch (err)
+        {
+        case ERROR_SUCCESS:
+            return 0;
+
+        case ERROR_FILE_NOT_FOUND:
+        case ERROR_PATH_NOT_FOUND:
+            return ENOENT;
+
+        case ERROR_TOO_MANY_OPEN_FILES:
+        case ERROR_TOO_MANY_MODULES:
+            return ENFILE;
+
+        case ERROR_ACCESS_DENIED:
+        case ERROR_NETWORK_ACCESS_DENIED:
+            return EACCES;
+
+        case ERROR_NOT_ENOUGH_MEMORY:
+        case ERROR_OUTOFMEMORY:
+            return ENOMEM;
+
+        // Invalid errors
+        case ERROR_INVALID_FUNCTION:
+        case ERROR_INVALID_HANDLE:
+        case ERROR_INVALID_BLOCK:
+        case ERROR_INVALID_ACCESS:
+        case ERROR_INVALID_DATA:
+        case ERROR_INVALID_DRIVE:
+        case ERROR_INVALID_PASSWORD:
+        case ERROR_INVALID_PARAMETER:
+        case ERROR_INVALID_AT_INTERRUPT_TIME:
+        case ERROR_INVALID_TARGET_HANDLE:
+        case ERROR_INVALID_CATEGORY:
+        case ERROR_INVALID_VERIFY_SWITCH:
+        case ERROR_INVALID_NAME:
+        case ERROR_INVALID_LEVEL:
+        case ERROR_INVALID_EVENT_COUNT:
+        case ERROR_INVALID_LIST_FORMAT:
+        case ERROR_INVALID_SEGMENT_NUMBER:
+        case ERROR_INVALID_ORDINAL:
+        case ERROR_INVALID_FLAG_NUMBER:
+        case ERROR_INVALID_STARTING_CODESEG:
+        case ERROR_INVALID_STACKSEG:
+        case ERROR_INVALID_MODULETYPE:
+        case ERROR_INVALID_EXE_SIGNATURE:
+        case ERROR_INVALID_MINALLOCSIZE:
+        case ERROR_INVALID_SEGDPL:
+        case ERROR_INVALID_SIGNAL_NUMBER:
+        case ERROR_INVALID_EA_NAME:
+        case ERROR_INVALID_EA_HANDLE:
+        case ERROR_INVALID_OPLOCK_PROTOCOL:
+        case ERROR_INVALID_LOCK_RANGE:
+        case ERROR_INVALID_EXCEPTION_HANDLER:
+        case ERROR_INVALID_TOKEN:
+        case ERROR_INVALID_CAP:
+        case ERROR_INVALID_FIELD_IN_PARAMETER_LIST:
+        case ERROR_INVALID_KERNEL_INFO_VERSION:
+        case ERROR_INVALID_PEP_INFO_VERSION:
+        case ERROR_INVALID_ADDRESS:
+        case ERROR_INVALID_UNWIND_TARGET:
+        case ERROR_INVALID_PORT_ATTRIBUTES:
+        case ERROR_INVALID_QUOTA_LOWER:
+        case ERROR_INVALID_LDT_SIZE:
+        case ERROR_INVALID_LDT_OFFSET:
+        case ERROR_INVALID_LDT_DESCRIPTOR:
+        case ERROR_INVALID_IMAGE_HASH:
+        case ERROR_INVALID_VARIANT:
+        case ERROR_INVALID_HW_PROFILE:
+        case ERROR_INVALID_PLUGPLAY_DEVICE_PATH:
+        case ERROR_INVALID_DEVICE_OBJECT_PARAMETER:
+        case ERROR_INVALID_ACE_CONDITION:
+        case ERROR_INVALID_MESSAGE:
+        case ERROR_INVALID_FLAGS:
+        case ERROR_INVALID_SERVICE_CONTROL:
+        case ERROR_INVALID_SERVICE_ACCOUNT:
+        case ERROR_INVALID_SERVICE_LOCK:
+        case ERROR_INVALID_BLOCK_LENGTH:
+        case ERROR_INVALID_DLL:
+        case ERROR_INVALID_GROUPNAME:
+        case ERROR_INVALID_COMPUTERNAME:
+        case ERROR_INVALID_EVENTNAME:
+        case ERROR_INVALID_DOMAINNAME:
+        case ERROR_INVALID_SERVICENAME:
+        case ERROR_INVALID_NETNAME:
+        case ERROR_INVALID_SHARENAME:
+        case ERROR_INVALID_PASSWORDNAME:
+        case ERROR_INVALID_MESSAGENAME:
+        case ERROR_INVALID_MESSAGEDEST:
+        case ERROR_INVALID_IMPORT_OF_NON_DLL:
+        case ERROR_INVALID_CRUNTIME_PARAMETER:
+        case ERROR_INVALID_LABEL:
+        case ERROR_INVALID_OWNER:
+        case ERROR_INVALID_PRIMARY_GROUP:
+        case ERROR_INVALID_ACCOUNT_NAME:
+        case ERROR_INVALID_LOGON_HOURS:
+        case ERROR_INVALID_WORKSTATION:
+        case ERROR_INVALID_SUB_AUTHORITY:
+        case ERROR_INVALID_ACL:
+        case ERROR_INVALID_SID:
+        case ERROR_INVALID_SECURITY_DESCR:
+        case ERROR_INVALID_ID_AUTHORITY:
+        case ERROR_INVALID_GROUP_ATTRIBUTES:
+        case ERROR_INVALID_SERVER_STATE:
+        case ERROR_INVALID_DOMAIN_STATE:
+        case ERROR_INVALID_DOMAIN_ROLE:
+        case ERROR_INVALID_LOGON_TYPE:
+        case ERROR_INVALID_MEMBER:
+        case ERROR_INVALID_WINDOW_HANDLE:
+        case ERROR_INVALID_MENU_HANDLE:
+        case ERROR_INVALID_CURSOR_HANDLE:
+        case ERROR_INVALID_ACCEL_HANDLE:
+        case ERROR_INVALID_HOOK_HANDLE:
+        case ERROR_INVALID_DWP_HANDLE:
+        case ERROR_INVALID_INDEX:
+        case ERROR_INVALID_ICON_HANDLE:
+        case ERROR_INVALID_COMBOBOX_MESSAGE:
+        case ERROR_INVALID_EDIT_HEIGHT:
+        case ERROR_INVALID_HOOK_FILTER:
+        case ERROR_INVALID_FILTER_PROC:
+        case ERROR_INVALID_LB_MESSAGE:
+        case ERROR_INVALID_MSGBOX_STYLE:
+        case ERROR_INVALID_SPI_VALUE:
+        case ERROR_INVALID_GW_COMMAND:
+        case ERROR_INVALID_THREAD_ID:
+        case ERROR_INVALID_SCROLLBAR_RANGE:
+        case ERROR_INVALID_SHOWWIN_COMMAND:
+        case ERROR_INVALID_KEYBOARD_HANDLE:
+        case ERROR_INVALID_MONITOR_HANDLE:
+        case ERROR_INVALID_TASK_NAME:
+        case ERROR_INVALID_TASK_INDEX:
+        case ERROR_INVALID_HANDLE_STATE:
+        case ERROR_INVALID_FIELD:
+        case ERROR_INVALID_TABLE:
+        case ERROR_INVALID_COMMAND_LINE:
+        case ERROR_INVALID_PATCH_XML:
+        case ERROR_INVALID_USER_BUFFER:
+        case ERROR_INVALID_SEPARATOR_FILE:
+        case ERROR_INVALID_PRIORITY:
+        case ERROR_INVALID_PRINTER_NAME:
+        case ERROR_INVALID_PRINTER_COMMAND:
+        case ERROR_INVALID_DATATYPE:
+        case ERROR_INVALID_ENVIRONMENT:
+        case ERROR_INVALID_TIME:
+        case ERROR_INVALID_FORM_NAME:
+        case ERROR_INVALID_FORM_SIZE:
+        case ERROR_INVALID_PRINTER_STATE:
+        case ERROR_INVALID_PIXEL_FORMAT:
+        case ERROR_INVALID_WINDOW_STYLE:
+        case ERROR_INVALID_CMM:
+        case ERROR_INVALID_PROFILE:
+        case ERROR_INVALID_COLORSPACE:
+        case ERROR_INVALID_TRANSFORM:
+        case ERROR_INVALID_COLORINDEX:
+        case ERROR_INVALID_PRINT_MONITOR:
+        case ERROR_INVALID_PRINTER_DRIVER_MANIFEST:
+        case ERROR_INVALID_PACKAGE_SID_LENGTH:
+        case ERROR_INVALID_MEDIA:
+        case ERROR_INVALID_LIBRARY:
+        case ERROR_INVALID_MEDIA_POOL:
+        case ERROR_INVALID_CLEANER:
+        case ERROR_INVALID_OPERATION:
+        case ERROR_INVALID_DRIVE_OBJECT:
+        case ERROR_INVALID_REPARSE_DATA:
+        case ERROR_INVALID_STATE:
+        case ERROR_INVALID_OPERATION_ON_QUORUM:
+        case ERROR_INVALID_CLUSTER_IPV6_ADDRESS:
+        case ERROR_INVALID_TRANSACTION:
+        case ERROR_INVALID_USER_PRINCIPAL_NAME:
+        case ERROR_INVALID_RUNLEVEL_SETTING:
+        case ERROR_INVALID_STAGED_SIGNATURE:
+            return EINVAL;
+        // End of invalid errors
+
+        case ERROR_WRITE_PROTECT:
+            return EROFS;
+
+        case ERROR_NOT_READY:
+        case ERROR_GEN_FAILURE:
+        case ERROR_DEV_NOT_EXIST:
+            return EXDEV;
+
+        case ERROR_READ_FAULT:
+        case ERROR_WRITE_FAULT:
+            return EIO;
+
+        case ERROR_LOCK_VIOLATION:
+        case ERROR_LOCKED:
+            return EWOULDBLOCK;
+
+        case ERROR_HANDLE_DISK_FULL:
+        case ERROR_NO_SPOOL_SPACE:
+        case ERROR_DISK_FULL:
+            return ENOSPC;
+
+        case ERROR_NOT_SUPPORTED:
+        case ERROR_CALL_NOT_IMPLEMENTED:
+            return ENOTSUP;
+
+        case ERROR_FILE_EXISTS:
+        case ERROR_ALREADY_EXISTS:
+            return EEXIST;
+
+        case ERROR_BUFFER_OVERFLOW:
+        case ERROR_LABEL_TOO_LONG:
+            return ENAMETOOLONG;
+
+        case ERROR_INSUFFICIENT_BUFFER:
+            return ERANGE;
+
+        case ERROR_DIR_NOT_EMPTY:
+            return ENOTEMPTY;
+
+        case ERROR_PATH_BUSY:
+        case ERROR_BUSY:
+            return EBUSY;
+
+        case ERROR_BAD_ARGUMENTS:
+        case ERROR_BAD_PATHNAME:
+            return EINVAL;
+
+        case ERROR_FILE_TOO_LARGE:
+            return E2BIG;
+
+        case ERROR_OPERATION_IN_PROGRESS:
+            return EALREADY;
+        }
+        return EPERM;
+    }
 };
 
 [[noreturn]] void throwWindowsException(DWORD err, const char* exp)
