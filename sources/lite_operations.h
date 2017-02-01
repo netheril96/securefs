@@ -63,6 +63,8 @@ namespace lite
 
     int symlink(const char* to, const char* from);
 
+    int link(const char* src, const char* dest);
+
     int readlink(const char* path, char* buf, size_t size);
 
     int rename(const char*, const char*);

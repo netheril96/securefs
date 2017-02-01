@@ -9,8 +9,8 @@
 #include <atomic>
 #include <map>
 #include <memory>
-#include <mutex>
 #include <string>
+#include <mutex>
 
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
@@ -25,55 +25,50 @@ namespace lite
         DISABLE_COPY_MOVE(File)
 
     private:
-        AESGCMCryptStream m_crypt_stream;
-        std::mutex m_mutex;
-        std::string m_name;
+        securefs::optional<lite::AESGCMCryptStream> m_crypt_stream;
         std::shared_ptr<securefs::FileStream> m_file_stream;
         std::atomic<int> m_open_count;
 
     public:
-        explicit File(std::string name,
-                      std::shared_ptr<securefs::FileStream> file_stream,
+        explicit File(std::shared_ptr<securefs::FileStream> file_stream,
                       const key_type& master_key,
                       unsigned block_size,
                       unsigned iv_size,
                       bool check);
         ~File();
 
-        length_type size() const { return m_crypt_stream.size(); }
-        void flush() { m_crypt_stream.flush(); }
-        bool is_sparse() const noexcept { return m_crypt_stream.is_sparse(); }
-        void resize(length_type len) { m_crypt_stream.resize(len); }
+        length_type size() const { return m_crypt_stream->size(); }
+        void flush() { m_crypt_stream->flush(); }
+        bool is_sparse() const noexcept { return m_crypt_stream->is_sparse(); }
+        void resize(length_type len) { m_crypt_stream->resize(len); }
         length_type read(void* output, offset_type off, length_type len)
         {
-            return m_crypt_stream.read(output, off, len);
+            return m_crypt_stream->read(output, off, len);
         }
         void write(const void* input, offset_type off, length_type len)
         {
-            return m_crypt_stream.write(input, off, len);
+            return m_crypt_stream->write(input, off, len);
         }
         void fstat(FUSE_STAT* stat);
         void fsync() { m_file_stream->fsync(); }
         void utimens(const timespec ts[2]) { m_file_stream->utimens(ts); }
         int increase_open_count() noexcept { return ++m_open_count; }
         int decrease_open_count() noexcept { return --m_open_count; }
-        void lock() { m_mutex.lock(); }
-        void unlock() { m_mutex.unlock(); }
-        bool try_lock() { return m_mutex.try_lock(); }
-        const std::string& name() const noexcept { return m_name; }
+        void lock() { m_file_stream->lock(); }
+        void unlock() { m_file_stream->unlock(); }
     };
 
     class FileSystem;
 
     struct FSCCloser
     {
-    private:
-        FileSystem* m_ctx;
-
-    public:
-        explicit FSCCloser(FileSystem* ctx) : m_ctx(ctx) {}
-        ~FSCCloser() {}
-        void operator()(File* file);
+        void operator()(File* file) const
+        {
+            if (file && file->decrease_open_count() <= 0)
+            {
+                delete file;
+            }
+        }
     };
 
     typedef std::unique_ptr<File, FSCCloser> AutoClosedFile;
@@ -99,7 +94,6 @@ namespace lite
         DISABLE_COPY_MOVE(FileSystem)
 
     private:
-        std::map<std::string, File*> m_opened_files;
         std::map<std::string, std::string> m_resolved_symlinks;
         std::mutex m_mutex;
         AES_SIV m_name_encryptor;
@@ -126,9 +120,7 @@ namespace lite
         void lock() { m_mutex.lock(); }
         void unlock() { m_mutex.unlock(); }
         bool try_lock() { return m_mutex.try_lock(); }
-        void close(File* f);
-        AutoClosedFile open(StringRef path, int flags);
-        AutoClosedFile create(StringRef path, mode_t mode);
+        AutoClosedFile open(StringRef path, int flags, mode_t mode);
         bool stat(StringRef path, FUSE_STAT* buf);
         void mkdir(StringRef path, mode_t mode);
         void rmdir(StringRef path);
@@ -136,6 +128,7 @@ namespace lite
         void rename(StringRef from, StringRef to);
         void unlink(StringRef path);
         void symlink(StringRef to, StringRef from);
+        void link(StringRef src, StringRef dest);
         size_t readlink(StringRef path, char* buf, size_t size);
         void utimens(StringRef path, const timespec tm[2]);
         void truncate(StringRef path, offset_type len);
@@ -158,11 +151,5 @@ namespace lite
         }
 #endif
     };
-
-    inline void FSCCloser::operator()(File* file)
-    {
-        if (file)
-            m_ctx->close(file);
-    }
 }
 }

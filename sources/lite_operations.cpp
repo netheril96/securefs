@@ -122,7 +122,7 @@ namespace lite
     int create(const char* path, mode_t mode, struct fuse_file_info* info)
     {
         SINGLE_COMMON_PROLOGUE
-        AutoClosedFile file = filesystem->create(path, mode);
+        AutoClosedFile file = filesystem->open(path, O_RDWR | O_CREAT | O_EXCL, mode);
         info->fh = reinterpret_cast<uintptr_t>(file.release());
         return 0;
         SINGLE_COMMON_EPILOGUE
@@ -131,7 +131,7 @@ namespace lite
     int open(const char* path, struct fuse_file_info* info)
     {
         SINGLE_COMMON_PROLOGUE
-        AutoClosedFile file = filesystem->open(path, info->flags);
+        AutoClosedFile file = filesystem->open(path, info->flags, 0644);
         info->fh = reinterpret_cast<uintptr_t>(file.release());
         return 0;
         SINGLE_COMMON_EPILOGUE
@@ -140,7 +140,7 @@ namespace lite
     int release(const char* path, struct fuse_file_info* info)
     {
         SINGLE_COMMON_PROLOGUE
-        filesystem->close(reinterpret_cast<File*>(info->fh));
+        FSCCloser()(reinterpret_cast<File*>(info->fh));
         return 0;
         SINGLE_COMMON_EPILOGUE
     }
@@ -327,6 +327,36 @@ namespace lite
         }
     }
 
+    int link(const char* src, const char* dest)
+    {
+        auto filesystem = static_cast<FileSystem*>(fuse_get_context()->private_data);
+        global_logger->trace("%s src=%s dest=%s", __func__, src, dest);
+        std::lock_guard<FileSystem> xguard(*filesystem);
+        try
+        {
+            filesystem->link(src, dest);
+            return 0;
+        }
+        catch (const CommonException& e)
+        {
+            return -e.error_number();
+        }
+        catch (const SystemException& e)
+        {
+            return -e.error_number();
+        }
+        catch (const std::exception& e)
+        {
+            global_logger->error("%s src=%s dest=%s encounters exception %s: %s",
+                                 __func__,
+                                 src,
+                                 dest,
+                                 get_type_name(e),
+                                 e.what());
+            return -get_error_number(e);
+        }
+    }
+
     int readlink(const char* path, char* buf, size_t size)
     {
         SINGLE_COMMON_PROLOGUE(void) filesystem->readlink(path, buf, size);
@@ -397,7 +427,7 @@ namespace lite
 
         SINGLE_COMMON_PROLOGUE
 
-        AutoClosedFile fp = filesystem->open(path, O_RDWR);
+        AutoClosedFile fp = filesystem->open(path, O_RDWR, 0644);
         std::lock_guard<File> xguard(*fp);
         fp->resize(static_cast<size_t>(len));
         return 0;
@@ -484,6 +514,7 @@ namespace lite
         opt->rmdir = &::securefs::lite::rmdir;
         opt->chmod = &::securefs::lite::chmod;
         opt->symlink = &::securefs::lite::symlink;
+        opt->link = &::securefs::lite::link;
         opt->readlink = &::securefs::lite::readlink;
         opt->rename = &::securefs::lite::rename;
         opt->fsync = &::securefs::lite::fsync;

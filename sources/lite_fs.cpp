@@ -5,22 +5,21 @@
 #include <cryptopp/base32.h>
 
 #include <cerrno>
+#include <mutex>
 
 namespace securefs
 {
 namespace lite
 {
-    File::File(std::string name,
-               std::shared_ptr<securefs::FileStream> file_stream,
+    File::File(std::shared_ptr<securefs::FileStream> file_stream,
                const key_type& master_key,
                unsigned block_size,
                unsigned iv_size,
                bool check)
-        : m_crypt_stream(file_stream, master_key, block_size, iv_size, check)
-        , m_name(std::move(name))
-        , m_file_stream(file_stream)
-        , m_open_count(0)
+        : m_file_stream(file_stream), m_open_count(0)
     {
+        std::lock_guard<FileStream> xguard(*m_file_stream);
+        m_crypt_stream.emplace(file_stream, master_key, block_size, iv_size, check);
     }
 
     File::~File() {}
@@ -29,7 +28,7 @@ namespace lite
     {
         m_file_stream->fstat(stat);
         stat->st_size = AESGCMCryptStream::calculate_real_size(
-            stat->st_size, m_crypt_stream.get_block_size(), m_crypt_stream.get_iv_size());
+            stat->st_size, m_crypt_stream->get_block_size(), m_crypt_stream->get_iv_size());
     }
 
     FileSystem::FileSystem(std::shared_ptr<securefs::OSService> root,
@@ -52,20 +51,6 @@ namespace lite
     }
 
     FileSystem::~FileSystem() {}
-
-    void FileSystem::close(File* f)
-    {
-        if (!f)
-            return;
-
-        if (f->decrease_open_count() <= 0)
-        {
-            auto iter = m_opened_files.find(f->name());
-            if (iter != m_opened_files.end())
-                m_opened_files.erase(iter);
-            delete f;
-        }
-    }
 
     InvalidFilenameException::~InvalidFilenameException() {}
     std::string InvalidFilenameException::message() const
@@ -199,54 +184,20 @@ namespace lite
         }
     }
 
-    AutoClosedFile FileSystem::open(StringRef path, int flags)
+    AutoClosedFile FileSystem::open(StringRef path, int flags, mode_t mode)
     {
-        if ((flags & O_CREAT) | (flags & O_APPEND))
+        if (flags & O_APPEND)
             throwVFSException(ENOTSUP);
-
-        auto strpath = path.to_string();
-        AutoClosedFile result(nullptr, FSCCloser(this));
-        auto iter = m_opened_files.find(strpath);
-        if (iter != m_opened_files.end())
-        {
-            iter->second->increase_open_count();
-            result.reset(iter->second);
-        }
-        else
-        {
-            auto file_stream = m_root->open_file_stream(translate_path(path, false), O_RDWR, 0644);
-            auto fp = securefs::make_unique<File>(path.to_string(),
-                                                  file_stream,
-                                                  m_content_key,
-                                                  m_block_size,
-                                                  m_iv_size,
-                                                  (m_flags & kOptionNoAuthentication) == 0);
-            fp->increase_open_count();
-            File* fp_pointer = fp.get();
-            m_opened_files[strpath] = fp.release();
-            result.reset(fp_pointer);
-        }
-        if (flags & O_TRUNC)
-            result->resize(0);
-        return result;
-    }
-
-    AutoClosedFile FileSystem::create(StringRef path, mode_t mode)
-    {
-        if (m_opened_files.find(path.to_string()) != m_opened_files.end())
-            throwVFSException(EEXIST);
-        auto file_stream = m_root->open_file_stream(
-            translate_path(path, false), O_RDWR | O_EXCL | O_CREAT, mode);
-        auto fp = securefs::make_unique<File>(path.to_string(),
-                                              file_stream,
-                                              m_content_key,
-                                              m_block_size,
-                                              m_iv_size,
-                                              (m_flags & kOptionNoAuthentication) == 0);
+        auto file_stream = m_root->open_file_stream(translate_path(path, false), flags, mode);
+        AutoClosedFile fp(new File(file_stream,
+                                   m_content_key,
+                                   m_block_size,
+                                   m_iv_size,
+                                   (m_flags & kOptionNoAuthentication) == 0));
         fp->increase_open_count();
-        File* fp_pointer = fp.get();
-        m_opened_files.emplace(path.to_string(), fp.release());
-        return AutoClosedFile(fp_pointer, FSCCloser(this));
+        if (flags & O_TRUNC)
+            fp->resize(0);
+        return fp;
     }
 
     bool FileSystem::stat(StringRef path, FUSE_STAT* buf)
@@ -345,17 +296,20 @@ namespace lite
 
     void FileSystem::unlink(StringRef path)
     {
-        auto strpath = path.to_string();
         m_root->remove_file(translate_path(path, false));
-        m_opened_files.erase(strpath);
-        m_resolved_symlinks.erase(strpath);
+        m_resolved_symlinks.erase(path.to_string());
     }
 
     void FileSystem::truncate(StringRef path, offset_type len)
     {
-        AutoClosedFile fp = open(path, O_RDONLY);
+        AutoClosedFile fp = open(path, O_RDWR, 0644);
         std::lock_guard<File> lg(*fp);
         fp->resize(len);
+    }
+
+    void FileSystem::link(StringRef src, StringRef dest)
+    {
+        m_root->link(translate_path(src, false), translate_path(dest, false));
     }
 
     void FileSystem::statvfs(struct statvfs* buf) { m_root->statfs(buf); }

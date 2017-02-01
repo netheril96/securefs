@@ -50,12 +50,6 @@ public:
             ::close(fd);
             throwPOSIXException(errno, "fstat");
         }
-        rc = ::flock(fd, LOCK_EX | LOCK_NB);
-        if (rc < 0)
-        {
-            ::close(fd);
-            throwPOSIXException(errno, "flock");
-        }
         m_size = st.st_size;
     }
 
@@ -63,9 +57,26 @@ public:
 
     void close() noexcept override
     {
-        ::flock(m_fd, LOCK_UN);
         ::close(m_fd);
         m_fd = -1;
+    }
+
+    void lock() override
+    {
+        int rc = ::flock(m_fd, LOCK_EX);
+        if (rc < 0)
+        {
+            throwPOSIXException(errno, "flock");
+        }
+    }
+
+    void unlock() override
+    {
+        int rc = ::flock(m_fd, LOCK_UN);
+        if (rc < 0)
+        {
+            throwPOSIXException(errno, "flock");
+        }
     }
 
     void fsync() override
@@ -338,6 +349,20 @@ void OSService::symlink(StringRef to, StringRef from)
             errno,
             strprintf("symlink to=%s and from=%s", to.c_str(), impl->norm_path(from).c_str()));
 }
+
+void OSService::link(StringRef source, StringRef dest)
+{
+#ifdef HAS_AT_FUNCTIONS
+    int rc = ::linkat(impl->dir_fd, source.c_str(), impl->dir_fd, dest.c_str(), 0);
+#else
+    int rc = ::link(impl->norm_path(source).c_str(), impl->norm_path(dest).c_str());
+#endif
+    if (rc < 0)
+    {
+        throwPOSIXException(errno, strprintf("link src=%s dest=%s", source.c_str(), dest.c_str()));
+    }
+}
+
 void OSService::statfs(struct statvfs* fs_info) const
 {
     int rc = ::fstatvfs(impl->dir_fd, fs_info);

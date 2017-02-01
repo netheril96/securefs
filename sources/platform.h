@@ -77,6 +77,8 @@ public:
     virtual ssize_t getxattr(const char*, void*, size_t) { throwVFSException(ENOTSUP); }
     virtual void setxattr(const char*, void*, size_t, int) { throwVFSException(ENOTSUP); }
     virtual void removexattr(const char*) { throwVFSException(ENOTSUP); }
+    virtual void lock() = 0;
+    virtual void unlock() = 0;
 };
 
 class DirectoryTraverser
@@ -117,9 +119,11 @@ public:
     // Returns false when the path does not exist; throw exceptions on other errors
     // The ENOENT errors are too frequent so the API is redesigned
     bool stat(StringRef path, FUSE_STAT* stat);
+
+    void link(StringRef source, StringRef dest);
     void chmod(StringRef path, mode_t mode);
     ssize_t readlink(StringRef path, char* output, size_t size);
-    void symlink(StringRef to, StringRef from);
+    void symlink(StringRef source, StringRef dest);
 
     typedef std::function<void(StringRef, StringRef)> recursive_traverse_callback;
     void recursive_traverse(StringRef dir, const recursive_traverse_callback& callback) const;
