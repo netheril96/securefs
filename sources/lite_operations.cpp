@@ -425,14 +425,32 @@ namespace lite
         if (len < 0)
             return -EINVAL;
 
-        SINGLE_COMMON_PROLOGUE
+        global_logger->trace("%s %s (len=%lld)", __func__, path, static_cast<long long>(len));
+        auto filesystem = static_cast<FileSystem*>(fuse_get_context()->private_data);
 
-        AutoClosedFile fp = filesystem->open(path, O_RDWR, 0644);
-        std::lock_guard<File> xguard(*fp);
-        fp->resize(static_cast<size_t>(len));
-        return 0;
-
-        SINGLE_COMMON_EPILOGUE
+        try
+        {
+            std::unique_lock<FileSystem> system_guard(*filesystem);
+            AutoClosedFile fp = filesystem->open(path, O_RDWR, 0644);
+            system_guard.release();
+            std::lock_guard<File> xguard(*fp);
+            fp->resize(static_cast<size_t>(len));
+            return 0;
+        }
+        catch (const CommonException& e)
+        {
+            return -e.error_number();
+        }
+        catch (const SystemException& e)
+        {
+            return -e.error_number();
+        }
+        catch (const std::exception& e)
+        {
+            global_logger->error(
+                "%s %s encounters exception %s: %s", __func__, path, get_type_name(e), e.what());
+            return -get_error_number(e);
+        }
     }
 
     int utimens(const char* path, const struct timespec ts[2])

@@ -300,13 +300,6 @@ namespace lite
         m_resolved_symlinks.erase(path.to_string());
     }
 
-    void FileSystem::truncate(StringRef path, offset_type len)
-    {
-        AutoClosedFile fp = open(path, O_RDWR, 0644);
-        std::lock_guard<File> lg(*fp);
-        fp->resize(len);
-    }
-
     void FileSystem::link(StringRef src, StringRef dest)
     {
         m_root->link(translate_path(src, false), translate_path(dest, false));

@@ -9,8 +9,8 @@
 #include <atomic>
 #include <map>
 #include <memory>
-#include <string>
 #include <mutex>
+#include <string>
 
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
@@ -131,7 +131,6 @@ namespace lite
         void link(StringRef src, StringRef dest);
         size_t readlink(StringRef path, char* buf, size_t size);
         void utimens(StringRef path, const timespec tm[2]);
-        void truncate(StringRef path, offset_type len);
         void statvfs(struct statvfs* buf);
         std::unique_ptr<DirectoryTraverser> create_traverser(StringRef path);
 
