@@ -1,5 +1,7 @@
 #include "lite_stream.h"
 
+#include <cryptopp/osrng.h>
+
 namespace securefs
 {
 namespace lite
@@ -34,7 +36,7 @@ namespace lite
         auto rc = m_stream->read(header.data(), 0, header.size());
         if (rc == 0)
         {
-            generate_random(session_key.data(), session_key.size());
+            CryptoPP::OS_GenerateRandomBlock(false, session_key.data(), session_key.size());
             CryptoPP::xorbuf(header.data(), master_key.data(), session_key.data(), KEY_LENGTH);
             m_stream->write(header.data(), 0, header.size());
         }
