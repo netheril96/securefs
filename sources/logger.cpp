@@ -17,6 +17,10 @@ static size_t current_thread_id(void) { return GetCurrentThreadId(); }
 static size_t current_thread_id(void) { return reinterpret_cast<size_t>(pthread_self()); }
 #endif
 
+static const char* WARNING_COLOR = "\033[1;30m";
+static const char* ERROR_COLOR = "\033[1;31m";
+static const char* DEFAULT_COLOR = "\033[0;39m";
+
 namespace securefs
 {
 void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
@@ -36,6 +40,24 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
 #endif
 
     flockfile(m_fp);
+
+#ifndef WIN32
+    if (m_fp == stderr)
+    {
+        switch (level)
+        {
+        case kLogWarning:
+            fputs(WARNING_COLOR, m_fp);
+            break;
+        case kLogError:
+            fputs(ERROR_COLOR, m_fp);
+            break;
+        default:
+            break;
+        }
+    }
+#endif
+
     fprintf(m_fp,
             "[%s] [0x%zx] [%d-%02d-%02d %02d:%02d:%02d.%09d UTC]    ",
             stringify(level),
@@ -48,6 +70,22 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
             tm.tm_sec,
             static_cast<int>(now.tv_nsec));
     vfprintf(m_fp, format, args);
+
+#ifndef WIN32
+    if (m_fp == stderr)
+    {
+        switch (level)
+        {
+        case kLogWarning:
+        case kLogError:
+            fputs(DEFAULT_COLOR, m_fp);
+            break;
+        default:
+            break;
+        }
+    }
+#endif
+
     putc('\n', m_fp);
     fflush(m_fp);
     funlockfile(m_fp);
