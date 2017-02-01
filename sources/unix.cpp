@@ -241,121 +241,124 @@ public:
     }
 };
 
-class OSService::Impl
+std::string OSService::norm_path(StringRef path) const
 {
-public:
-    std::string dir_name;
-    int dir_fd;
+#ifdef HAS_AT_FUNCTIONS
+    if (m_dir_fd < 0)
+        return path.to_string();
+#endif
+    if (path.size() > 0 && path[0] == '/')
+        return path.to_string();
+    return m_dir_name + path;
+}
 
-    std::string norm_path(StringRef path) const
-    {
-        if (dir_fd < 0)
-            return path.to_string();
-        if (path.size() > 0 && path[0] == '/')
-            return path.to_string();
-        return dir_name + path;
-    }
-};
-
-OSService::OSService() : impl(new Impl()) { impl->dir_fd = AT_FDCWD; }
+OSService::OSService()
+{
+#ifdef HAS_AT_FUNCTIONS
+    m_dir_fd = AT_FDCWD;
+#endif
+}
 
 OSService::~OSService()
 {
-    if (impl->dir_fd >= 0)
-        ::close(impl->dir_fd);
+#ifdef HAS_AT_FUNCTIONS
+    if (m_dir_fd >= 0)
+        ::close(m_dir_fd);
+#endif
 }
 
-OSService::OSService(StringRef path) : impl(new Impl())
+OSService::OSService(StringRef path)
 {
     char buffer[PATH_MAX + 1] = {0};
     char* rc = ::realpath(path.c_str(), buffer);
     if (!rc)
         throwPOSIXException(errno, "realpath on " + path);
-    impl->dir_name.reserve(strlen(buffer) + 1);
-    impl->dir_name.assign(buffer);
-    impl->dir_name.push_back('/');
+    m_dir_name.reserve(strlen(buffer) + 1);
+    m_dir_name.assign(buffer);
+    m_dir_name.push_back('/');
 
+#ifdef HAS_AT_FUNCTIONS
     int dir_fd = ::open(path.c_str(), O_RDONLY);
     if (dir_fd < 0)
         throwPOSIXException(errno, "Opening directory " + path);
-    impl->dir_fd = dir_fd;
+    m_dir_fd = dir_fd;
+#endif
 }
 
 std::shared_ptr<FileStream>
 OSService::open_file_stream(StringRef path, int flags, unsigned mode) const
 {
 #ifdef HAS_AT_FUNCTIONS
-    int fd = ::openat(impl->dir_fd, path.c_str(), flags, mode);
+    int fd = ::openat(m_dir_fd, path.c_str(), flags, mode);
 #else
-    int fd = ::open(impl->norm_path(path).c_str(), flags, mode);
+    int fd = ::open(norm_path(path).c_str(), flags, mode);
 #endif
     if (fd < 0)
-        throwPOSIXException(
-            errno, strprintf("Opening %s with flags %#o", impl->norm_path(path).c_str(), flags));
+        throwPOSIXException(errno,
+                            strprintf("Opening %s with flags %#o", norm_path(path).c_str(), flags));
     return std::make_shared<UnixFileStream>(fd);
 }
 
 void OSService::remove_file(StringRef path) const
 {
 #ifdef HAS_AT_FUNCTIONS
-    int rc = ::unlinkat(impl->dir_fd, path.c_str(), 0) == 0;
+    int rc = ::unlinkat(m_dir_fd, path.c_str(), 0) == 0;
 #else
-    int rc = ::unlink(impl->norm_path(path).c_str()) == 0;
+    int rc = ::unlink(norm_path(path).c_str()) == 0;
 #endif
     if (rc < 0)
-        throwPOSIXException(errno, "unlinking " + impl->norm_path(path));
+        throwPOSIXException(errno, "unlinking " + norm_path(path));
 }
 
 void OSService::remove_directory(StringRef path) const
 {
 #ifdef HAS_AT_FUNCTIONS
-    int rc = ::unlinkat(impl->dir_fd, path.c_str(), AT_REMOVEDIR);
+    int rc = ::unlinkat(m_dir_fd, path.c_str(), AT_REMOVEDIR);
 #else
-    int rc = ::rmdir(impl->norm_path(path).c_str()) == 0;
+    int rc = ::rmdir(norm_path(path).c_str()) == 0;
 #endif
     if (rc < 0)
-        throwPOSIXException(errno, "removing directory " + impl->norm_path(path));
+        throwPOSIXException(errno, "removing directory " + norm_path(path));
 }
 
 void OSService::lock() const
 {
-    int rc = ::flock(impl->dir_fd, LOCK_NB | LOCK_EX);
+    int rc = ::flock(m_dir_fd, LOCK_NB | LOCK_EX);
     if (rc < 0)
-        throwPOSIXException(
-            errno, strprintf("Fail to obtain exclusive lock on %s", impl->dir_name.c_str()));
+        throwPOSIXException(errno,
+                            strprintf("Fail to obtain exclusive lock on %s", m_dir_name.c_str()));
 }
 
 void OSService::mkdir(StringRef path, unsigned mode) const
 {
 #ifdef HAS_AT_FUNCTIONS
-    int rc = ::mkdirat(impl->dir_fd, path.c_str(), mode);
+    int rc = ::mkdirat(m_dir_fd, path.c_str(), mode);
 #else
-    int rc = ::mkdir(impl->norm_path(path).c_str(), mode);
+    int rc = ::mkdir(norm_path(path).c_str(), mode);
+#endif
+    if (rc < 0)
+        throwPOSIXException(errno,
+                            strprintf("Fail to create directory %s", norm_path(path).c_str()));
+}
+
+void OSService::symlink(StringRef to, StringRef from) const
+{
+#ifdef HAS_AT_FUNCTIONS
+    int rc = ::symlinkat(to.c_str(), m_dir_fd, from.c_str());
+#else
+    int rc = ::symlink(to.c_str(), norm_path(from).c_str());
 #endif
     if (rc < 0)
         throwPOSIXException(
-            errno, strprintf("Fail to create directory %s", impl->norm_path(path).c_str()));
+            errno, strprintf("symlink to=%s and from=%s", to.c_str(), norm_path(from).c_str()));
 }
 
-void OSService::symlink(StringRef to, StringRef from)
+void OSService::link(StringRef source, StringRef dest) const
 {
 #ifdef HAS_AT_FUNCTIONS
-    int rc = ::symlinkat(to.c_str(), impl->dir_fd, from.c_str());
+    int rc = ::linkat(m_dir_fd, source.c_str(), m_dir_fd, dest.c_str(), 0);
 #else
-    int rc = ::symlink(to.c_str(), impl->norm_path(from).c_str());
-#endif
-    if (rc < 0)
-        throwPOSIXException(
-            errno,
-            strprintf("symlink to=%s and from=%s", to.c_str(), impl->norm_path(from).c_str()));
-}
-
-void OSService::link(StringRef source, StringRef dest)
-{
-#ifdef HAS_AT_FUNCTIONS
-    int rc = ::linkat(impl->dir_fd, source.c_str(), impl->dir_fd, dest.c_str(), 0);
-#else
-    int rc = ::link(impl->norm_path(source).c_str(), impl->norm_path(dest).c_str());
+    int rc = ::link(norm_path(source).c_str(), norm_path(dest).c_str());
 #endif
     if (rc < 0)
     {
@@ -365,7 +368,7 @@ void OSService::link(StringRef source, StringRef dest)
 
 void OSService::statfs(struct statvfs* fs_info) const
 {
-    int rc = ::fstatvfs(impl->dir_fd, fs_info);
+    int rc = ::fstatvfs(m_dir_fd, fs_info);
     if (rc < 0)
         throwPOSIXException(errno, "statvfs");
 }
@@ -373,70 +376,67 @@ void OSService::statfs(struct statvfs* fs_info) const
 void OSService::rename(StringRef a, StringRef b) const
 {
 #ifdef HAS_AT_FUNCTIONS
-    int rc = ::renameat(impl->dir_fd, a.c_str(), impl->dir_fd, b.c_str());
+    int rc = ::renameat(m_dir_fd, a.c_str(), m_dir_fd, b.c_str());
 #else
-    int rc = ::rename(impl->norm_path(a).c_str(), impl->norm_path(b).c_str());
+    int rc = ::rename(norm_path(a).c_str(), norm_path(b).c_str());
 #endif
     if (rc < 0)
-        throwPOSIXException(errno,
-                            strprintf("Renaming from %s to %s",
-                                      impl->norm_path(a).c_str(),
-                                      impl->norm_path(b).c_str()));
+        throwPOSIXException(
+            errno, strprintf("Renaming from %s to %s", norm_path(a).c_str(), norm_path(b).c_str()));
 }
 
-bool OSService::stat(StringRef path, FUSE_STAT* stat)
+bool OSService::stat(StringRef path, FUSE_STAT* stat) const
 {
 #ifdef HAS_AT_FUNCTIONS
-    int rc = ::fstatat(impl->dir_fd, path.c_str(), stat, AT_SYMLINK_NOFOLLOW);
+    int rc = ::fstatat(m_dir_fd, path.c_str(), stat, AT_SYMLINK_NOFOLLOW);
 #else
-    int rc = ::lstat(impl->norm_path(path).c_str(), stat);
+    int rc = ::lstat(norm_path(path).c_str(), stat);
 #endif
     if (rc < 0)
     {
         if (errno == ENOENT)
             return false;
-        throwPOSIXException(errno, strprintf("stating %s", impl->norm_path(path).c_str()));
+        throwPOSIXException(errno, strprintf("stating %s", norm_path(path).c_str()));
     }
     return true;
 }
 
-void OSService::chmod(StringRef path, mode_t mode)
+void OSService::chmod(StringRef path, mode_t mode) const
 {
 #ifdef HAS_AT_FUNCTIONS
-    int rc = ::fchmodat(impl->dir_fd, path.c_str(), mode, AT_SYMLINK_NOFOLLOW);
+    int rc = ::fchmodat(m_dir_fd, path.c_str(), mode, AT_SYMLINK_NOFOLLOW);
 #else
-    int rc = ::lchmod(impl->norm_path(path).c_str(), mode);
+    int rc = ::lchmod(norm_path(path).c_str(), mode);
 #endif
     if (rc < 0)
-        throwPOSIXException(
-            errno, strprintf("chmod %s with mode=0%o", impl->norm_path(path).c_str(), mode));
+        throwPOSIXException(errno,
+                            strprintf("chmod %s with mode=0%o", norm_path(path).c_str(), mode));
 }
 
-ssize_t OSService::readlink(StringRef path, char* output, size_t size)
+ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
 {
 #ifdef HAS_AT_FUNCTIONS
-    ssize_t rc = ::readlinkat(impl->dir_fd, path.c_str(), output, size);
+    ssize_t rc = ::readlinkat(m_dir_fd, path.c_str(), output, size);
 #else
-    ssize_t rc = ::readlink(impl->norm_path(path).c_str(), output, size);
+    ssize_t rc = ::readlink(norm_path(path).c_str(), output, size);
 #endif
     if (rc < 0)
         throwPOSIXException(
-            errno,
-            strprintf("readlink %s with buffer size=%zu", impl->norm_path(path).c_str(), size));
+            errno, strprintf("readlink %s with buffer size=%zu", norm_path(path).c_str(), size));
     return rc;
 }
 
 void OSService::utimens(StringRef path, const timespec* ts) const
 {
 #if defined(HAS_AT_FUNCTIONS) && defined(HAS_FUTIMENS)
-    int rc = ::utimensat(impl->dir_fd, path.c_str(), ts, AT_SYMLINK_NOFOLLOW);
+    int rc = ::utimensat(m_dir_fd, path.c_str(), ts, AT_SYMLINK_NOFOLLOW);
     if (rc < 0)
         throwPOSIXException(errno, "utimensat");
 #else
     int rc;
     if (!ts)
     {
-        rc = ::lutimes(impl->norm_path(path).c_str(), nullptr);
+        rc = ::lutimes(norm_path(path).c_str(), nullptr);
     }
     else
     {
@@ -445,7 +445,7 @@ void OSService::utimens(StringRef path, const timespec* ts) const
         tv[0].tv_usec = ts[0].tv_nsec / 1000;
         tv[1].tv_sec = ts[1].tv_sec;
         tv[1].tv_usec = ts[1].tv_nsec / 1000;
-        rc = ::lutimes(impl->norm_path(path).c_str(), tv);
+        rc = ::lutimes(norm_path(path).c_str(), tv);
     }
     if (rc < 0)
         throwPOSIXException(errno, "lutimes");
@@ -454,7 +454,7 @@ void OSService::utimens(StringRef path, const timespec* ts) const
 
 std::unique_ptr<DirectoryTraverser> OSService::create_traverser(StringRef dir) const
 {
-    return securefs::make_unique<UnixDirectoryTraverser>(impl->norm_path(dir));
+    return securefs::make_unique<UnixDirectoryTraverser>(norm_path(dir));
 }
 
 uint32_t OSService::getuid() noexcept { return ::getuid(); }
@@ -501,38 +501,31 @@ void OSService::get_current_time(timespec& current_time)
 #endif
 }
 
-std::string WindowsException::message() const
-{
-    return strprintf("Win32 error %ld (%s)", m_err, m_msg.c_str());
-}
-
-int WindowsException::error_number() const noexcept { return EPERM; }
-
 #ifdef __APPLE__
 
 ssize_t OSService::listxattr(const char* path, char* buf, size_t size) const noexcept
 {
-    auto rc = ::listxattr(impl->norm_path(path).c_str(), buf, size, XATTR_NOFOLLOW);
+    auto rc = ::listxattr(norm_path(path).c_str(), buf, size, XATTR_NOFOLLOW);
     return rc < 0 ? -errno : rc;
 }
 
 ssize_t OSService::getxattr(const char* path, const char* name, void* buf, size_t size) const
     noexcept
 {
-    auto rc = ::getxattr(impl->norm_path(path).c_str(), name, buf, size, 0, XATTR_NOFOLLOW);
+    auto rc = ::getxattr(norm_path(path).c_str(), name, buf, size, 0, XATTR_NOFOLLOW);
     return rc < 0 ? -errno : rc;
 }
 
 int OSService::setxattr(const char* path, const char* name, void* buf, size_t size, int flags) const
     noexcept
 {
-    auto rc = ::setxattr(impl->norm_path(path).c_str(), name, buf, size, 0, flags | XATTR_NOFOLLOW);
+    auto rc = ::setxattr(norm_path(path).c_str(), name, buf, size, 0, flags | XATTR_NOFOLLOW);
     return rc < 0 ? -errno : rc;
 }
 
 int OSService::removexattr(const char* path, const char* name) const noexcept
 {
-    auto rc = ::removexattr(impl->norm_path(path).c_str(), name, XATTR_NOFOLLOW);
+    auto rc = ::removexattr(norm_path(path).c_str(), name, XATTR_NOFOLLOW);
     return rc < 0 ? -errno : rc;
 }
 #endif
