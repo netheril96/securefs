@@ -281,13 +281,7 @@ OSService::~OSService() {}
 
 OSService::OSService(StringRef path) : impl(new Impl())
 {
-    wchar_t resolved[16000];
-    CHECK_CALL(GetFullPathNameW(widen_string(path).c_str(), 16000, resolved, nullptr));
-    WideStringRef refresolved(resolved);
-    if (refresolved.starts_with(L"\\\\?\\"))
-        impl->dir_name = refresolved + L"\\";
-    else
-        impl->dir_name = L"\\\\?\\" + refresolved + L"\\";
+    impl->dir_name = widen_string(path) + L"\\";
 }
 
 std::shared_ptr<FileStream>

@@ -1,8 +1,30 @@
 #include "commands.h"
+#include "mystring.h"
+#include "myutils.h"
+
 #include <clocale>
 
+#ifdef WIN32
+
+int wmain(int argc, wchar_t** wargv)
+{
+	auto str_argv = securefs::make_unique_array<std::string>(argc);
+	for (int i = 0; i < argc; ++i)
+		str_argv[i] = securefs::narrow_string(wargv[i]);
+	auto argv = securefs::make_unique_array<const char*>(argc + 1);
+	for (int i = 0; i < argc; ++i)
+		argv[i] = str_argv[i].c_str();
+	argv[argc] = nullptr;
+
+	int rc = securefs::commands_main(argc, argv.get());
+	system("pause");
+	return rc;
+}
+
+#else
 int main(int argc, char** argv)
 {
     setlocale(LC_ALL, "");
     return securefs::commands_main(argc, argv);
 }
+#endif

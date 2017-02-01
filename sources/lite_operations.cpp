@@ -111,7 +111,7 @@ namespace lite
         while (traverser->next(&name, &mode))
         {
             stbuf.st_mode = mode;
-            int rc = filler(buf, name.c_str(), &stbuf, 0);
+            int rc = filler(buf, name.c_str(), mode ? &stbuf : nullptr, 0);
             if (rc != 0)
                 return -abs(rc);
         }
