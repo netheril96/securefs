@@ -12,6 +12,16 @@ Security, however, is often at odds with convenience, and people easily grow tir
 
 `securefs` is intended to make the experience as smooth as possible so that the security and convenience do not conflict. After mounting the virtual filesystem, everything just works&#8482;.
 
+## Comparison
+
+There are already many encrypting filesystem in widespread use. Some notable ones are TrueCrypt, FileVault, BitLocker, eCryptFS, encfs and gocryptfs. `securefs` differs from them in that it is the only one with all of the following features:
+
+* [Authenticated encryption](https://en.wikipedia.org/wiki/Authenticated_encryption) (hence secure against chosen ciphertext attacks)
+* [Probabilistic encryption](https://en.wikipedia.org/wiki/Probabilistic_encryption) (hence provides semantical security) 
+* Supported on all major platforms (Mac, Linux, BSDs and Windows)
+* Efficient cloud synchronization (not a single preallocated file as container)
+
+*Caveat: The FUSE driver on Windows is unstable for now. Nothing we can fix.*
 
 ## Install
 
@@ -37,7 +47,7 @@ brew install homebrew/fuse/securefs
 
 ### Manual Build
 
-Run `cmake .` then `make install`. The compiler must be new enough (g++ >= 4.8, clang >= 3.4, Visual Studio >= 2015). If you encounter build errors and the compiler is new enough, try `cmake -DPORTABLE_BUILD=ON .` instead. Windows support is now only experimental.
+Run `cmake .` then `make install -j8`. The compiler must be new enough (g++ >= 4.8, clang >= 3.4, Visual Studio >= 2015). If you encounter build errors and the compiler is new enough, try `cmake -DPORTABLE_BUILD=ON .` instead. Windows support is now only experimental.
 
 ## Basic usage
 
@@ -53,31 +63,18 @@ securefs mount ~/Secret ~/Mount # press Ctrl-C to unmount
 securefs m -h # m is an alias for mount, -h tell you all the flags
 ```
 
+## Lite and full mode
+
+There are two categories of filesystem format.
+
+The **lite** format simply encrypts filenames and file contents separately, similar to how `encfs` operates, although with more security.
+
+The **full** format maps files, directory and symlinks in the virtual filesystem all to regular files in the underlying filesystem. The directory structure is flattened and recorded as B-trees in files.
+
+The lite format has become the default on Unix-like operating systems as it is much faster and features easier conflict resolution, especially when used with DropBox, Google Drive, etc. The full format, however, leaks fewer information about the filesystem hierarchy, runs independent of the features of the underlying filesystem, and prevents some very theoretical attacks against ciphertext integrity.
+
+To request full format, which is no longer the default, run `securefs create --format 2`.
+
 ## Design and algorithms
 
 See [here](docs/design.md).
-
-## Comparison with alternatives
-
-Compared to TrueCrypt, eCryptfs, Apple's encrypted DMG, Microsoft's BitLocker and EncFS, `securefs` has the following advantages:
-
-### Enhanced security
-
-#### Randomized encryption
-
-Most alternative products employ deterministic encryption. To see why it is not secure, consider a simplified example. A military commander communicates electronically two kinds of orders, encrypted, to his subordinates. They are either "attack at dawn" or "attack at dusk". The enemy intercepts them and cannot decrypt at first. But after observing the patterns several days, where ciphertext A always precedes an attack at dawn, and ciphertext B always comes before attack at dusk, they are able to infer the meaning eventually, effectively defeating the encryption scheme. Had **randomization** been applied, in contrast, all that the enemy would obtain would look like random noise, leaving them no useful information to correlate with their observation.
-
-#### Authenticated encryption
-
-Authentication protects the data from being tampered. Even though the encrypted data looks like nonsense without the key to decrypt it, people have developed many methods over the years to manipulate the ciphertext to their liking without the key and decryption. Without authenticated encryption, the sensitive financial records you store may be modified and your wealth or even life may dissipate when you trust the wrong data.
-
-If you don't care whether your data have been modified, you still have to care about authenticated encryption. This is something a lot of "military grade encryption software" gets wrong. Without integrity protection, attackers can feed a victim systematically corrupted ciphertexts and observe the behavior of the victim in handling them. That forms the basis for a family of "error oracle" side channel attacks with which the data can be decrypted. In other words, **confidentiality can hardly exist without integrity**.
-
-### Efficient cloud sync
-
-(This feature is also available on eCryptfs and EncFS, but not other alternatives)
-
-Unlike alternatives, `securefs` does not preallocate the underlying storage. So you don't need to sync a, say, 4GiB disk file just in case your encrypted data will grow to that amount. If you have only 4MiB of data, then you only need to sync 4MiB (plus a small fraction of overhead).
-
-In addition, the files are encrypted in blocks, so that binary diff update functionality (syncing only the modified part) of Dropbox, iCloud, Google Drive, etc, still works. Builtin version control of cloud services also works, albeit somewhat hard to use.
-
