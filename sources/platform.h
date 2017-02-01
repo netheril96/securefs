@@ -109,12 +109,12 @@ public:
 
     // Returns false when the path does not exist; throw exceptions on other errors
     // The ENOENT errors are too frequent so the API is redesigned
-    bool stat(StringRef path, FUSE_STAT* stat);
+    bool stat(StringRef path, FUSE_STAT* stat) const;
 
-    void link(StringRef source, StringRef dest);
-    void chmod(StringRef path, mode_t mode);
-    ssize_t readlink(StringRef path, char* output, size_t size);
-    void symlink(StringRef source, StringRef dest);
+    void link(StringRef source, StringRef dest) const;
+    void chmod(StringRef path, mode_t mode) const;
+    ssize_t readlink(StringRef path, char* output, size_t size) const;
+    void symlink(StringRef source, StringRef dest) const;
 
     typedef std::function<void(StringRef, StringRef)> recursive_traverse_callback;
     void recursive_traverse(StringRef dir, const recursive_traverse_callback& callback) const;

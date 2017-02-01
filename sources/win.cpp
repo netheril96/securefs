@@ -1,4 +1,5 @@
 #ifdef _WIN32
+#include "logger.h"
 #include "platform.h"
 
 #include <cerrno>
@@ -7,6 +8,8 @@
 #include <mutex>
 #include <stdint.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/utime.h>
 #include <time.h>
 
 #include <Windows.h>
@@ -48,14 +51,15 @@ public:
     const char* type_name() const noexcept override { return "WindowsException"; }
     std::string message() const override
     {
-        const int WIDE_BUFSIZE = 1000;
-        wchar_t wide_buffer[WIDE_BUFSIZE];
-        char buffer[WIDE_BUFSIZE * 2];
+        char buffer[2000];
 
-        if (!FormatMessageW(
-                FORMAT_MESSAGE_FROM_SYSTEM, nullptr, err, 0, wide_buffer, WIDE_BUFSIZE, nullptr)
-            || !WideCharToMultiByte(
-                   CP_UTF8, 0, wide_buffer, -1, buffer, WIDE_BUFSIZE * 2, nullptr, nullptr))
+        if (!FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM,
+                            nullptr,
+                            err,
+                            MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US),
+                            buffer,
+                            sizeof(buffer),
+                            nullptr))
             return strprintf("error %lu (%s)", err, exp);
         return strprintf("error %lu (%s) %s", err, exp, buffer);
     }
@@ -260,7 +264,13 @@ public:
             return widen_string(path);
         else
         {
-            return dir_name + widen_string(path);
+            auto str = dir_name + widen_string(path);
+            for (wchar_t& c : str)
+            {
+                if (c == L'/')
+                    c = L'\\';
+            }
+            return str;
         }
     }
 };
@@ -271,8 +281,8 @@ OSService::~OSService() {}
 
 OSService::OSService(StringRef path) : impl(new Impl())
 {
-    wchar_t resolved[8000];
-    CHECK_CALL(GetFullPathNameW(widen_string(path).c_str(), 8000, resolved, nullptr));
+    wchar_t resolved[16000];
+    CHECK_CALL(GetFullPathNameW(widen_string(path).c_str(), 16000, resolved, nullptr));
     WideStringRef refresolved(resolved);
     if (refresolved.starts_with(L"\\\\?\\"))
         impl->dir_name = refresolved + L"\\";
@@ -335,6 +345,66 @@ void OSService::statfs(struct statvfs* fs_info) const
     fs_info->f_namemax = 255;
 }
 
+void OSService::utimens(StringRef path, const timespec ts[2]) const
+{
+    ::__utimbuf64 buf;
+    if (!ts)
+    {
+        buf.actime = _time64(nullptr);
+        buf.modtime = buf.actime;
+    }
+    else
+    {
+        buf.actime = ts[0].tv_sec;
+        buf.modtime = ts[1].tv_sec;
+    }
+    int rc = ::_wutime64(impl->norm_path(path).c_str(), &buf);
+    if (rc < 0)
+        throwPOSIXException(errno, "_wutime64");
+}
+
+bool OSService::stat(StringRef path, FUSE_STAT* stat) const
+{
+    struct _stat64 stbuf;
+    int rc = ::_wstat64(impl->norm_path(path).c_str(), &stbuf);
+    if (rc < 0)
+    {
+        if (errno == ENOENT)
+            return false;
+        throwPOSIXException(errno, "_wstat64");
+    }
+    memset(stat, 0, sizeof(*stat));
+
+    stat->st_atim.tv_sec = stbuf.st_atime;
+    stat->st_mtim.tv_sec = stbuf.st_mtime;
+    stat->st_ctim.tv_sec = stbuf.st_ctime;
+
+    stat->st_dev = stbuf.st_dev;
+    stat->st_ino = stbuf.st_ino;
+    stat->st_mode = stbuf.st_mode;
+    stat->st_nlink = stbuf.st_nlink;
+    stat->st_uid = stbuf.st_uid;
+    stat->st_gid = stbuf.st_gid;
+    stat->st_rdev = stbuf.st_rdev;
+    stat->st_size = stbuf.st_size;
+
+    return true;
+}
+
+void OSService::link(StringRef source, StringRef dest) const { throwVFSException(ENOSYS); }
+void OSService::chmod(StringRef path, mode_t mode) const
+{
+    int rc = ::_wchmod(impl->norm_path(path).c_str(), mode);
+    if (rc < 0)
+        throwPOSIXException(errno, "_wchmod");
+}
+
+ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
+{
+    throwVFSException(ENOSYS);
+}
+void OSService::symlink(StringRef source, StringRef dest) const { throwVFSException(ENOSYS); }
+
 void OSService::rename(StringRef a, StringRef b) const
 {
     auto wa = impl->norm_path(a);
@@ -389,6 +459,63 @@ int OSService::raise_fd_limit()
 //    if (GetLastError() != ERROR_NO_MORE_FILES)
 //        throwWindowsException(GetLastError(), "FindNextFile");
 //}
+
+class WindowsDirectoryTraverser : public DirectoryTraverser
+{
+private:
+    HANDLE m_handle;
+    WIN32_FIND_DATAW m_data;
+
+public:
+    explicit WindowsDirectoryTraverser(WideStringRef pattern)
+    {
+        m_handle = FindFirstFileW(pattern.c_str(), &m_data);
+        if (m_handle == INVALID_HANDLE_VALUE)
+        {
+            throwWindowsException(GetLastError(), "FindFirstFileW");
+        }
+    }
+
+    ~WindowsDirectoryTraverser()
+    {
+        if (m_handle != INVALID_HANDLE_VALUE)
+            FindClose(m_handle);
+    }
+
+    bool next(std::string* name, mode_t* type) override
+    {
+        while (wcscmp(m_data.cFileName, L".") == 0 || wcscmp(m_data.cFileName, L"..") == 0)
+        {
+            if (!FindNextFileW(m_handle, &m_data))
+            {
+                DWORD err = GetLastError();
+                if (err == ERROR_NO_MORE_FILES)
+                    return false;
+                throwWindowsException(err, "FindNextFileW");
+            }
+        }
+
+        if (name)
+            *name = narrow_string(m_data.cFileName);
+        if (type)
+        {
+            if (m_data.dwFileAttributes == FILE_ATTRIBUTE_NORMAL)
+                *type = S_IFREG;
+            else if (m_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                *type = S_IFDIR;
+            else
+                *type = 0;
+        }
+        m_data.cFileName[0] = L'.';
+        m_data.cFileName[1] = 0;
+        return true;
+    }
+};
+
+std::unique_ptr<DirectoryTraverser> OSService::create_traverser(StringRef dir) const
+{
+    return securefs::make_unique<WindowsDirectoryTraverser>(impl->norm_path(dir) + L"\\*");
+}
 
 uint32_t OSService::getuid() noexcept { return 0; }
 
