@@ -11,7 +11,7 @@ namespace lite
         return "CorruptedStreamException";
     }
 
-    static const offset_type MAX_BLOCKS = 1ULL << 31;
+    static const offset_type MAX_BLOCKS = (1ULL << 31) - 1;
 
     AESGCMCryptStream::AESGCMCryptStream(std::shared_ptr<StreamBase> stream,
                                          const key_type& master_key,
@@ -111,6 +111,16 @@ namespace lite
             throw StreamTooLongException(MAX_BLOCKS * get_block_size(),
                                          block_number * get_block_size());
 
+        auto underlying_offset = block_number * get_underlying_block_size() + get_header_size();
+        auto underlying_size = size + get_iv_size() + get_mac_size();
+
+        if (is_all_zeros(input, size))
+        {
+            memset(m_buffer.get(), 0, underlying_size);
+            m_stream->write(m_buffer.get(), underlying_offset, underlying_size);
+            return;
+        }
+
         byte auxiliary[sizeof(std::uint32_t)];
         to_little_endian(static_cast<std::uint32_t>(block_number), auxiliary);
 
@@ -129,9 +139,7 @@ namespace lite
                                            static_cast<const byte*>(input),
                                            size);
 
-        m_stream->write(m_buffer.get(),
-                        block_number * get_underlying_block_size() + get_header_size(),
-                        size + get_iv_size() + get_mac_size());
+        m_stream->write(m_buffer.get(), underlying_offset, underlying_size);
     }
 
     length_type AESGCMCryptStream::size() const
