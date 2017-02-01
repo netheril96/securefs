@@ -1,4 +1,5 @@
 #include "operations.h"
+#include "constants.h"
 #include "platform.h"
 
 #include <algorithm>
@@ -39,11 +40,11 @@ namespace internal
 
     FileGuard open_base_dir(FileSystemContext* fs, const char* path, std::string& last_component)
     {
-#ifdef WIN32
-        auto components = split(normalize_to_lower_case(path).c_str(), '/');
-#else
-        auto components = split(path, '/');
-#endif
+        std::vector<std::string> components;
+        if (fs->flags & kOptionNormalizeFileNameToLowerCase)
+            components = split(unicode_lowercase(path).c_str(), '/');
+        else
+            components = split(path, '/');
 
         FileGuard result(&fs->table, fs->table.open_as(fs->root_id, FileBase::DIRECTORY));
         if (components.empty())
@@ -166,10 +167,9 @@ namespace internal
                     contents += str;
                     return true;
                 });
-            fs->logger->log(LoggingLevel::WARNING,
-                            "Trying to remove a non-empty directory \"%s\" with contents: %s",
-                            path,
-                            contents.c_str());
+            global_logger->warn("Trying to remove a non-empty directory \"%s\" with contents: %s",
+                                path,
+                                contents.c_str());
             throwVFSException(ENOTEMPTY);
         }
         dir->remove_entry(last_component, id, type);
@@ -192,9 +192,9 @@ namespace operations
         , root(opt.root)
         , lock_stream(opt.lock_stream)
         , root_id()
-        , logger(opt.logger)
         , uid_override(opt.uid_override)
         , gid_override(opt.gid_override)
+        , flags(opt.flags.value())
     {
         block_size = opt.block_size.value();
     }
@@ -204,24 +204,21 @@ namespace operations
         if (!lock_stream)
             return;
         lock_stream->close();
-        root->remove_file(LOCK_FILENAME);
+        root->remove_file_nothrow(LOCK_FILENAME);
     }
 
 #define COMMON_PROLOGUE                                                                            \
     auto ctx = fuse_get_context();                                                                 \
     auto fs = internal::get_fs(ctx);                                                               \
-    fs->logger->log(LoggingLevel::VERBOSE, "%s (path=%s)", __FUNCTION__, path);
+    (void)fs;                                                                                      \
+    global_logger->trace("%s (path=%s)", __FUNCTION__, path);
 
 #define COMMON_CATCH_BLOCK                                                                         \
     catch (const CommonException& e) { return -e.error_number(); }                                 \
     catch (const SeriousException& e)                                                              \
     {                                                                                              \
-        fs->logger->log(LoggingLevel::ERROR,                                                       \
-                        "%s (path=%s) encounters %s: %s",                                          \
-                        __FUNCTION__,                                                              \
-                        path,                                                                      \
-                        e.type_name(),                                                             \
-                        e.what());                                                                 \
+        global_logger->error(                                                                      \
+            "%s (path=%s) encounters %s: %s", __FUNCTION__, path, e.type_name(), e.what());        \
         return -e.error_number();                                                                  \
     }
 
@@ -229,7 +226,7 @@ namespace operations
     {
         auto args = static_cast<MountOptions*>(fuse_get_context()->private_data);
         auto fs = new FileSystemContext(*args);
-        fs->logger->log(LoggingLevel::VERBOSE, "%s", __FUNCTION__);
+        global_logger->trace("%s", __FUNCTION__);
         fputs("Filesystem mounted successfully\n", stderr);
         return fs;
     }
@@ -237,7 +234,7 @@ namespace operations
     void destroy(void* data)
     {
         auto fs = static_cast<FileSystemContext*>(data);
-        fs->logger->log(LoggingLevel::VERBOSE, "%s", __FUNCTION__);
+        global_logger->trace("%s", __FUNCTION__);
         delete fs;
         fputs("Filesystem unmounted successfully\n", stderr);
     }
@@ -320,7 +317,7 @@ namespace operations
                 bool success = filler(buffer, name.c_str(), &st, 0) == 0;
                 if (!success)
                 {
-                    fs->logger->log(LoggingLevel::WARNING, "Filling directory buffer failed");
+                    global_logger->warn("Filling directory buffer failed");
                 }
                 return success;
             };
@@ -394,14 +391,8 @@ namespace operations
 
     int read(const char* path, char* buffer, size_t len, off_t off, struct fuse_file_info* info)
     {
-        auto ctx = fuse_get_context();
-        auto fs = internal::get_fs(ctx);
-        fs->logger->log(LoggingLevel::VERBOSE,
-                        "%s (path=%s, length=%zu, offset=%lld)",
-                        __FUNCTION__,
-                        path,
-                        len,
-                        (long long)off);
+        global_logger->trace(
+            "%s (path=%s, length=%zu, offset=%lld)", __FUNCTION__, path, len, (long long)off);
 
         try
         {
@@ -416,14 +407,13 @@ namespace operations
         }
         catch (const SeriousException& e)
         {
-            fs->logger->log(LoggingLevel::ERROR,
-                            "%s (path=%s, length=%zu, offset=%lld) encounters %s: %s",
-                            __FUNCTION__,
-                            path,
-                            len,
-                            (long long)off,
-                            e.type_name(),
-                            e.what());
+            global_logger->error("%s (path=%s, length=%zu, offset=%lld) encounters %s: %s",
+                                 __FUNCTION__,
+                                 path,
+                                 len,
+                                 (long long)off,
+                                 e.type_name(),
+                                 e.what());
             return -e.error_number();
         }
     }
@@ -431,14 +421,8 @@ namespace operations
     int
     write(const char* path, const char* buffer, size_t len, off_t off, struct fuse_file_info* info)
     {
-        auto ctx = fuse_get_context();
-        auto fs = internal::get_fs(ctx);
-        fs->logger->log(LoggingLevel::VERBOSE,
-                        "%s (path=%s, length=%zu, offset=%lld)",
-                        __FUNCTION__,
-                        path,
-                        len,
-                        (long long)off);
+        global_logger->trace(
+            "%s (path=%s, length=%zu, offset=%lld)", __FUNCTION__, path, len, (long long)off);
 
         try
         {
@@ -454,15 +438,15 @@ namespace operations
         }
         catch (const SeriousException& e)
         {
-            fs->logger->log(LoggingLevel::ERROR,
+            global_logger->error(
 
-                            "%s (path=%s, length=%zu, offset=%lld) encounters %s: %s",
-                            __FUNCTION__,
-                            path,
-                            len,
-                            (long long)off,
-                            e.type_name(),
-                            e.what());
+                "%s (path=%s, length=%zu, offset=%lld) encounters %s: %s",
+                __FUNCTION__,
+                path,
+                len,
+                (long long)off,
+                e.type_name(),
+                e.what());
             return -e.error_number();
         }
     }
@@ -581,7 +565,7 @@ namespace operations
     {
         auto ctx = fuse_get_context();
         auto fs = internal::get_fs(ctx);
-        fs->logger->log(LoggingLevel::VERBOSE, "%s (to=%s, from=%s)", __FUNCTION__, to, from);
+        global_logger->trace("%s (to=%s, from=%s)", __FUNCTION__, to, from);
 
         try
         {
@@ -598,14 +582,14 @@ namespace operations
         }
         catch (const SeriousException& e)
         {
-            fs->logger->log(LoggingLevel::ERROR,
+            global_logger->error(
 
-                            "%s (to=%s, from=%s) encounters %s: %s",
-                            __FUNCTION__,
-                            to,
-                            from,
-                            e.type_name(),
-                            e.what());
+                "%s (to=%s, from=%s) encounters %s: %s",
+                __FUNCTION__,
+                to,
+                from,
+                e.type_name(),
+                e.what());
             return -e.error_number();
         }
     }
@@ -631,7 +615,7 @@ namespace operations
     {
         auto ctx = fuse_get_context();
         auto fs = internal::get_fs(ctx);
-        fs->logger->log(LoggingLevel::VERBOSE, "%s (src=%s, dest=%s)", __FUNCTION__, src, dst);
+        global_logger->trace("%s (src=%s, dest=%s)", __FUNCTION__, src, dst);
 
         try
         {
@@ -671,14 +655,14 @@ namespace operations
         }
         catch (const SeriousException& e)
         {
-            fs->logger->log(LoggingLevel::ERROR,
+            global_logger->error(
 
-                            "%s (src=%s, dest=%s) encounters %s: %s",
-                            __FUNCTION__,
-                            src,
-                            dst,
-                            e.type_name(),
-                            e.what());
+                "%s (src=%s, dest=%s) encounters %s: %s",
+                __FUNCTION__,
+                src,
+                dst,
+                e.type_name(),
+                e.what());
             return -e.error_number();
         }
     }
@@ -687,7 +671,7 @@ namespace operations
     {
         auto ctx = fuse_get_context();
         auto fs = internal::get_fs(ctx);
-        fs->logger->log(LoggingLevel::VERBOSE, "%s (src=%s, dest=%s)", __FUNCTION__, src, dst);
+        global_logger->trace("%s (src=%s, dest=%s)", __FUNCTION__, src, dst);
 
         try
         {
@@ -723,14 +707,14 @@ namespace operations
         }
         catch (const SeriousException& e)
         {
-            fs->logger->log(LoggingLevel::ERROR,
+            global_logger->error(
 
-                            "%s (src=%s, dest=%s) encounters %s: %s",
-                            __FUNCTION__,
-                            src,
-                            dst,
-                            e.type_name(),
-                            e.what());
+                "%s (src=%s, dest=%s) encounters %s: %s",
+                __FUNCTION__,
+                src,
+                dst,
+                e.type_name(),
+                e.what());
             return -e.error_number();
         }
     }
@@ -788,7 +772,7 @@ namespace operations
 #define XATTR_COMMON_PROLOGUE                                                                      \
     auto ctx = fuse_get_context();                                                                 \
     auto fs = internal::get_fs(ctx);                                                               \
-    fs->logger->log(LoggingLevel::VERBOSE, "%s (path=%s, name=%s)", __FUNCTION__, path, name);
+    global_logger->trace("%s (path=%s, name=%s)", __FUNCTION__, path, name);
 
 #define XATTR_COMMON_CATCH_BLOCK                                                                   \
     catch (const CommonException& e) { return -e.error_number(); }                                 \
@@ -797,13 +781,12 @@ namespace operations
         int errc = e.error_number();                                                               \
         if (errc != ENOATTR) /* Attribute not found is very common and normal; no need to log it   \
                                 as an error */                                                     \
-            fs->logger->log(LoggingLevel::ERROR,                                                   \
-                            "%s (path=%s, name=%s) encounters %s: %s",                             \
-                            __FUNCTION__,                                                          \
-                            path,                                                                  \
-                            name,                                                                  \
-                            e.type_name(),                                                         \
-                            e.what());                                                             \
+            global_logger->error("%s (path=%s, name=%s) encounters %s: %s",                        \
+                                 __FUNCTION__,                                                     \
+                                 path,                                                             \
+                                 name,                                                             \
+                                 e.type_name(),                                                    \
+                                 e.what());                                                        \
         return -errc;                                                                              \
     }
 

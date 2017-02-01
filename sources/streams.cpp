@@ -163,8 +163,10 @@ length_type CryptStream::read_block(offset_type block_number, void* output)
     return rc;
 }
 
-length_type
-CryptStream::read_block(offset_type block_number, void* output, offset_type begin, offset_type end)
+length_type BlockBasedStream::read_block(offset_type block_number,
+                                         void* output,
+                                         offset_type begin,
+                                         offset_type end)
 {
     assert(begin <= m_block_size && end <= m_block_size);
 
@@ -191,10 +193,10 @@ void CryptStream::write_block(offset_type block_number, const void* input, lengt
     m_stream->write(buffer.get(), block_number * m_block_size, length);
 }
 
-void CryptStream::read_then_write_block(offset_type block_number,
-                                        const void* input,
-                                        offset_type begin,
-                                        offset_type end)
+void BlockBasedStream::read_then_write_block(offset_type block_number,
+                                             const void* input,
+                                             offset_type begin,
+                                             offset_type end)
 {
     assert(begin <= m_block_size && end <= m_block_size);
 
@@ -209,7 +211,7 @@ void CryptStream::read_then_write_block(offset_type block_number,
     write_block(block_number, buffer.data(), std::max<length_type>(rc, end));
 }
 
-length_type CryptStream::read(void* output, offset_type offset, length_type length)
+length_type BlockBasedStream::read(void* output, offset_type offset, length_type length)
 {
     length_type total = 0;
 
@@ -231,7 +233,7 @@ length_type CryptStream::read(void* output, offset_type offset, length_type leng
     return total;
 }
 
-void CryptStream::write(const void* input, offset_type offset, length_type length)
+void BlockBasedStream::write(const void* input, offset_type offset, length_type length)
 {
     auto current_size = this->size();
     if (offset > current_size)
@@ -240,7 +242,7 @@ void CryptStream::write(const void* input, offset_type offset, length_type lengt
     unchecked_write(input, offset, length);
 }
 
-void CryptStream::unchecked_write(const void* input, offset_type offset, length_type length)
+void BlockBasedStream::unchecked_write(const void* input, offset_type offset, length_type length)
 {
     while (length > 0)
     {
@@ -256,7 +258,7 @@ void CryptStream::unchecked_write(const void* input, offset_type offset, length_
     }
 }
 
-void CryptStream::zero_fill(offset_type offset, offset_type finish)
+void BlockBasedStream::zero_fill(offset_type offset, offset_type finish)
 {
     auto zeros = make_unique_array<byte>(m_block_size);
     memset(zeros.get(), 0, m_block_size);
@@ -272,7 +274,7 @@ void CryptStream::zero_fill(offset_type offset, offset_type finish)
     }
 }
 
-void CryptStream::resize(length_type new_size)
+void BlockBasedStream::resize(length_type new_size)
 {
     auto current_size = this->size();
     if (new_size == current_size)
@@ -302,7 +304,7 @@ void CryptStream::resize(length_type new_size)
             zero_fill(new_block_num * m_block_size, new_size);
         }
     }
-    m_stream->resize(new_size);
+    adjust_logical_size(new_size);
 }
 
 namespace internal

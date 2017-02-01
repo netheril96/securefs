@@ -136,7 +136,11 @@ public:
 
 [[noreturn]] void throwVFSException(int errc);
 
-class POSIXException : public SeriousException
+class SystemException : public SeriousException
+{
+};
+
+class POSIXException : public SystemException
 {
 private:
     int m_errno;
@@ -178,6 +182,7 @@ public:
     int error_number() const noexcept override { return EINVAL; }
 };
 
+[[noreturn]] void throwInvalidArgumentException(const char* why);
 [[noreturn]] void throwInvalidArgumentException(std::string why);
 
 class CorruptedMetaDataException : public InvalidFormatException
@@ -244,6 +249,14 @@ public:
                          hexify(m_id.data(), m_id.size()).c_str(),
                          m_name.c_str());
     }
+};
+
+class LiteMessageVerificationException : public VerificationException
+{
+public:
+    const char* type_name() const noexcept override { return "LiteMessageVerificationException"; }
+
+    std::string message() const override { return "File content has invalid checksum"; }
 };
 
 class StreamTooLongException : public SeriousException

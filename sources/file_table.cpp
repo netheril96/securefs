@@ -1,6 +1,7 @@
 #include "file_table.h"
 #include "btree_dir.h"
 #include "exceptions.h"
+#include "logger.h"
 #include "myutils.h"
 #include "platform.h"
 
@@ -83,10 +84,10 @@ public:
     {
         std::string first_level_dir, second_level_dir, filename, metaname;
         calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
-        m_root->remove_file(filename);
-        m_root->remove_file(metaname);
-        m_root->remove_directory(second_level_dir);
-        m_root->remove_directory(second_level_dir);
+        m_root->remove_file_nothrow(filename);
+        m_root->remove_file_nothrow(metaname);
+        m_root->remove_directory_nothrow(second_level_dir);
+        m_root->remove_directory_nothrow(second_level_dir);
     }
 };
 
@@ -136,9 +137,9 @@ public:
     {
         std::string dir, filename, metaname;
         calculate_paths(id, dir, filename, metaname);
-        m_root->remove_file(filename);
-        m_root->remove_file(metaname);
-        m_root->remove_directory(dir);
+        m_root->remove_file_nothrow(filename);
+        m_root->remove_file_nothrow(metaname);
+        m_root->remove_directory_nothrow(dir);
     }
 };
 
@@ -266,6 +267,9 @@ void FileTable::eject()
     for (size_t i = 0; i < num_eject; ++i)
     {
         m_files.erase(m_closed_ids[i]);
+        if (global_logger->get_level() <= kLogTrace)
+            global_logger->trace("Evicting file with ID=%s from cache",
+                                 hexify(m_closed_ids[i]).c_str());
     }
     m_closed_ids.erase(m_closed_ids.begin(), m_closed_ids.begin() + num_eject);
 }

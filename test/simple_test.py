@@ -32,13 +32,13 @@ class TimeoutException(BaseException):
 
 
 def securefs_mount(data_dir, mount_point, password):
-    p = subprocess.Popen([SECUREFS_BINARY, 'mount', '--stdinpass', '--background', data_dir, mount_point],
+    p = subprocess.Popen([SECUREFS_BINARY, 'mount', '-m', '--stdinpass', '--log', 'XXXX.log', '--trace', '--background', data_dir, mount_point],
                          stdin=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate(input=password + '\n')
     if p.returncode:
         raise RuntimeError(err)
     for i in xrange(100):
-        time.sleep(0.05)
+        time.sleep(0.1)
         try:
             if os.path.ismount(mount_point):
                 return
@@ -53,7 +53,7 @@ def securefs_unmount(mount_point):
     if p.returncode:
         raise RuntimeError(err)
     for i in xrange(100):
-        time.sleep(0.05)
+        time.sleep(0.1)
         try:
             if not os.path.ismount(mount_point):
                 return
@@ -92,8 +92,6 @@ def make_test_case(format_version):
             except:
                 if os.path.ismount(cls.mount_point):
                     raise  # Still mounted
-            shutil.rmtree(cls.data_dir)
-            shutil.rmtree(cls.mount_point)
 
         def mount(self):
             securefs_mount(self.data_dir, self.mount_point, self.password)
@@ -129,34 +127,35 @@ def make_test_case(format_version):
                     except EnvironmentError:
                         pass
 
-        def test_hardlink(self):
-            data = os.urandom(16)
-            source = os.path.join(self.mount_point, str(uuid.uuid4()))
-            dest = os.path.join(self.mount_point, str(uuid.uuid4()))
-            try:
-                with open(source, 'wb') as f:
-                    f.write(data)
-                os.link(source, dest)
-                source_stat = os.stat(source)
-                dest_stat = os.stat(dest)
-                self.assertEqual(source_stat.st_mode, dest_stat.st_mode)
-                self.assertEqual(source_stat.st_mtime, dest_stat.st_mtime)
-                self.assertEqual(source_stat.st_size, dest_stat.st_size)
-                self.assertEqual(source_stat.st_nlink, 2)
-                with open(dest, 'rb') as f:
-                    self.assertEqual(data, f.read())
-                # Moving hard links onto each other is a no-op
-                os.rename(dest, source)
-                self.assertTrue(os.path.isfile(dest) and os.path.isfile(source))
-            finally:
+        if format_version < 4:
+            def test_hardlink(self):
+                data = os.urandom(16)
+                source = os.path.join(self.mount_point, str(uuid.uuid4()))
+                dest = os.path.join(self.mount_point, str(uuid.uuid4()))
                 try:
-                    os.remove(source)
-                except EnvironmentError:
-                    pass
-                try:
-                    os.remove(dest)
-                except EnvironmentError:
-                    pass
+                    with open(source, 'wb') as f:
+                        f.write(data)
+                    os.link(source, dest)
+                    source_stat = os.stat(source)
+                    dest_stat = os.stat(dest)
+                    self.assertEqual(source_stat.st_mode, dest_stat.st_mode)
+                    self.assertEqual(source_stat.st_mtime, dest_stat.st_mtime)
+                    self.assertEqual(source_stat.st_size, dest_stat.st_size)
+                    self.assertEqual(source_stat.st_nlink, 2)
+                    with open(dest, 'rb') as f:
+                        self.assertEqual(data, f.read())
+                    # Moving hard links onto each other is a no-op
+                    os.rename(dest, source)
+                    self.assertTrue(os.path.isfile(dest) and os.path.isfile(source))
+                finally:
+                    try:
+                        os.remove(source)
+                    except EnvironmentError:
+                        pass
+                    try:
+                        os.remove(dest)
+                    except EnvironmentError:
+                        pass
 
         def test_symlink(self):
             data = os.urandom(16)
@@ -266,6 +265,8 @@ class TestVersion2(make_test_case(2)):
 class TestVersion3(make_test_case(3)):
     pass
 
+class TestVersion4(make_test_case(4)):
+    pass
 
 if __name__ == '__main__':
     unittest.main()

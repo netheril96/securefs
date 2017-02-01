@@ -1,11 +1,13 @@
 #include "commands.h"
 #include "exceptions.h"
+#include "lite_operations.h"
 #include "myutils.h"
 #include "operations.h"
 #include "platform.h"
 #include "streams.h"
 
 #include <cryptopp/cpu.h>
+#include <cryptopp/osrng.h>
 #include <cryptopp/secblock.h>
 #include <fuse.h>
 #include <json/json.h>
@@ -34,12 +36,27 @@ using namespace securefs;
 namespace
 {
 
-static const char* VERSION_HEADER = "version=1";
 static const std::string CONFIG_FILE_NAME = ".securefs.json";
 static const unsigned MIN_ITERATIONS = 20000;
 static const unsigned MIN_DERIVE_SECONDS = 1;
 static const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
 static const size_t MAX_PASS_LEN = 4000;
+
+static const char* get_version_header(unsigned version)
+{
+    switch (version)
+    {
+    case 1:
+    case 2:
+    case 3:
+        return "version=1";    // These headers are all the same for backwards compatible behavior
+                               // with old mistakes
+    case 4:
+        return "version=4";
+    default:
+        throwInvalidArgumentException("Unknown format version");
+    }
+}
 
 enum class NLinkFixPhase
 {
@@ -218,8 +235,8 @@ void fix(const std::string& basedir, operations::FileSystemContext* fs)
     puts("Fix complete");
 }
 
-Json::Value generate_config(int version,
-                            const securefs::key_type& master_key,
+Json::Value generate_config(unsigned int version,
+                            const CryptoPP::AlignedSecByteBlock& master_key,
                             const securefs::key_type& salt,
                             const void* password,
                             size_t pass_len,
@@ -229,7 +246,9 @@ Json::Value generate_config(int version,
 {
     Json::Value config;
     config["version"] = version;
-    securefs::key_type key_to_encrypt, encrypted_master_key;
+    securefs::key_type key_to_encrypt;
+    CryptoPP::AlignedSecByteBlock encrypted_master_key(nullptr, master_key.size());
+
     config["iterations"] = securefs::pbkdf_hmac_sha256(password,
                                                        pass_len,
                                                        salt.data(),
@@ -246,8 +265,8 @@ Json::Value generate_config(int version,
 
     securefs::aes_gcm_encrypt(master_key.data(),
                               master_key.size(),
-                              VERSION_HEADER,
-                              strlen(VERSION_HEADER),
+                              get_version_header(version),
+                              strlen(get_version_header(version)),
                               key_to_encrypt.data(),
                               key_to_encrypt.size(),
                               iv,
@@ -274,7 +293,7 @@ Json::Value generate_config(int version,
 bool parse_config(const Json::Value& config,
                   const void* password,
                   size_t pass_len,
-                  securefs::key_type& master_key,
+                  CryptoPP::AlignedSecByteBlock& master_key,
                   unsigned& block_size,
                   unsigned& iv_size)
 {
@@ -286,7 +305,7 @@ bool parse_config(const Json::Value& config,
         block_size = 4096;
         iv_size = 32;
     }
-    else if (version == 2 || version == 3)
+    else if (version == 2 || version == 3 || version == 4)
     {
         block_size = config["block_size"].asUInt();
         iv_size = config["iv_size"].asUInt();
@@ -300,7 +319,8 @@ bool parse_config(const Json::Value& config,
 
     byte iv[CONFIG_IV_LENGTH];
     byte mac[CONFIG_MAC_LENGTH];
-    key_type salt, encrypted_key, key_to_encrypt_master_key;
+    key_type salt, key_to_encrypt_master_key;
+    CryptoPP::AlignedSecByteBlock encrypted_key;
 
     std::string salt_hex = config["salt"].asString();
     auto&& encrypted_key_json_value = config["encrypted_key"];
@@ -311,7 +331,10 @@ bool parse_config(const Json::Value& config,
     parse_hex(salt_hex, salt.data(), salt.size());
     parse_hex(iv_hex, iv, sizeof(iv));
     parse_hex(mac_hex, mac, sizeof(mac));
+
+    encrypted_key.resize(ekey_hex.size() / 2);
     parse_hex(ekey_hex, encrypted_key.data(), encrypted_key.size());
+    master_key.resize(encrypted_key.size());
 
     pbkdf_hmac_sha256(password,
                       pass_len,
@@ -324,8 +347,8 @@ bool parse_config(const Json::Value& config,
 
     return aes_gcm_decrypt(encrypted_key.data(),
                            encrypted_key.size(),
-                           VERSION_HEADER,
-                           strlen(VERSION_HEADER),
+                           get_version_header(version),
+                           strlen(get_version_header(version)),
                            key_to_encrypt_master_key.data(),
                            key_to_encrypt_master_key.size(),
                            iv,
@@ -360,7 +383,7 @@ size_t try_read_password_with_confirmation(void* password, size_t length)
     return len1;
 }
 
-void init_fuse_operations(const char* underlying_path, struct fuse_operations& opt, bool xattr)
+void init_fuse_operations(const char* underlying_path, struct fuse_operations& opt, bool noxattr)
 {
     memset(&opt, 0, sizeof(opt));
     opt.getattr = &securefs::operations::getattr;
@@ -391,11 +414,9 @@ void init_fuse_operations(const char* underlying_path, struct fuse_operations& o
     opt.utimens = &securefs::operations::utimens;
     opt.statfs = &securefs::operations::statfs;
 
-    (void)xattr;
-
-#ifdef __APPLE__
-    if (!xattr)
+    if (noxattr)
         return;
+#ifdef __APPLE__
     auto rc = ::listxattr(underlying_path, nullptr, 0, 0);
     if (rc < 0)
     {
@@ -451,6 +472,19 @@ FSConfig CommandBase::read_config(StreamBase* stream, const void* password, size
         throw std::runtime_error("Invalid password");
     result.version = value["version"].asUInt();
     return result;
+}
+
+static void copy_key(const CryptoPP::AlignedSecByteBlock& in_key, key_type* out_key)
+{
+    if (in_key.size() != out_key->size())
+        throw std::runtime_error("Invalid key size");
+    memcpy(out_key->data(), in_key.data(), out_key->size());
+}
+
+static void copy_key(const CryptoPP::AlignedSecByteBlock& in_key, optional<key_type>* out_key)
+{
+    out_key->emplace();
+    copy_key(in_key, &(out_key->value()));
 }
 
 void CommandBase::write_config(StreamBase* stream,
@@ -516,9 +550,21 @@ private:
         0,
         "integer"};
     TCLAP::ValueArg<unsigned int> format{
-        "", "format", "The filesystem format version (1,2,3)", false, 2, "integer"};
+        "",
+        "format",
+        "The filesystem format version (1,2,3)",
+        false,
+#ifdef WIN32
+        2    // Dokany has mysterious bugs when used with the new filesystem format
+#else
+        4
+#endif
+        ,
+        "integer"};
     TCLAP::ValueArg<unsigned int> iv_size{
         "", "iv-size", "The IV size (ignored for fs format 1)", false, 12, "integer"};
+    TCLAP::ValueArg<unsigned int> block_size{
+        "", "block-size", "Block size for files (ignored for fs format 1)", false, 4096, "integer"};
     TCLAP::SwitchArg store_time{
         "",
         "store_time",
@@ -536,6 +582,7 @@ public:
         cmdline.add(&format);
         cmdline.add(&pass);
         cmdline.add(&store_time);
+        cmdline.add(&block_size);
         cmdline.parse(argc, argv);
 
         if (pass.isSet())
@@ -565,42 +612,48 @@ public:
             return 1;
         }
 
-        if (format.isSet() && format.getValue() == 1 && iv_size.isSet())
+        if (format.isSet() && format.getValue() == 1 && (iv_size.isSet() || block_size.isSet()))
         {
-            fprintf(stderr, "IV size option are not available for filesystem format 1");
+            fprintf(stderr, "IV and block size options are not available for filesystem format 1");
             return 1;
         }
 
-        int format_version = store_time.isSet() ? 3 : format.getValue();
+        unsigned format_version = store_time.isSet() ? 3 : format.getValue();
 
         OSService::get_default().ensure_directory(data_dir.getValue(), 0755);
+
         FSConfig config;
-        config.iv_size = iv_size.getValue();
+        config.master_key.resize(format_version < 4 ? KEY_LENGTH : 3 * KEY_LENGTH);
+        CryptoPP::OS_GenerateRandomBlock(false, config.master_key.data(), config.master_key.size());
+
+        config.iv_size = format_version == 1 ? 32 : iv_size.getValue();
         config.version = format_version;
-        config.block_size = 4096;
+        config.block_size = block_size.getValue();
 
         auto config_stream
             = open_config_stream(get_real_config_path(), O_WRONLY | O_CREAT | O_EXCL);
-
         write_config(
             config_stream.get(), config, password.data(), password.size(), rounds.getValue());
         config_stream.reset();
 
-        operations::MountOptions opt;
-        opt.version = format_version;
-        opt.root = std::make_shared<OSService>(data_dir.getValue());
-        opt.master_key = config.master_key;
-        opt.flags = format_version < 3 ? 0 : FileTable::STORE_TIME;
-        opt.block_size = 4096;
-        opt.iv_size = format_version == 1 ? 32 : iv_size.getValue();
+        if (format_version < 4)
+        {
+            operations::MountOptions opt;
+            opt.version = format_version;
+            opt.root = std::make_shared<OSService>(data_dir.getValue());
+            copy_key(config.master_key, &opt.master_key);
+            opt.flags = format_version < 3 ? 0 : kOptionStoreTime;
+            opt.block_size = config.block_size;
+            opt.iv_size = config.iv_size;
 
-        operations::FileSystemContext fs(opt);
-        auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
-        root->set_uid(securefs::OSService::getuid());
-        root->set_gid(securefs::OSService::getgid());
-        root->set_mode(S_IFDIR | 0755);
-        root->set_nlink(1);
-        root->flush();
+            operations::FileSystemContext fs(opt);
+            auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
+            root->set_uid(securefs::OSService::getuid());
+            root->set_gid(securefs::OSService::getgid());
+            root->set_mode(S_IFDIR | 0755);
+            root->set_nlink(1);
+            root->flush();
+        }
         return 0;
     }
 
@@ -678,10 +731,22 @@ private:
         "i", "insecure", "Disable all integrity verification (insecure mode)"};
     TCLAP::SwitchArg noxattr{"x", "noxattr", "Disable built-in xattr support"};
     TCLAP::SwitchArg trace{"", "trace", "Trace all calls into `securefs` (implies --info)"};
-    TCLAP::SwitchArg info{
-        "", "info", "Logs more information than warnings and errors"};    // Disabled for now
     TCLAP::ValueArg<std::string> log{
         "", "log", "Path of the log file (may contain sensitive information)", false, "", "path"};
+    TCLAP::SwitchArg multithreaded{"m",
+                                   "multithread",
+                                   "Run in multithreaded mode. Only usable for lite filesystems. "
+                                   "Experimental at this point so enable it at your own risk!"};
+    TCLAP::SwitchArg lowercasing{"l",
+                                 "lower",
+                                 "Turn on/off the conversion of all filenames to lowercase "
+                                 "(default to true on Windows, false on other systems)",
+#ifdef WIN32
+                                 true
+#else
+                                 false
+#endif
+    };
     TCLAP::MultiArg<std::string> fuse_options{
         "o",
         "opt",
@@ -728,6 +793,8 @@ public:
         cmdline.add(&fuse_options);
         cmdline.add(&uid_override);
         cmdline.add(&gid_override);
+        cmdline.add(&multithreaded);
+        cmdline.add(&lowercasing);
         cmdline.parse(argc, argv);
 
         if (pass.isSet() && !pass.getValue().empty())
@@ -767,8 +834,31 @@ public:
         return "/tmp";
     }
 
+    void recreate_logger()
+    {
+        if (log.isSet())
+        {
+            global_logger.reset(Logger::create_file_logger(log.getValue()));
+        }
+        else if (background.getValue())
+        {
+            global_logger->warn("securefs is about to enter background without a log file. You "
+                                "won't be able to inspect what goes wrong. You can remount with "
+                                "option --log instead.");
+            global_logger.reset(Logger::create_null_logger());
+        }
+        if (trace.getValue())
+            global_logger->set_level(kLogTrace);
+    }
+
     int execute() override
     {
+        if (data_dir.getValue() == mount_point.getValue())
+        {
+            global_logger->warn("Mounting a directory on itself may cause securefs to hang");
+        }
+
+        recreate_logger();
         OSService::get_default().ensure_directory(mount_point.getValue(), 0755);
         std::shared_ptr<FileStream> config_stream;
         try
@@ -779,10 +869,10 @@ public:
         {
             if (e.error_number() == ENOENT)
             {
-                fprintf(stderr,
-                        "Config file %s does not exist. Perhaps you forget to run `create` command "
-                        "first?\n",
-                        get_real_config_path().c_str());
+                global_logger->error(
+                    "Config file %s does not exist. Perhaps you forget to run `create` command "
+                    "first?",
+                    get_real_config_path().c_str());
                 return 19;
             }
             throw;
@@ -790,105 +880,39 @@ public:
         auto config = read_config(config_stream.get(), password.data(), password.size());
         config_stream.reset();
 
+        if (config.master_key.size() == KEY_LENGTH
+            && std::count(config.master_key.begin(), config.master_key.end(), (byte)0) >= 20)
+        {
+            global_logger->warn(
+                "%s",
+                "Your filesystem is created by a vulnerable version of securefs.\n"
+                "Please immediate migrate your old data to a newly created securefs filesystem,\n"
+                "and remove all traces of old data to avoid information leakage!");
+            fputs("Do you wish to continue with mounting? (y/n)", stdout);
+            fflush(stdout);
+            if (getc(stdout) != 'y')
+                return 0;
+        }
         generate_random(password.data(), password.size());    // Erase user input
 
-        operations::MountOptions fsopt;
-        fsopt.root = std::make_shared<OSService>(data_dir.getValue());
         try
         {
-            fsopt.lock_stream = fsopt.root->open_file_stream(
-                securefs::operations::LOCK_FILENAME, O_CREAT | O_EXCL | O_RDONLY, 0644);
+            global_logger->info("Raising the number of file descriptor limit to %d",
+                                OSService::raise_fd_limit());
         }
         catch (const ExceptionBase& e)
         {
-            fprintf(
-                stderr,
-                "Encountering error %s when creating the lock file %s/%s.\n"
-                "Perhaps multiple securefs instances are trying to operate on a single directory.\n"
-                "Close other instances, including on other machines, and try again.\n"
-                "Or remove the lock file manually if you are sure no other instances are holding "
-                "the lock.",
-                e.what(),
-                data_dir.getValue().c_str(),
-                securefs::operations::LOCK_FILENAME.c_str());
-            return 18;
+            global_logger->warn("Failure to raise the maximum file descriptor limit (%s: %s)",
+                                e.type_name(),
+                                e.what());
         }
-        fsopt.block_size = config.block_size;
-        fsopt.iv_size = config.iv_size;
-        fsopt.version = config.version;
-        fsopt.master_key = config.master_key;
-        fsopt.flags = config.version < 3 ? 0 : FileTable::STORE_TIME;
-        if (insecure.getValue())
-            fsopt.flags.value() |= FileTable::NO_AUTHENTICATION;
-        if (uid_override.isSet())
-        {
-            fsopt.uid_override = uid_override.getValue();
-        }
-        if (gid_override.isSet())
-        {
-            fsopt.gid_override = gid_override.getValue();
-        }
-
-        std::string log_filename;
-        if (log.isSet())
-        {
-            log_filename.swap(log.getValue());
-        }
-        else if (background.getValue())
-        {
-            log_filename = OSService::temp_name(std::string(get_tmp_dir()) + "/securefs_", ".log");
-            fprintf(stderr,
-                    "Setting %s as the log file since the user specifies none\n",
-                    log_filename.c_str());
-        }
-        if (log_filename.empty())
-        {
-            fsopt.logger = std::make_shared<Logger>(LoggingLevel::WARNING, 2, false);
-        }
-        else
-        {
-            int fd = ::open(log_filename.c_str(), O_CREAT | O_APPEND | O_WRONLY, 0600);
-            if (fd < 0)
-            {
-                fprintf(stderr,
-                        "Failed to open file %s: %s\n",
-                        log_filename.c_str(),
-                        sane_strerror(errno).c_str());
-                return 10;
-            }
-            fsopt.logger = std::make_shared<Logger>(LoggingLevel::WARNING, fd, true);
-        }
-        if (info.getValue())
-            fsopt.logger->set_level(LoggingLevel::INFO);
-        if (trace.getValue())
-            fsopt.logger->set_level(LoggingLevel::VERBOSE);
-
-        try
-        {
-            fprintf(stderr,
-                    "Raising the number of file descriptor limit to %d\n",
-                    OSService::raise_fd_limit());
-        }
-        catch (const ExceptionBase& e)
-        {
-            fprintf(stderr,
-                    "Warning: failure to raise the maximum file descriptor limit (%s: %s)\n",
-                    e.type_name(),
-                    e.what());
-        }
-
-        fprintf(stderr,
-                "Mounting filesystem stored at %s onto %s\nFormat version: %u\n",
-                data_dir.getValue().c_str(),
-                mount_point.getValue().c_str(),
-                fsopt.version.value());
-
-        struct fuse_operations opt;
-        init_fuse_operations(data_dir.getValue().c_str(), opt, !noxattr.getValue());
 
         std::vector<const char*> fuse_args;
         fuse_args.push_back("securefs");
-        fuse_args.push_back("-s");
+        if (config.version < 4 || !multithreaded.getValue())
+        {
+            fuse_args.push_back("-s");
+        }
         if (!background.getValue())
             fuse_args.push_back("-f");
         if (fuse_options.isSet())
@@ -903,18 +927,104 @@ public:
         const char* copyfile_disable = ::getenv("COPYFILE_DISABLE");
         if (copyfile_disable)
         {
-            fprintf(stderr,
-                    "Mounting without .DS_Store and other apple dot files because environmental "
-                    "variable COPYFILE_DISABLE is set to \"%s\"\n",
-                    copyfile_disable);
+            global_logger->info(
+                "Mounting without .DS_Store and other apple dot files because environmental "
+                "variable COPYFILE_DISABLE is set to \"%s\"",
+                copyfile_disable);
             fuse_args.push_back("-o");
             fuse_args.push_back("noappledouble");
         }
 #endif
         fuse_args.push_back(mount_point.getValue().c_str());
 
-        return fuse_main(
-            static_cast<int>(fuse_args.size()), const_cast<char**>(fuse_args.data()), &opt, &fsopt);
+        global_logger->info("Mounting filesystem stored at %s onto %s with format version: %u",
+                            data_dir.getValue().c_str(),
+                            mount_point.getValue().c_str(),
+                            config.version);
+
+        if (config.version < 4)
+        {
+            operations::MountOptions fsopt;
+            fsopt.root = std::make_shared<OSService>(data_dir.getValue());
+            try
+            {
+                fsopt.lock_stream = fsopt.root->open_file_stream(
+                    securefs::operations::LOCK_FILENAME, O_CREAT | O_EXCL | O_RDONLY, 0644);
+            }
+            catch (const ExceptionBase& e)
+            {
+                global_logger->error(
+                    "Encountering error %s when creating the lock file %s/%s.\n"
+                    "Perhaps multiple securefs instances are trying to operate on a single "
+                    "directory.\n"
+                    "Close other instances, including on other machines, and try again.\n"
+                    "Or remove the lock file manually if you are sure no other instances are "
+                    "holding the lock.",
+                    e.what(),
+                    data_dir.getValue().c_str(),
+                    securefs::operations::LOCK_FILENAME.c_str());
+                return 18;
+            }
+            fsopt.block_size = config.block_size;
+            fsopt.iv_size = config.iv_size;
+            fsopt.version = config.version;
+
+            copy_key(config.master_key, &fsopt.master_key);
+            fsopt.flags = config.version < 3 ? 0 : kOptionStoreTime;
+            if (insecure.getValue())
+                fsopt.flags.value() |= kOptionNoAuthentication;
+            if (uid_override.isSet())
+            {
+                fsopt.uid_override = uid_override.getValue();
+            }
+            if (gid_override.isSet())
+            {
+                fsopt.gid_override = gid_override.getValue();
+            }
+            if (lowercasing.getValue())
+            {
+                fsopt.flags.value() |= kOptionNormalizeFileNameToLowerCase;
+            }
+            struct fuse_operations operations;
+
+            init_fuse_operations(data_dir.getValue().c_str(), operations, noxattr.getValue());
+
+            return fuse_main(static_cast<int>(fuse_args.size()),
+                             const_cast<char**>(fuse_args.data()),
+                             &operations,
+                             &fsopt);
+        }
+        else
+        {
+            lite::MountOptions fsopt;
+            fsopt.root = std::make_shared<OSService>(data_dir.getValue());
+            fsopt.block_size = config.block_size;
+            fsopt.iv_size = config.iv_size;
+            if (lowercasing.getValue())
+            {
+                fsopt.flags |= kOptionNormalizeFileNameToLowerCase;
+            }
+
+            if (config.master_key.size() != 3 * KEY_LENGTH)
+            {
+                global_logger->error(
+                    "The config file has an invalid master key size %zu (expect %zu)",
+                    config.master_key.size(),
+                    static_cast<size_t>(3 * KEY_LENGTH));
+                return 100;
+            }
+
+            memcpy(fsopt.name_key.data(), config.master_key.data(), KEY_LENGTH);
+            memcpy(fsopt.content_key.data(), config.master_key.data() + KEY_LENGTH, KEY_LENGTH);
+            memcpy(fsopt.xattr_key.data(), config.master_key.data() + 2 * KEY_LENGTH, KEY_LENGTH);
+
+            struct fuse_operations operations;
+            lite::init_fuse_operations(&operations, data_dir.getValue(), noxattr.getValue());
+            return fuse_main(static_cast<int>(fuse_args.size()),
+                             const_cast<char**>(fuse_args.data()),
+                             &operations,
+                             &fsopt);
+        }
     }
 
     const char* long_name() const noexcept override { return "mount"; }
@@ -958,6 +1068,13 @@ public:
         auto config = read_config(config_stream.get(), password.data(), password.size());
         config_stream.reset();
 
+        if (config.version >= 4)
+        {
+            fprintf(stderr,
+                    "The filesystem has format version %u which cannot be fixed\n",
+                    config.version);
+            return 3;
+        }
         generate_random(password.data(), password.size());    // Erase user input
 
         operations::MountOptions fsopt;
@@ -966,7 +1083,7 @@ public:
         fsopt.block_size = config.block_size;
         fsopt.iv_size = config.iv_size;
         fsopt.version = config.version;
-        fsopt.master_key = config.master_key;
+        copy_key(config.master_key, &fsopt.master_key);
         fsopt.flags = 0;
 
         operations::FileSystemContext fs(fsopt);
@@ -987,7 +1104,7 @@ public:
 class VersionCommand : public CommandBase
 {
 private:
-    const char* version_string = "0.6.1";
+    const char* version_string = "0.7.0";
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
@@ -1079,29 +1196,23 @@ int commands_main(int argc, const char* const* argv)
     }
     catch (const TCLAP::ArgException& e)
     {
-        Logger l(LoggingLevel::VERBOSE, 2, false);
-        l.log(LoggingLevel::ERROR,
-              "Error parsing arguments: %s at %s\n",
-              e.error().c_str(),
-              e.argId().c_str());
+        global_logger->error(
+            "Error parsing arguments: %s at %s\n", e.error().c_str(), e.argId().c_str());
         return 5;
     }
     catch (const std::runtime_error& e)
     {
-        Logger l(LoggingLevel::VERBOSE, 2, false);
-        l.log(LoggingLevel::ERROR, "%s\n", e.what());
+        global_logger->error("%s\n", e.what());
         return 1;
     }
     catch (const securefs::ExceptionBase& e)
     {
-        Logger l(LoggingLevel::VERBOSE, 2, false);
-        l.log(LoggingLevel::ERROR, "%s: %s\n", e.type_name(), e.what());
+        global_logger->error("%s: %s\n", e.type_name(), e.what());
         return 2;
     }
     catch (const std::exception& e)
     {
-        Logger l(LoggingLevel::VERBOSE, 2, false);
-        l.log(LoggingLevel::ERROR, "%s: %s\n", typeid(e).name(), e.what());
+        global_logger->error("%s: %s\n", typeid(e).name(), e.what());
         return 3;
     }
 }

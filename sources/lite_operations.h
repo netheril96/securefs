@@ -1,51 +1,27 @@
 #pragma once
+
+#pragma once
 #define FUSE_USE_VERSION 27
 
-#include "file_table.h"
 #include "logger.h"
 #include "myutils.h"
+#include "platform.h"
 
 #include <fuse.h>
 
 namespace securefs
 {
-class FileStream;
-
-namespace operations
+namespace lite
 {
-    extern const std::string LOCK_FILENAME;
     struct MountOptions
     {
-        optional<int> version;
-        std::shared_ptr<OSService> root;
-        std::shared_ptr<FileStream> lock_stream;
-        optional<key_type> master_key;
-        optional<uint32_t> flags;
-        optional<unsigned> block_size;
-        optional<unsigned> iv_size;
-        optional<uid_t> uid_override;
-        optional<gid_t> gid_override;
-
-        MountOptions();
-        ~MountOptions();
+        std::shared_ptr<securefs::OSService> root;
+        key_type name_key, content_key, xattr_key;
+        optional<unsigned> block_size, iv_size;
+        unsigned flags = 0;
     };
 
-    struct FileSystemContext
-    {
-    public:
-        FileTable table;
-        std::shared_ptr<OSService> root;
-        std::shared_ptr<FileStream> lock_stream;
-        id_type root_id;
-        unsigned block_size;
-        optional<uid_t> uid_override;
-        optional<gid_t> gid_override;
-        uint32_t flags;
-
-        explicit FileSystemContext(const MountOptions& opt);
-
-        ~FileSystemContext();
-    };
+    void init_fuse_operations(fuse_operations* opt, const std::string& data_dir, bool noxattr);
 
     int statfs(const char*, struct statvfs*);
 
@@ -85,19 +61,15 @@ namespace operations
 
     int chmod(const char*, mode_t);
 
-    int chown(const char* path, uid_t uid, gid_t gid);
-
     int symlink(const char* to, const char* from);
+
+    int link(const char* src, const char* dest);
 
     int readlink(const char* path, char* buf, size_t size);
 
     int rename(const char*, const char*);
 
-    int link(const char*, const char*);
-
     int fsync(const char* path, int isdatasync, struct fuse_file_info* fi);
-
-    int fsyncdir(const char* path, int isdatasync, struct fuse_file_info* fi);
 
     int utimens(const char* path, const struct timespec ts[2]);
 

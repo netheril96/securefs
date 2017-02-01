@@ -28,7 +28,7 @@ namespace securefs
 {
 std::string errno_to_string() { return sane_strerror(errno); }
 
-#ifndef HAS_THREAD_LOCAL
+#if !defined(HAS_THREAD_LOCAL) && !defined(WIN32)
 template <class T>
 class ThreadLocalStorage
 {
@@ -66,10 +66,10 @@ public:
 void generate_random(void* data, size_t size)
 {
 #ifndef HAS_THREAD_LOCAL
-    static ThreadLocalStorage<CryptoPP::NonblockingRng> rng;
+    static ThreadLocalStorage<CryptoPP::AutoSeededRandomPool> rng;
     return rng->GenerateBlock(static_cast<byte*>(data), size);
 #else
-    thread_local CryptoPP::NonblockingRng rng;
+    thread_local CryptoPP::AutoSeededRandomPool rng;
     return rng.GenerateBlock(static_cast<byte*>(data), size);
 #endif
 }
@@ -361,13 +361,13 @@ static void find_ids_helper(const std::string& current_dir,
 {
     id_type id;
     std::string hex(id_type::size() * 2, 0);
-    OSService::traverse_callback callback
-        = [&id, &result, &hex](const std::string& dir, const std::string& name) -> bool {
+    OSService::recursive_traverse_callback callback
+        = [&id, &result, &hex](StringRef dir, StringRef name) -> bool {
         if (name == "." || name == "..")
             return true;
-        if (ends_with(name.data(), name.size(), ".meta", strlen(".meta")))
+        if (name.ends_with(".meta"))
         {
-            std::string total_name = dir + '/' + name.substr(0, name.size() - strlen(".meta"));
+            std::string total_name = dir + "/" + name.substr(0, name.size() - strlen(".meta"));
             hex.assign(hex.size(), 0);
             ptrdiff_t i = hex.size() - 1, j = total_name.size() - 1;
             while (i >= 0 && j >= 0)

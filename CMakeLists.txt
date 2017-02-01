@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
+cmake_minimum_required(VERSION 2.8.12 FATAL_ERROR)
 
 option(PORTABLE_BUILD "Build for the general architecture instead of this cpu" OFF)
 if (PORTABLE_BUILD)
@@ -9,13 +9,11 @@ endif ()
 project(securefs)
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
-set (CMAKE_CXX_STANDARD 11)
-
 if (UNIX)
     find_package(FUSE REQUIRED)
     include_directories(${FUSE_INCLUDE_DIR})
     link_libraries(${FUSE_LIBRARIES})
-    add_compile_options(-Wall -Wextra -pedantic)
+    add_compile_options(-Wall -Wextra -pedantic -std=gnu++11)
 
     if (NOT ${PORTABLE_BUILD})
         add_compile_options(-march=native -mtune=native)
@@ -35,6 +33,7 @@ else ()
         message(FATAL_ERROR "Dokan prefix not set or found")
     endif ()
     include_directories(${DOKAN_PREFIX}/include/fuse)
+    include_directories(${DOKAN_PREFIX}/include/dokan)
     link_libraries(${DOKAN_PREFIX}/lib/dokan1.lib)
     link_libraries(${DOKAN_PREFIX}/lib/dokanfuse1.lib)
     if (MSVC)

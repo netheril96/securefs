@@ -1,7 +1,20 @@
 #include "mystring.h"
 #include "exceptions.h"
+#include "logger.h"
 
+#ifdef HAS_CODECVT
+#include <codecvt>
+#include <locale>
+#endif
+
+#include <stdint.h>
 #include <system_error>
+
+#ifdef WIN32
+#include <Windows.h>
+#else
+#include <dlfcn.h>
+#endif
 
 namespace securefs
 {
@@ -50,7 +63,7 @@ std::string to_lower(const std::string& str)
     return result;
 }
 
-void parse_hex(const std::string& hex, byte* output, size_t len)
+void parse_hex(StringRef hex, byte* output, size_t len)
 {
     if (hex.size() % 2 != 0)
         throwInvalidArgumentException("Hex string must have an even length");
@@ -213,4 +226,123 @@ std::string hexify(const byte* data, size_t length)
     }
     return result;
 }
+
+#ifdef HAS_CODECVT
+std::wstring widen_string(StringRef str)
+{
+    if (sizeof(wchar_t) == 2)
+    {
+        std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t> converter;
+        return converter.from_bytes(str.begin(), str.end());
+    }
+    else
+    {
+        std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> converter;
+        return converter.from_bytes(str.begin(), str.end());
+    }
+}
+
+std::string narrow_string(WideStringRef str)
+{
+    if (sizeof(wchar_t) == 2)
+    {
+        std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t> converter;
+        return converter.to_bytes(str.begin(), str.end());
+    }
+    else
+    {
+        std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> converter;
+        return converter.to_bytes(str.begin(), str.end());
+    }
+}
+#endif
+
+bool is_ascci(StringRef str)
+{
+    for (char c : str)
+    {
+        if (static_cast<signed char>(c) < 0)
+            return false;
+    }
+    return true;
+}
+
+std::string ascii_lowercase(StringRef str)
+{
+    auto result = str.to_string();
+    for (char& c : result)
+    {
+        if (c >= 'A' && c <= 'Z')
+        {
+            c -= 'A' - 'a';
+        }
+    }
+    return result;
+}
+
+typedef uint32_t code_point_conversion_func(uint32_t);
+
+#ifndef WIN32
+class ICUDylib
+{
+    DISABLE_COPY_MOVE(ICUDylib)
+
+private:
+    void* m_dylib;
+    code_point_conversion_func* m_tolower;
+
+public:
+    explicit ICUDylib() : m_tolower(nullptr)
+    {
+        m_dylib = ::dlopen("libicucore.dylib", RTLD_LAZY);
+        if (!m_dylib)
+            m_dylib = ::dlopen("libicui18n.so", RTLD_LAZY);
+        if (m_dylib)
+        {
+            m_tolower
+                = reinterpret_cast<code_point_conversion_func*>(::dlsym(m_dylib, "u_tolower"));
+        }
+    }
+    ~ICUDylib()
+    {
+        if (m_dylib)
+            ::dlclose(m_dylib);
+    }
+
+    code_point_conversion_func* get_lower_func() const { return m_tolower; }
+};
+#endif
+
+#ifdef HAS_CODECVT
+std::string unicode_lowercase(StringRef str)
+{
+    if (is_ascci(str))
+        return ascii_lowercase(str);
+
+#ifdef WIN32
+    auto widened = widen_string(str);
+    CharLowerW(&widened[0]);
+    return narrow_string(widened);
+#else
+    static ICUDylib icu;
+    auto func = icu.get_lower_func();
+    if (!func)
+    {
+        global_logger->warn(
+            "ICU library not loaded, and therefore fall back to ASCII-only lowercase");
+        return ascii_lowercase(str);
+    }
+
+    std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> converter;
+    auto u32str = converter.from_bytes(str.begin(), str.end());
+    for (char32_t& c : u32str)
+    {
+        c = func(static_cast<uint32_t>(c));
+    }
+    return converter.to_bytes(u32str);
+#endif
+}
+#else
+std::string unicode_lowercase(StringRef str) { return ascii_lowercase(str); }
+#endif
 }
