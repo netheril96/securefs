@@ -27,6 +27,8 @@ TEST_CASE("Test string")
     REQUIRE(securefs::strprintf("%s %04d", "rsy", 9) == "rsy 0009");
     std::string long_string(2000, 'r');
     REQUIRE(securefs::strprintf("%s", long_string.c_str()) == long_string);
+
+#ifdef HAS_CODECVT
     REQUIRE(securefs::unicode_lowercase("ABCd") == "abcd");
     REQUIRE(securefs::unicode_lowercase("\xce\x91 \xce\xb1") == "\xce\xb1 \xce\xb1");
     REQUIRE(securefs::unicode_lowercase("abc") == "abc");
@@ -39,6 +41,7 @@ TEST_CASE("Test string")
             == "\xec\xa5\xa0\xef\xbd\x82\xd9\xb1\xe2\x90\x8c");
     REQUIRE(securefs::unicode_lowercase("\xe5\x9e\xb5\xee\x9f\x82\xe1\x97\xaf\xe7\x8d\x88\xd0\x94")
             == "\xe5\x9e\xb5\xee\x9f\x82\xe1\x97\xaf\xe7\x8d\x88\xd0\xb4");
+#endif
 }
 
 TEST_CASE("Test conversion of hex")

@@ -1,9 +1,12 @@
 #include "mystring.h"
 #include "exceptions.h"
+#include "logger.h"
 
+#ifdef HAS_CODECVT
 #include <codecvt>
-#include <cwctype>
 #include <locale>
+#endif
+
 #include <stdint.h>
 #include <system_error>
 
@@ -224,6 +227,7 @@ std::string hexify(const byte* data, size_t length)
     return result;
 }
 
+#ifdef HAS_CODECVT
 std::wstring widen_string(StringRef str)
 {
     if (sizeof(wchar_t) == 2)
@@ -251,6 +255,7 @@ std::string narrow_string(WideStringRef str)
         return converter.to_bytes(str.begin(), str.end());
     }
 }
+#endif
 
 bool is_ascci(StringRef str)
 {
@@ -289,6 +294,8 @@ public:
     explicit ICUDylib() : m_tolower(nullptr)
     {
         m_dylib = ::dlopen("libicucore.dylib", RTLD_LAZY);
+        if (!m_dylib)
+            m_dylib = ::dlopen("libicui18n.so", RTLD_LAZY);
         if (m_dylib)
         {
             m_tolower
@@ -304,9 +311,9 @@ public:
     code_point_conversion_func* get_lower_func() const { return m_tolower; }
 };
 
+#ifdef HAS_CODECVT
 std::string unicode_lowercase(StringRef str)
 {
-
     if (is_ascci(str))
         return ascii_lowercase(str);
 
@@ -318,9 +325,11 @@ std::string unicode_lowercase(StringRef str)
     static ICUDylib icu;
     auto func = icu.get_lower_func();
     if (!func)
-        throwPOSIXException(
-            EILSEQ,
-            "ICU library not found and therefore case conversion only works on ASCII strings");
+    {
+        global_logger->warn(
+            "ICU library not loaded, and therefore fall back to ASCII-only lowercase");
+        return ascii_lowercase(str);
+    }
 
     std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> converter;
     auto u32str = converter.from_bytes(str.begin(), str.end());
@@ -331,4 +340,7 @@ std::string unicode_lowercase(StringRef str)
     return converter.to_bytes(u32str);
 #endif
 }
+#else
+std::string unicode_lowercase(StringRef str) { return ascii_lowercase(str); }
+#endif
 }

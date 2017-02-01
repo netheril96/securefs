@@ -1,5 +1,6 @@
 include(CheckCXXSourceCompiles)
 include(CheckFunctionExists)
+include(CheckIncludeFileCXX)
 
 set(TMP_FLAGS ${CMAKE_REQUIRED_FLAGS})
 if (UNIX)
@@ -10,6 +11,12 @@ CHECK_CXX_SOURCE_COMPILES("int main() { thread_local int a = 0; return a; }" HAS
 if (HAS_THREAD_LOCAL})
     add_definitions(-DHAS_THREAD_LOCAL)
 endif ()
+
+CHECK_INCLUDE_FILE_CXX(codecvt HAS_CODECVT)
+if (HAS_CODECVT)
+    add_definitions(-DHAS_CODECVT)
+endif ()
+
 set(CMAKE_REQUIRED_FLAGS ${TMP_FLAGS})
 
 CHECK_FUNCTION_EXISTS(openat HAS_OPENAT)

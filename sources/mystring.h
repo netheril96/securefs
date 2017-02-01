@@ -144,8 +144,11 @@ inline std::string hexify(const ByteContainer& c)
 
 std::string sane_strerror(int error_number);
 
+#ifdef HAS_CODECVT
 std::wstring widen_string(StringRef str);
 std::string narrow_string(WideStringRef str);
+#endif
+
 std::string unicode_lowercase(StringRef str);
 
 bool is_ascci(StringRef str);
