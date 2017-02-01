@@ -77,7 +77,7 @@ public:
 class WindowsFileStream : public FileStream
 {
 private:
-    std::mutex m_mutex;
+    std::recursive_mutex m_mutex;
     HANDLE m_handle;
 
 public:

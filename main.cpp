@@ -16,9 +16,7 @@ int wmain(int argc, wchar_t** wargv)
 		argv[i] = str_argv[i].c_str();
 	argv[argc] = nullptr;
 
-	int rc = securefs::commands_main(argc, argv.get());
-	system("pause");
-	return rc;
+	return securefs::commands_main(argc, argv.get());
 }
 
 #else

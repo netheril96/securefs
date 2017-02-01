@@ -95,7 +95,7 @@ namespace lite
 
     private:
         std::map<std::string, std::string> m_resolved_symlinks;
-        std::mutex m_mutex;
+        std::recursive_mutex m_mutex;
         AES_SIV m_name_encryptor;
         key_type m_content_key;
         CryptoPP::GCM<CryptoPP::AES>::Encryption m_xattr_enc;
