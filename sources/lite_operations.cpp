@@ -53,7 +53,7 @@ namespace lite
                                  args->xattr_key,
                                  args->block_size.value(),
                                  args->iv_size.value(),
-                                 true);
+                                 args->flags);
         global_logger->info("init");
         return fs;
     }

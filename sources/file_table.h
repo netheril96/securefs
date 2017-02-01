@@ -1,4 +1,5 @@
 #pragma once
+#include "constants.h"
 #include "exceptions.h"
 #include "files.h"
 #include "myutils.h"
@@ -40,9 +41,6 @@ private:
     void finalize(std::unique_ptr<FileBase>&);
 
 public:
-    static const uint32_t READ_ONLY = 0x1, NO_AUTHENTICATION = 0x2, STORE_TIME = 0x4;
-
-public:
     explicit FileTable(int version,
                        std::shared_ptr<OSService> root,
                        const key_type& master_key,
@@ -53,9 +51,9 @@ public:
     FileBase* open_as(const id_type& id, int type);
     FileBase* create_as(const id_type& id, int type);
     void close(FileBase*);
-    bool is_readonly() const noexcept { return (m_flags & READ_ONLY) != 0; }
-    bool is_auth_enabled() const noexcept { return (m_flags & NO_AUTHENTICATION) == 0; }
-    bool is_time_stored() const noexcept { return (m_flags & STORE_TIME) != 0; }
+    bool is_readonly() const noexcept { return (m_flags & kOptionReadOnly) != 0; }
+    bool is_auth_enabled() const noexcept { return (m_flags & kOptionNoAuthentication) == 0; }
+    bool is_time_stored() const noexcept { return (m_flags & kOptionStoreTime) != 0; }
     void gc();
     void statfs(struct statvfs* fs_info) { m_root->statfs(fs_info); }
 };

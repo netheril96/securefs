@@ -40,6 +40,7 @@ namespace operations
         unsigned block_size;
         optional<uid_t> uid_override;
         optional<gid_t> gid_override;
+        uint32_t flags;
 
         explicit FileSystemContext(const MountOptions& opt);
 

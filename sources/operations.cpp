@@ -1,4 +1,5 @@
 #include "operations.h"
+#include "constants.h"
 #include "platform.h"
 
 #include <algorithm>
@@ -39,11 +40,11 @@ namespace internal
 
     FileGuard open_base_dir(FileSystemContext* fs, const char* path, std::string& last_component)
     {
-#ifdef WIN32
-        auto components = split(normalize_to_lower_case(path).c_str(), '/');
-#else
-        auto components = split(path, '/');
-#endif
+        std::vector<std::string> components;
+        if (fs->flags & kOptionNormalizeFileNameToLowerCase)
+            components = split(unicode_lowercase(path).c_str(), '/');
+        else
+            components = split(path, '/');
 
         FileGuard result(&fs->table, fs->table.open_as(fs->root_id, FileBase::DIRECTORY));
         if (components.empty())
@@ -193,6 +194,7 @@ namespace operations
         , root_id()
         , uid_override(opt.uid_override)
         , gid_override(opt.gid_override)
+        , flags(opt.flags.value())
     {
         block_size = opt.block_size.value();
     }

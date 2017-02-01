@@ -632,7 +632,7 @@ public:
             opt.version = format_version;
             opt.root = std::make_shared<OSService>(data_dir.getValue());
             copy_key(config.master_key, &opt.master_key);
-            opt.flags = format_version < 3 ? 0 : FileTable::STORE_TIME;
+            opt.flags = format_version < 3 ? 0 : kOptionStoreTime;
             opt.block_size = config.block_size;
             opt.iv_size = config.iv_size;
 
@@ -727,6 +727,8 @@ private:
                                    "multithread",
                                    "Run in multithreaded mode. Only usable for lite filesystems. "
                                    "Experimental at this point so enable it at your own risk!"};
+    TCLAP::SwitchArg lowercasing{
+        "l", "lower", "Convert all filenames to lowercase to ensure interoperability with Windows"};
     TCLAP::MultiArg<std::string> fuse_options{
         "o",
         "opt",
@@ -774,6 +776,7 @@ public:
         cmdline.add(&uid_override);
         cmdline.add(&gid_override);
         cmdline.add(&multithreaded);
+        cmdline.add(&lowercasing);
         cmdline.parse(argc, argv);
 
         if (pass.isSet() && !pass.getValue().empty())
@@ -949,9 +952,9 @@ public:
             fsopt.version = config.version;
 
             copy_key(config.master_key, &fsopt.master_key);
-            fsopt.flags = config.version < 3 ? 0 : FileTable::STORE_TIME;
+            fsopt.flags = config.version < 3 ? 0 : kOptionStoreTime;
             if (insecure.getValue())
-                fsopt.flags.value() |= FileTable::NO_AUTHENTICATION;
+                fsopt.flags.value() |= kOptionNoAuthentication;
             if (uid_override.isSet())
             {
                 fsopt.uid_override = uid_override.getValue();
@@ -959,6 +962,10 @@ public:
             if (gid_override.isSet())
             {
                 fsopt.gid_override = gid_override.getValue();
+            }
+            if (lowercasing.getValue())
+            {
+                fsopt.flags.value() |= kOptionNormalizeFileNameToLowerCase;
             }
             struct fuse_operations operations;
 
@@ -975,6 +982,10 @@ public:
             fsopt.root = std::make_shared<OSService>(data_dir.getValue());
             fsopt.block_size = config.block_size;
             fsopt.iv_size = config.iv_size;
+            if (lowercasing.getValue())
+            {
+                fsopt.flags |= kOptionNormalizeFileNameToLowerCase;
+            }
 
             if (config.master_key.size() != 3 * KEY_LENGTH)
             {

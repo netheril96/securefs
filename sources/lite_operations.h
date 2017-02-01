@@ -18,6 +18,7 @@ namespace lite
         std::shared_ptr<securefs::OSService> root;
         key_type name_key, content_key, xattr_key;
         optional<unsigned> block_size, iv_size;
+        unsigned flags = 0;
     };
 
     void init_fuse_operations(fuse_operations* opt, const std::string& data_dir, bool noxattr);

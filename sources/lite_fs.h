@@ -108,7 +108,7 @@ namespace lite
         CryptoPP::GCM<CryptoPP::AES>::Decryption m_xattr_dec;
         std::shared_ptr<securefs::OSService> m_root;
         unsigned m_block_size, m_iv_size;
-        bool m_check;
+        unsigned m_flags;
 
     private:
         std::string translate_path(StringRef path, bool preserve_leading_slash);
@@ -120,7 +120,7 @@ namespace lite
                    const key_type& xattr_key,
                    unsigned block_size,
                    unsigned iv_size,
-                   bool check);
+                   unsigned flags);
         ~FileSystem();
 
         void lock() { m_mutex.lock(); }

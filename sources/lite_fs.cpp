@@ -1,4 +1,5 @@
 #include "lite_fs.h"
+#include "constants.h"
 #include "logger.h"
 
 #include <cryptopp/base32.h>
@@ -37,13 +38,13 @@ namespace lite
                            const key_type& xattr_key,
                            unsigned block_size,
                            unsigned iv_size,
-                           bool check)
+                           unsigned flags)
         : m_name_encryptor(name_key.data(), name_key.size())
         , m_content_key(content_key)
         , m_root(std::move(root))
         , m_block_size(block_size)
         , m_iv_size(iv_size)
-        , m_check(check)
+        , m_flags(flags)
     {
         byte null_iv[12] = {0};
         m_xattr_enc.SetKeyWithIV(xattr_key.data(), xattr_key.size(), null_iv, sizeof(null_iv));
@@ -163,31 +164,39 @@ namespace lite
 
     std::string FileSystem::translate_path(StringRef path, bool preserve_leading_slash)
     {
-        std::string result;
         if (path.empty())
         {
+            return {};
         }
         else if (path.size() == 1 && path[0] == '/')
         {
             if (preserve_leading_slash)
             {
-                result = path.to_string();
+                return "/";
             }
             else
             {
-                result = ".";
+                return ".";
             }
         }
         else
         {
-            result = lite::encrypt_path(m_name_encryptor, path);
-            if (!preserve_leading_slash && !result.empty() && result[0] == '/')
+            std::string str;
+            if (m_flags & kOptionNormalizeFileNameToLowerCase)
             {
-                result.erase(result.begin());
+                str = lite::encrypt_path(m_name_encryptor, unicode_lowercase(path));
             }
+            else
+            {
+                str = lite::encrypt_path(m_name_encryptor, path);
+            }
+            if (!preserve_leading_slash && !str.empty() && str[0] == '/')
+            {
+                str.erase(str.begin());
+            }
+            global_logger->trace("Translate path %s into %s", path.c_str(), str.c_str());
+            return str;
         }
-        global_logger->trace("Translate path %s into %s", path.c_str(), result.c_str());
-        return result;
     }
 
     AutoClosedFile FileSystem::open(StringRef path, int flags)
@@ -206,8 +215,12 @@ namespace lite
         else
         {
             auto file_stream = m_root->open_file_stream(translate_path(path, false), O_RDWR, 0644);
-            auto fp = securefs::make_unique<File>(
-                path.to_string(), file_stream, m_content_key, m_block_size, m_iv_size, m_check);
+            auto fp = securefs::make_unique<File>(path.to_string(),
+                                                  file_stream,
+                                                  m_content_key,
+                                                  m_block_size,
+                                                  m_iv_size,
+                                                  (m_flags & kOptionNoAuthentication) == 0);
             fp->increase_open_count();
             File* fp_pointer = fp.get();
             m_opened_files[strpath] = fp.release();
@@ -224,8 +237,12 @@ namespace lite
             throwVFSException(EEXIST);
         auto file_stream = m_root->open_file_stream(
             translate_path(path, false), O_RDWR | O_EXCL | O_CREAT, mode);
-        auto fp = securefs::make_unique<File>(
-            path.to_string(), file_stream, m_content_key, m_block_size, m_iv_size, m_check);
+        auto fp = securefs::make_unique<File>(path.to_string(),
+                                              file_stream,
+                                              m_content_key,
+                                              m_block_size,
+                                              m_iv_size,
+                                              (m_flags & kOptionNoAuthentication) == 0);
         fp->increase_open_count();
         File* fp_pointer = fp.get();
         m_opened_files.emplace(path.to_string(), fp.release());
