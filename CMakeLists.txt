@@ -9,13 +9,11 @@ endif ()
 project(securefs)
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
-set (CMAKE_CXX_STANDARD 11)
-
 if (UNIX)
     find_package(FUSE REQUIRED)
     include_directories(${FUSE_INCLUDE_DIR})
     link_libraries(${FUSE_LIBRARIES})
-    add_compile_options(-Wall -Wextra -pedantic)
+    add_compile_options(-Wall -Wextra -pedantic -std=gnu++11)
 
     if (NOT ${PORTABLE_BUILD})
         add_compile_options(-march=native -mtune=native)

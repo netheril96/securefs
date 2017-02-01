@@ -24,16 +24,21 @@ TEST_CASE("Test string")
     REQUIRE((securefs::split("cdafadfm", ' ') == std::vector<std::string>{"cdafadfm"}));
     REQUIRE((securefs::split("", 'a')).empty());
     REQUIRE((securefs::split("//////", '/')).empty());
-    REQUIRE(securefs::to_lower("abc") == "abc");
-    REQUIRE(securefs::to_lower("ABcD;,") == "abcd;,");
     REQUIRE(securefs::strprintf("%s %04d", "rsy", 9) == "rsy 0009");
     std::string long_string(2000, 'r');
     REQUIRE(securefs::strprintf("%s", long_string.c_str()) == long_string);
-
-#ifdef WIN32
-    REQUIRE(securefs::normalize_to_lower_case("ABCd") == "abcd");
-    REQUIRE(securefs::normalize_to_lower_case("\xce\x91 \xce\xb1") == "\xce\xb1 \xce\xb1");
-#endif
+    REQUIRE(securefs::unicode_lowercase("ABCd") == "abcd");
+    REQUIRE(securefs::unicode_lowercase("\xce\x91 \xce\xb1") == "\xce\xb1 \xce\xb1");
+    REQUIRE(securefs::unicode_lowercase("abc") == "abc");
+    REQUIRE(securefs::unicode_lowercase("ABcD;,") == "abcd;,");
+    REQUIRE(securefs::unicode_lowercase("\xc3\x81") == "\xc3\xa1");
+    REQUIRE(securefs::unicode_lowercase("\xe4\x89\x92\xe1\xbb\xbe") == "\xe4\x89\x92\xe1\xbb\xbf");
+    REQUIRE(securefs::unicode_lowercase("\xef\x9e\x90\xea\xb2\xa2\xd2\xbc")
+            == "\xef\x9e\x90\xea\xb2\xa2\xd2\xbd");
+    REQUIRE(securefs::unicode_lowercase("\xec\xa5\xa0\xef\xbc\xa2\xd9\xb1\xe2\x90\x8c")
+            == "\xec\xa5\xa0\xef\xbd\x82\xd9\xb1\xe2\x90\x8c");
+    REQUIRE(securefs::unicode_lowercase("\xe5\x9e\xb5\xee\x9f\x82\xe1\x97\xaf\xe7\x8d\x88\xd0\x94")
+            == "\xe5\x9e\xb5\xee\x9f\x82\xe1\x97\xaf\xe7\x8d\x88\xd0\xb4");
 }
 
 TEST_CASE("Test conversion of hex")

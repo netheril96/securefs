@@ -143,5 +143,11 @@ inline std::string hexify(const ByteContainer& c)
 }
 
 std::string sane_strerror(int error_number);
-std::string to_lower(const std::string&);
+
+std::wstring widen_string(StringRef str);
+std::string narrow_string(WideStringRef str);
+std::string unicode_lowercase(StringRef str);
+
+bool is_ascci(StringRef str);
+std::string ascii_lowercase(StringRef str);
 }
