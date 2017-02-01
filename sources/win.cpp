@@ -4,6 +4,7 @@
 #include <cerrno>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <stdint.h>
 #include <stdlib.h>
 #include <time.h>
@@ -36,14 +37,14 @@ static const int CONSOLE_CP_CHANGED = []() { return SetConsoleOutputCP(CP_UTF8);
 
 namespace securefs
 {
-class WindowsException : public SeriousException
+class WindowsException : public SystemException
 {
 private:
     DWORD err;
-    std::string msg;
+    const char* exp;
 
 public:
-    explicit WindowsException(DWORD err, std::string msg) : err(err), msg(std::move(msg)) {}
+    explicit WindowsException(DWORD err, const char* exp) : err(err), exp(exp) {}
     const char* type_name() const noexcept override { return "WindowsException"; }
     std::string message() const override
     {
@@ -55,24 +56,28 @@ public:
                 FORMAT_MESSAGE_FROM_SYSTEM, nullptr, err, 0, wide_buffer, WIDE_BUFSIZE, nullptr)
             || !WideCharToMultiByte(
                    CP_UTF8, 0, wide_buffer, -1, buffer, WIDE_BUFSIZE * 2, nullptr, nullptr))
-            return strprintf("error %lu (%s)", err, msg.c_str());
-        return strprintf("error %lu (%s) %s", err, msg.c_str(), buffer);
+            return strprintf("error %lu (%s)", err, exp);
+        return strprintf("error %lu (%s) %s", err, exp, buffer);
     }
 };
 
-[[noreturn]] void throwWindowsException(DWORD err, std::string msg)
+[[noreturn]] void throwWindowsException(DWORD err, const char* exp)
 {
-    if (err != 0)
-        throw WindowsException(err, std::move(msg));
+    throw WindowsException(err, exp);
 }
+
+#define CHECK_CALL(exp)                                                                            \
+    if (!(exp))                                                                                    \
+        throwWindowsException(GetLastError(), #exp);
 
 class WindowsFileStream : public FileStream
 {
 private:
+    std::mutex m_mutex;
     HANDLE m_handle;
 
 public:
-    explicit WindowsFileStream(const std::string& path, int flags, unsigned mode)
+    explicit WindowsFileStream(WideStringRef path, int flags, unsigned mode)
     {
         DWORD access_flags = GENERIC_READ;
         if (flags & O_WRONLY)
@@ -97,7 +102,7 @@ public:
             create_flags = OPEN_EXISTING;
         }
 
-        m_handle = CreateFileA(path.c_str(),
+        m_handle = CreateFileW(path.c_str(),
                                access_flags,
                                FILE_SHARE_READ | FILE_SHARE_DELETE,
                                nullptr,
@@ -109,6 +114,10 @@ public:
     }
 
     ~WindowsFileStream() { CloseHandle(m_handle); }
+
+    void lock() override { m_mutex.lock(); }
+
+    void unlock() override { m_mutex.unlock(); }
 
     length_type read32(void* output, offset_type offset, DWORD length)
     {
@@ -142,8 +151,7 @@ public:
         ol.OffsetHigh = static_cast<DWORD>(offset >> 32);
 
         DWORD writelen;
-        if (!WriteFile(m_handle, input, length, &writelen, &ol))
-            throwWindowsException(GetLastError(), "WriteFile");
+        CHECK_CALL(WriteFile(m_handle, input, length, &writelen, &ol));
         if (writelen != length)
             throwVFSException(EIO);
     }
@@ -180,8 +188,7 @@ public:
     length_type size() const override
     {
         _LARGE_INTEGER SIZE;
-        if (GetFileSizeEx(m_handle, &SIZE) == 0)
-            throwWindowsException(GetLastError(), "GetFileSizeEx");
+        CHECK_CALL(GetFileSizeEx(m_handle, &SIZE));
         return SIZE.QuadPart;
     }
 
@@ -199,20 +206,14 @@ public:
         {
             LARGE_INTEGER llen;
             llen.QuadPart = len;
-            if (!SetFilePointerEx(m_handle, llen, nullptr, FILE_BEGIN))
-                throwWindowsException(GetLastError(), "SetFilePointerEx");
-            if (!SetEndOfFile(m_handle))
-                throwWindowsException(GetLastError(), "SetEndOfFile");
+            CHECK_CALL(SetFilePointerEx(m_handle, llen, nullptr, FILE_BEGIN));
+            CHECK_CALL(SetEndOfFile(m_handle));
         }
     }
 
     length_type optimal_block_size() const noexcept override { return 4096; }
 
-    void fsync() override
-    {
-        if (FlushFileBuffers(m_handle) == 0)
-            throwWindowsException(GetLastError(), "FlushFileBuffers");
-    }
+    void fsync() override { CHECK_CALL(FlushFileBuffers(m_handle)); }
     void utimens(const struct timespec ts[2]) override
     {
         FILETIME access_time, mod_time;
@@ -226,15 +227,13 @@ public:
             access_time = unix_time_to_filetime(ts + 0);
             mod_time = unix_time_to_filetime(ts + 1);
         }
-        if (SetFileTime(m_handle, nullptr, &access_time, &mod_time) == 0)
-            throwWindowsException(GetLastError(), "SetFileTime");
+        CHECK_CALL(SetFileTime(m_handle, nullptr, &access_time, &mod_time));
     }
     void fstat(FUSE_STAT* st) override
     {
         memset(st, 0, sizeof(*st));
         BY_HANDLE_FILE_INFORMATION info;
-        if (GetFileInformationByHandle(m_handle, &info) == 0)
-            throwWindowsException(GetLastError(), "GetFileInformationByHandle");
+        CHECK_CALL(GetFileInformationByHandle(m_handle, &info));
         filetime_to_unix_time(&info.ftLastAccessTime, &st->st_atim);
         filetime_to_unix_time(&info.ftLastWriteTime, &st->st_mtim);
         filetime_to_unix_time(&info.ftCreationTime, &st->st_birthtim);
@@ -251,16 +250,17 @@ public:
 class OSService::Impl
 {
 public:
-    std::string dir_name;
+    std::wstring dir_name;
 
-    std::string norm_path(const std::string& path) const
+    std::wstring norm_path(StringRef path) const
     {
-        if (dir_name.empty() || (path.size() > 0 && (path[0] == '/' || path[0] == '\\'))
+        if (dir_name.empty() || path.empty()
+            || (path.size() > 0 && (path[0] == '/' || path[0] == '\\'))
             || (path.size() > 2 && path[1] == ':'))
-            return path;
+            return widen_string(path);
         else
         {
-            return dir_name + '\\' + path;
+            return dir_name + widen_string(path);
         }
     }
 };
@@ -269,22 +269,31 @@ OSService::OSService() : impl(new Impl()) {}
 
 OSService::~OSService() {}
 
-OSService::OSService(const std::string& path) : impl(new Impl()) { impl->dir_name = path; }
+OSService::OSService(StringRef path) : impl(new Impl())
+{
+    wchar_t resolved[8000];
+    CHECK_CALL(GetFullPathNameW(widen_string(path).c_str(), 8000, resolved, nullptr));
+    WideStringRef refresolved(resolved);
+    if (refresolved.starts_with(L"\\\\?\\"))
+        impl->dir_name = refresolved + L"\\";
+    else
+        impl->dir_name = L"\\\\?\\" + refresolved + L"\\";
+}
 
 std::shared_ptr<FileStream>
-OSService::open_file_stream(const std::string& path, int flags, unsigned mode) const
+OSService::open_file_stream(StringRef path, int flags, unsigned mode) const
 {
     return std::make_shared<WindowsFileStream>(impl->norm_path(path), flags, mode);
 }
 
-bool OSService::remove_file(const std::string& path) const noexcept
+void OSService::remove_file(StringRef path) const
 {
-    return DeleteFileA(impl->norm_path(path).c_str()) != 0;
+    CHECK_CALL(DeleteFileW(impl->norm_path(path).c_str()));
 }
 
-bool OSService::remove_directory(const std::string& path) const noexcept
+void OSService::remove_directory(StringRef path) const
 {
-    return RemoveDirectoryA(impl->norm_path(path).c_str()) != 0;
+    CHECK_CALL(RemoveDirectoryW(impl->norm_path(path).c_str()));
 }
 
 void OSService::lock() const
@@ -294,9 +303,9 @@ void OSService::lock() const
             "Be careful not to mount the same data directory multiple times!\n");
 }
 
-void OSService::ensure_directory(const std::string& path, unsigned mode) const
+void OSService::mkdir(StringRef path, unsigned mode) const
 {
-    if (CreateDirectoryA(impl->norm_path(path).c_str(), nullptr) == 0)
+    if (CreateDirectoryW(impl->norm_path(path).c_str(), nullptr) == 0)
     {
         DWORD err = GetLastError();
         if (err != ERROR_ALREADY_EXISTS)
@@ -308,7 +317,7 @@ void OSService::statfs(struct statvfs* fs_info) const
 {
     memset(fs_info, 0, sizeof(*fs_info));
     ULARGE_INTEGER FreeBytesAvailable, TotalNumberOfBytes, TotalNumberOfFreeBytes;
-    if (GetDiskFreeSpaceExA(impl->dir_name.c_str(),
+    if (GetDiskFreeSpaceExW(impl->dir_name.c_str(),
                             &FreeBytesAvailable,
                             &TotalNumberOfBytes,
                             &TotalNumberOfFreeBytes)
@@ -326,13 +335,12 @@ void OSService::statfs(struct statvfs* fs_info) const
     fs_info->f_namemax = 255;
 }
 
-void OSService::rename(const std::string& a, const std::string& b) const
+void OSService::rename(StringRef a, StringRef b) const
 {
     auto wa = impl->norm_path(a);
     auto wb = impl->norm_path(b);
-    DeleteFileA(wb.c_str());
-    if (MoveFileA(wa.c_str(), wb.c_str()) == 0)
-        throwWindowsException(GetLastError(), "MoveFile");
+    DeleteFileW(wb.c_str());
+    CHECK_CALL(MoveFileW(wa.c_str(), wb.c_str()));
 }
 
 int OSService::raise_fd_limit()
@@ -341,46 +349,46 @@ int OSService::raise_fd_limit()
     // The handle limit on Windows is high enough that no adjustments are necessary
 }
 
-void OSService::recursive_traverse(const std::string& dir,
-                                   const recursive_traverse_callback& callback) const
-{
-    struct Finder
-    {
-        HANDLE handle;
-
-        explicit Finder(HANDLE h) : handle(h) {}
-        ~Finder()
-        {
-            if (handle != INVALID_HANDLE_VALUE)
-                FindClose(handle);
-        }
-    };
-
-    WIN32_FIND_DATAA data;
-    auto find_pattern = impl->norm_path(dir) + "\\*";
-    Finder finder(FindFirstFileA(find_pattern.c_str(), &data));
-
-    if (finder.handle == INVALID_HANDLE_VALUE)
-        throwWindowsException(GetLastError(), "FindFirstFile on pattern " + find_pattern);
-
-    do
-    {
-        if (strcmp(data.cFileName, ".") == 0 || strcmp(data.cFileName, "..") == 0)
-            continue;
-        if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-        {
-            recursive_traverse(dir + '\\' + data.cFileName, callback);
-        }
-        else
-        {
-            if (!callback(dir, data.cFileName))
-                return;
-        }
-    } while (FindNextFileA(finder.handle, &data));
-
-    if (GetLastError() != ERROR_NO_MORE_FILES)
-        throwWindowsException(GetLastError(), "FindNextFile");
-}
+// void OSService::recursive_traverse(StringRef dir,
+//                                   const recursive_traverse_callback& callback) const
+//{
+//    struct Finder
+//    {
+//        HANDLE handle;
+//
+//        explicit Finder(HANDLE h) : handle(h) {}
+//        ~Finder()
+//        {
+//            if (handle != INVALID_HANDLE_VALUE)
+//                FindClose(handle);
+//        }
+//    };
+//
+//    WIN32_FIND_DATAA data;
+//    auto find_pattern = impl->norm_path(dir) + "\\*";
+//    Finder finder(FindFirstFileA(find_pattern.c_str(), &data));
+//
+//    if (finder.handle == INVALID_HANDLE_VALUE)
+//        throwWindowsException(GetLastError(), "FindFirstFile on pattern " + find_pattern);
+//
+//    do
+//    {
+//        if (strcmp(data.cFileName, ".") == 0 || strcmp(data.cFileName, "..") == 0)
+//            continue;
+//        if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+//        {
+//            recursive_traverse(dir + '\\' + data.cFileName, callback);
+//        }
+//        else
+//        {
+//            if (!callback(dir, data.cFileName))
+//                return;
+//        }
+//    } while (FindNextFileA(finder.handle, &data));
+//
+//    if (GetLastError() != ERROR_NO_MORE_FILES)
+//        throwWindowsException(GetLastError(), "FindNextFile");
+//}
 
 uint32_t OSService::getuid() noexcept { return 0; }
 
@@ -395,31 +403,6 @@ void OSService::get_current_time(timespec& current_time)
 #else
     timespec_get(&current_time, TIME_UTC);
 #endif
-}
-
-std::string normalize_to_lower_case(const char* input)
-{
-    size_t len = strlen(input);
-    if (len > std::numeric_limits<int>::max())
-        throwInvalidArgumentException("String size too large");
-    int wide_count = MultiByteToWideChar(
-        CP_UTF8, MB_ERR_INVALID_CHARS, input, static_cast<int>(len), nullptr, 0);
-    if (wide_count <= 0)
-        throwWindowsException(GetLastError(), "MultiByteToWideChar");
-    std::vector<wchar_t> wide_buffer(wide_count);
-    MultiByteToWideChar(CP_UTF8, 0, input, static_cast<int>(len), wide_buffer.data(), wide_count);
-
-    if (CharLowerBuffW(wide_buffer.data(), wide_count) != wide_count)
-        throwWindowsException(GetLastError(), "CharLowerBuff");
-    int narrow_count
-        = WideCharToMultiByte(CP_UTF8, 0, wide_buffer.data(), wide_count, nullptr, 0, 0, nullptr);
-    if (narrow_count <= 0)
-        throwWindowsException(GetLastError(), "MultiByteToWideChar");
-
-    std::string result(narrow_count, '\0');
-    WideCharToMultiByte(
-        CP_UTF8, 0, wide_buffer.data(), wide_count, &result[0], narrow_count, 0, nullptr);
-    return result;
 }
 }
 

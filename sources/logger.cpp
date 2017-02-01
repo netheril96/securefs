@@ -7,8 +7,14 @@
 
 #ifdef WIN32
 #include <Windows.h>
+
+static void flockfile(FILE*) {}
+static void funlockfile(FILE*) {}
+
+static size_t current_thread_id(void) { return GetCurrentThreadId(); }
 #else
 #include <pthread.h>
+static size_t current_thread_id(void) { return reinterpret_cast<size_t>(pthread_self()); }
 #endif
 
 namespace securefs
@@ -33,7 +39,7 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
     fprintf(m_fp,
             "[%s] [0x%zx] [%d-%02d-%02d %02d:%02d:%02d.%09d UTC]    ",
             stringify(level),
-            reinterpret_cast<size_t>(pthread_self()),
+            current_thread_id(),
             tm.tm_year + 1900,
             tm.tm_mon + 1,
             tm.tm_mday,

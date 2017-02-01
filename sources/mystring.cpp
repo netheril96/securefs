@@ -282,6 +282,7 @@ std::string ascii_lowercase(StringRef str)
 
 typedef uint32_t code_point_conversion_func(uint32_t);
 
+#ifndef WIN32
 class ICUDylib
 {
     DISABLE_COPY_MOVE(ICUDylib)
@@ -310,6 +311,7 @@ public:
 
     code_point_conversion_func* get_lower_func() const { return m_tolower; }
 };
+#endif
 
 #ifdef HAS_CODECVT
 std::string unicode_lowercase(StringRef str)
@@ -319,7 +321,7 @@ std::string unicode_lowercase(StringRef str)
 
 #ifdef WIN32
     auto widened = widen_string(str);
-    CharLowerW(widened.c_str());
+    CharLowerW(&widened[0]);
     return narrow_string(widened);
 #else
     static ICUDylib icu;

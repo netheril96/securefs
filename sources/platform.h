@@ -46,15 +46,6 @@ typedef ptrdiff_t ssize_t;
 #ifndef S_IFLNK
 #define S_IFLNK 0120000
 #endif
-
-inline int open(const char* fn, int flags, int mode) { return ::_open(fn, flags, mode); }
-inline int close(int fd) { return ::_close(fd); }
-inline int write(int fd, const void* data, int size) { return ::_write(fd, data, size); }
-
-namespace securefs
-{
-std::string normalize_to_lower_case(const char* input);
-}
 #else
 typedef struct stat FUSE_STAT;
 

@@ -28,7 +28,7 @@ namespace securefs
 {
 std::string errno_to_string() { return sane_strerror(errno); }
 
-#ifndef HAS_THREAD_LOCAL
+#if !defined(HAS_THREAD_LOCAL) && !defined(WIN32)
 template <class T>
 class ThreadLocalStorage
 {
