@@ -82,16 +82,24 @@ public:
     virtual bool next(std::string* name, mode_t* type) = 0;
 };
 
+#ifdef WIN32
+typedef std::wstring native_string_type;
+#else
+typedef std::string native_string_type;
+#endif
+
 class OSService
 {
 private:
-    class Impl;
-    std::unique_ptr<Impl> impl;
+#ifdef HAS_AT_FUNCTIONS
+    int m_dir_fd;
+#endif
+    native_string_type m_dir_name;
 
-private:
-    OSService();
+    native_string_type norm_path(StringRef path) const;
 
 public:
+    OSService();
     OSService(StringRef path);
     ~OSService();
     std::shared_ptr<FileStream> open_file_stream(StringRef path, int flags, unsigned mode) const;

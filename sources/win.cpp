@@ -481,53 +481,44 @@ public:
     }
 };
 
-class OSService::Impl
-{
-public:
-    std::wstring dir_name;
-
-    std::wstring norm_path(StringRef path) const
-    {
-        if (dir_name.empty() || path.empty()
-            || (path.size() > 0 && (path[0] == '/' || path[0] == '\\'))
-            || (path.size() > 2 && path[1] == ':'))
-            return widen_string(path);
-        else
-        {
-            auto str = dir_name + widen_string(path);
-            for (wchar_t& c : str)
-            {
-                if (c == L'/')
-                    c = L'\\';
-            }
-            return str;
-        }
-    }
-};
-
-OSService::OSService() : impl(new Impl()) {}
+OSService::OSService() {}
 
 OSService::~OSService() {}
 
-OSService::OSService(StringRef path) : impl(new Impl())
+std::wstring OSService::norm_path(StringRef path) const
 {
-    impl->dir_name = widen_string(path) + L"\\";
+    if (m_dir_name.empty() || path.empty()
+        || (path.size() > 0 && (path[0] == '/' || path[0] == '\\'))
+        || (path.size() > 2 && path[1] == ':'))
+        return widen_string(path);
+    else
+    {
+        auto str = m_dir_name + widen_string(path);
+        for (wchar_t& c : str)
+        {
+            if (c == L'/')
+                c = L'\\';
+        }
+        return str;
+    }
 }
+
+OSService::OSService(StringRef path) : m_dir_name(widen_string(path) + L"\\") {}
 
 std::shared_ptr<FileStream>
 OSService::open_file_stream(StringRef path, int flags, unsigned mode) const
 {
-    return std::make_shared<WindowsFileStream>(impl->norm_path(path), flags, mode);
+    return std::make_shared<WindowsFileStream>(norm_path(path), flags, mode);
 }
 
 void OSService::remove_file(StringRef path) const
 {
-    CHECK_CALL(DeleteFileW(impl->norm_path(path).c_str()));
+    CHECK_CALL(DeleteFileW(norm_path(path).c_str()));
 }
 
 void OSService::remove_directory(StringRef path) const
 {
-    CHECK_CALL(RemoveDirectoryW(impl->norm_path(path).c_str()));
+    CHECK_CALL(RemoveDirectoryW(norm_path(path).c_str()));
 }
 
 void OSService::lock() const
@@ -539,7 +530,7 @@ void OSService::lock() const
 
 void OSService::mkdir(StringRef path, unsigned mode) const
 {
-    if (CreateDirectoryW(impl->norm_path(path).c_str(), nullptr) == 0)
+    if (CreateDirectoryW(norm_path(path).c_str(), nullptr) == 0)
     {
         DWORD err = GetLastError();
         if (err != ERROR_ALREADY_EXISTS)
@@ -551,10 +542,8 @@ void OSService::statfs(struct statvfs* fs_info) const
 {
     memset(fs_info, 0, sizeof(*fs_info));
     ULARGE_INTEGER FreeBytesAvailable, TotalNumberOfBytes, TotalNumberOfFreeBytes;
-    if (GetDiskFreeSpaceExW(impl->dir_name.c_str(),
-                            &FreeBytesAvailable,
-                            &TotalNumberOfBytes,
-                            &TotalNumberOfFreeBytes)
+    if (GetDiskFreeSpaceExW(
+            m_dir_name.c_str(), &FreeBytesAvailable, &TotalNumberOfBytes, &TotalNumberOfFreeBytes)
         == 0)
         throwWindowsException(GetLastError(), "GetDiskFreeSpaceEx");
     auto maximum = static_cast<unsigned>(-1);
@@ -582,7 +571,7 @@ void OSService::utimens(StringRef path, const timespec ts[2]) const
         buf.actime = ts[0].tv_sec;
         buf.modtime = ts[1].tv_sec;
     }
-    int rc = ::_wutime64(impl->norm_path(path).c_str(), &buf);
+    int rc = ::_wutime64(norm_path(path).c_str(), &buf);
     if (rc < 0)
         throwPOSIXException(errno, "_wutime64");
 }
@@ -590,7 +579,7 @@ void OSService::utimens(StringRef path, const timespec ts[2]) const
 bool OSService::stat(StringRef path, FUSE_STAT* stat) const
 {
     struct _stat64 stbuf;
-    int rc = ::_wstat64(impl->norm_path(path).c_str(), &stbuf);
+    int rc = ::_wstat64(norm_path(path).c_str(), &stbuf);
     if (rc < 0)
     {
         if (errno == ENOENT)
@@ -618,7 +607,7 @@ bool OSService::stat(StringRef path, FUSE_STAT* stat) const
 void OSService::link(StringRef source, StringRef dest) const { throwVFSException(ENOSYS); }
 void OSService::chmod(StringRef path, mode_t mode) const
 {
-    int rc = ::_wchmod(impl->norm_path(path).c_str(), mode);
+    int rc = ::_wchmod(norm_path(path).c_str(), mode);
     if (rc < 0)
         throwPOSIXException(errno, "_wchmod");
 }
@@ -631,8 +620,8 @@ void OSService::symlink(StringRef source, StringRef dest) const { throwVFSExcept
 
 void OSService::rename(StringRef a, StringRef b) const
 {
-    auto wa = impl->norm_path(a);
-    auto wb = impl->norm_path(b);
+    auto wa = norm_path(a);
+    auto wb = norm_path(b);
     DeleteFileW(wb.c_str());
     CHECK_CALL(MoveFileW(wa.c_str(), wb.c_str()));
 }
@@ -659,7 +648,7 @@ int OSService::raise_fd_limit()
 //    };
 //
 //    WIN32_FIND_DATAA data;
-//    auto find_pattern = impl->norm_path(dir) + "\\*";
+//    auto find_pattern = norm_path(dir) + "\\*";
 //    Finder finder(FindFirstFileA(find_pattern.c_str(), &data));
 //
 //    if (finder.handle == INVALID_HANDLE_VALUE)
@@ -738,7 +727,7 @@ public:
 
 std::unique_ptr<DirectoryTraverser> OSService::create_traverser(StringRef dir) const
 {
-    return securefs::make_unique<WindowsDirectoryTraverser>(impl->norm_path(dir) + L"\\*");
+    return securefs::make_unique<WindowsDirectoryTraverser>(norm_path(dir) + L"\\*");
 }
 
 uint32_t OSService::getuid() noexcept { return 0; }
