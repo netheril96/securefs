@@ -27,7 +27,7 @@ namespace lite
     private:
         securefs::optional<lite::AESGCMCryptStream> m_crypt_stream;
         std::shared_ptr<securefs::FileStream> m_file_stream;
-        
+
     public:
         explicit File(std::shared_ptr<securefs::FileStream> file_stream,
                       const key_type& master_key,
@@ -56,7 +56,7 @@ namespace lite
     };
 
     class FileSystem;
-    
+
     typedef std::unique_ptr<File> AutoClosedFile;
 
     std::string encrypt_path(AES_SIV& encryptor, StringRef path);

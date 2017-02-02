@@ -515,6 +515,7 @@ namespace lite
 
         opt->init = &::securefs::lite::init;
         opt->destroy = &::securefs::lite::destroy;
+        opt->statfs = &::securefs::lite::statfs;
         opt->getattr = &::securefs::lite::getattr;
         opt->opendir = &::securefs::lite::opendir;
         opt->releasedir = &::securefs::lite::releasedir;
