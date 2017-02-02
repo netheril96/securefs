@@ -8,7 +8,6 @@
 
 #include <map>
 #include <memory>
-#include <mutex>
 #include <string>
 
 #include <cryptopp/aes.h>
@@ -79,8 +78,6 @@ namespace lite
         DISABLE_COPY_MOVE(FileSystem)
 
     private:
-        std::map<std::string, std::string> m_resolved_symlinks;
-        std::recursive_mutex m_mutex;
         AES_SIV m_name_encryptor;
         key_type m_content_key;
         CryptoPP::GCM<CryptoPP::AES>::Encryption m_xattr_enc;
@@ -102,9 +99,6 @@ namespace lite
                    unsigned flags);
         ~FileSystem();
 
-        void lock() { m_mutex.lock(); }
-        void unlock() { m_mutex.unlock(); }
-        bool try_lock() { return m_mutex.try_lock(); }
         AutoClosedFile open(StringRef path, int flags, fuse_mode_t mode);
         bool stat(StringRef path, struct fuse_stat* buf);
         void mkdir(StringRef path, fuse_mode_t mode);

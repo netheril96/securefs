@@ -207,7 +207,7 @@ def make_test_case(format_version):
 
         def test_read_write_mkdir_listdir_remove(self):
             dir_names = set(str(i) for i in xrange(3))
-            random_data = os.urandom(1111111)
+            random_data = os.urandom(11111)
             rng_filename = os.path.join(self.mount_point, 'rng')
             with open(rng_filename, 'wb') as f:
                 f.write(random_data)

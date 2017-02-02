@@ -2,6 +2,7 @@
 #include "lite_fs.h"
 #include "lite_stream.h"
 #include "logger.h"
+#include "myutils.h"
 #include "platform.h"
 
 #include <math.h>
@@ -10,10 +11,36 @@ namespace securefs
 {
 namespace lite
 {
+
+    namespace
+    {
+        FileSystem* get_local_filesystem(void)
+        {
+#ifdef HAS_THREAD_LOCAL
+            thread_local securefs::optional<FileSystem> local_fs;
+#else
+            static ThreadLocalStorage<securefs::optional<FileSystem>> tls_local_fs;
+            auto& local_fs = *tls_local_fs.get();
+#endif
+
+            if (!local_fs)
+            {
+                auto args = static_cast<MountOptions*>(fuse_get_context()->private_data);
+                local_fs.emplace(args->root,
+                                 args->name_key,
+                                 args->content_key,
+                                 args->xattr_key,
+                                 args->block_size.value(),
+                                 args->iv_size.value(),
+                                 args->flags);
+            }
+            return &(*local_fs);
+        }
+    }
+
 #define SINGLE_COMMON_PROLOGUE                                                                     \
-    auto filesystem = static_cast<FileSystem*>(fuse_get_context()->private_data);                  \
-    global_logger->trace("%s %s", __func__, path);                                                 \
-    std::lock_guard<FileSystem> xguard(*filesystem);
+    auto filesystem = get_local_filesystem();                                                      \
+    global_logger->trace("%s %s", __func__, path);
 
 #define SINGLE_COMMON_EPILOGUE                                                                     \
     catch (const std::exception& e)                                                                \
@@ -33,23 +60,11 @@ namespace lite
     void* init(struct fuse_conn_info*)
     {
         auto args = static_cast<MountOptions*>(fuse_get_context()->private_data);
-        auto fs = new FileSystem(args->root,
-                                 args->name_key,
-                                 args->content_key,
-                                 args->xattr_key,
-                                 args->block_size.value(),
-                                 args->iv_size.value(),
-                                 args->flags);
         global_logger->info("init");
-        return fs;
+        return args;
     }
 
-    void destroy(void* ptr)
-    {
-        auto fs = static_cast<FileSystem*>(ptr);
-        global_logger->info("destroy");
-        delete fs;
-    }
+    void destroy(void*) { global_logger->info("destroy"); }
 
     int statfs(const char* path, struct fuse_statvfs* buf)
     {
@@ -94,7 +109,7 @@ namespace lite
 
     int releasedir(const char* path, struct fuse_file_info* info)
     {
-        SINGLE_COMMON_PROLOGUE
+        global_logger->trace("%s %s", __func__, path);
         try
         {
             delete reinterpret_cast<DirectoryTraverser*>(info->fh);
@@ -169,7 +184,7 @@ namespace lite
 
     int release(const char* path, struct fuse_file_info* info)
     {
-        SINGLE_COMMON_PROLOGUE
+        global_logger->trace("%s %s", __func__, path);
         try
         {
             delete reinterpret_cast<File*>(info->fh);
@@ -259,19 +274,7 @@ namespace lite
             fp->flush();
             return 0;
         }
-        catch (const std::exception& e)
-        {
-            auto ebase = dynamic_cast<const ExceptionBase*>(&e);
-            auto code = ebase ? ebase->error_number() : EPERM;
-            auto type_name = ebase ? ebase->type_name() : typeid(e).name();
-            global_logger->error("%s %s encounters exception %s (code=%s): %s",
-                                 __func__,
-                                 path,
-                                 type_name,
-                                 code,
-                                 e.what());
-            return -code;
-        }
+        SINGLE_COMMON_EPILOGUE
     }
 
     int ftruncate(const char* path, fuse_off_t len, struct fuse_file_info* info)
@@ -349,9 +352,8 @@ namespace lite
 
     int symlink(const char* to, const char* from)
     {
-        auto filesystem = static_cast<FileSystem*>(fuse_get_context()->private_data);
+        auto filesystem = get_local_filesystem();
         global_logger->trace("%s from=%s to=%s", __func__, from, to);
-        std::lock_guard<FileSystem> xguard(*filesystem);
 
         try
         {
@@ -376,9 +378,8 @@ namespace lite
 
     int link(const char* src, const char* dest)
     {
-        auto filesystem = static_cast<FileSystem*>(fuse_get_context()->private_data);
+        auto filesystem = get_local_filesystem();
         global_logger->trace("%s src=%s dest=%s", __func__, src, dest);
-        std::lock_guard<FileSystem> xguard(*filesystem);
 
         try
         {
@@ -414,9 +415,8 @@ namespace lite
 
     int rename(const char* from, const char* to)
     {
-        auto filesystem = static_cast<FileSystem*>(fuse_get_context()->private_data);
+        auto filesystem = get_local_filesystem();
         global_logger->trace("%s from=%s to=%s", __func__, from, to);
-        std::lock_guard<FileSystem> xguard(*filesystem);
 
         try
         {
@@ -460,13 +460,11 @@ namespace lite
             return -EINVAL;
 
         global_logger->trace("%s %s (len=%lld)", __func__, path, static_cast<long long>(len));
-        auto filesystem = static_cast<FileSystem*>(fuse_get_context()->private_data);
+        auto filesystem = get_local_filesystem();
 
         try
         {
-            std::unique_lock<FileSystem> system_guard(*filesystem);
             AutoClosedFile fp = filesystem->open(path, O_RDWR, 0644);
-            system_guard.release();
             std::lock_guard<File> xguard(*fp);
             fp->resize(static_cast<size_t>(len));
             return 0;
@@ -488,7 +486,7 @@ namespace lite
 #ifdef __APPLE__
     int listxattr(const char* path, char* list, size_t size)
     {
-        auto filesystem = static_cast<FileSystem*>(fuse_get_context()->private_data);
+        auto filesystem = get_local_filesystem();
         return static_cast<int>(filesystem->listxattr(path, list, size));
     }
 
@@ -501,7 +499,7 @@ namespace lite
         if (strcmp(name, "com.apple.FinderInfo") == 0)
             return -ENOATTR;    // stupid Apple hardcodes the size of xattr values
 
-        auto filesystem = static_cast<FileSystem*>(fuse_get_context()->private_data);
+        auto filesystem = get_local_filesystem();
         return static_cast<int>(filesystem->getxattr(path, name, value, size));
     }
 
@@ -521,12 +519,12 @@ namespace lite
         if (!value || size == 0)
             return 0;
 
-        auto filesystem = static_cast<FileSystem*>(fuse_get_context()->private_data);
+        auto filesystem = get_local_filesystem();
         return filesystem->setxattr(path, name, const_cast<char*>(value), size, flags);
     }
     int removexattr(const char* path, const char* name)
     {
-        auto filesystem = static_cast<FileSystem*>(fuse_get_context()->private_data);
+        auto filesystem = get_local_filesystem();
         return filesystem->removexattr(path, name);
     }
 #endif

@@ -33,7 +33,7 @@ public:
 class FileTableIOVersion1 : public FileTableIO
 {
 private:
-    std::shared_ptr<OSService> m_root;
+    std::shared_ptr<const OSService> m_root;
     bool m_readonly;
 
     static const size_t FIRST_LEVEL = 1, SECOND_LEVEL = 5;
@@ -54,7 +54,7 @@ private:
     }
 
 public:
-    explicit FileTableIOVersion1(std::shared_ptr<OSService> root, bool readonly)
+    explicit FileTableIOVersion1(std::shared_ptr<const OSService> root, bool readonly)
         : m_root(root), m_readonly(readonly)
     {
     }
@@ -94,7 +94,7 @@ public:
 class FileTableIOVersion2 : public FileTableIO
 {
 private:
-    std::shared_ptr<OSService> m_root;
+    std::shared_ptr<const OSService> m_root;
     bool m_readonly;
 
     static void calculate_paths(const securefs::id_type& id,
@@ -108,7 +108,7 @@ private:
     }
 
 public:
-    explicit FileTableIOVersion2(std::shared_ptr<OSService> root, bool readonly)
+    explicit FileTableIOVersion2(std::shared_ptr<const OSService> root, bool readonly)
         : m_root(root), m_readonly(readonly)
     {
     }
@@ -144,7 +144,7 @@ public:
 };
 
 FileTable::FileTable(int version,
-                     std::shared_ptr<OSService> root,
+                     std::shared_ptr<const OSService> root,
                      const key_type& master_key,
                      uint32_t flags,
                      unsigned block_size,

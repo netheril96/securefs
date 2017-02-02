@@ -48,9 +48,11 @@ namespace lite
         byte null_iv[12] = {0};
         m_xattr_enc.SetKeyWithIV(xattr_key.data(), xattr_key.size(), null_iv, sizeof(null_iv));
         m_xattr_dec.SetKeyWithIV(xattr_key.data(), xattr_key.size(), null_iv, sizeof(null_iv));
+
+        global_logger->trace("Filesystem created at %p", this);
     }
 
-    FileSystem::~FileSystem() {}
+    FileSystem::~FileSystem() { global_logger->trace("Filesystem destroyed at %p", this); }
 
     InvalidFilenameException::~InvalidFilenameException() {}
     std::string InvalidFilenameException::message() const
@@ -212,21 +214,11 @@ namespace lite
         {
         case S_IFLNK:
         {
-            auto strpath = path.to_string();
-            auto iter = m_resolved_symlinks.find(strpath);
-            if (iter != m_resolved_symlinks.end())
-            {
-                buf->st_size = iter->second.size();
-            }
-            else
-            {
-                std::string buffer(buf->st_size, '\0');
-                if (m_root->readlink(enc_path, &buffer[0], buffer.size()) != buf->st_size)
-                    throwVFSException(EIO);
-                auto resolved = decrypt_path(m_name_encryptor, buffer);
-                buf->st_size = resolved.size();
-                m_resolved_symlinks.emplace(strpath, std::move(resolved));
-            }
+            std::string buffer(buf->st_size, '\0');
+            if (m_root->readlink(enc_path, &buffer[0], buffer.size()) != buf->st_size)
+                throwVFSException(EIO);
+            auto resolved = decrypt_path(m_name_encryptor, buffer);
+            buf->st_size = resolved.size();
             break;
         }
         case S_IFDIR:
@@ -273,28 +265,21 @@ namespace lite
         if (size <= 0)
             return size;
 
-        auto strpath = path.to_string();
-        auto iter = m_resolved_symlinks.find(strpath);
-        if (iter == m_resolved_symlinks.end())
-        {
-            struct fuse_stat st;
-            this->stat(path, &st);
-            iter = m_resolved_symlinks.find(strpath);
-            if (iter == m_resolved_symlinks.end())
-                throwVFSException(EIO);
-        }
-
-        auto read_size = std::min(iter->second.size(), size - 1);
-        memcpy(buf, iter->second.data(), read_size);
-        buf[read_size] = '\0';
-        return read_size;
+        auto max_size = size / 5 * 8 + 32;
+        auto underbuf = securefs::make_unique_array<char>(max_size);
+        memset(underbuf.get(), 0, max_size);
+        m_root->readlink(translate_path(path, false), underbuf.get(), max_size - 1);
+        std::string resolved = decrypt_path(m_name_encryptor, underbuf.get());
+        size_t copy_size = std::min(resolved.size(), size - 1);
+        memcpy(buf, resolved.data(), copy_size);
+        buf[copy_size] = '\0';
+        return copy_size;
     }
 
     void FileSystem::symlink(StringRef to, StringRef from)
     {
         auto eto = translate_path(to, true), efrom = translate_path(from, false);
         m_root->symlink(eto, efrom);
-        m_resolved_symlinks[efrom] = std::move(eto);
     }
 
     void FileSystem::utimens(StringRef path, const fuse_timespec* ts)
@@ -302,11 +287,7 @@ namespace lite
         m_root->utimens(translate_path(path, false), ts);
     }
 
-    void FileSystem::unlink(StringRef path)
-    {
-        m_root->remove_file(translate_path(path, false));
-        m_resolved_symlinks.erase(path.to_string());
-    }
+    void FileSystem::unlink(StringRef path) { m_root->remove_file(translate_path(path, false)); }
 
     void FileSystem::link(StringRef src, StringRef dest)
     {
