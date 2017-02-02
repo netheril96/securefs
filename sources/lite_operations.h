@@ -1,8 +1,5 @@
 #pragma once
 
-#pragma once
-#define FUSE_USE_VERSION 27
-
 #include "logger.h"
 #include "myutils.h"
 #include "platform.h"

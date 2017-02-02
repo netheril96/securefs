@@ -1,5 +1,4 @@
 #pragma once
-#define FUSE_USE_VERSION 27
 
 #include "file_table.h"
 #include "logger.h"

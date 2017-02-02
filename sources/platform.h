@@ -18,8 +18,8 @@ struct statvfs;
 struct timespec;
 
 #ifdef WIN32
-
-#include <fuse_win.h>
+#define USE_FUSE_VERSION 28
+#include <fuse.h>
 #include <io.h>
 
 #define off_t __int64
