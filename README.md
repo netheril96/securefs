@@ -35,7 +35,7 @@ On Debian based Linux distro, `sudo apt-get install fuse libfuse-dev`.
 
 On RPM based Linux, `sudo yum install fuse fuse-devel`.
 
-On Windows, you need [dokany](https://github.com/dokan-dev/dokany/releases).
+On Windows, you need [WinFsp](https://github.com/billziss-gh/winfsp/releases).
 
 ### Install with Homebrew
 
