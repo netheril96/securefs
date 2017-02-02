@@ -601,8 +601,6 @@ bool OSService::stat(StringRef path, fuse_stat* stat) const
     stat->st_rdev = stbuf.st_rdev;
     stat->st_size = stbuf.st_size;
 
-	stat->st_mode |= 0666; // The Unix style permissions on Windows do not work properly
-
     return true;
 }
 

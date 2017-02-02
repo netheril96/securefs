@@ -67,6 +67,8 @@ The XOR-ing is necessary because NIST recommends that a single key is not used w
 
 We cannot use probabilistic encryption for file names, for otherwise name lookups will become linear. We choose a deterministic authenticated encryption algorithm AES-SIV as defined by RFC 5297. The directory prefix is input as associated data to the algorithm, so that only two files with completely same path within the filesystem will have the same underlying name (which can only occur temporally not spatially). Symlinks are similarly encrypted.
 
+The encrypted names are converted to ASCII in base32 encoding (in DUDE alphabet without padding). Base64 is not used because it won't work properly over case insensitive filesystems.
+
 The key for name encryption is independent from the master content key.
 
 ### Extended attributes

@@ -78,8 +78,12 @@ namespace lite
         SINGLE_COMMON_PROLOGUE
         if (!filesystem->stat(path, st))
             return -ENOENT;
-		global_logger->trace("stat (%s): mode=0%o, uid=%u, gid=%u, size=%zu", path, st->st_mode, (unsigned)st->st_uid,
-			(unsigned)st->st_gid, (size_t)st->st_size);
+        global_logger->trace("stat (%s): mode=0%o, uid=%u, gid=%u, size=%zu",
+                             path,
+                             st->st_mode,
+                             (unsigned)st->st_uid,
+                             (unsigned)st->st_gid,
+                             (size_t)st->st_size);
         return 0;
         SINGLE_COMMON_EPILOGUE
     }
@@ -145,7 +149,7 @@ namespace lite
     int release(const char* path, struct fuse_file_info* info)
     {
         SINGLE_COMMON_PROLOGUE
-        FSCCloser()(reinterpret_cast<File*>(info->fh));
+        delete reinterpret_cast<File*>(info->fh);
         return 0;
         SINGLE_COMMON_EPILOGUE
     }
@@ -524,6 +528,7 @@ namespace lite
 
         opt->init = &::securefs::lite::init;
         opt->destroy = &::securefs::lite::destroy;
+        opt->statfs = &::securefs::lite::statfs;
         opt->getattr = &::securefs::lite::getattr;
         opt->opendir = &::securefs::lite::opendir;
         opt->releasedir = &::securefs::lite::releasedir;
