@@ -37,10 +37,15 @@ typedef ptrdiff_t ssize_t;
 #define O_CREAT 0x0200    /* create if nonexistant */
 #define O_TRUNC 0x0400    /* truncate to zero length */
 #define O_EXCL 0x0800     /* error if already exists */
+#define S_IFMT 0170000    /* type of file */
+#define S_IFIFO 0010000   /* named pipe (fifo) */
+#define S_IFCHR 0020000   /* character special */
+#define S_IFDIR 0040000   /* directory */
+#define S_IFBLK 0060000   /* block special */
+#define S_IFREG 0100000   /* regular */
+#define S_IFLNK 0120000   /* symbolic link */
+#define S_IFSOCK 0140000  /* socket */
 
-#ifndef S_IFLNK
-#define S_IFLNK 0120000
-#endif
 #else
 #define fuse_uid_t uid_t
 #define fuse_gid_t gid_t
@@ -111,7 +116,7 @@ private:
 
 public:
     OSService();
-    OSService(StringRef path);
+    explicit OSService(StringRef path);
     ~OSService();
     std::shared_ptr<FileStream> open_file_stream(StringRef path, int flags, unsigned mode) const;
     bool remove_file_nothrow(StringRef path) const noexcept;

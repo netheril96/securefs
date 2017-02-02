@@ -40,11 +40,7 @@ namespace internal
 
     FileGuard open_base_dir(FileSystemContext* fs, const char* path, std::string& last_component)
     {
-        std::vector<std::string> components;
-        if (fs->flags & kOptionNormalizeFileNameToLowerCase)
-            components = split(unicode_lowercase(path).c_str(), '/');
-        else
-            components = split(path, '/');
+        std::vector<std::string> components = split(path, '/');
 
         FileGuard result(&fs->table, fs->table.open_as(fs->root_id, FileBase::DIRECTORY));
         if (components.empty())

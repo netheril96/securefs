@@ -148,9 +148,4 @@ std::string sane_strerror(int error_number);
 std::wstring widen_string(StringRef str);
 std::string narrow_string(WideStringRef str);
 #endif
-
-std::string unicode_lowercase(StringRef str);
-
-bool is_ascci(StringRef str);
-std::string ascii_lowercase(StringRef str);
 }

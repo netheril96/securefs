@@ -113,10 +113,24 @@ namespace lite
         try
         {
             auto traverser = reinterpret_cast<DirectoryTraverser*>(info->fh);
+            std::unique_ptr<DirectoryTraverser> guard;
+            if (!traverser)
+            {
+                // Bug in WinFsp
+                // Open it ourselves
+                guard = filesystem->create_traverser(path);
+                traverser = guard.get();
+            }
             std::string name;
             fuse_mode_t mode;
             struct fuse_stat stbuf;
             memset(&stbuf, 0, sizeof(stbuf));
+
+#ifdef WIN32
+            filler(buf, ".", nullptr, 0);
+            filler(buf, "..", nullptr, 0);
+#endif
+
             while (traverser->next(&name, &mode))
             {
                 stbuf.st_mode = mode;
@@ -170,6 +184,8 @@ namespace lite
         global_logger->trace(
             "%s %s (offset=%lld, size=%zu)", __func__, path, static_cast<long long>(offset), size);
         auto fp = reinterpret_cast<File*>(info->fh);
+        if (!fp)
+            return -EFAULT;
         std::lock_guard<File> xguard(*fp);
 
         try
@@ -203,6 +219,8 @@ namespace lite
         global_logger->trace(
             "%s %s (offset=%lld, size=%zu)", __func__, path, static_cast<long long>(offset), size);
         auto fp = reinterpret_cast<File*>(info->fh);
+        if (!fp)
+            return -EFAULT;
         std::lock_guard<File> xguard(*fp);
 
         try
@@ -232,6 +250,8 @@ namespace lite
     {
         global_logger->trace("%s %s", __func__, path);
         auto fp = reinterpret_cast<File*>(info->fh);
+        if (!fp)
+            return -EFAULT;
         std::lock_guard<File> xguard(*fp);
 
         try
@@ -258,6 +278,8 @@ namespace lite
     {
         global_logger->trace("%s %s with length=%lld", __func__, path, static_cast<long long>(len));
         auto fp = reinterpret_cast<File*>(info->fh);
+        if (!fp)
+            return -EFAULT;
         std::lock_guard<File> xguard(*fp);
 
         try
@@ -420,6 +442,8 @@ namespace lite
     {
         global_logger->trace("%s %s", __func__, path);
         auto fp = reinterpret_cast<File*>(info->fh);
+        if (!fp)
+            return -EFAULT;
         std::lock_guard<File> xguard(*fp);
 
         try

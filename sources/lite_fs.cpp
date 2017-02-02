@@ -166,15 +166,7 @@ namespace lite
         }
         else
         {
-            std::string str;
-            if (m_flags & kOptionNormalizeFileNameToLowerCase)
-            {
-                str = lite::encrypt_path(m_name_encryptor, unicode_lowercase(path));
-            }
-            else
-            {
-                str = lite::encrypt_path(m_name_encryptor, path);
-            }
+            std::string str = lite::encrypt_path(m_name_encryptor, path);
             if (!preserve_leading_slash && !str.empty() && str[0] == '/')
             {
                 str.erase(str.begin());

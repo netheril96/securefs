@@ -313,11 +313,21 @@ private:
 public:
     explicit WindowsFileStream(WideStringRef path, int flags, unsigned mode)
     {
-        DWORD access_flags = GENERIC_READ;
-        if (flags & O_WRONLY)
+        DWORD access_flags = 0;
+        switch (flags & O_ACCMODE)
+        {
+        case O_RDONLY:
+            access_flags = GENERIC_READ;
+            break;
+        case O_WRONLY:
             access_flags = GENERIC_WRITE;
-        if (flags & O_RDWR)
+            break;
+        case O_RDWR:
             access_flags = GENERIC_READ | GENERIC_WRITE;
+            break;
+        default:
+            throwVFSException(EINVAL);
+        }
 
         DWORD create_flags = 0;
         if (flags & O_CREAT)

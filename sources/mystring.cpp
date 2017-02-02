@@ -12,8 +12,6 @@
 
 #ifdef WIN32
 #include <Windows.h>
-#else
-#include <dlfcn.h>
 #endif
 
 namespace securefs
@@ -255,94 +253,5 @@ std::string narrow_string(WideStringRef str)
         return converter.to_bytes(str.begin(), str.end());
     }
 }
-#endif
-
-bool is_ascci(StringRef str)
-{
-    for (char c : str)
-    {
-        if (static_cast<signed char>(c) < 0)
-            return false;
-    }
-    return true;
-}
-
-std::string ascii_lowercase(StringRef str)
-{
-    auto result = str.to_string();
-    for (char& c : result)
-    {
-        if (c >= 'A' && c <= 'Z')
-        {
-            c -= 'A' - 'a';
-        }
-    }
-    return result;
-}
-
-typedef uint32_t code_point_conversion_func(uint32_t);
-
-#ifndef WIN32
-class ICUDylib
-{
-    DISABLE_COPY_MOVE(ICUDylib)
-
-private:
-    void* m_dylib;
-    code_point_conversion_func* m_tolower;
-
-public:
-    explicit ICUDylib() : m_tolower(nullptr)
-    {
-        m_dylib = ::dlopen("libicucore.dylib", RTLD_LAZY);
-        if (!m_dylib)
-            m_dylib = ::dlopen("libicui18n.so", RTLD_LAZY);
-        if (m_dylib)
-        {
-            m_tolower
-                = reinterpret_cast<code_point_conversion_func*>(::dlsym(m_dylib, "u_tolower"));
-        }
-    }
-    ~ICUDylib()
-    {
-        if (m_dylib)
-            ::dlclose(m_dylib);
-    }
-
-    code_point_conversion_func* get_lower_func() const { return m_tolower; }
-};
-#endif
-
-#ifdef HAS_CODECVT
-std::string unicode_lowercase(StringRef str)
-{
-    if (is_ascci(str))
-        return ascii_lowercase(str);
-
-#ifdef WIN32
-    auto widened = widen_string(str);
-    CharLowerW(&widened[0]);
-    return narrow_string(widened);
-#else
-    static ICUDylib icu;
-    auto func = icu.get_lower_func();
-    if (!func)
-    {
-        global_logger->warn(
-            "ICU library not loaded, and therefore fall back to ASCII-only lowercase");
-        return ascii_lowercase(str);
-    }
-
-    std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> converter;
-    auto u32str = converter.from_bytes(str.begin(), str.end());
-    for (char32_t& c : u32str)
-    {
-        c = func(static_cast<uint32_t>(c));
-    }
-    return converter.to_bytes(u32str);
-#endif
-}
-#else
-std::string unicode_lowercase(StringRef str) { return ascii_lowercase(str); }
 #endif
 }

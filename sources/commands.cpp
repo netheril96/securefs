@@ -727,10 +727,6 @@ private:
                                    "multithread",
                                    "Run in multithreaded mode. Only usable for lite filesystems. "
                                    "Experimental at this point so enable it at your own risk!"};
-    TCLAP::SwitchArg lowercasing{
-        "l",
-        "lower",
-        "Convert all filenames to lowercase. Useful if case insensitivity is required."};
     TCLAP::MultiArg<std::string> fuse_options{
         "o",
         "opt",
@@ -778,7 +774,6 @@ public:
         cmdline.add(&uid_override);
         cmdline.add(&gid_override);
         cmdline.add(&multithreaded);
-        cmdline.add(&lowercasing);
         cmdline.parse(argc, argv);
 
         if (pass.isSet() && !pass.getValue().empty())
@@ -843,7 +838,15 @@ public:
         }
 
         recreate_logger();
-#ifndef WIN32
+#ifdef WIN32
+        if (mount_point.getValue().size() != 2 || mount_point.getValue()[1] != ':'
+            || mount_point.getValue().front() < 'A'
+            || mount_point.getValue().front() > 'Z')
+        {
+            global_logger->error("The mount point must be a drive path, such as Z:");
+            return 33;
+        }
+#else
         OSService::get_default().ensure_directory(mount_point.getValue(), 0755);
 #endif
         std::shared_ptr<FileStream> config_stream;
@@ -967,10 +970,6 @@ public:
             {
                 fsopt.gid_override = gid_override.getValue();
             }
-            if (lowercasing.getValue())
-            {
-                fsopt.flags.value() |= kOptionNormalizeFileNameToLowerCase;
-            }
             struct fuse_operations operations;
 
             init_fuse_operations(data_dir.getValue().c_str(), operations, noxattr.getValue());
@@ -986,11 +985,6 @@ public:
             fsopt.root = std::make_shared<OSService>(data_dir.getValue());
             fsopt.block_size = config.block_size;
             fsopt.iv_size = config.iv_size;
-            if (lowercasing.getValue())
-            {
-                fsopt.flags |= kOptionNormalizeFileNameToLowerCase;
-            }
-
             if (config.master_key.size() != 3 * KEY_LENGTH)
             {
                 global_logger->error(

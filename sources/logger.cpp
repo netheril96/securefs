@@ -107,7 +107,11 @@ Logger* Logger::create_stderr_logger() { return new Logger(stderr, false); }
 
 Logger* Logger::create_file_logger(const std::string& path)
 {
+#ifdef WIN32
+    FILE* fp = _wfopen(widen_string(path).c_str(), L"a");
+#else
     FILE* fp = fopen(path.c_str(), "a");
+#endif
     if (!fp)
         throwPOSIXException(errno, path);
     return new Logger(fp, true);
