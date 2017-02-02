@@ -550,17 +550,7 @@ private:
         0,
         "integer"};
     TCLAP::ValueArg<unsigned int> format{
-        "",
-        "format",
-        "The filesystem format version (1,2,3)",
-        false,
-#ifdef WIN32
-        2    // Dokany has mysterious bugs when used with the new filesystem format
-#else
-        4
-#endif
-        ,
-        "integer"};
+        "", "format", "The filesystem format version (1,2,3)", false, 4, "integer"};
     TCLAP::ValueArg<unsigned int> iv_size{
         "", "iv-size", "The IV size (ignored for fs format 1)", false, 12, "integer"};
     TCLAP::ValueArg<unsigned int> block_size{
@@ -737,16 +727,10 @@ private:
                                    "multithread",
                                    "Run in multithreaded mode. Only usable for lite filesystems. "
                                    "Experimental at this point so enable it at your own risk!"};
-    TCLAP::SwitchArg lowercasing{"l",
-                                 "lower",
-                                 "Turn on/off the conversion of all filenames to lowercase "
-                                 "(default to true on Windows, false on other systems)",
-#ifdef WIN32
-                                 true
-#else
-                                 false
-#endif
-    };
+    TCLAP::SwitchArg lowercasing{
+        "l",
+        "lower",
+        "Convert all filenames to lowercase. Useful if case insensitivity is required."};
     TCLAP::MultiArg<std::string> fuse_options{
         "o",
         "opt",
