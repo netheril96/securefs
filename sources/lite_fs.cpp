@@ -188,6 +188,16 @@ namespace lite
     {
         if (flags & O_APPEND)
             throwVFSException(ENOTSUP);
+
+        if ((flags & O_ACCMODE) == O_WRONLY)
+        {
+            flags = (flags & ~O_ACCMODE) | O_RDWR;
+        }
+        if ((flags & O_CREAT) && !(mode & 0400))
+        {
+            throwPOSIXException(
+                EINVAL, "Creating a file without read access is not supported on this filesystem");
+        }
         auto file_stream = m_root->open_file_stream(translate_path(path, false), flags, mode);
         AutoClosedFile fp(new File(file_stream,
                                    m_content_key,
@@ -256,6 +266,13 @@ namespace lite
 
     void FileSystem::chmod(StringRef path, fuse_mode_t mode)
     {
+        if (!(mode & 0400))
+        {
+            global_logger->warn("Change the mode of file %s to 0%o which denies user write access. "
+                                "Mysterious bugs will occur.",
+                                path.c_str(),
+                                static_cast<unsigned>(mode));
+        }
         m_root->chmod(translate_path(path, false), mode);
     }
 
