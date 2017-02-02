@@ -14,15 +14,10 @@
 #include <sys/types.h>
 #include <vector>
 
-struct statvfs;
-struct timespec;
+#include <fuse.h>
 
 #ifdef WIN32
-#define USE_FUSE_VERSION 28
-#include <fuse.h>
 #include <io.h>
-
-#define off_t __int64
 
 typedef ptrdiff_t ssize_t;
 
@@ -47,11 +42,27 @@ typedef ptrdiff_t ssize_t;
 #define S_IFLNK 0120000
 #endif
 #else
-typedef struct stat FUSE_STAT;
+#define fuse_uid_t uid_t
+#define fuse_gid_t gid_t
+#define fuse_pid_t pid_t
 
-#include <fcntl.h>
-#include <sys/time.h>
-#include <unistd.h>
+#define fuse_dev_t dev_t
+#define fuse_ino_t ino_t
+#define fuse_mode_t mode_t
+#define fuse_nlink_t nlink_t
+#define fuse_off_t off_t
+
+#define fuse_fsblkcnt_t fsblkcnt_t
+#define fuse_fsfilcnt_t fsfilcnt_t
+#define fuse_blksize_t blksize_t
+#define fuse_blkcnt_t blkcnt_t
+
+#define fuse_utimbuf utimbuf
+#define fuse_timespec timespec
+
+#define fuse_stat stat
+#define fuse_statvfs statvfs
+#define fuse_flock flock
 #endif    // WIN32
 
 namespace securefs
@@ -61,8 +72,8 @@ class FileStream : public StreamBase
 {
 public:
     virtual void fsync() = 0;
-    virtual void utimens(const struct timespec ts[2]) = 0;
-    virtual void fstat(FUSE_STAT*) = 0;
+    virtual void utimens(const struct fuse_timespec ts[2]) = 0;
+    virtual void fstat(fuse_stat*) = 0;
     virtual void close() noexcept = 0;
     virtual ssize_t listxattr(char*, size_t) { throwVFSException(ENOTSUP); }
     virtual ssize_t getxattr(const char*, void*, size_t) { throwVFSException(ENOTSUP); }
@@ -79,7 +90,7 @@ class DirectoryTraverser
 public:
     DirectoryTraverser() {}
     virtual ~DirectoryTraverser();
-    virtual bool next(std::string* name, mode_t* type) = 0;
+    virtual bool next(std::string* name, fuse_mode_t* type) = 0;
 };
 
 #ifdef WIN32
@@ -112,15 +123,15 @@ public:
     void lock() const;
     void ensure_directory(StringRef path, unsigned mode) const;
     void mkdir(StringRef path, unsigned mode) const;
-    void statfs(struct statvfs*) const;
-    void utimens(StringRef path, const timespec ts[2]) const;
+    void statfs(struct fuse_statvfs*) const;
+    void utimens(StringRef path, const fuse_timespec ts[2]) const;
 
     // Returns false when the path does not exist; throw exceptions on other errors
     // The ENOENT errors are too frequent so the API is redesigned
-    bool stat(StringRef path, FUSE_STAT* stat) const;
+    bool stat(StringRef path, fuse_stat* stat) const;
 
     void link(StringRef source, StringRef dest) const;
-    void chmod(StringRef path, mode_t mode) const;
+    void chmod(StringRef path, fuse_mode_t mode) const;
     ssize_t readlink(StringRef path, char* output, size_t size) const;
     void symlink(StringRef source, StringRef dest) const;
 
@@ -146,6 +157,6 @@ public:
 
     static std::string temp_name(StringRef prefix, StringRef suffix);
     static const OSService& get_default();
-    static void get_current_time(timespec& out);
+    static void get_current_time(fuse_timespec& out);
 };
 }

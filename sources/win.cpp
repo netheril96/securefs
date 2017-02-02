@@ -16,7 +16,7 @@
 #include <io.h>
 #include <sddl.h>
 
-static void filetime_to_unix_time(const FILETIME* ft, struct timespec* out)
+static void filetime_to_unix_time(const FILETIME* ft, struct fuse_timespec* out)
 {
     long long ll = (static_cast<long long>(ft->dwHighDateTime) << 32)
         + static_cast<long long>(ft->dwLowDateTime) - 116444736000000000LL;
@@ -25,7 +25,7 @@ static void filetime_to_unix_time(const FILETIME* ft, struct timespec* out)
     out->tv_nsec = (ll % FACTOR) * 100;
 }
 
-static FILETIME unix_time_to_filetime(const timespec* t)
+static FILETIME unix_time_to_filetime(const fuse_timespec* t)
 {
     long long ll = t->tv_sec * 10000000LL + t->tv_nsec / 100LL + 116444736000000000LL;
     FILETIME res;
@@ -448,7 +448,7 @@ public:
     length_type optimal_block_size() const noexcept override { return 4096; }
 
     void fsync() override { CHECK_CALL(FlushFileBuffers(m_handle)); }
-    void utimens(const struct timespec ts[2]) override
+    void utimens(const struct fuse_timespec ts[2]) override
     {
         FILETIME access_time, mod_time;
         if (!ts)
@@ -463,7 +463,7 @@ public:
         }
         CHECK_CALL(SetFileTime(m_handle, nullptr, &access_time, &mod_time));
     }
-    void fstat(FUSE_STAT* st) override
+    void fstat(fuse_stat* st) override
     {
         memset(st, 0, sizeof(*st));
         BY_HANDLE_FILE_INFORMATION info;
@@ -538,7 +538,7 @@ void OSService::mkdir(StringRef path, unsigned mode) const
     }
 }
 
-void OSService::statfs(struct statvfs* fs_info) const
+void OSService::statfs(struct fuse_statvfs* fs_info) const
 {
     memset(fs_info, 0, sizeof(*fs_info));
     ULARGE_INTEGER FreeBytesAvailable, TotalNumberOfBytes, TotalNumberOfFreeBytes;
@@ -558,7 +558,7 @@ void OSService::statfs(struct statvfs* fs_info) const
     fs_info->f_namemax = 255;
 }
 
-void OSService::utimens(StringRef path, const timespec ts[2]) const
+void OSService::utimens(StringRef path, const fuse_timespec ts[2]) const
 {
     ::__utimbuf64 buf;
     if (!ts)
@@ -576,7 +576,7 @@ void OSService::utimens(StringRef path, const timespec ts[2]) const
         throwPOSIXException(errno, "_wutime64");
 }
 
-bool OSService::stat(StringRef path, FUSE_STAT* stat) const
+bool OSService::stat(StringRef path, fuse_stat* stat) const
 {
     struct _stat64 stbuf;
     int rc = ::_wstat64(norm_path(path).c_str(), &stbuf);
@@ -605,7 +605,7 @@ bool OSService::stat(StringRef path, FUSE_STAT* stat) const
 }
 
 void OSService::link(StringRef source, StringRef dest) const { throwVFSException(ENOSYS); }
-void OSService::chmod(StringRef path, mode_t mode) const
+void OSService::chmod(StringRef path, fuse_mode_t mode) const
 {
     int rc = ::_wchmod(norm_path(path).c_str(), mode);
     if (rc < 0)
@@ -695,7 +695,7 @@ public:
             FindClose(m_handle);
     }
 
-    bool next(std::string* name, mode_t* type) override
+    bool next(std::string* name, fuse_mode_t* type) override
     {
         while (wcscmp(m_data.cFileName, L".") == 0 || wcscmp(m_data.cFileName, L"..") == 0)
         {
@@ -736,13 +736,11 @@ uint32_t OSService::getgid() noexcept { return 0; }
 
 bool OSService::isatty(int fd) noexcept { return ::_isatty(fd) != 0; }
 
-void OSService::get_current_time(timespec& current_time)
+void OSService::get_current_time(fuse_timespec& current_time)
 {
-#ifdef HAS_CLOCK_GETTIME
-    clock_gettime(CLOCK_REALTIME, &current_time);
-#else
-    timespec_get(&current_time, TIME_UTC);
-#endif
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    filetime_to_unix_time(&ft, &current_time);
 }
 }
 

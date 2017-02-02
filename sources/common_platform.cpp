@@ -56,7 +56,7 @@ void OSService::recursive_traverse(StringRef dir, const recursive_traverse_callb
 {
     auto traverser = create_traverser(dir);
     std::string name;
-    mode_t mode;
+    fuse_mode_t mode;
 
     while (traverser->next(&name, &mode))
     {

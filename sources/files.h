@@ -35,7 +35,7 @@ private:
     key_type m_key;
     id_type m_id;
     uint32_t m_flags[NUM_FLAGS];
-    timespec m_atime, m_mtime, m_ctime, m_birthtime;
+    fuse_timespec m_atime, m_mtime, m_ctime, m_birthtime;
     std::shared_ptr<FileStream> m_data_stream, m_meta_stream;
     bool m_dirty, m_check, m_store_time;
 
@@ -97,9 +97,9 @@ public:
         return EINVAL;
     }
 
-    static mode_t mode_for_type(int type) noexcept { return type << 12; }
+    static fuse_mode_t mode_for_type(int type) noexcept { return type << 12; }
 
-    static int type_for_mode(mode_t mode) noexcept { return mode >> 12; }
+    static int type_for_mode(fuse_mode_t mode) noexcept { return mode >> 12; }
 
     static const char* type_name(int type) noexcept
     {
@@ -175,27 +175,27 @@ public:
         m_dirty = true;
     }
 
-    void get_atime(timespec& out) const noexcept { out = m_atime; }
+    void get_atime(fuse_timespec& out) const noexcept { out = m_atime; }
 
-    void get_mtime(timespec& out) const noexcept { out = m_mtime; }
+    void get_mtime(fuse_timespec& out) const noexcept { out = m_mtime; }
 
-    void get_ctime(timespec& out) const noexcept { out = m_ctime; }
+    void get_ctime(fuse_timespec& out) const noexcept { out = m_ctime; }
 
-    void get_birthtime(timespec& out) const noexcept { out = m_birthtime; }
+    void get_birthtime(fuse_timespec& out) const noexcept { out = m_birthtime; }
 
-    void set_atime(const timespec& in) noexcept
+    void set_atime(const fuse_timespec& in) noexcept
     {
         m_atime = in;
         m_dirty = true;
     }
 
-    void set_mtime(const timespec& in) noexcept
+    void set_mtime(const fuse_timespec& in) noexcept
     {
         m_mtime = in;
         m_dirty = true;
     }
 
-    void set_ctime(const timespec& in) noexcept
+    void set_ctime(const fuse_timespec& in) noexcept
     {
         m_ctime = in;
         m_dirty = true;
@@ -264,9 +264,9 @@ public:
         m_meta_stream->fsync();
     }
 
-    void utimens(const struct timespec ts[2]);
+    void utimens(const struct fuse_timespec ts[2]);
 
-    void stat(FUSE_STAT* st);
+    void stat(fuse_stat* st);
 
     ssize_t listxattr(char* buffer, size_t size);
 

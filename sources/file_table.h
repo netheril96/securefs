@@ -55,7 +55,7 @@ public:
     bool is_auth_enabled() const noexcept { return (m_flags & kOptionNoAuthentication) == 0; }
     bool is_time_stored() const noexcept { return (m_flags & kOptionStoreTime) != 0; }
     void gc();
-    void statfs(struct statvfs* fs_info) { m_root->statfs(fs_info); }
+    void statfs(struct fuse_statvfs* fs_info) { m_root->statfs(fs_info); }
 };
 
 class AutoClosedFileBase

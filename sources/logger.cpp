@@ -7,6 +7,7 @@
 
 #ifdef WIN32
 #include <Windows.h>
+#include <time.h>
 
 static void flockfile(FILE*) {}
 static void funlockfile(FILE*) {}
@@ -28,7 +29,7 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
     if (!m_fp || level < this->get_level())
         return;
 
-    struct timespec now;
+    struct fuse_timespec now;
     OSService::get_current_time(now);
     struct tm tm;
 

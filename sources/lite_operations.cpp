@@ -65,7 +65,7 @@ namespace lite
         delete fs;
     }
 
-    int statfs(const char* path, struct statvfs* buf)
+    int statfs(const char* path, struct fuse_statvfs* buf)
     {
         SINGLE_COMMON_PROLOGUE
         filesystem->statvfs(buf);
@@ -73,7 +73,7 @@ namespace lite
         SINGLE_COMMON_EPILOGUE
     }
 
-    int getattr(const char* path, FUSE_STAT* st)
+    int getattr(const char* path, fuse_stat* st)
     {
         SINGLE_COMMON_PROLOGUE
         if (!filesystem->stat(path, st))
@@ -99,14 +99,17 @@ namespace lite
         SINGLE_COMMON_EPILOGUE
     }
 
-    int
-    readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t, struct fuse_file_info* info)
+    int readdir(const char* path,
+                void* buf,
+                fuse_fill_dir_t filler,
+                fuse_off_t,
+                struct fuse_file_info* info)
     {
         SINGLE_COMMON_PROLOGUE
         auto traverser = reinterpret_cast<DirectoryTraverser*>(info->fh);
         std::string name;
-        mode_t mode;
-        FUSE_STAT stbuf;
+        fuse_mode_t mode;
+        fuse_stat stbuf;
         memset(&stbuf, 0, sizeof(stbuf));
         while (traverser->next(&name, &mode))
         {
@@ -119,7 +122,7 @@ namespace lite
         SINGLE_COMMON_EPILOGUE
     }
 
-    int create(const char* path, mode_t mode, struct fuse_file_info* info)
+    int create(const char* path, fuse_mode_t mode, struct fuse_file_info* info)
     {
         SINGLE_COMMON_PROLOGUE
         AutoClosedFile file = filesystem->open(path, O_RDWR | O_CREAT | O_EXCL, mode);
@@ -145,7 +148,8 @@ namespace lite
         SINGLE_COMMON_EPILOGUE
     }
 
-    int read(const char* path, char* buf, size_t size, off_t offset, struct fuse_file_info* info)
+    int
+    read(const char* path, char* buf, size_t size, fuse_off_t offset, struct fuse_file_info* info)
     {
         global_logger->trace(
             "%s %s (offset=%lld, size=%zu)", __func__, path, static_cast<long long>(offset), size);
@@ -176,8 +180,11 @@ namespace lite
         }
     }
 
-    int
-    write(const char* path, const char* buf, size_t size, off_t offset, struct fuse_file_info* info)
+    int write(const char* path,
+              const char* buf,
+              size_t size,
+              fuse_off_t offset,
+              struct fuse_file_info* info)
     {
         global_logger->trace(
             "%s %s (offset=%lld, size=%zu)", __func__, path, static_cast<long long>(offset), size);
@@ -235,7 +242,7 @@ namespace lite
         }
     }
 
-    int ftruncate(const char* path, off_t len, struct fuse_file_info* info)
+    int ftruncate(const char* path, fuse_off_t len, struct fuse_file_info* info)
     {
         global_logger->trace("%s %s with length=%lld", __func__, path, static_cast<long long>(len));
         auto fp = reinterpret_cast<File*>(info->fh);
@@ -273,7 +280,7 @@ namespace lite
         SINGLE_COMMON_EPILOGUE
     }
 
-    int mkdir(const char* path, mode_t mode)
+    int mkdir(const char* path, fuse_mode_t mode)
     {
         SINGLE_COMMON_PROLOGUE
         filesystem->mkdir(path, mode);
@@ -289,7 +296,7 @@ namespace lite
         SINGLE_COMMON_EPILOGUE
     }
 
-    int chmod(const char* path, mode_t mode)
+    int chmod(const char* path, fuse_mode_t mode)
     {
         SINGLE_COMMON_PROLOGUE
         filesystem->chmod(path, mode);
@@ -420,7 +427,7 @@ namespace lite
         }
     }
 
-    int truncate(const char* path, off_t len)
+    int truncate(const char* path, fuse_off_t len)
     {
         if (len < 0)
             return -EINVAL;
@@ -453,7 +460,7 @@ namespace lite
         }
     }
 
-    int utimens(const char* path, const struct timespec ts[2])
+    int utimens(const char* path, const struct fuse_timespec ts[2])
     {
         SINGLE_COMMON_PROLOGUE
         filesystem->utimens(path, ts);

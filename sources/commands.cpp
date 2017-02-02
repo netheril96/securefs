@@ -859,7 +859,9 @@ public:
         }
 
         recreate_logger();
+#ifndef WIN32
         OSService::get_default().ensure_directory(mount_point.getValue(), 0755);
+#endif
         std::shared_ptr<FileStream> config_stream;
         try
         {

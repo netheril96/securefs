@@ -128,7 +128,7 @@ public:
 
     bool is_sparse() const noexcept override { return true; }
 
-    void utimens(const struct timespec ts[2]) override
+    void utimens(const struct fuse_timespec ts[2]) override
     {
         int rc;
 #ifdef HAS_FUTIMENS
@@ -200,7 +200,7 @@ public:
     }
     ~UnixDirectoryTraverser() { ::closedir(m_dir); }
 
-    bool next(std::string* name, mode_t* type) override
+    bool next(std::string* name, fuse_mode_t* type) override
     {
         while (1)
         {
@@ -366,7 +366,7 @@ void OSService::link(StringRef source, StringRef dest) const
     }
 }
 
-void OSService::statfs(struct statvfs* fs_info) const
+void OSService::statfs(struct fuse_statvfs* fs_info) const
 {
     int rc = ::fstatvfs(m_dir_fd, fs_info);
     if (rc < 0)
@@ -385,7 +385,7 @@ void OSService::rename(StringRef a, StringRef b) const
             errno, strprintf("Renaming from %s to %s", norm_path(a).c_str(), norm_path(b).c_str()));
 }
 
-bool OSService::stat(StringRef path, FUSE_STAT* stat) const
+bool OSService::stat(StringRef path, fuse_stat* stat)
 {
 #ifdef HAS_AT_FUNCTIONS
     int rc = ::fstatat(m_dir_fd, path.c_str(), stat, AT_SYMLINK_NOFOLLOW);
@@ -401,7 +401,7 @@ bool OSService::stat(StringRef path, FUSE_STAT* stat) const
     return true;
 }
 
-void OSService::chmod(StringRef path, mode_t mode) const
+void OSService::chmod(StringRef path, fuse_mode_t mode)
 {
 #ifdef HAS_AT_FUNCTIONS
     int rc = ::fchmodat(m_dir_fd, path.c_str(), mode, AT_SYMLINK_NOFOLLOW);
@@ -426,7 +426,7 @@ ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
     return rc;
 }
 
-void OSService::utimens(StringRef path, const timespec* ts) const
+void OSService::utimens(StringRef path, const fuse_timespec* ts) const
 {
 #if defined(HAS_AT_FUNCTIONS) && defined(HAS_FUTIMENS)
     int rc = ::utimensat(m_dir_fd, path.c_str(), ts, AT_SYMLINK_NOFOLLOW);
@@ -489,7 +489,7 @@ int OSService::raise_fd_limit()
 
 bool OSService::isatty(int fd) noexcept { return ::isatty(fd) != 0; }
 
-void OSService::get_current_time(timespec& current_time)
+void OSService::get_current_time(fuse_timespec& current_time)
 {
 #ifdef HAS_CLOCK_GETTIME
     clock_gettime(CLOCK_REALTIME, &current_time);

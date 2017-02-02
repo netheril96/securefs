@@ -239,7 +239,7 @@ namespace operations
         fputs("Filesystem unmounted successfully\n", stderr);
     }
 
-    int statfs(const char* path, struct statvfs* fs_info)
+    int statfs(const char* path, struct fuse_statvfs* fs_info)
     {
         COMMON_PROLOGUE
         try
@@ -250,7 +250,7 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-    int getattr(const char* path, FUSE_STAT* st)
+    int getattr(const char* path, fuse_stat* st)
     {
         COMMON_PROLOGUE
 
@@ -297,8 +297,11 @@ namespace operations
         return ::securefs::operations::release(path, info);
     }
 
-    int readdir(
-        const char* path, void* buffer, fuse_fill_dir_t filler, off_t, struct fuse_file_info* info)
+    int readdir(const char* path,
+                void* buffer,
+                fuse_fill_dir_t filler,
+                fuse_off_t,
+                struct fuse_file_info* info)
     {
         COMMON_PROLOGUE
 
@@ -309,7 +312,7 @@ namespace operations
                 return -EFAULT;
             if (fb->type() != FileBase::DIRECTORY)
                 return -ENOTDIR;
-            FUSE_STAT st;
+            fuse_stat st;
             memset(&st, 0, sizeof(st));
             auto actions = [&st, filler, fs, buffer](
                 const std::string& name, const id_type&, int type) -> bool {
@@ -327,7 +330,7 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-    int create(const char* path, mode_t mode, struct fuse_file_info* info)
+    int create(const char* path, fuse_mode_t mode, struct fuse_file_info* info)
     {
         COMMON_PROLOGUE
 
@@ -389,7 +392,8 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-    int read(const char* path, char* buffer, size_t len, off_t off, struct fuse_file_info* info)
+    int
+    read(const char* path, char* buffer, size_t len, fuse_off_t off, struct fuse_file_info* info)
     {
         global_logger->trace(
             "%s (path=%s, length=%zu, offset=%lld)", __FUNCTION__, path, len, (long long)off);
@@ -418,8 +422,11 @@ namespace operations
         }
     }
 
-    int
-    write(const char* path, const char* buffer, size_t len, off_t off, struct fuse_file_info* info)
+    int write(const char* path,
+              const char* buffer,
+              size_t len,
+              fuse_off_t off,
+              struct fuse_file_info* info)
     {
         global_logger->trace(
             "%s (path=%s, length=%zu, offset=%lld)", __FUNCTION__, path, len, (long long)off);
@@ -466,7 +473,7 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-    int truncate(const char* path, off_t size)
+    int truncate(const char* path, fuse_off_t size)
     {
         COMMON_PROLOGUE
 
@@ -480,7 +487,7 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-    int ftruncate(const char* path, off_t size, struct fuse_file_info* info)
+    int ftruncate(const char* path, fuse_off_t size, struct fuse_file_info* info)
     {
         COMMON_PROLOGUE
 
@@ -510,7 +517,7 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-    int mkdir(const char* path, mode_t mode)
+    int mkdir(const char* path, fuse_mode_t mode)
     {
         COMMON_PROLOGUE
 
@@ -529,7 +536,7 @@ namespace operations
 
     int rmdir(const char* path) { return ::securefs::operations::unlink(path); }
 
-    int chmod(const char* path, mode_t mode)
+    int chmod(const char* path, fuse_mode_t mode)
     {
         COMMON_PROLOGUE
 
@@ -546,7 +553,7 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-    int chown(const char* path, uid_t uid, gid_t gid)
+    int chown(const char* path, fuse_uid_t uid, fuse_gid_t gid)
     {
         COMMON_PROLOGUE
 
@@ -740,7 +747,7 @@ namespace operations
         return ::securefs::operations::fsync(path, isdatasync, fi);
     }
 
-    int utimens(const char* path, const struct timespec ts[2])
+    int utimens(const char* path, const struct fuse_timespec ts[2])
     {
         COMMON_PROLOGUE
 

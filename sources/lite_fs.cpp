@@ -24,7 +24,7 @@ namespace lite
 
     File::~File() {}
 
-    void File::fstat(FUSE_STAT* stat)
+    void File::fstat(fuse_stat* stat)
     {
         m_file_stream->fstat(stat);
         stat->st_size = AESGCMCryptStream::calculate_real_size(
@@ -184,7 +184,7 @@ namespace lite
         }
     }
 
-    AutoClosedFile FileSystem::open(StringRef path, int flags, mode_t mode)
+    AutoClosedFile FileSystem::open(StringRef path, int flags, fuse_mode_t mode)
     {
         if (flags & O_APPEND)
             throwVFSException(ENOTSUP);
@@ -200,7 +200,7 @@ namespace lite
         return fp;
     }
 
-    bool FileSystem::stat(StringRef path, FUSE_STAT* buf)
+    bool FileSystem::stat(StringRef path, fuse_stat* buf)
     {
         auto enc_path = translate_path(path, false);
         if (!m_root->stat(enc_path, buf))
@@ -240,7 +240,7 @@ namespace lite
         return true;
     }
 
-    void FileSystem::mkdir(StringRef path, mode_t mode)
+    void FileSystem::mkdir(StringRef path, fuse_mode_t mode)
     {
         m_root->mkdir(translate_path(path, false), mode);
     }
@@ -255,7 +255,7 @@ namespace lite
         m_root->rename(translate_path(from, false), translate_path(to, false));
     }
 
-    void FileSystem::chmod(StringRef path, mode_t mode)
+    void FileSystem::chmod(StringRef path, fuse_mode_t mode)
     {
         m_root->chmod(translate_path(path, false), mode);
     }
@@ -269,7 +269,7 @@ namespace lite
         auto iter = m_resolved_symlinks.find(strpath);
         if (iter == m_resolved_symlinks.end())
         {
-            FUSE_STAT st;
+            fuse_stat st;
             this->stat(path, &st);
             iter = m_resolved_symlinks.find(strpath);
             if (iter == m_resolved_symlinks.end())
@@ -289,7 +289,7 @@ namespace lite
         m_resolved_symlinks[efrom] = std::move(eto);
     }
 
-    void FileSystem::utimens(StringRef path, const timespec* ts)
+    void FileSystem::utimens(StringRef path, const fuse_timespec* ts)
     {
         m_root->utimens(translate_path(path, false), ts);
     }
@@ -305,7 +305,7 @@ namespace lite
         m_root->link(translate_path(src, false), translate_path(dest, false));
     }
 
-    void FileSystem::statvfs(struct statvfs* buf) { m_root->statfs(buf); }
+    void FileSystem::statvfs(struct fuse_statvfs* buf) { m_root->statfs(buf); }
 
     class LiteDirectoryTraverser : public DirectoryTraverser
     {
@@ -325,7 +325,7 @@ namespace lite
         }
         ~LiteDirectoryTraverser() {}
 
-        bool next(std::string* name, mode_t* type) override
+        bool next(std::string* name, fuse_mode_t* type) override
         {
             std::string under_name;
             byte buffer[2000];

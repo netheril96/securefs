@@ -49,9 +49,9 @@ namespace lite
         {
             return m_crypt_stream->write(input, off, len);
         }
-        void fstat(FUSE_STAT* stat);
+        void fstat(fuse_stat* stat);
         void fsync() { m_file_stream->fsync(); }
-        void utimens(const timespec ts[2]) { m_file_stream->utimens(ts); }
+        void utimens(const fuse_timespec ts[2]) { m_file_stream->utimens(ts); }
         int increase_open_count() noexcept { return ++m_open_count; }
         int decrease_open_count() noexcept { return --m_open_count; }
         void lock() { m_file_stream->lock(); }
@@ -120,18 +120,18 @@ namespace lite
         void lock() { m_mutex.lock(); }
         void unlock() { m_mutex.unlock(); }
         bool try_lock() { return m_mutex.try_lock(); }
-        AutoClosedFile open(StringRef path, int flags, mode_t mode);
-        bool stat(StringRef path, FUSE_STAT* buf);
-        void mkdir(StringRef path, mode_t mode);
+        AutoClosedFile open(StringRef path, int flags, fuse_mode_t mode);
+        bool stat(StringRef path, fuse_stat* buf);
+        void mkdir(StringRef path, fuse_mode_t mode);
         void rmdir(StringRef path);
-        void chmod(StringRef path, mode_t mode);
+        void chmod(StringRef path, fuse_mode_t mode);
         void rename(StringRef from, StringRef to);
         void unlink(StringRef path);
         void symlink(StringRef to, StringRef from);
         void link(StringRef src, StringRef dest);
         size_t readlink(StringRef path, char* buf, size_t size);
-        void utimens(StringRef path, const timespec tm[2]);
-        void statvfs(struct statvfs* buf);
+        void utimens(StringRef path, const fuse_timespec tm[2]);
+        void statvfs(struct fuse_statvfs* buf);
         std::unique_ptr<DirectoryTraverser> create_traverser(StringRef path);
 
 #ifdef __APPLE__
