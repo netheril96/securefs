@@ -140,7 +140,7 @@ namespace lite
     int release(const char* path, struct fuse_file_info* info)
     {
         SINGLE_COMMON_PROLOGUE
-        FSCCloser()(reinterpret_cast<File*>(info->fh));
+        delete reinterpret_cast<File*>(info->fh);
         return 0;
         SINGLE_COMMON_EPILOGUE
     }

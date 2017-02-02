@@ -16,7 +16,7 @@ namespace lite
                unsigned block_size,
                unsigned iv_size,
                bool check)
-        : m_file_stream(file_stream), m_open_count(0)
+        : m_file_stream(file_stream)
     {
         std::lock_guard<FileStream> xguard(*m_file_stream);
         m_crypt_stream.emplace(file_stream, master_key, block_size, iv_size, check);
@@ -194,7 +194,6 @@ namespace lite
                                    m_block_size,
                                    m_iv_size,
                                    (m_flags & kOptionNoAuthentication) == 0));
-        fp->increase_open_count();
         if (flags & O_TRUNC)
             fp->resize(0);
         return fp;

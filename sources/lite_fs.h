@@ -27,8 +27,7 @@ namespace lite
     private:
         securefs::optional<lite::AESGCMCryptStream> m_crypt_stream;
         std::shared_ptr<securefs::FileStream> m_file_stream;
-        std::atomic<int> m_open_count;
-
+        
     public:
         explicit File(std::shared_ptr<securefs::FileStream> file_stream,
                       const key_type& master_key,
@@ -52,26 +51,13 @@ namespace lite
         void fstat(FUSE_STAT* stat);
         void fsync() { m_file_stream->fsync(); }
         void utimens(const timespec ts[2]) { m_file_stream->utimens(ts); }
-        int increase_open_count() noexcept { return ++m_open_count; }
-        int decrease_open_count() noexcept { return --m_open_count; }
         void lock() { m_file_stream->lock(); }
         void unlock() { m_file_stream->unlock(); }
     };
 
     class FileSystem;
-
-    struct FSCCloser
-    {
-        void operator()(File* file) const
-        {
-            if (file && file->decrease_open_count() <= 0)
-            {
-                delete file;
-            }
-        }
-    };
-
-    typedef std::unique_ptr<File, FSCCloser> AutoClosedFile;
+    
+    typedef std::unique_ptr<File> AutoClosedFile;
 
     std::string encrypt_path(AES_SIV& encryptor, StringRef path);
     std::string decrypt_path(AES_SIV& decryptor, StringRef path);
