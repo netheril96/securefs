@@ -73,7 +73,7 @@ class FileStream : public StreamBase
 public:
     virtual void fsync() = 0;
     virtual void utimens(const struct fuse_timespec ts[2]) = 0;
-    virtual void fstat(fuse_stat*) = 0;
+    virtual void fstat(struct fuse_stat*) = 0;
     virtual void close() noexcept = 0;
     virtual ssize_t listxattr(char*, size_t) { throwVFSException(ENOTSUP); }
     virtual ssize_t getxattr(const char*, void*, size_t) { throwVFSException(ENOTSUP); }
@@ -128,7 +128,7 @@ public:
 
     // Returns false when the path does not exist; throw exceptions on other errors
     // The ENOENT errors are too frequent so the API is redesigned
-    bool stat(StringRef path, fuse_stat* stat) const;
+    bool stat(StringRef path, struct fuse_stat* stat) const;
 
     void link(StringRef source, StringRef dest) const;
     void chmod(StringRef path, fuse_mode_t mode) const;

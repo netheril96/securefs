@@ -250,7 +250,7 @@ namespace operations
         COMMON_CATCH_BLOCK
     }
 
-    int getattr(const char* path, fuse_stat* st)
+    int getattr(const char* path, struct fuse_stat* st)
     {
         COMMON_PROLOGUE
 
@@ -312,7 +312,7 @@ namespace operations
                 return -EFAULT;
             if (fb->type() != FileBase::DIRECTORY)
                 return -ENOTDIR;
-            fuse_stat st;
+            struct fuse_stat st;
             memset(&st, 0, sizeof(st));
             auto actions = [&st, filler, fs, buffer](
                 const std::string& name, const id_type&, int type) -> bool {

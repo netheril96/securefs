@@ -186,7 +186,7 @@ void FileBase::read_header()
 
 int FileBase::get_real_type() { return type_for_mode(get_mode() & S_IFMT); }
 
-void FileBase::stat(fuse_stat* st)
+void FileBase::stat(struct fuse_stat* st)
 {
     m_data_stream->fstat(st);
 
@@ -203,10 +203,10 @@ void FileBase::stat(fuse_stat* st)
     if (m_store_time)
     {
 #ifdef __APPLE__
-        get_atime(st->st_afuse_timespec);
-        get_mtime(st->st_mfuse_timespec);
-        get_ctime(st->st_cfuse_timespec);
-        get_birthtime(st->st_birthfuse_timespec);
+        get_atime(st->st_atimespec);
+        get_mtime(st->st_mtimespec);
+        get_ctime(st->st_ctimespec);
+        get_birthtime(st->st_birthtimespec);
 #else
         get_atime(st->st_atim);
         get_mtime(st->st_mtim);

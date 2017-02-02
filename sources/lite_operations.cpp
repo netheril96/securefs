@@ -62,7 +62,7 @@ namespace lite
         SINGLE_COMMON_EPILOGUE
     }
 
-    int getattr(const char* path, fuse_stat* st)
+    int getattr(const char* path, struct fuse_stat* st)
     {
         SINGLE_COMMON_PROLOGUE
         try
@@ -115,7 +115,7 @@ namespace lite
             auto traverser = reinterpret_cast<DirectoryTraverser*>(info->fh);
             std::string name;
             fuse_mode_t mode;
-            fuse_stat stbuf;
+            struct fuse_stat stbuf;
             memset(&stbuf, 0, sizeof(stbuf));
             while (traverser->next(&name, &mode))
             {

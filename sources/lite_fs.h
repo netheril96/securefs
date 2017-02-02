@@ -47,7 +47,7 @@ namespace lite
         {
             return m_crypt_stream->write(input, off, len);
         }
-        void fstat(fuse_stat* stat);
+        void fstat(struct fuse_stat* stat);
         void fsync() { m_file_stream->fsync(); }
         void utimens(const fuse_timespec ts[2]) { m_file_stream->utimens(ts); }
         void lock() { m_file_stream->lock(); }
@@ -106,7 +106,7 @@ namespace lite
         void unlock() { m_mutex.unlock(); }
         bool try_lock() { return m_mutex.try_lock(); }
         AutoClosedFile open(StringRef path, int flags, fuse_mode_t mode);
-        bool stat(StringRef path, fuse_stat* buf);
+        bool stat(StringRef path, struct fuse_stat* buf);
         void mkdir(StringRef path, fuse_mode_t mode);
         void rmdir(StringRef path);
         void chmod(StringRef path, fuse_mode_t mode);

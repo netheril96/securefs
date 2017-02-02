@@ -385,7 +385,7 @@ void OSService::rename(StringRef a, StringRef b) const
             errno, strprintf("Renaming from %s to %s", norm_path(a).c_str(), norm_path(b).c_str()));
 }
 
-bool OSService::stat(StringRef path, fuse_stat* stat)
+bool OSService::stat(StringRef path, struct fuse_stat* stat) const
 {
 #ifdef HAS_AT_FUNCTIONS
     int rc = ::fstatat(m_dir_fd, path.c_str(), stat, AT_SYMLINK_NOFOLLOW);
@@ -401,7 +401,7 @@ bool OSService::stat(StringRef path, fuse_stat* stat)
     return true;
 }
 
-void OSService::chmod(StringRef path, fuse_mode_t mode)
+void OSService::chmod(StringRef path, fuse_mode_t mode) const
 {
 #ifdef HAS_AT_FUNCTIONS
     int rc = ::fchmodat(m_dir_fd, path.c_str(), mode, AT_SYMLINK_NOFOLLOW);

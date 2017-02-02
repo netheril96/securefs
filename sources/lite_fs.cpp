@@ -24,7 +24,7 @@ namespace lite
 
     File::~File() {}
 
-    void File::fstat(fuse_stat* stat)
+    void File::fstat(struct fuse_stat* stat)
     {
         m_file_stream->fstat(stat);
         stat->st_size = AESGCMCryptStream::calculate_real_size(
@@ -199,7 +199,7 @@ namespace lite
         return fp;
     }
 
-    bool FileSystem::stat(StringRef path, fuse_stat* buf)
+    bool FileSystem::stat(StringRef path, struct fuse_stat* buf)
     {
         auto enc_path = translate_path(path, false);
         if (!m_root->stat(enc_path, buf))
@@ -268,7 +268,7 @@ namespace lite
         auto iter = m_resolved_symlinks.find(strpath);
         if (iter == m_resolved_symlinks.end())
         {
-            fuse_stat st;
+            struct fuse_stat st;
             this->stat(path, &st);
             iter = m_resolved_symlinks.find(strpath);
             if (iter == m_resolved_symlinks.end())

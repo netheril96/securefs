@@ -26,7 +26,7 @@ namespace lite
 
     void destroy(void* ptr);
 
-    int getattr(const char*, fuse_stat*);
+    int getattr(const char*, struct fuse_stat*);
 
     int opendir(const char*, struct fuse_file_info*);
 

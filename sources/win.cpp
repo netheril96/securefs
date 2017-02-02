@@ -479,7 +479,7 @@ public:
         }
         CHECK_CALL(SetFileTime(m_handle, nullptr, &access_time, &mod_time));
     }
-    void fstat(fuse_stat* st) override
+    void fstat(struct fuse_stat* st) override
     {
         memset(st, 0, sizeof(*st));
         BY_HANDLE_FILE_INFORMATION info;
@@ -592,7 +592,7 @@ void OSService::utimens(StringRef path, const fuse_timespec ts[2]) const
         throwPOSIXException(errno, "_wutime64");
 }
 
-bool OSService::stat(StringRef path, fuse_stat* stat) const
+bool OSService::stat(StringRef path, struct fuse_stat* stat) const
 {
     struct _stat64 stbuf;
     int rc = ::_wstat64(norm_path(path).c_str(), &stbuf);

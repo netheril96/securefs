@@ -266,7 +266,7 @@ public:
 
     void utimens(const struct fuse_timespec ts[2]);
 
-    void stat(fuse_stat* st);
+    void stat(struct fuse_stat* st);
 
     ssize_t listxattr(char* buffer, size_t size);
 
