@@ -35,13 +35,16 @@ namespace lite
 
 #define SINGLE_COMMON_EPILOGUE                                                                     \
     }                                                                                              \
-    catch (const CommonException& e) { return -e.error_number(); }                                 \
-    catch (const SystemException& e) { return -e.error_number(); }                                 \
     catch (const std::exception& e)                                                                \
     {                                                                                              \
-        global_logger->error(                                                                      \
-            "%s %s encounters exception %s: %s", __func__, path, get_type_name(e), e.what());      \
-        return -get_error_number(e);                                                               \
+        int code = get_error_number(e);                                                            \
+        global_logger->error("%s %s encounters exception %s (code=%d): %s",                        \
+                             __func__,                                                             \
+                             path,                                                                 \
+                             get_type_name(e),                                                     \
+                             code,                                                                 \
+                             e.what());                                                            \
+        return -code;                                                                              \
     }
 
     void* init(struct fuse_conn_info*)
@@ -165,14 +168,6 @@ namespace lite
         {
             return static_cast<int>(fp->read(buf, offset, size));
         }
-        catch (const CommonException& e)
-        {
-            return -e.error_number();
-        }
-        catch (const SystemException& e)
-        {
-            return -e.error_number();
-        }
         catch (const std::exception& e)
         {
             global_logger->error("%s %s (offset=%lld, size=%zu) encounters exception %s: %s",
@@ -201,14 +196,6 @@ namespace lite
             fp->write(buf, offset, size);
             return static_cast<int>(size);
         }
-        catch (const CommonException& e)
-        {
-            return -e.error_number();
-        }
-        catch (const SystemException& e)
-        {
-            return -e.error_number();
-        }
         catch (const std::exception& e)
         {
             global_logger->error("%s %s (offset=%lld, size=%zu) encounters exception %s: %s",
@@ -232,14 +219,6 @@ namespace lite
             fp->flush();
             return 0;
         }
-        catch (const CommonException& e)
-        {
-            return -e.error_number();
-        }
-        catch (const SystemException& e)
-        {
-            return -e.error_number();
-        }
         catch (const std::exception& e)
         {
             global_logger->error(
@@ -257,14 +236,6 @@ namespace lite
         {
             fp->resize(len);
             return 0;
-        }
-        catch (const CommonException& e)
-        {
-            return -e.error_number();
-        }
-        catch (const SystemException& e)
-        {
-            return -e.error_number();
         }
         catch (const std::exception& e)
         {
@@ -319,14 +290,6 @@ namespace lite
         {
             filesystem->symlink(to, from);
             return 0;
-        }
-        catch (const CommonException& e)
-        {
-            return -e.error_number();
-        }
-        catch (const SystemException& e)
-        {
-            return -e.error_number();
         }
         catch (const std::exception& e)
         {
@@ -416,14 +379,6 @@ namespace lite
         {
             fp->fsync();
             return 0;
-        }
-        catch (const CommonException& e)
-        {
-            return -e.error_number();
-        }
-        catch (const SystemException& e)
-        {
-            return -e.error_number();
         }
         catch (const std::exception& e)
         {

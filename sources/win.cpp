@@ -297,7 +297,8 @@ public:
 
 [[noreturn]] void throwWindowsException(DWORD err, const char* exp)
 {
-    throw WindowsException(err, exp);
+    if (err != 0)
+        throw WindowsException(err, exp);
 }
 
 #define CHECK_CALL(exp)                                                                            \
@@ -307,7 +308,6 @@ public:
 class WindowsFileStream : public FileStream
 {
 private:
-    std::recursive_mutex m_mutex;
     HANDLE m_handle;
 
 public:
@@ -338,7 +338,7 @@ public:
 
         m_handle = CreateFileW(path.c_str(),
                                access_flags,
-                               FILE_SHARE_READ | FILE_SHARE_DELETE,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                                nullptr,
                                create_flags,
                                FILE_ATTRIBUTE_NORMAL,
@@ -349,9 +349,25 @@ public:
 
     ~WindowsFileStream() { CloseHandle(m_handle); }
 
-    void lock() override { m_mutex.lock(); }
+    void lock() override
+    {
+        OVERLAPPED o;
+        memset(&o, 0, sizeof(o));
+        CHECK_CALL(LockFileEx(m_handle,
+                              LOCKFILE_EXCLUSIVE_LOCK,
+                              0,
+                              std::numeric_limits<DWORD>::max(),
+                              std::numeric_limits<DWORD>::max(),
+                              &o));
+    }
 
-    void unlock() override { m_mutex.unlock(); }
+    void unlock() override
+    {
+        OVERLAPPED o;
+        memset(&o, 0, sizeof(o));
+        CHECK_CALL(UnlockFileEx(
+            m_handle, 0, std::numeric_limits<DWORD>::max(), std::numeric_limits<DWORD>::max(), &o));
+    }
 
     length_type read32(void* output, offset_type offset, DWORD length)
     {
