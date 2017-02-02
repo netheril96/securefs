@@ -23,7 +23,7 @@ static_assert(BTREE_MAX_NUM_ENTRIES * (Directory::MAX_FILENAME_LENGTH + 1 + ID_L
                   <= BLOCK_SIZE,
               "A btree node may not fit in a single block");
 
-class CorruptedDirectoryException : public SeriousException
+class CorruptedDirectoryException : public VerificationException
 {
 public:
     const char* type_name() const noexcept override { return "CorruptedDirectoryException"; }

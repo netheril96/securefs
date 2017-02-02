@@ -256,7 +256,7 @@ void hkdf(const void* key,
 size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length)
 {
     if (!fp || !password)
-        NULL_EXCEPT();
+        throwVFSException(EFAULT);
 
     if (prompt)
     {
@@ -295,7 +295,7 @@ size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t
 {
 #ifdef WIN32
     if (!fp || !password)
-        NULL_EXCEPT();
+        throwVFSException(EFAULT);
 
     if (fp != stdin)
         return insecure_read_password(fp, prompt, password, max_length);
@@ -334,7 +334,7 @@ size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t
     return actual_read;
 #else
     if (!fp || !password)
-        NULL_EXCEPT();
+        throwVFSException(EFAULT);
 
     int fd = fileno(fp);
     struct termios old_termios, new_termios;

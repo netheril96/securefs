@@ -235,7 +235,7 @@ FileBase* FileTable::create_as(const id_type& id, int type)
 void FileTable::close(FileBase* fb)
 {
     if (!fb)
-        NULL_EXCEPT();
+        throwVFSException(EFAULT);
 
     auto iter = m_files.find(fb->get_id());
     if (iter == m_files.end() || iter->second.get() != fb)

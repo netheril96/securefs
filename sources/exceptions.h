@@ -42,59 +42,7 @@ public:
     }
 };
 
-class CommonException : public ExceptionBase
-{
-};
-
-class SeriousException : public ExceptionBase
-{
-};
-
-class FatalException : public SeriousException
-{
-};
-
-class NotImplementedException : public SeriousException
-{
-private:
-    const char* m_func;
-
-public:
-    explicit NotImplementedException(const char* func_name) : m_func(func_name) {}
-
-    std::string message() const override
-    {
-        return strprintf("Function/method %s of this instance is not implemented", m_func);
-    }
-
-    const char* type_name() const noexcept override { return "NotImplementedException"; }
-};
-
-class NullPointerException : public FatalException
-{
-private:
-    const char* m_func;
-    const char* m_file;
-    int m_line;
-
-public:
-    explicit NullPointerException(const char* func, const char* file, int line)
-        : m_func(func), m_file(file), m_line(line)
-    {
-    }
-
-    const char* type_name() const noexcept override { return "NullPointerException"; }
-
-    std::string message() const override
-    {
-        const char* format = "Unexpected null pointer in function \"%s\" at %s:%d";
-        return strprintf(format, m_func, m_file, m_line);
-    }
-};
-
-#define NULL_EXCEPT() throw securefs::NullPointerException(__FUNCTION__, __FILE__, __LINE__)
-
-class UnreachableCodeException : public FatalException
+class UnreachableCodeException : public ExceptionBase
 {
 private:
     const char* m_func;
@@ -111,14 +59,14 @@ public:
 
     std::string message() const override
     {
-        const char* format = "Unreachable code executed in function \"%s\" at %s:%d";
-        return strprintf(format, m_func, m_file, m_line);
+        return strprintf(
+            "Unreachable code executed in function \"%s\" at %s:%d", m_func, m_file, m_line);
     }
 };
 
 #define UNREACHABLE() throw securefs::UnreachableCodeException(__FUNCTION__, __FILE__, __LINE__)
 
-class VFSException : public CommonException
+class VFSException : public ExceptionBase
 {
 private:
     int m_errno;
@@ -136,7 +84,7 @@ public:
 
 [[noreturn]] void throwVFSException(int errc);
 
-class SystemException : public SeriousException
+class SystemException : public ExceptionBase
 {
 };
 
@@ -159,15 +107,15 @@ public:
 
 [[noreturn]] void throwPOSIXException(int errc, std::string msg);
 
-class VerificationException : public SeriousException
+class VerificationException : public ExceptionBase
 {
 };
 
-class InvalidFormatException : public SeriousException
+class InvalidFormatException : public ExceptionBase
 {
 };
 
-class InvalidArgumentException : public SeriousException
+class InvalidArgumentException : public ExceptionBase
 {
 private:
     std::string m_msg;
@@ -259,7 +207,7 @@ public:
     std::string message() const override { return "File content has invalid checksum"; }
 };
 
-class StreamTooLongException : public SeriousException
+class StreamTooLongException : public ExceptionBase
 {
 private:
     int64_t m_max_size;
@@ -280,7 +228,7 @@ public:
     int error_number() const noexcept override { return EFBIG; }
 };
 
-class InvalidCastException : public SeriousException
+class InvalidCastException : public ExceptionBase
 {
 private:
     const char* from_name;
@@ -300,7 +248,7 @@ public:
     }
 };
 
-class FileTypeInconsistencyException : public SeriousException
+class FileTypeInconsistencyException : public ExceptionBase
 {
 public:
     const char* type_name() const noexcept override { return "InvalidCastException"; }

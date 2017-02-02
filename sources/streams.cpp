@@ -73,7 +73,7 @@ namespace internal
             : m_key(key_), m_id(id_), m_stream(std::move(stream)), is_dirty(false)
         {
             if (!m_stream)
-                throw NullPointerException(__FUNCTION__, __FILE__, __LINE__);
+                throwVFSException(EFAULT);
             if (check)
             {
                 std::array<byte, hmac_length> hmac;

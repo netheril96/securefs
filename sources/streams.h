@@ -148,7 +148,7 @@ public:
         : BlockBasedStream(block_size), m_stream(std::move(stream))
     {
         if (!m_stream)
-            throw NullPointerException(__FUNCTION__, __FILE__, __LINE__);
+            throwVFSException(EFAULT);
         if (m_block_size < 1)
             throwInvalidArgumentException("Too small block size");
     }

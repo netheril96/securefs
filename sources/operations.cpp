@@ -214,8 +214,7 @@ namespace operations
     global_logger->trace("%s (path=%s)", __FUNCTION__, path);
 
 #define COMMON_CATCH_BLOCK                                                                         \
-    catch (const CommonException& e) { return -e.error_number(); }                                 \
-    catch (const SeriousException& e)                                                              \
+    catch (const ExceptionBase& e)                                                                 \
     {                                                                                              \
         global_logger->error(                                                                      \
             "%s (path=%s) encounters %s: %s", __FUNCTION__, path, e.type_name(), e.what());        \
@@ -405,11 +404,7 @@ namespace operations
                 return -EFAULT;
             return static_cast<int>(fb->cast_as<RegularFile>()->read(buffer, off, len));
         }
-        catch (const CommonException& e)
-        {
-            return -e.error_number();
-        }
-        catch (const SeriousException& e)
+        catch (const ExceptionBase& e)
         {
             global_logger->error("%s (path=%s, length=%zu, offset=%lld) encounters %s: %s",
                                  __FUNCTION__,
@@ -439,11 +434,7 @@ namespace operations
             fb->cast_as<RegularFile>()->write(buffer, off, len);
             return static_cast<int>(len);
         }
-        catch (const CommonException& e)
-        {
-            return -e.error_number();
-        }
-        catch (const SeriousException& e)
+        catch (const ExceptionBase& e)
         {
             global_logger->error(
 
@@ -583,11 +574,7 @@ namespace operations
             fg.get_as<Symlink>()->set(to);
             return 0;
         }
-        catch (const CommonException& e)
-        {
-            return -e.error_number();
-        }
-        catch (const SeriousException& e)
+        catch (const ExceptionBase& e)
         {
             global_logger->error(
 
@@ -656,11 +643,7 @@ namespace operations
                 internal::remove(fs, dst_id, dst_type);
             return 0;
         }
-        catch (const CommonException& e)
-        {
-            return -e.error_number();
-        }
-        catch (const SeriousException& e)
+        catch (const ExceptionBase& e)
         {
             global_logger->error(
 
@@ -708,11 +691,7 @@ namespace operations
             dst_dir->add_entry(dst_filename, src_id, src_type);
             return 0;
         }
-        catch (const CommonException& e)
-        {
-            return -e.error_number();
-        }
-        catch (const SeriousException& e)
+        catch (const ExceptionBase& e)
         {
             global_logger->error(
 
@@ -782,8 +761,7 @@ namespace operations
     global_logger->trace("%s (path=%s, name=%s)", __FUNCTION__, path, name);
 
 #define XATTR_COMMON_CATCH_BLOCK                                                                   \
-    catch (const CommonException& e) { return -e.error_number(); }                                 \
-    catch (const SeriousException& e)                                                              \
+    catch (const ExceptionBase& e)                                                                 \
     {                                                                                              \
         int errc = e.error_number();                                                               \
         if (errc != ENOATTR) /* Attribute not found is very common and normal; no need to log it   \
