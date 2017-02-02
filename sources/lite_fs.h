@@ -73,6 +73,14 @@ namespace lite
         int error_number() const noexcept override { return EINVAL; }
     };
 
+    struct FileSystemOptions
+    {
+        std::shared_ptr<securefs::OSService> root;
+        key_type name_key, content_key, xattr_key;
+        optional<unsigned> block_size, iv_size;
+        unsigned flags = 0;
+    };
+
     class FileSystem
     {
         DISABLE_COPY_MOVE(FileSystem)
@@ -97,6 +105,17 @@ namespace lite
                    unsigned block_size,
                    unsigned iv_size,
                    unsigned flags);
+        explicit FileSystem(const FileSystemOptions& opt)
+            : FileSystem(opt.root,
+                         opt.name_key,
+                         opt.content_key,
+                         opt.xattr_key,
+                         opt.block_size.value(),
+                         opt.iv_size.value(),
+                         opt.flags)
+        {
+        }
+
         ~FileSystem();
 
         AutoClosedFile open(StringRef path, int flags, fuse_mode_t mode);

@@ -981,7 +981,7 @@ public:
         }
         else
         {
-            lite::MountOptions fsopt;
+            lite::FileSystemOptions fsopt;
             fsopt.root = std::make_shared<OSService>(data_dir.getValue());
             fsopt.block_size = config.block_size;
             fsopt.iv_size = config.iv_size;

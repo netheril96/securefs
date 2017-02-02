@@ -1,5 +1,6 @@
 #pragma once
 
+#include "lite_fs.h"
 #include "logger.h"
 #include "myutils.h"
 #include "platform.h"
@@ -10,14 +11,6 @@ namespace securefs
 {
 namespace lite
 {
-    struct MountOptions
-    {
-        std::shared_ptr<securefs::OSService> root;
-        key_type name_key, content_key, xattr_key;
-        optional<unsigned> block_size, iv_size;
-        unsigned flags = 0;
-    };
-
     void init_fuse_operations(fuse_operations* opt, const std::string& data_dir, bool noxattr);
 
     int statfs(const char*, struct fuse_statvfs*);

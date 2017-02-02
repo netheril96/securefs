@@ -5,36 +5,50 @@
 #include "myutils.h"
 #include "platform.h"
 
+#ifndef HAS_THREAD_LOCAL
+#include <pthread.h>
+#endif
+
 #include <math.h>
 
 namespace securefs
 {
 namespace lite
 {
-
     namespace
     {
         FileSystem* get_local_filesystem(void)
         {
 #ifdef HAS_THREAD_LOCAL
-            thread_local securefs::optional<FileSystem> local_fs;
+            thread_local FileSystem local_fs(
+                *static_cast<const FileSystemOptions*>(fuse_get_context()->private_data));
+            return &local_fs;
 #else
-            static ThreadLocalStorage<securefs::optional<FileSystem>> tls_local_fs;
-            auto& local_fs = *tls_local_fs.get();
-#endif
-
-            if (!local_fs)
+            struct FileSystemKey
             {
-                auto args = static_cast<MountOptions*>(fuse_get_context()->private_data);
-                local_fs.emplace(args->root,
-                                 args->name_key,
-                                 args->content_key,
-                                 args->xattr_key,
-                                 args->block_size.value(),
-                                 args->iv_size.value(),
-                                 args->flags);
+                pthread_key_t key;
+
+                FileSystemKey()
+                {
+                    int rc = pthread_key_create(
+                        &key, [](void* ptr) { delete static_cast<FileSystem*>(ptr); });
+                    if (rc != 0)
+                        throwPOSIXException(rc, "pthread_key_create");
+                }
+                ~FileSystemKey() { pthread_key_delete(key); }
+            };
+
+            static FileSystemKey fskey;
+
+            auto result = static_cast<FileSystem*>(pthread_getspecific(fskey.key));
+            if (!result)
+            {
+                result = new FileSystem(
+                    *static_cast<const FileSystemOptions*>(fuse_get_context()->private_data));
+                pthread_setspecific(fskey.key, result);
             }
-            return &(*local_fs);
+            return result;
+#endif
         }
     }
 
@@ -59,7 +73,7 @@ namespace lite
 
     void* init(struct fuse_conn_info*)
     {
-        auto args = static_cast<MountOptions*>(fuse_get_context()->private_data);
+        auto args = fuse_get_context()->private_data;
         global_logger->info("init");
         return args;
     }
