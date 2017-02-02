@@ -216,6 +216,11 @@ def make_test_case(format_version):
             self.mount()
             with open(rng_filename, 'rb') as f:
                 self.assertEqual(f.read(), random_data)
+            data = '\0' * len(random_data) + '0'
+            with open(rng_filename, 'wb') as f:
+                f.write(data)
+            with open(rng_filename, 'rb') as f:
+                self.assertEqual(f.read(), data)
             os.remove(rng_filename)
             for n in dir_names:
                 os.mkdir(os.path.join(self.mount_point, n))
