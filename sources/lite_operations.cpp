@@ -78,6 +78,8 @@ namespace lite
         SINGLE_COMMON_PROLOGUE
         if (!filesystem->stat(path, st))
             return -ENOENT;
+		global_logger->trace("stat (%s): mode=0%o, uid=%u, gid=%u, size=%zu", path, st->st_mode, (unsigned)st->st_uid,
+			(unsigned)st->st_gid, (size_t)st->st_size);
         return 0;
         SINGLE_COMMON_EPILOGUE
     }
