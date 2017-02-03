@@ -155,8 +155,8 @@ public:
     int removexattr(const char* path, const char* name) const noexcept;
 #endif
 public:
-    static uint32_t getuid() noexcept;
-    static uint32_t getgid() noexcept;
+    static uint32_t getuid();
+    static uint32_t getgid();
     static int raise_fd_limit();
     static bool isatty(int fd) noexcept;
 

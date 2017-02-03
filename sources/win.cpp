@@ -2,6 +2,8 @@
 #include "logger.h"
 #include "platform.h"
 
+#include <winfsp/winfsp.h>
+
 #include <cerrno>
 #include <limits>
 #include <memory>
@@ -35,8 +37,6 @@ static FILETIME unix_time_to_filetime(const fuse_timespec* t)
 }
 
 static const DWORD MAX_SINGLE_BLOCK = std::numeric_limits<DWORD>::max();
-
-static const int CONSOLE_CP_CHANGED = []() { return SetConsoleOutputCP(CP_UTF8); }();
 
 namespace securefs
 {
@@ -622,8 +622,8 @@ bool OSService::stat(StringRef path, struct fuse_stat* stat) const
     stat->st_ino = stbuf.st_ino;
     stat->st_mode = stbuf.st_mode;
     stat->st_nlink = stbuf.st_nlink;
-    stat->st_uid = stbuf.st_uid;
-    stat->st_gid = stbuf.st_gid;
+    stat->st_uid = getuid();
+    stat->st_gid = stat->st_uid;
     stat->st_rdev = stbuf.st_rdev;
     stat->st_size = stbuf.st_size;
 
@@ -756,9 +756,30 @@ std::unique_ptr<DirectoryTraverser> OSService::create_traverser(StringRef dir) c
     return securefs::make_unique<WindowsDirectoryTraverser>(norm_path(dir) + L"\\*");
 }
 
-uint32_t OSService::getuid() noexcept { return 0; }
+static thread_local uint32_t cached_uid = 0;
 
-uint32_t OSService::getgid() noexcept { return 0; }
+uint32_t OSService::getuid()
+{
+    if (cached_uid > 0)
+        return static_cast<uint32_t>(cached_uid);
+
+    HANDLE token;
+    CHECK_CALL(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token));
+    DEFER(CloseHandle(token));
+
+    DWORD outsize = 1;
+    TOKEN_USER* tkuser = nullptr;
+    DEFER(free(tkuser));
+    GetTokenInformation(token, TokenUser, nullptr, 0, &outsize);
+    tkuser = (TOKEN_USER*)malloc(outsize);
+    CHECK_CALL(GetTokenInformation(token, TokenUser, tkuser, outsize, &outsize));
+    NTSTATUS rc = FspPosixMapSidToUid(tkuser->User.Sid, &cached_uid);
+    if (rc)
+        global_logger->warn("FspPosixMapSidToUid returns NTSTATUS %d", (int)rc);
+    return cached_uid;
+}
+
+uint32_t OSService::getgid() { return getuid(); }
 
 bool OSService::isatty(int fd) noexcept { return ::_isatty(fd) != 0; }
 
