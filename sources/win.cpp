@@ -18,6 +18,11 @@
 #include <io.h>
 #include <sddl.h>
 
+static inline uint64_t convert_dword_pair(uint64_t low_part, uint64_t high_part)
+{
+    return low_part | (high_part << 32);
+}
+
 static void filetime_to_unix_time(const FILETIME* ft, struct fuse_timespec* out)
 {
     long long ll = (static_cast<long long>(ft->dwHighDateTime) << 32)
@@ -63,6 +68,7 @@ public:
             return strprintf("error %lu (%s)", err, exp);
         return strprintf("error %lu (%s) %s", err, exp, buffer);
     }
+    DWORD win32_code() const noexcept { return err; }
     int error_number() const noexcept override
     {
         switch (err)
@@ -305,6 +311,29 @@ public:
     if (!(exp))                                                                                    \
         throwWindowsException(GetLastError(), #exp);
 
+static void stat_file_handle(HANDLE hd, struct fuse_stat* st)
+{
+    memset(st, 0, sizeof(*st));
+    BY_HANDLE_FILE_INFORMATION info;
+    CHECK_CALL(GetFileInformationByHandle(hd, &info));
+    filetime_to_unix_time(&info.ftLastAccessTime, &st->st_atim);
+    filetime_to_unix_time(&info.ftLastWriteTime, &st->st_mtim);
+    filetime_to_unix_time(&info.ftCreationTime, &st->st_birthtim);
+    st->st_ctim = st->st_mtim;
+    st->st_nlink = static_cast<fuse_nlink_t>(info.nNumberOfLinks);
+    st->st_uid = securefs::OSService::getuid();
+    st->st_gid = st->st_uid;
+    if (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+        st->st_mode = S_IFDIR | 0777;
+    else
+        st->st_mode = S_IFREG | 0777;
+    st->st_dev = info.dwVolumeSerialNumber;
+    st->st_ino = convert_dword_pair(info.nFileIndexLow, info.nFileIndexHigh);
+    st->st_size = convert_dword_pair(info.nFileSizeLow, info.nFileSizeHigh);
+    st->st_blksize = 4096;
+    st->st_blocks = (st->st_size + 4095) / 4096 * (4096 / 512);
+}
+
 class WindowsFileStream : public FileStream
 {
 private:
@@ -489,22 +518,7 @@ public:
         }
         CHECK_CALL(SetFileTime(m_handle, nullptr, &access_time, &mod_time));
     }
-    void fstat(struct fuse_stat* st) override
-    {
-        memset(st, 0, sizeof(*st));
-        BY_HANDLE_FILE_INFORMATION info;
-        CHECK_CALL(GetFileInformationByHandle(m_handle, &info));
-        filetime_to_unix_time(&info.ftLastAccessTime, &st->st_atim);
-        filetime_to_unix_time(&info.ftLastWriteTime, &st->st_mtim);
-        filetime_to_unix_time(&info.ftCreationTime, &st->st_birthtim);
-        st->st_ctim = st->st_mtim;
-
-        st->st_nlink = 1;
-        st->st_mode = 0644;
-        st->st_size = size();
-        st->st_blksize = 4096;
-        st->st_blocks = (st->st_size + 4095) / 4096 * (4096 / 512);
-    }
+    void fstat(struct fuse_stat* st) override { stat_file_handle(m_handle, st); }
 };
 
 OSService::OSService() {}
@@ -604,29 +618,23 @@ void OSService::utimens(StringRef path, const fuse_timespec ts[2]) const
 
 bool OSService::stat(StringRef path, struct fuse_stat* stat) const
 {
-    struct _stat64 stbuf;
-    int rc = ::_wstat64(norm_path(path).c_str(), &stbuf);
-    if (rc < 0)
+    HANDLE handle = CreateFileW(norm_path(path).c_str(),
+                                GENERIC_READ,
+                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                nullptr,
+                                OPEN_EXISTING,
+                                FILE_FLAG_BACKUP_SEMANTICS,
+                                nullptr);
+    if (handle == INVALID_HANDLE_VALUE)
     {
-        if (errno == ENOENT)
+        DWORD err = GetLastError();
+        if (err == ERROR_FILE_NOT_FOUND || err == ERROR_NOT_FOUND)
             return false;
-        throwPOSIXException(errno, "_wstat64");
+        throwWindowsException(err, "CreateFileW");
     }
-    memset(stat, 0, sizeof(*stat));
 
-    stat->st_atim.tv_sec = stbuf.st_atime;
-    stat->st_mtim.tv_sec = stbuf.st_mtime;
-    stat->st_ctim.tv_sec = stbuf.st_ctime;
-
-    stat->st_dev = stbuf.st_dev;
-    stat->st_ino = stbuf.st_ino;
-    stat->st_mode = stbuf.st_mode;
-    stat->st_nlink = stbuf.st_nlink;
-    stat->st_uid = getuid();
-    stat->st_gid = stat->st_uid;
-    stat->st_rdev = stbuf.st_rdev;
-    stat->st_size = stbuf.st_size;
-
+    DEFER(CloseHandle(handle));
+    stat_file_handle(handle, stat);
     return true;
 }
 
