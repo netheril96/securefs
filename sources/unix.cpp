@@ -6,6 +6,7 @@
 #include "streams.h"
 
 #include <algorithm>
+#include <locale.h>
 #include <vector>
 
 #include <dirent.h>
@@ -529,5 +530,7 @@ int OSService::removexattr(const char* path, const char* name) const noexcept
     return rc < 0 ? -errno : rc;
 }
 #endif
+
+void platform_specific_initialize(void) { setlocale(LC_ALL, ""); }
 }
 #endif

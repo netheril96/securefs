@@ -164,4 +164,6 @@ public:
     static const OSService& get_default();
     static void get_current_time(fuse_timespec& out);
 };
+
+void platform_specific_initialize(void);
 }
