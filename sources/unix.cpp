@@ -458,8 +458,8 @@ std::unique_ptr<DirectoryTraverser> OSService::create_traverser(StringRef dir) c
     return securefs::make_unique<UnixDirectoryTraverser>(norm_path(dir));
 }
 
-uint32_t OSService::getuid() noexcept { return ::getuid(); }
-uint32_t OSService::getgid() noexcept { return ::getgid(); }
+uint32_t OSService::getuid() { return ::getuid(); }
+uint32_t OSService::getgid() { return ::getgid(); }
 
 int OSService::raise_fd_limit()
 {
