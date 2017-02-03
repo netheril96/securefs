@@ -78,6 +78,7 @@ public:
 
         case ERROR_FILE_NOT_FOUND:
         case ERROR_PATH_NOT_FOUND:
+        case ERROR_NOT_FOUND:
             return ENOENT;
 
         case ERROR_TOO_MANY_OPEN_FILES:
@@ -628,7 +629,7 @@ bool OSService::stat(StringRef path, struct fuse_stat* stat) const
     if (handle == INVALID_HANDLE_VALUE)
     {
         DWORD err = GetLastError();
-        if (err == ERROR_FILE_NOT_FOUND || err == ERROR_NOT_FOUND)
+        if (err == ERROR_PATH_NOT_FOUND || err == ERROR_FILE_NOT_FOUND || err == ERROR_NOT_FOUND)
             return false;
         throwWindowsException(err, "CreateFileW");
     }
