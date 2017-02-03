@@ -1,3 +1,4 @@
+#include <clocale>
 #include "commands.h"
 #include "mystring.h"
 #include "myutils.h"
@@ -8,7 +9,6 @@
 
 int wmain(int argc, wchar_t** wargv)
 {
-	securefs::platform_specific_initialize();
 	auto str_argv = securefs::make_unique_array<std::string>(argc);
 	for (int i = 0; i < argc; ++i)
 		str_argv[i] = securefs::narrow_string(wargv[i]);
@@ -23,7 +23,7 @@ int wmain(int argc, wchar_t** wargv)
 #else
 int main(int argc, char** argv)
 {
-	securefs::platform_specific_initialize();
+	setlocale(LC_ALL, "");
     return securefs::commands_main(argc, argv);
 }
 #endif

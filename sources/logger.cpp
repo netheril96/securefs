@@ -42,6 +42,7 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
 
     flockfile(m_fp);
 
+#ifndef WIN32
     if (m_fp == stderr)
     {
         switch (level)
@@ -56,6 +57,7 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
             break;
         }
     }
+#endif
 
     fprintf(m_fp,
             "[%s] [0x%zx] [%d-%02d-%02d %02d:%02d:%02d.%09d UTC]    ",
@@ -70,10 +72,12 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
             static_cast<int>(now.tv_nsec));
     vfprintf(m_fp, format, args);
 
+#ifndef WIN32
     if (m_fp == stderr && (level == kLogWarning || level == kLogError))
     {
         fputs(DEFAULT_COLOR, m_fp);
     }
+#endif
 
     putc('\n', m_fp);
     fflush(m_fp);

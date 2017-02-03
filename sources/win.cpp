@@ -49,10 +49,10 @@ class WindowsException : public SystemException
 {
 private:
     DWORD err;
-    const char* exp;
+    std::string msg;
 
 public:
-    explicit WindowsException(DWORD err, const char* exp) : err(err), exp(exp) {}
+    explicit WindowsException(DWORD err, std::string msg) : err(err), msg(std::move(msg)) {}
     const char* type_name() const noexcept override { return "WindowsException"; }
     std::string message() const override
     {
@@ -65,8 +65,8 @@ public:
                             buffer,
                             sizeof(buffer),
                             nullptr))
-            return strprintf("error %lu (%s)", err, exp);
-        return strprintf("error %lu (%s) %s", err, exp, buffer);
+            return strprintf("error %lu (%s)", err, msg.c_str());
+        return strprintf("error %lu (%s) %s", err, msg.c_str(), buffer);
     }
     DWORD win32_code() const noexcept { return err; }
     int error_number() const noexcept override
@@ -297,6 +297,9 @@ public:
 
         case ERROR_OPERATION_IN_PROGRESS:
             return EALREADY;
+
+        case ERROR_FILENAME_EXCED_RANGE:
+            return ENAMETOOLONG;
         }
         return EPERM;
     }
@@ -384,7 +387,12 @@ public:
                                FILE_ATTRIBUTE_NORMAL,
                                nullptr);
         if (m_handle == INVALID_HANDLE_VALUE)
-            throwWindowsException(GetLastError(), "CreateFile");
+            throw WindowsException(
+                GetLastError(),
+                strprintf("CreateFileW with path=%s, access rights %lu, create flags %lu",
+                          narrow_string(path).c_str(),
+                          access_flags,
+                          create_flags));
     }
 
     ~WindowsFileStream() { CloseHandle(m_handle); }
@@ -522,9 +530,9 @@ public:
     void fstat(struct fuse_stat* st) override { stat_file_handle(m_handle, st); }
 };
 
-OSService::OSService() {}
+OSService::OSService() : m_root_handle(INVALID_HANDLE_VALUE) {}
 
-OSService::~OSService() {}
+OSService::~OSService() { CloseHandle(m_root_handle); }
 
 std::wstring OSService::norm_path(StringRef path) const
 {
@@ -544,7 +552,16 @@ std::wstring OSService::norm_path(StringRef path) const
     }
 }
 
-OSService::OSService(StringRef path) : m_dir_name(widen_string(path) + L"\\") {}
+OSService::OSService(StringRef path) : m_dir_name(widen_string(path) + L"\\")
+{
+    m_root_handle = CreateFileW(m_dir_name.c_str(),
+                                GENERIC_READ,
+                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                nullptr,
+                                OPEN_EXISTING,
+                                0,
+                                nullptr);
+}
 
 std::shared_ptr<FileStream>
 OSService::open_file_stream(StringRef path, int flags, unsigned mode) const
@@ -601,24 +618,38 @@ void OSService::statfs(struct fuse_statvfs* fs_info) const
 
 void OSService::utimens(StringRef path, const fuse_timespec ts[2]) const
 {
-    ::__utimbuf64 buf;
+    FILETIME atime, mtime;
     if (!ts)
     {
-        buf.actime = _time64(nullptr);
-        buf.modtime = buf.actime;
+        GetSystemTimeAsFileTime(&atime);
+        mtime = atime;
     }
     else
     {
-        buf.actime = ts[0].tv_sec;
-        buf.modtime = ts[1].tv_sec;
+        atime = unix_time_to_filetime(ts);
+        mtime = unix_time_to_filetime(ts + 1);
     }
-    int rc = ::_wutime64(norm_path(path).c_str(), &buf);
-    if (rc < 0)
-        throwPOSIXException(errno, "_wutime64");
+    HANDLE hd = CreateFileW(norm_path(path).c_str(),
+                            FILE_WRITE_ATTRIBUTES,
+                            FILE_SHARE_READ | FILE_SHARE_DELETE | FILE_SHARE_WRITE,
+                            nullptr,
+                            OPEN_EXISTING,
+                            FILE_FLAG_BACKUP_SEMANTICS,
+                            nullptr);
+    if (hd == INVALID_HANDLE_VALUE)
+        throwWindowsException(GetLastError(), "CreateFileW");
+    DEFER(CloseHandle(hd));
+    CHECK_CALL(SetFileTime(hd, nullptr, &atime, &mtime));
 }
 
 bool OSService::stat(StringRef path, struct fuse_stat* stat) const
 {
+    if (path == "." && m_root_handle != INVALID_HANDLE_VALUE)
+    {
+        // Special case which occurs very frequently
+        stat_file_handle(m_root_handle, stat);
+        return true;
+    }
     HANDLE handle = CreateFileW(norm_path(path).c_str(),
                                 GENERIC_READ,
                                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
@@ -765,10 +796,9 @@ std::unique_ptr<DirectoryTraverser> OSService::create_traverser(StringRef dir) c
     return securefs::make_unique<WindowsDirectoryTraverser>(norm_path(dir) + L"\\*");
 }
 
-static thread_local uint32_t cached_uid = 0;
-
 uint32_t OSService::getuid()
 {
+    thread_local uint32_t cached_uid = 0;
     if (cached_uid > 0)
         return static_cast<uint32_t>(cached_uid);
 
@@ -857,12 +887,15 @@ static inline NTSTATUS FspLoad(PVOID* PModule)
 #undef FSP_DLLPATH
 }
 
-void platform_specific_initialize(void)
+static int win_init(void)
 {
     SetConsoleOutputCP(CP_UTF8);
     FspLoad(nullptr);
     OSService::getuid();    // Force the call to WinFsp so that DLL failure will be caught sooner
+    return 0;
 }
+
+static int win_inited_flag = win_init();
 }
 
 #endif

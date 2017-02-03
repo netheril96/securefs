@@ -109,9 +109,12 @@ class OSService
 private:
 #ifdef HAS_AT_FUNCTIONS
     int m_dir_fd;
+#elif defined(WIN32)
+    void* m_root_handle;
 #endif
     native_string_type m_dir_name;
 
+public:
     native_string_type norm_path(StringRef path) const;
 
 public:
@@ -164,6 +167,4 @@ public:
     static const OSService& get_default();
     static void get_current_time(fuse_timespec& out);
 };
-
-void platform_specific_initialize(void);
 }
