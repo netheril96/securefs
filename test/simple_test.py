@@ -32,7 +32,7 @@ class TimeoutException(BaseException):
 
 
 def securefs_mount(data_dir, mount_point, password):
-    p = subprocess.Popen([SECUREFS_BINARY, 'mount', '-m', '--stdinpass', '--log', 'XXXX.log', '--trace', '--background', data_dir, mount_point],
+    p = subprocess.Popen([SECUREFS_BINARY, 'mount', '--log', 'XXXX.log', '--trace', '--background', data_dir, mount_point],
                          stdin=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate(input=password + '\n')
     if p.returncode:
@@ -63,7 +63,7 @@ def securefs_unmount(mount_point):
 
 
 def securefs_create(data_dir, password, version):
-    p = subprocess.Popen([SECUREFS_BINARY, 'create', '--stdinpass', '--format', str(version), data_dir, '--rounds', '1'],
+    p = subprocess.Popen([SECUREFS_BINARY, 'create', '--format', str(version), data_dir, '--rounds', '1'],
                          stdin=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate(input=password + '\n')
     if p.returncode:

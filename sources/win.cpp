@@ -389,12 +389,12 @@ public:
 
     ~WindowsFileStream() { CloseHandle(m_handle); }
 
-    void lock() override
+    void lock(bool exclusive) override
     {
         OVERLAPPED o;
         memset(&o, 0, sizeof(o));
         CHECK_CALL(LockFileEx(m_handle,
-                              LOCKFILE_EXCLUSIVE_LOCK,
+                              exclusive ? LOCKFILE_EXCLUSIVE_LOCK : 0,
                               0,
                               std::numeric_limits<DWORD>::max(),
                               std::numeric_limits<DWORD>::max(),

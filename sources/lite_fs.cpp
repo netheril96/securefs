@@ -18,7 +18,8 @@ namespace lite
                bool check)
         : m_file_stream(file_stream)
     {
-        std::lock_guard<FileStream> xguard(*m_file_stream);
+        m_file_stream->lock(true);
+        DEFER(m_file_stream->unlock());
         m_crypt_stream.emplace(file_stream, master_key, block_size, iv_size, check);
     }
 

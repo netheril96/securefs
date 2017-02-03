@@ -540,8 +540,6 @@ class CreateCommand : public CommonCommandBase
 private:
     CryptoPP::AlignedSecByteBlock password;
 
-    TCLAP::SwitchArg stdinpass{
-        "s", "stdinpass", "Compatibility flag with older version. Does nothing."};
     TCLAP::ValueArg<unsigned> rounds{
         "r",
         "rounds",
@@ -565,7 +563,6 @@ public:
     {
         TCLAP::CmdLine cmdline(help_message());
         cmdline.add(&iv_size);
-        cmdline.add(&stdinpass);
         cmdline.add(&rounds);
         cmdline.add(&data_dir);
         cmdline.add(&config_path);
@@ -714,8 +711,7 @@ class MountCommand : public CommonCommandBase
 {
 private:
     std::vector<byte> password;
-    TCLAP::SwitchArg stdinpass{
-        "s", "stdinpass", "Compatibility flag with older version. Does nothing."};
+    TCLAP::SwitchArg single_threaded{"s", "single", "Single threaded mode"};
     TCLAP::SwitchArg background{"b", "background", "Run securefs in the background"};
     TCLAP::SwitchArg insecure{
         "i", "insecure", "Disable all integrity verification (insecure mode)"};
@@ -723,10 +719,6 @@ private:
     TCLAP::SwitchArg trace{"", "trace", "Trace all calls into `securefs` (implies --info)"};
     TCLAP::ValueArg<std::string> log{
         "", "log", "Path of the log file (may contain sensitive information)", false, "", "path"};
-    TCLAP::SwitchArg multithreaded{"m",
-                                   "multithread",
-                                   "Run in multithreaded mode. Only usable for lite filesystems. "
-                                   "Experimental at this point so enable it at your own risk!"};
     TCLAP::MultiArg<std::string> fuse_options{
         "o",
         "opt",
@@ -761,7 +753,6 @@ public:
         cmdline.add(&noxattr);
 #endif
 
-        cmdline.add(&stdinpass);
         cmdline.add(&background);
         cmdline.add(&insecure);
         cmdline.add(&trace);
@@ -773,7 +764,7 @@ public:
         cmdline.add(&fuse_options);
         cmdline.add(&uid_override);
         cmdline.add(&gid_override);
-        cmdline.add(&multithreaded);
+        cmdline.add(&single_threaded);
         cmdline.parse(argc, argv);
 
         if (pass.isSet() && !pass.getValue().empty())
@@ -898,7 +889,7 @@ public:
 
         std::vector<const char*> fuse_args;
         fuse_args.push_back("securefs");
-        if (config.version < 4 || !multithreaded.getValue())
+        if (config.version < 4 || single_threaded.getValue())
         {
             fuse_args.push_back("-s");
         }
@@ -1018,14 +1009,11 @@ class FixCommand : public CommonCommandBase
 {
 private:
     CryptoPP::AlignedSecByteBlock password;
-    TCLAP::SwitchArg stdinpass{
-        "s", "stdinpass", "Compatibility flag with older version. Does nothing."};
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
     {
         TCLAP::CmdLine cmdline(help_message());
-        cmdline.add(&stdinpass);
         cmdline.add(&data_dir);
         cmdline.add(&config_path);
         cmdline.parse(argc, argv);

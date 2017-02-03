@@ -62,9 +62,9 @@ public:
         m_fd = -1;
     }
 
-    void lock() override
+    void lock(bool exclusive) override
     {
-        int rc = ::flock(m_fd, LOCK_EX);
+        int rc = ::flock(m_fd, exclusive ? LOCK_EX : LOCK_SH);
         if (rc < 0)
         {
             throwPOSIXException(errno, "flock");

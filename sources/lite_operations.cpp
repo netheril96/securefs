@@ -215,10 +215,11 @@ namespace lite
         auto fp = reinterpret_cast<File*>(info->fh);
         if (!fp)
             return -EFAULT;
-        std::lock_guard<File> xguard(*fp);
 
         try
         {
+            fp->lock(false);
+            DEFER(fp->unlock());
             return static_cast<int>(fp->read(buf, offset, size));
         }
         catch (const std::exception& e)
@@ -250,10 +251,11 @@ namespace lite
         auto fp = reinterpret_cast<File*>(info->fh);
         if (!fp)
             return -EFAULT;
-        std::lock_guard<File> xguard(*fp);
 
         try
         {
+            fp->lock(true);
+            DEFER(fp->unlock());
             fp->write(buf, offset, size);
             return static_cast<int>(size);
         }
@@ -281,10 +283,11 @@ namespace lite
         auto fp = reinterpret_cast<File*>(info->fh);
         if (!fp)
             return -EFAULT;
-        std::lock_guard<File> xguard(*fp);
 
         try
         {
+            fp->lock(true);
+            DEFER(fp->unlock());
             fp->flush();
             return 0;
         }
@@ -297,10 +300,11 @@ namespace lite
         auto fp = reinterpret_cast<File*>(info->fh);
         if (!fp)
             return -EFAULT;
-        std::lock_guard<File> xguard(*fp);
 
         try
         {
+            fp->lock(true);
+            DEFER(fp->unlock());
             fp->resize(len);
             return 0;
         }
@@ -458,10 +462,11 @@ namespace lite
         auto fp = reinterpret_cast<File*>(info->fh);
         if (!fp)
             return -EFAULT;
-        std::lock_guard<File> xguard(*fp);
 
         try
         {
+            fp->lock(true);
+            DEFER(fp->unlock());
             fp->fsync();
             return 0;
         }
@@ -479,7 +484,8 @@ namespace lite
         try
         {
             AutoClosedFile fp = filesystem->open(path, O_RDWR, 0644);
-            std::lock_guard<File> xguard(*fp);
+            fp->lock(true);
+            DEFER(fp->unlock());
             fp->resize(static_cast<size_t>(len));
             return 0;
         }
