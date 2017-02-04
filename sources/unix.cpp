@@ -242,7 +242,16 @@ public:
     }
 };
 
-std::string OSService::norm_path(StringRef path) const { return m_dir_name + path; }
+std::string OSService::norm_path(StringRef path) const
+{
+#ifdef HAS_AT_FUNCTIONS
+    if (m_dir_fd < 0)
+        return path.to_string();
+#endif
+    if (path.size() > 0 && path[0] == '/')
+        return path.to_string();
+    return m_dir_name + path;
+}
 
 OSService::OSService()
 {

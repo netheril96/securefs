@@ -97,7 +97,7 @@ namespace lite
         unsigned m_flags;
 
     private:
-        std::string translate_path(StringRef path);
+        std::string translate_path(StringRef path, bool preserve_leading_slash);
 
     public:
         FileSystem(std::shared_ptr<securefs::OSService> root,

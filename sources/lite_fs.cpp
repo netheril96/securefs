@@ -153,7 +153,7 @@ namespace lite
         return result;
     }
 
-    std::string FileSystem::translate_path(StringRef path)
+    std::string FileSystem::translate_path(StringRef path, bool preserve_leading_slash)
     {
         if (path.empty())
         {
@@ -161,11 +161,24 @@ namespace lite
         }
         else if (path.size() == 1 && path[0] == '/')
         {
-            return path.to_string();
+            if (preserve_leading_slash)
+            {
+                return "/";
+            }
+            else
+            {
+                return ".";
+            }
         }
         else
         {
-            return lite::encrypt_path(m_encoder, m_name_encryptor, path);
+            std::string str = lite::encrypt_path(m_encoder, m_name_encryptor, path);
+            if (!preserve_leading_slash && !str.empty() && str[0] == '/')
+            {
+                str.erase(str.begin());
+            }
+            global_logger->trace("Translate path %s into %s", path.c_str(), str.c_str());
+            return str;
         }
     }
 
@@ -183,7 +196,7 @@ namespace lite
             THROW_POSIX_EXCEPTION(
                 EINVAL, "Creating a file without read access is not supported on this filesystem");
         }
-        auto file_stream = m_root->open_file_stream(translate_path(path), flags, mode);
+        auto file_stream = m_root->open_file_stream(translate_path(path, false), flags, mode);
         AutoClosedFile fp(new File(file_stream,
                                    m_content_key,
                                    m_block_size,
@@ -196,7 +209,7 @@ namespace lite
 
     bool FileSystem::stat(StringRef path, struct fuse_stat* buf)
     {
-        auto enc_path = translate_path(path);
+        auto enc_path = translate_path(path, false);
         if (!m_root->stat(enc_path, buf))
             return false;
         if (buf->st_size <= 0)
@@ -226,14 +239,17 @@ namespace lite
 
     void FileSystem::mkdir(StringRef path, fuse_mode_t mode)
     {
-        m_root->mkdir(translate_path(path), mode);
+        m_root->mkdir(translate_path(path, false), mode);
     }
 
-    void FileSystem::rmdir(StringRef path) { m_root->remove_directory(translate_path(path)); }
+    void FileSystem::rmdir(StringRef path)
+    {
+        m_root->remove_directory(translate_path(path, false));
+    }
 
     void FileSystem::rename(StringRef from, StringRef to)
     {
-        m_root->rename(translate_path(from), translate_path(to));
+        m_root->rename(translate_path(from, false), translate_path(to, false));
     }
 
     void FileSystem::chmod(StringRef path, fuse_mode_t mode)
@@ -245,7 +261,7 @@ namespace lite
                                 path.c_str(),
                                 static_cast<unsigned>(mode));
         }
-        m_root->chmod(translate_path(path), mode);
+        m_root->chmod(translate_path(path, false), mode);
     }
 
     size_t FileSystem::readlink(StringRef path, char* buf, size_t size)
@@ -256,7 +272,7 @@ namespace lite
         auto max_size = size / 5 * 8 + 32;
         auto underbuf = securefs::make_unique_array<char>(max_size);
         memset(underbuf.get(), 0, max_size);
-        m_root->readlink(translate_path(path), underbuf.get(), max_size - 1);
+        m_root->readlink(translate_path(path, false), underbuf.get(), max_size - 1);
         std::string resolved = decrypt_path(m_name_encryptor, underbuf.get());
         size_t copy_size = std::min(resolved.size(), size - 1);
         memcpy(buf, resolved.data(), copy_size);
@@ -266,20 +282,20 @@ namespace lite
 
     void FileSystem::symlink(StringRef to, StringRef from)
     {
-        auto eto = translate_path(to), efrom = translate_path(from);
+        auto eto = translate_path(to, true), efrom = translate_path(from, false);
         m_root->symlink(eto, efrom);
     }
 
     void FileSystem::utimens(StringRef path, const fuse_timespec* ts)
     {
-        m_root->utimens(translate_path(path), ts);
+        m_root->utimens(translate_path(path, false), ts);
     }
 
-    void FileSystem::unlink(StringRef path) { m_root->remove_file(translate_path(path)); }
+    void FileSystem::unlink(StringRef path) { m_root->remove_file(translate_path(path, false)); }
 
     void FileSystem::link(StringRef src, StringRef dest)
     {
-        m_root->link(translate_path(src), translate_path(dest));
+        m_root->link(translate_path(src, false), translate_path(dest, false));
     }
 
     void FileSystem::statvfs(struct fuse_statvfs* buf) { m_root->statfs(buf); }
@@ -362,7 +378,7 @@ namespace lite
         if (path.empty())
             throwVFSException(EINVAL);
         return securefs::make_unique<LiteDirectoryTraverser>(
-            m_root->create_traverser(translate_path(path)), &this->m_name_encryptor);
+            m_root->create_traverser(translate_path(path, false)), &this->m_name_encryptor);
     }
 
 #ifdef __APPLE__
@@ -371,7 +387,7 @@ namespace lite
     {
         if (!buf)
         {
-            return m_root->getxattr(translate_path(path).c_str(), name, nullptr, 0);
+            return m_root->getxattr(translate_path(path, false).c_str(), name, nullptr, 0);
         }
 
         try
@@ -379,8 +395,10 @@ namespace lite
             auto iv_size = m_iv_size;
             auto mac_size = AESGCMCryptStream::get_mac_size();
             auto underbuf = securefs::make_unique_array<byte>(size + iv_size + mac_size);
-            ssize_t readlen = m_root->getxattr(
-                translate_path(path).c_str(), name, underbuf.get(), size + iv_size + mac_size);
+            ssize_t readlen = m_root->getxattr(translate_path(path, false).c_str(),
+                                               name,
+                                               underbuf.get(),
+                                               size + iv_size + mac_size);
             if (readlen <= 0)
                 return readlen;
             if (readlen <= iv_size + mac_size)
@@ -433,7 +451,7 @@ namespace lite
                                                0,
                                                static_cast<const byte*>(buf),
                                                size);
-            return m_root->setxattr(translate_path(path).c_str(),
+            return m_root->setxattr(translate_path(path, false).c_str(),
                                     name,
                                     underbuf.get(),
                                     size + iv_size + mac_size,

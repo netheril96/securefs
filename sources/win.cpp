@@ -585,7 +585,9 @@ OSService::~OSService() { CloseHandle(m_root_handle); }
 
 std::wstring OSService::norm_path(StringRef path) const
 {
-    if (m_dir_name.empty())
+    if (m_dir_name.empty() || path.empty()
+        || (path.size() > 0 && (path[0] == '/' || path[0] == '\\'))
+        || (path.size() > 2 && path[1] == ':'))
         return widen_string(path);
     else
     {
