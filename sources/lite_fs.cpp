@@ -355,9 +355,10 @@ namespace lite
                                                                         buffer);
                     if (!success)
                     {
-                        global_logger->warn("Skipping filename %s in virtual directory that does "
-                                            "not decode properly",
-                                            under_name.c_str());
+                        global_logger->warn("Skipping filename %s (decrypted to %s) since it fails "
+                                            "authentication check",
+                                            under_name.c_str(),
+                                            name->c_str());
                         continue;
                     }
                 }
