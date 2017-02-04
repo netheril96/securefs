@@ -767,8 +767,7 @@ void OSService::rename(StringRef a, StringRef b) const
 {
     auto wa = norm_path(a);
     auto wb = norm_path(b);
-    DeleteFileW(wb.c_str());
-    CHECK_CALL(MoveFileW(wa.c_str(), wb.c_str()));
+    CHECK_CALL(MoveFileExW(wa.c_str(), wb.c_str(), MOVEFILE_REPLACE_EXISTING));
 }
 
 int OSService::raise_fd_limit()
