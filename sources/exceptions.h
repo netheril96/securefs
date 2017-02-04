@@ -109,10 +109,11 @@ public:
 // with respect to other function calls, and those other function calls may modify errno, resulting
 // in incorrect error reporting
 #define throwPOSIXException(errc, msg)                                                             \
+    do                                                                                             \
     {                                                                                              \
         int code = errc;                                                                           \
         throw POSIXException(code, msg);                                                           \
-    }
+    } while (0)
 
 class VerificationException : public ExceptionBase
 {

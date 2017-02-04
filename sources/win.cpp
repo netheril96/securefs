@@ -351,10 +351,11 @@ public:
 };
 
 #define throwWindowsException(err, exp)                                                            \
+    do                                                                                             \
     {                                                                                              \
         DWORD code = err;                                                                          \
         throw WindowsException(code, exp);                                                         \
-    }
+    } while (0)
 
 #define CHECK_CALL(exp)                                                                            \
     if (!(exp))                                                                                    \
@@ -978,16 +979,20 @@ static int win_inited_flag = win_init();
 #ifdef WIN32
 std::wstring widen_string(StringRef str)
 {
+    if (str.size() >= std::numeric_limits<int>::max())
+        throwInvalidArgumentException("String too long");
     int sz = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), nullptr, 0);
     if (sz <= 0)
         throwWindowsException(GetLastError(), "MultiByteToWideChar");
     std::wstring result(sz, 0);
-    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), str.size(), &result[0], sz);
+    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), &result[0], sz);
     return result;
 }
 
 std::string narrow_string(WideStringRef str)
 {
+    if (str.size() >= std::numeric_limits<int>::max())
+        throwInvalidArgumentException("String too long");
     int sz = WideCharToMultiByte(
         CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), nullptr, 0, 0, 0);
     if (sz <= 0)

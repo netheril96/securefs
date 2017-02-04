@@ -12,10 +12,13 @@
 static void flockfile(FILE*) {}
 static void funlockfile(FILE*) {}
 
-static size_t current_thread_id(void) { return GetCurrentThreadId(); }
+static const void* current_thread_id(void)
+{
+    return reinterpret_cast<const void*>(GetCurrentThreadId());
+}
 #else
 #include <pthread.h>
-static size_t current_thread_id(void) { return reinterpret_cast<size_t>(pthread_self()); }
+static const void* current_thread_id(void) { return (void*)(pthread_self()); }
 #endif
 
 static const char* WARNING_COLOR = "\033[1;30m";
@@ -60,7 +63,7 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
 #endif
 
     fprintf(m_fp,
-            "[%s] [0x%zx] [%d-%02d-%02d %02d:%02d:%02d.%09d UTC]    ",
+            "[%s] [%p] [%d-%02d-%02d %02d:%02d:%02d.%09d UTC]    ",
             stringify(level),
             current_thread_id(),
             tm.tm_year + 1900,

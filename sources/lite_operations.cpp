@@ -3,6 +3,7 @@
 #include "lite_stream.h"
 #include "logger.h"
 #include "myutils.h"
+#include "operations.h"
 #include "platform.h"
 
 #ifndef HAS_THREAD_LOCAL
@@ -56,20 +57,7 @@ namespace lite
     auto filesystem = get_local_filesystem();                                                      \
     global_logger->trace("%s %s", __func__, path);
 
-#define SINGLE_COMMON_EPILOGUE                                                                     \
-    catch (const std::exception& e)                                                                \
-    {                                                                                              \
-        auto ebase = dynamic_cast<const ExceptionBase*>(&e);                                       \
-        auto code = ebase ? ebase->error_number() : EPERM;                                         \
-        auto type_name = ebase ? ebase->type_name() : typeid(e).name();                            \
-        global_logger->error("%s %s encounters exception %s (code=%d): %s",                        \
-                             __func__,                                                             \
-                             path,                                                                 \
-                             type_name,                                                            \
-                             code,                                                                 \
-                             e.what());                                                            \
-        return -code;                                                                              \
-    }
+#define SINGLE_COMMON_EPILOGUE OPT_CATCH_WITH_PATH
 
     void* init(struct fuse_conn_info*)
     {
@@ -210,8 +198,7 @@ namespace lite
     int
     read(const char* path, char* buf, size_t size, fuse_off_t offset, struct fuse_file_info* info)
     {
-        global_logger->trace(
-            "%s %s (offset=%lld, size=%zu)", __func__, path, static_cast<long long>(offset), size);
+        OPT_TRACE_WITH_PATH_OFF_LEN(offset, size);
         auto fp = reinterpret_cast<File*>(info->fh);
         if (!fp)
             return -EFAULT;
@@ -222,22 +209,7 @@ namespace lite
             DEFER(fp->unlock());
             return static_cast<int>(fp->read(buf, offset, size));
         }
-        catch (const std::exception& e)
-        {
-            auto ebase = dynamic_cast<const ExceptionBase*>(&e);
-            auto code = ebase ? ebase->error_number() : EPERM;
-            auto type_name = ebase ? ebase->type_name() : typeid(e).name();
-            global_logger->error(
-                "%s %s (offset=%lld, size=%zu) encounters exception %s (code=%d): %s",
-                __func__,
-                path,
-                static_cast<long long>(offset),
-                size,
-                type_name,
-                code,
-                e.what());
-            return -code;
-        }
+        OPT_CATCH_WITH_PATH_OFF_LEN(offset, size)
     }
 
     int write(const char* path,
@@ -246,8 +218,7 @@ namespace lite
               fuse_off_t offset,
               struct fuse_file_info* info)
     {
-        global_logger->trace(
-            "%s %s (offset=%lld, size=%zu)", __func__, path, static_cast<long long>(offset), size);
+        OPT_TRACE_WITH_PATH_OFF_LEN(offset, size);
         auto fp = reinterpret_cast<File*>(info->fh);
         if (!fp)
             return -EFAULT;
@@ -259,22 +230,7 @@ namespace lite
             fp->write(buf, offset, size);
             return static_cast<int>(size);
         }
-        catch (const std::exception& e)
-        {
-            auto ebase = dynamic_cast<const ExceptionBase*>(&e);
-            auto code = ebase ? ebase->error_number() : EPERM;
-            auto type_name = ebase ? ebase->type_name() : typeid(e).name();
-            global_logger->error(
-                "%s %s (offset=%lld, size=%zu) encounters exception %s (code=%d): %s",
-                __func__,
-                path,
-                static_cast<long long>(offset),
-                size,
-                type_name,
-                code,
-                e.what());
-            return -code;
-        }
+        OPT_CATCH_WITH_PATH_OFF_LEN(offset, size)
     }
 
     int flush(const char* path, struct fuse_file_info* info)
@@ -371,53 +327,27 @@ namespace lite
     int symlink(const char* to, const char* from)
     {
         auto filesystem = get_local_filesystem();
-        global_logger->trace("%s from=%s to=%s", __func__, from, to);
+        OPT_TRACE_WITH_TWO_PATHS(to, from);
 
         try
         {
             filesystem->symlink(to, from);
             return 0;
         }
-        catch (const std::exception& e)
-        {
-            auto ebase = dynamic_cast<const ExceptionBase*>(&e);
-            auto code = ebase ? ebase->error_number() : EPERM;
-            auto type_name = ebase ? ebase->type_name() : typeid(e).name();
-            global_logger->error("%s from=%s to=%s encounters exception %s (code=%d): %s",
-                                 __func__,
-                                 from,
-                                 to,
-                                 type_name,
-                                 code,
-                                 e.what());
-            return -code;
-        }
+        OPT_CATCH_WITH_TWO_PATHS(to, from)
     }
 
     int link(const char* src, const char* dest)
     {
         auto filesystem = get_local_filesystem();
-        global_logger->trace("%s src=%s dest=%s", __func__, src, dest);
+        OPT_TRACE_WITH_TWO_PATHS(src, dest);
 
         try
         {
             filesystem->link(src, dest);
             return 0;
         }
-        catch (const std::exception& e)
-        {
-            auto ebase = dynamic_cast<const ExceptionBase*>(&e);
-            auto code = ebase ? ebase->error_number() : EPERM;
-            auto type_name = ebase ? ebase->type_name() : typeid(e).name();
-            global_logger->error("%s src=%s dest=%s encounters exception %s (code=%d): %s",
-                                 __func__,
-                                 src,
-                                 dest,
-                                 type_name,
-                                 code,
-                                 e.what());
-            return -code;
-        }
+        OPT_CATCH_WITH_TWO_PATHS(src, dest)
     }
 
     int readlink(const char* path, char* buf, size_t size)
@@ -434,26 +364,14 @@ namespace lite
     int rename(const char* from, const char* to)
     {
         auto filesystem = get_local_filesystem();
-        global_logger->trace("%s from=%s to=%s", __func__, from, to);
+        OPT_TRACE_WITH_TWO_PATHS(from, to);
 
         try
         {
             filesystem->rename(from, to);
             return 0;
         }
-        catch (const std::exception& e)
-        {
-            auto ebase = dynamic_cast<const ExceptionBase*>(&e);
-            auto code = ebase ? ebase->error_number() : EPERM;
-            auto type_name = ebase ? ebase->type_name() : typeid(e).name();
-            global_logger->error("%s from=%s to=%s encounters exception %s: %s",
-                                 __func__,
-                                 from,
-                                 to,
-                                 type_name,
-                                 e.what());
-            return -code;
-        }
+        OPT_CATCH_WITH_TWO_PATHS(from, to)
     }
 
     int fsync(const char* path, int, struct fuse_file_info* info)

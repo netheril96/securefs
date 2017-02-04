@@ -207,15 +207,9 @@ namespace operations
     auto ctx = fuse_get_context();                                                                 \
     auto fs = internal::get_fs(ctx);                                                               \
     (void)fs;                                                                                      \
-    global_logger->trace("%s (path=%s)", __FUNCTION__, path);
+    OPT_TRACE_WITH_PATH;
 
-#define COMMON_CATCH_BLOCK                                                                         \
-    catch (const ExceptionBase& e)                                                                 \
-    {                                                                                              \
-        global_logger->error(                                                                      \
-            "%s (path=%s) encounters %s: %s", __FUNCTION__, path, e.type_name(), e.what());        \
-        return -e.error_number();                                                                  \
-    }
+#define COMMON_CATCH_BLOCK OPT_CATCH_WITH_PATH
 
     void* init(struct fuse_conn_info*)
     {
@@ -390,8 +384,7 @@ namespace operations
     int
     read(const char* path, char* buffer, size_t len, fuse_off_t off, struct fuse_file_info* info)
     {
-        global_logger->trace(
-            "%s (path=%s, length=%zu, offset=%lld)", __FUNCTION__, path, len, (long long)off);
+        OPT_TRACE_WITH_PATH_OFF_LEN(off, len);
 
         try
         {
@@ -400,17 +393,7 @@ namespace operations
                 return -EFAULT;
             return static_cast<int>(fb->cast_as<RegularFile>()->read(buffer, off, len));
         }
-        catch (const ExceptionBase& e)
-        {
-            global_logger->error("%s (path=%s, length=%zu, offset=%lld) encounters %s: %s",
-                                 __FUNCTION__,
-                                 path,
-                                 len,
-                                 (long long)off,
-                                 e.type_name(),
-                                 e.what());
-            return -e.error_number();
-        }
+        OPT_CATCH_WITH_PATH_OFF_LEN(off, len)
     }
 
     int write(const char* path,
@@ -419,9 +402,7 @@ namespace operations
               fuse_off_t off,
               struct fuse_file_info* info)
     {
-        global_logger->trace(
-            "%s (path=%s, length=%zu, offset=%lld)", __FUNCTION__, path, len, (long long)off);
-
+        OPT_TRACE_WITH_PATH_OFF_LEN(off, len);
         try
         {
             auto fb = reinterpret_cast<FileBase*>(info->fh);
@@ -430,19 +411,7 @@ namespace operations
             fb->cast_as<RegularFile>()->write(buffer, off, len);
             return static_cast<int>(len);
         }
-        catch (const ExceptionBase& e)
-        {
-            global_logger->error(
-
-                "%s (path=%s, length=%zu, offset=%lld) encounters %s: %s",
-                __FUNCTION__,
-                path,
-                len,
-                (long long)off,
-                e.type_name(),
-                e.what());
-            return -e.error_number();
-        }
+        OPT_CATCH_WITH_PATH_OFF_LEN(off, len)
     }
 
     int flush(const char* path, struct fuse_file_info* info)
@@ -559,7 +528,7 @@ namespace operations
     {
         auto ctx = fuse_get_context();
         auto fs = internal::get_fs(ctx);
-        global_logger->trace("%s (to=%s, from=%s)", __FUNCTION__, to, from);
+        OPT_TRACE_WITH_TWO_PATHS(to, from);
 
         try
         {
@@ -570,18 +539,7 @@ namespace operations
             fg.get_as<Symlink>()->set(to);
             return 0;
         }
-        catch (const ExceptionBase& e)
-        {
-            global_logger->error(
-
-                "%s (to=%s, from=%s) encounters %s: %s",
-                __FUNCTION__,
-                to,
-                from,
-                e.type_name(),
-                e.what());
-            return -e.error_number();
-        }
+        OPT_CATCH_WITH_TWO_PATHS(to, from)
     }
 
     int readlink(const char* path, char* buf, size_t size)
@@ -605,7 +563,7 @@ namespace operations
     {
         auto ctx = fuse_get_context();
         auto fs = internal::get_fs(ctx);
-        global_logger->trace("%s (src=%s, dest=%s)", __FUNCTION__, src, dst);
+        OPT_TRACE_WITH_TWO_PATHS(src, dst);
 
         try
         {
@@ -639,25 +597,14 @@ namespace operations
                 internal::remove(fs, dst_id, dst_type);
             return 0;
         }
-        catch (const ExceptionBase& e)
-        {
-            global_logger->error(
-
-                "%s (src=%s, dest=%s) encounters %s: %s",
-                __FUNCTION__,
-                src,
-                dst,
-                e.type_name(),
-                e.what());
-            return -e.error_number();
-        }
+        OPT_CATCH_WITH_TWO_PATHS(src, dst)
     }
 
     int link(const char* src, const char* dst)
     {
         auto ctx = fuse_get_context();
         auto fs = internal::get_fs(ctx);
-        global_logger->trace("%s (src=%s, dest=%s)", __FUNCTION__, src, dst);
+        OPT_TRACE_WITH_TWO_PATHS(src, dst);
 
         try
         {
@@ -687,18 +634,7 @@ namespace operations
             dst_dir->add_entry(dst_filename, src_id, src_type);
             return 0;
         }
-        catch (const ExceptionBase& e)
-        {
-            global_logger->error(
-
-                "%s (src=%s, dest=%s) encounters %s: %s",
-                __FUNCTION__,
-                src,
-                dst,
-                e.type_name(),
-                e.what());
-            return -e.error_number();
-        }
+        OPT_CATCH_WITH_TWO_PATHS(src, dst)
     }
 
     int fsync(const char* path, int, struct fuse_file_info* fi)
@@ -754,7 +690,7 @@ namespace operations
 #define XATTR_COMMON_PROLOGUE                                                                      \
     auto ctx = fuse_get_context();                                                                 \
     auto fs = internal::get_fs(ctx);                                                               \
-    global_logger->trace("%s (path=%s, name=%s)", __FUNCTION__, path, name);
+    global_logger->trace("%s (path=%s, name=%s)", __func__, path, name);
 
 #define XATTR_COMMON_CATCH_BLOCK                                                                   \
     catch (const ExceptionBase& e)                                                                 \
