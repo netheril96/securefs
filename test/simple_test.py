@@ -205,6 +205,28 @@ def make_test_case(format_version):
                 except EnvironmentError:
                     pass
 
+        def test_rename_dir(self):
+            a = str(uuid.uuid4())
+            b = str(uuid.uuid4())
+            c = str(uuid.uuid4())
+            cwd = os.getcwd()
+            os.chdir(self.mount_point)
+            try:
+                os.mkdir(a)
+                os.mkdir(os.path.join(a, b))
+                os.mkdir(c)
+                os.rename(a, os.path.join(c, a))
+                self.assertTrue(os.path.isdir(os.path.join(c, a, b)))
+            finally:
+                try:
+                    shutil.rmtree(a)
+                except EnvironmentError:
+                    pass
+                try:
+                    shutil.rmtree(c)
+                except:
+                    pass
+                os.chdir(cwd)
         def test_read_write_mkdir_listdir_remove(self):
             dir_names = set(str(i) for i in xrange(3))
             random_data = os.urandom(11111)
