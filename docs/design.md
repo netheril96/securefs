@@ -30,7 +30,7 @@ The master key is not directly used to encrypt data. Instead, each file will hav
 
 For example, to access `foo` in the root directory, one needs to know the encrypted result of `foo`. But given that encryption is randomized, there is no way to know what ciphertext is actually stored in the system. The whole directory would have to be scanned with each entry decrypted to find `foo`. All access to directory would have linear complexity.
 
-Instead, in `securefs`, a directory is implemented as a normal file containing a B-tree. This ensures that encryption is randomized and access is logarithmic with respect to directory size.
+Instead, in `securefs`, a directory is implemented as a normal file containing a B-tree. This ensures that encryption is randomized and access is logarithmic with respect to directory size. The maximum filename length is always 255, independent from the property of the underlying filesystem.
 
 ### Extended attributes
 
@@ -65,9 +65,11 @@ The XOR-ing is necessary because NIST recommends that a single key is not used w
 
 ### Names of files, directories and symlinks
 
-We cannot use probabilistic encryption for file names, for otherwise name lookups will become linear. We choose a deterministic authenticated encryption algorithm AES-SIV as defined by RFC 5297. The directory prefix is input as associated data to the algorithm, so that only two files with completely same path within the filesystem will have the same underlying name (which can only occur temporally not spatially). Symlinks are similarly encrypted.
+We cannot use probabilistic encryption for file names, for otherwise name lookups will become linear. We choose a deterministic authenticated encryption algorithm AES-SIV as defined by RFC 5297. This prevents the filenames from being deduced, except that identical filenames will show as identical encrypted names in the underlying directory.
 
 The encrypted names are converted to ASCII in base32 encoding (in DUDE alphabet without padding). Base64 is not used because it won't work properly over case insensitive filesystems.
+
+Because of the added IV and the base32 encoding, the underlying filename is longer than the virtual filename. Therefore the maximum filename length in the mounted filesystem is always shorter than its underlying filesystem. On Windows we use Unicode long names (prefixed with \\?\) but other programs may not work well with the encrypted filenames.
 
 The key for name encryption is independent from the master content key.
 
