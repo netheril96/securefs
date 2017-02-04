@@ -55,7 +55,7 @@ namespace lite
 
 #define SINGLE_COMMON_PROLOGUE                                                                     \
     auto filesystem = get_local_filesystem();                                                      \
-    global_logger->trace("%s %s", __func__, path);
+    OPT_TRACE_WITH_PATH;
 
 #define SINGLE_COMMON_EPILOGUE OPT_CATCH_WITH_PATH
 

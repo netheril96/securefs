@@ -711,7 +711,7 @@ class MountCommand : public CommonCommandBase
 {
 private:
     std::vector<byte> password;
-    TCLAP::SwitchArg single_threaded{"s", "single", "Single threaded mode", is_windows()};
+    TCLAP::SwitchArg single_threaded{"s", "single", "Single threaded mode"};
     TCLAP::SwitchArg background{"b", "background", "Run securefs in the background"};
     TCLAP::SwitchArg insecure{
         "i", "insecure", "Disable all integrity verification (insecure mode)"};

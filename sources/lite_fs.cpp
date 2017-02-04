@@ -99,11 +99,11 @@ namespace lite
         return result;
     }
 
-	std::string encrypt_path(AES_SIV& encryptor, StringRef path)
-	{
-		CryptoPP::Base32Encoder enc;
-		return encrypt_path(enc, encryptor, path);
-	}
+    std::string encrypt_path(AES_SIV& encryptor, StringRef path)
+    {
+        CryptoPP::Base32Encoder enc;
+        return encrypt_path(enc, encryptor, path);
+    }
 
     std::string decrypt_path(AES_SIV& decryptor, StringRef path)
     {
