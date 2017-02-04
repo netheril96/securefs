@@ -169,7 +169,25 @@ void parse_hex(StringRef hex, byte* output, size_t len)
     }
 }
 
-std::string sane_strerror(int error_number) { return std::system_category().message(error_number); }
+std::string sane_strerror(int error_number)
+{
+    char buffer[4000] = {};
+#if defined(WIN32)
+    strerror_s(buffer, sizeof(buffer), error_number);
+    return buffer;
+#elif defined(__GLIBC__)
+    const char* r = strerror_r(error_number, buffer, sizeof(buffer));
+    if (r)
+        return r;
+    snprintf(buffer, sizeof(buffer), "Unknown POSIX error %d", error_number);
+    return buffer;
+#else
+    int rc = strerror_r(error_number, buffer, sizeof(buffer));
+    if (rc != 0)
+        snprintf(buffer, sizeof(buffer), "Unknown POSIX error %d", error_number);
+    return buffer;
+#endif
+}
 
 bool ends_with(const char* str, size_t size, const char* suffix, size_t suffix_len)
 {

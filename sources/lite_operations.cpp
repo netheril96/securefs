@@ -92,6 +92,8 @@ namespace lite
                                  (unsigned)st->st_uid,
                                  (unsigned)st->st_gid,
                                  (size_t)st->st_size);
+            if (is_windows())
+                st->st_mode |= 0777;
             return 0;
         }
         SINGLE_COMMON_EPILOGUE

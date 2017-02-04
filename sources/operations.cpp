@@ -260,6 +260,8 @@ namespace operations
             {
                 st->st_gid = *fs->gid_override;
             }
+            if (is_windows())
+                st->st_mode |= 0777;
             return 0;
         }
         COMMON_CATCH_BLOCK
