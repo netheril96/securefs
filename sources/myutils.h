@@ -104,6 +104,14 @@ auto make_guard(Func&& f) -> scope_guard<Func>
 
 namespace securefs
 {
+inline constexpr bool is_windows(void)
+{
+#ifdef WIN32
+    return true;
+#else
+    return false;
+#endif
+}
 using std::experimental::optional;
 
 typedef uint64_t length_type;

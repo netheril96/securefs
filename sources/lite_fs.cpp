@@ -79,12 +79,8 @@ namespace lite
                     size_t slice_size = i - last_nonseparator_index;
                     if (slice_size > 2000)
                         throwVFSException(ENAMETOOLONG);
-                    encryptor.encrypt_and_authenticate(slice,
-                                                       slice_size,
-                                                       path.data(),
-                                                       last_nonseparator_index,
-                                                       buffer + AES_SIV::IV_SIZE,
-                                                       buffer);
+                    encryptor.encrypt_and_authenticate(
+                        slice, slice_size, nullptr, 0, buffer + AES_SIV::IV_SIZE, buffer);
                     encoder.Initialize();
                     encoder.Put(buffer, slice_size + AES_SIV::IV_SIZE);
                     encoder.MessageEnd();
@@ -135,8 +131,8 @@ namespace lite
 
                     bool success = decryptor.decrypt_and_verify(buffer + AES_SIV::IV_SIZE,
                                                                 decoded_size - AES_SIV::IV_SIZE,
-                                                                result.data(),
-                                                                result.size(),
+                                                                nullptr,
+                                                                0,
                                                                 string_buffer,
                                                                 buffer);
                     if (!success)
@@ -303,16 +299,13 @@ namespace lite
     {
     private:
         CryptoPP::Base32Decoder decoder;
-        std::string m_prefix;
         std::unique_ptr<DirectoryTraverser> m_underlying_traverser;
         AES_SIV* m_name_encryptor;
 
     public:
-        explicit LiteDirectoryTraverser(std::string prefix,
-                                        std::unique_ptr<DirectoryTraverser> underlying_traverser,
+        explicit LiteDirectoryTraverser(std::unique_ptr<DirectoryTraverser> underlying_traverser,
                                         AES_SIV* name_encryptor)
-            : m_prefix(std::move(prefix))
-            , m_underlying_traverser(std::move(underlying_traverser))
+            : m_underlying_traverser(std::move(underlying_traverser))
             , m_name_encryptor(name_encryptor)
         {
         }
@@ -342,10 +335,8 @@ namespace lite
                     auto size = decoder.MaxRetrievable();
                     if (size > sizeof(buffer) || size <= AES_SIV::IV_SIZE)
                     {
-                        global_logger->warn("Skipping too large/small encrypted filename %s in "
-                                            "virtual directory %s",
-                                            under_name.c_str(),
-                                            m_prefix.c_str());
+                        global_logger->warn("Skipping too large/small encrypted filename %s",
+                                            under_name.c_str());
                         continue;
                     }
 
@@ -353,16 +344,15 @@ namespace lite
                     name->assign(size - AES_SIV::IV_SIZE, '\0');
                     bool success = m_name_encryptor->decrypt_and_verify(buffer + AES_SIV::IV_SIZE,
                                                                         size - AES_SIV::IV_SIZE,
-                                                                        m_prefix.data(),
-                                                                        m_prefix.size(),
+                                                                        nullptr,
+                                                                        0,
                                                                         &(*name)[0],
                                                                         buffer);
                     if (!success)
                     {
-                        global_logger->warn("Skipping filename %s in virtual directory %s that "
-                                            "does not decode properly",
-                                            under_name.c_str(),
-                                            m_prefix.c_str());
+                        global_logger->warn("Skipping filename %s in virtual directory that does "
+                                            "not decode properly",
+                                            under_name.c_str());
                         continue;
                     }
                 }
@@ -383,9 +373,7 @@ namespace lite
         if (path.empty())
             throwVFSException(EINVAL);
         return securefs::make_unique<LiteDirectoryTraverser>(
-            path.back() == '/' ? path.to_string() : path + StringRef("/"),
-            m_root->create_traverser(translate_path(path, false)),
-            &this->m_name_encryptor);
+            m_root->create_traverser(translate_path(path, false)), &this->m_name_encryptor);
     }
 
 #ifdef __APPLE__
