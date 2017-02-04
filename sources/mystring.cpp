@@ -185,6 +185,7 @@ std::vector<std::string> split(const char* str, char separator)
 {
     const char* start = str;
     std::vector<std::string> result;
+    result.reserve(15);
 
     while (*str)
     {

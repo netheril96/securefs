@@ -350,11 +350,11 @@ public:
     }
 };
 
-[[noreturn]] void throwWindowsException(DWORD err, const char* exp)
-{
-    if (err != 0)
-        throw WindowsException(err, exp);
-}
+#define throwWindowsException(err, exp)                                                            \
+    {                                                                                              \
+        DWORD code = err;                                                                          \
+        throw WindowsException(code, exp);                                                         \
+    }
 
 #define CHECK_CALL(exp)                                                                            \
     if (!(exp))                                                                                    \
@@ -590,7 +590,10 @@ std::wstring OSService::norm_path(StringRef path) const
         return widen_string(path);
     else
     {
-        std::string prepath = (m_dir_name + '/' + path);
+        std::string prepath = m_dir_name;
+        prepath.reserve(prepath.size() + 1 + path.size());
+        prepath.push_back('/');
+        prepath.append(path.data(), path.size());
         for (char& c : prepath)
         {
             if (c == '\\')
@@ -598,6 +601,7 @@ std::wstring OSService::norm_path(StringRef path) const
         }
         std::vector<std::string> components = split(prepath.c_str(), '/');
         std::vector<const std::string*> norm_components;
+        norm_components.reserve(components.size());
         for (const std::string& name : components)
         {
             if (name.empty() || name == ".")
@@ -609,7 +613,9 @@ std::wstring OSService::norm_path(StringRef path) const
             }
             norm_components.push_back(&name);
         }
-        std::string str("\\\\?");
+        std::string str;
+        str.reserve(m_dir_name.size() + path.size() + 24);
+        str.assign(("\\\\?"));
         for (const std::string* name : norm_components)
         {
             str.push_back('\\');
