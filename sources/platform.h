@@ -112,7 +112,7 @@ private:
 #elif defined(WIN32)
     void* m_root_handle;
 #endif
-    native_string_type m_dir_name;
+    std::string m_dir_name;
 
 public:
     native_string_type norm_path(StringRef path) const;

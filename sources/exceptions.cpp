@@ -7,11 +7,6 @@ securefs::ExceptionBase::~ExceptionBase() {}
 
 void ::securefs::throwVFSException(int errc) { throw VFSException(errc); }
 
-void ::securefs::throwPOSIXException(int errc, std::string msg)
-{
-    throw POSIXException(errc, std::move(msg));
-}
-
 void ::securefs::throwInvalidArgumentException(const char* why)
 {
     throw InvalidArgumentException(why);

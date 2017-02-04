@@ -105,7 +105,14 @@ public:
     std::string message() const override { return sane_strerror(m_errno) + " # " + m_msg; }
 };
 
-[[noreturn]] void throwPOSIXException(int errc, std::string msg);
+// This macro is needed because errno expands to a function, which has unspecified evaluation order
+// with respect to other function calls, and those other function calls may modify errno, resulting
+// in incorrect error reporting
+#define throwPOSIXException(errc, msg)                                                             \
+    {                                                                                              \
+        int code = errc;                                                                           \
+        throw POSIXException(code, msg);                                                           \
+    }
 
 class VerificationException : public ExceptionBase
 {

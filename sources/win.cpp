@@ -590,19 +590,41 @@ std::wstring OSService::norm_path(StringRef path) const
         return widen_string(path);
     else
     {
-        auto str = m_dir_name + widen_string(path);
-        for (wchar_t& c : str)
+        std::string prepath = (m_dir_name + '/' + path);
+        for (char& c : prepath)
         {
-            if (c == L'/')
-                c = L'\\';
+            if (c == '\\')
+                c = '/';
         }
-        return str;
+        std::vector<std::string> components = split(prepath.c_str(), '/');
+        std::vector<const std::string*> norm_components;
+        for (const std::string& name : components)
+        {
+            if (name.empty() || name == ".")
+                continue;
+            if (name == "..")
+            {
+                if (norm_components.size() > 0)
+                    norm_components.pop_back();
+            }
+            norm_components.push_back(&name);
+        }
+        std::string str("\\\\?");
+        for (const std::string* name : norm_components)
+        {
+            str.push_back('\\');
+            str.append(*name);
+        }
+        return widen_string(str);
     }
 }
 
-OSService::OSService(StringRef path) : m_dir_name(widen_string(path) + L"\\")
+OSService::OSService(StringRef path)
 {
-    m_root_handle = CreateFileW(m_dir_name.c_str(),
+    wchar_t resolved[4000];
+    CHECK_CALL(GetFullPathNameW(widen_string(path).c_str(), 4000, resolved, nullptr));
+    m_dir_name = narrow_string(resolved);
+    m_root_handle = CreateFileW(resolved,
                                 GENERIC_READ,
                                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                                 nullptr,
@@ -648,8 +670,10 @@ void OSService::statfs(struct fuse_statvfs* fs_info) const
 {
     memset(fs_info, 0, sizeof(*fs_info));
     ULARGE_INTEGER FreeBytesAvailable, TotalNumberOfBytes, TotalNumberOfFreeBytes;
-    if (GetDiskFreeSpaceExW(
-            m_dir_name.c_str(), &FreeBytesAvailable, &TotalNumberOfBytes, &TotalNumberOfFreeBytes)
+    if (GetDiskFreeSpaceExW(norm_path(".").c_str(),
+                            &FreeBytesAvailable,
+                            &TotalNumberOfBytes,
+                            &TotalNumberOfFreeBytes)
         == 0)
         throwWindowsException(GetLastError(), "GetDiskFreeSpaceEx");
     auto maximum = static_cast<unsigned>(-1);

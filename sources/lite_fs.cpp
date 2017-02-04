@@ -339,8 +339,10 @@ namespace lite
                     auto size = decoder.MaxRetrievable();
                     if (size > sizeof(buffer) || size <= AES_SIV::IV_SIZE)
                     {
-                        global_logger->warn("Skipping too large/small filename %s",
-                                            under_name.c_str());
+                        global_logger->warn("Skipping too large/small encrypted filename %s in "
+                                            "virtual directory %s",
+                                            under_name.c_str(),
+                                            m_prefix.c_str());
                         continue;
                     }
 
@@ -354,8 +356,10 @@ namespace lite
                                                                         buffer);
                     if (!success)
                     {
-                        global_logger->warn("Skipping filename %s that does not decode properly",
-                                            under_name.c_str());
+                        global_logger->warn("Skipping filename %s in virtual directory %s that "
+                                            "does not decode properly",
+                                            under_name.c_str(),
+                                            m_prefix.c_str());
                         continue;
                     }
                 }
