@@ -1,18 +1,8 @@
 #include "mystring.h"
 #include "exceptions.h"
 #include "logger.h"
-
-#ifdef HAS_CODECVT
-#include <codecvt>
-#include <locale>
-#endif
-
 #include <stdint.h>
 #include <system_error>
-
-#ifdef WIN32
-#include <Windows.h>
-#endif
 
 namespace securefs
 {
@@ -224,34 +214,4 @@ std::string hexify(const byte* data, size_t length)
     }
     return result;
 }
-
-#ifdef HAS_CODECVT
-std::wstring widen_string(StringRef str)
-{
-    if (sizeof(wchar_t) == 2)
-    {
-        std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t> converter;
-        return converter.from_bytes(str.begin(), str.end());
-    }
-    else
-    {
-        std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> converter;
-        return converter.from_bytes(str.begin(), str.end());
-    }
-}
-
-std::string narrow_string(WideStringRef str)
-{
-    if (sizeof(wchar_t) == 2)
-    {
-        std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t> converter;
-        return converter.to_bytes(str.begin(), str.end());
-    }
-    else
-    {
-        std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> converter;
-        return converter.to_bytes(str.begin(), str.end());
-    }
-}
-#endif
 }

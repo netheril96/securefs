@@ -144,7 +144,7 @@ inline std::string hexify(const ByteContainer& c)
 
 std::string sane_strerror(int error_number);
 
-#ifdef HAS_CODECVT
+#ifdef WIN32
 std::wstring widen_string(StringRef str);
 std::string narrow_string(WideStringRef str);
 #endif
