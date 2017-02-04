@@ -350,7 +350,7 @@ public:
     }
 };
 
-#define THROW_WINDOWS_EXCEPTION(err, exp)                                                            \
+#define THROW_WINDOWS_EXCEPTION(err, exp)                                                          \
     do                                                                                             \
     {                                                                                              \
         DWORD code = err;                                                                          \

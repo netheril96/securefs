@@ -286,8 +286,8 @@ OSService::open_file_stream(StringRef path, int flags, unsigned mode) const
     int fd = ::open(norm_path(path).c_str(), flags, mode);
 #endif
     if (fd < 0)
-        THROW_POSIX_EXCEPTION(errno,
-                            strprintf("Opening %s with flags %#o", norm_path(path).c_str(), flags));
+        THROW_POSIX_EXCEPTION(
+            errno, strprintf("Opening %s with flags %#o", norm_path(path).c_str(), flags));
     return std::make_shared<UnixFileStream>(fd);
 }
 
@@ -318,7 +318,7 @@ void OSService::lock() const
     int rc = ::flock(m_dir_fd, LOCK_NB | LOCK_EX);
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno,
-                            strprintf("Fail to obtain exclusive lock on %s", m_dir_name.c_str()));
+                              strprintf("Fail to obtain exclusive lock on %s", m_dir_name.c_str()));
 }
 
 void OSService::mkdir(StringRef path, unsigned mode) const
@@ -330,7 +330,7 @@ void OSService::mkdir(StringRef path, unsigned mode) const
 #endif
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno,
-                            strprintf("Fail to create directory %s", norm_path(path).c_str()));
+                              strprintf("Fail to create directory %s", norm_path(path).c_str()));
 }
 
 void OSService::symlink(StringRef to, StringRef from) const
@@ -354,7 +354,8 @@ void OSService::link(StringRef source, StringRef dest) const
 #endif
     if (rc < 0)
     {
-        THROW_POSIX_EXCEPTION(errno, strprintf("link src=%s dest=%s", source.c_str(), dest.c_str()));
+        THROW_POSIX_EXCEPTION(errno,
+                              strprintf("link src=%s dest=%s", source.c_str(), dest.c_str()));
     }
 }
 
@@ -402,7 +403,7 @@ void OSService::chmod(StringRef path, fuse_mode_t mode) const
 #endif
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno,
-                            strprintf("chmod %s with mode=0%o", norm_path(path).c_str(), mode));
+                              strprintf("chmod %s with mode=0%o", norm_path(path).c_str(), mode));
 }
 
 ssize_t OSService::readlink(StringRef path, char* output, size_t size) const

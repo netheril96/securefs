@@ -108,7 +108,7 @@ public:
 // This macro is needed because errno expands to a function, which has unspecified evaluation order
 // with respect to other function calls, and those other function calls may modify errno, resulting
 // in incorrect error reporting
-#define THROW_POSIX_EXCEPTION(errc, msg)                                                             \
+#define THROW_POSIX_EXCEPTION(errc, msg)                                                           \
     do                                                                                             \
     {                                                                                              \
         int code = errc;                                                                           \

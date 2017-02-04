@@ -61,9 +61,8 @@ namespace lite
         return strprintf("Invalid filename \"%s\"", m_filename.c_str());
     }
 
-    std::string encrypt_path(AES_SIV& encryptor, StringRef path)
+    std::string encrypt_path(CryptoPP::Base32Encoder& encoder, AES_SIV& encryptor, StringRef path)
     {
-        CryptoPP::Base32Encoder encoder;
         byte buffer[2032];
         std::string result;
         result.reserve((path.size() * 8 + 4) / 5);
@@ -99,6 +98,12 @@ namespace lite
         }
         return result;
     }
+
+	std::string encrypt_path(AES_SIV& encryptor, StringRef path)
+	{
+		CryptoPP::Base32Encoder enc;
+		return encrypt_path(enc, encryptor, path);
+	}
 
     std::string decrypt_path(AES_SIV& decryptor, StringRef path)
     {
@@ -160,7 +165,7 @@ namespace lite
         }
         else
         {
-            return lite::encrypt_path(m_name_encryptor, path);
+            return lite::encrypt_path(m_encoder, m_name_encryptor, path);
         }
     }
 
