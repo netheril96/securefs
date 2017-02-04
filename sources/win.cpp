@@ -350,7 +350,7 @@ public:
     }
 };
 
-#define throwWindowsException(err, exp)                                                            \
+#define THROW_WINDOWS_EXCEPTION(err, exp)                                                            \
     do                                                                                             \
     {                                                                                              \
         DWORD code = err;                                                                          \
@@ -359,7 +359,7 @@ public:
 
 #define CHECK_CALL(exp)                                                                            \
     if (!(exp))                                                                                    \
-        throwWindowsException(GetLastError(), #exp);
+        THROW_WINDOWS_EXCEPTION(GetLastError(), #exp);
 
 static void stat_file_handle(HANDLE hd, struct fuse_stat* st)
 {
@@ -479,7 +479,7 @@ public:
             DWORD err = GetLastError();
             if (err == ERROR_HANDLE_EOF)
                 return 0;
-            throwWindowsException(err, "ReadFile");
+            THROW_WINDOWS_EXCEPTION(err, "ReadFile");
         }
         return readlen;
     }
@@ -667,7 +667,7 @@ void OSService::mkdir(StringRef path, unsigned mode) const
     {
         DWORD err = GetLastError();
         if (err != ERROR_ALREADY_EXISTS)
-            throwWindowsException(err, "CreateDirectory");
+            THROW_WINDOWS_EXCEPTION(err, "CreateDirectory");
     }
 }
 
@@ -680,7 +680,7 @@ void OSService::statfs(struct fuse_statvfs* fs_info) const
                             &TotalNumberOfBytes,
                             &TotalNumberOfFreeBytes)
         == 0)
-        throwWindowsException(GetLastError(), "GetDiskFreeSpaceEx");
+        THROW_WINDOWS_EXCEPTION(GetLastError(), "GetDiskFreeSpaceEx");
     auto maximum = static_cast<unsigned>(-1);
     fs_info->f_bsize = 4096;
     fs_info->f_frsize = fs_info->f_bsize;
@@ -714,7 +714,7 @@ void OSService::utimens(StringRef path, const fuse_timespec ts[2]) const
                             FILE_FLAG_BACKUP_SEMANTICS,
                             nullptr);
     if (hd == INVALID_HANDLE_VALUE)
-        throwWindowsException(GetLastError(), "CreateFileW");
+        THROW_WINDOWS_EXCEPTION(GetLastError(), "CreateFileW");
     DEFER(CloseHandle(hd));
     CHECK_CALL(SetFileTime(hd, nullptr, &atime, &mtime));
 }
@@ -739,7 +739,7 @@ bool OSService::stat(StringRef path, struct fuse_stat* stat) const
         DWORD err = GetLastError();
         if (err == ERROR_PATH_NOT_FOUND || err == ERROR_FILE_NOT_FOUND || err == ERROR_NOT_FOUND)
             return false;
-        throwWindowsException(err, "CreateFileW");
+        THROW_WINDOWS_EXCEPTION(err, "CreateFileW");
     }
 
     DEFER(CloseHandle(handle));
@@ -752,7 +752,7 @@ void OSService::chmod(StringRef path, fuse_mode_t mode) const
 {
     int rc = ::_wchmod(norm_path(path).c_str(), mode);
     if (rc < 0)
-        throwPOSIXException(errno, "_wchmod");
+        THROW_POSIX_EXCEPTION(errno, "_wchmod");
 }
 
 ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
@@ -794,7 +794,7 @@ int OSService::raise_fd_limit()
 //    Finder finder(FindFirstFileA(find_pattern.c_str(), &data));
 //
 //    if (finder.handle == INVALID_HANDLE_VALUE)
-//        throwWindowsException(GetLastError(), "FindFirstFile on pattern " + find_pattern);
+//        THROW_WINDOWS_EXCEPTION(GetLastError(), "FindFirstFile on pattern " + find_pattern);
 //
 //    do
 //    {
@@ -812,7 +812,7 @@ int OSService::raise_fd_limit()
 //    } while (FindNextFileA(finder.handle, &data));
 //
 //    if (GetLastError() != ERROR_NO_MORE_FILES)
-//        throwWindowsException(GetLastError(), "FindNextFile");
+//        THROW_WINDOWS_EXCEPTION(GetLastError(), "FindNextFile");
 //}
 
 class WindowsDirectoryTraverser : public DirectoryTraverser
@@ -827,7 +827,7 @@ public:
         m_handle = FindFirstFileW(pattern.c_str(), &m_data);
         if (m_handle == INVALID_HANDLE_VALUE)
         {
-            throwWindowsException(GetLastError(), "FindFirstFileW");
+            THROW_WINDOWS_EXCEPTION(GetLastError(), "FindFirstFileW");
         }
     }
 
@@ -846,7 +846,7 @@ public:
                 DWORD err = GetLastError();
                 if (err == ERROR_NO_MORE_FILES)
                     return false;
-                throwWindowsException(err, "FindNextFileW");
+                THROW_WINDOWS_EXCEPTION(err, "FindNextFileW");
             }
         }
 
@@ -980,7 +980,7 @@ std::wstring widen_string(StringRef str)
         throwInvalidArgumentException("String too long");
     int sz = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), nullptr, 0);
     if (sz <= 0)
-        throwWindowsException(GetLastError(), "MultiByteToWideChar");
+        THROW_WINDOWS_EXCEPTION(GetLastError(), "MultiByteToWideChar");
     std::wstring result(sz, 0);
     MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), &result[0], sz);
     return result;
@@ -993,7 +993,7 @@ std::string narrow_string(WideStringRef str)
     int sz = WideCharToMultiByte(
         CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), nullptr, 0, 0, 0);
     if (sz <= 0)
-        throwWindowsException(GetLastError(), "WideCharToMultiByte");
+        THROW_WINDOWS_EXCEPTION(GetLastError(), "WideCharToMultiByte");
     std::string result(sz, 0);
     WideCharToMultiByte(
         CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), &result[0], sz, 0, 0);

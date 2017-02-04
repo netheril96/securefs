@@ -120,7 +120,7 @@ Logger* Logger::create_file_logger(const std::string& path)
     FILE* fp = fopen(path.c_str(), "a");
 #endif
     if (!fp)
-        throwPOSIXException(errno, path);
+        THROW_POSIX_EXCEPTION(errno, path);
     return new Logger(fp, true);
 }
 

@@ -34,7 +34,7 @@ namespace lite
                     int rc = pthread_key_create(
                         &key, [](void* ptr) { delete static_cast<FileSystem*>(ptr); });
                     if (rc != 0)
-                        throwPOSIXException(rc, "pthread_key_create");
+                        THROW_POSIX_EXCEPTION(rc, "pthread_key_create");
                 }
                 ~FileSystemKey() { pthread_key_delete(key); }
             };

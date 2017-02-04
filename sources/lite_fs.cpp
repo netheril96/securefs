@@ -175,7 +175,7 @@ namespace lite
         }
         if ((flags & O_CREAT) && !(mode & 0400))
         {
-            throwPOSIXException(
+            THROW_POSIX_EXCEPTION(
                 EINVAL, "Creating a file without read access is not supported on this filesystem");
         }
         auto file_stream = m_root->open_file_stream(translate_path(path), flags, mode);

@@ -40,7 +40,7 @@ public:
     {
         int rc = pthread_key_create(&m_pkey, [](void* ptr) { delete static_cast<T*>(ptr); });
         if (rc)
-            throwPOSIXException(rc, "Fail to initialize pthread TLS");
+            THROW_POSIX_EXCEPTION(rc, "Fail to initialize pthread TLS");
     }
 
     ~ThreadLocalStorage() { pthread_key_delete(m_pkey); }
@@ -53,7 +53,7 @@ public:
             ptr = new T();
             int rc = pthread_setspecific(m_pkey, ptr);
             if (rc)
-                throwPOSIXException(rc, "Fail to set TLS value");
+                THROW_POSIX_EXCEPTION(rc, "Fail to set TLS value");
         }
         return static_cast<T*>(ptr);
     }
@@ -275,7 +275,7 @@ size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size
             if (feof(fp))
                 break;
             if (ferror(fp))
-                throwPOSIXException(errno, "getc");
+                THROW_POSIX_EXCEPTION(errno, "getc");
         }
         if (ch == '\0' || ch == '\n' || ch == '\r')
             break;
@@ -340,7 +340,7 @@ size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t
     struct termios old_termios, new_termios;
     int rc = ::tcgetattr(fd, &old_termios);
     if (rc < 0)
-        throwPOSIXException(errno, "tcgetattr");
+        THROW_POSIX_EXCEPTION(errno, "tcgetattr");
     if (!(old_termios.c_lflag & ECHO))
         throwInvalidArgumentException("Unechoed terminal");
 

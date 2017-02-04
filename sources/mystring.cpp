@@ -15,7 +15,7 @@ std::string vstrprintf(const char* format, va_list args)
     int size = vsnprintf(buffer, sizeof(buffer), format, copied_args);
     va_end(copied_args);
     if (size < 0)
-        throwPOSIXException(errno, "vsnprintf");
+        THROW_POSIX_EXCEPTION(errno, "vsnprintf");
     if (size <= MAX_SIZE)
         return std::string(buffer, size);
     std::string result(static_cast<std::string::size_type>(size), '\0');

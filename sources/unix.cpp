@@ -49,7 +49,7 @@ public:
         if (rc < 0)
         {
             ::close(fd);
-            throwPOSIXException(errno, "fstat");
+            THROW_POSIX_EXCEPTION(errno, "fstat");
         }
         m_size = st.st_size;
     }
@@ -67,7 +67,7 @@ public:
         int rc = ::flock(m_fd, exclusive ? LOCK_EX : LOCK_SH);
         if (rc < 0)
         {
-            throwPOSIXException(errno, "flock");
+            THROW_POSIX_EXCEPTION(errno, "flock");
         }
     }
 
@@ -76,7 +76,7 @@ public:
         int rc = ::flock(m_fd, LOCK_UN);
         if (rc < 0)
         {
-            throwPOSIXException(errno, "flock");
+            THROW_POSIX_EXCEPTION(errno, "flock");
         }
     }
 
@@ -84,7 +84,7 @@ public:
     {
         int rc = ::fsync(m_fd);
         if (rc < 0)
-            throwPOSIXException(errno, "fsync");
+            THROW_POSIX_EXCEPTION(errno, "fsync");
     }
 
     void fstat(struct stat* out) override
@@ -93,14 +93,14 @@ public:
             throwVFSException(EFAULT);
 
         if (::fstat(m_fd, out) < 0)
-            throwPOSIXException(errno, "fstat");
+            THROW_POSIX_EXCEPTION(errno, "fstat");
     }
 
     length_type read(void* output, offset_type offset, length_type length) override
     {
         auto rc = ::pread(m_fd, output, length, offset);
         if (rc < 0)
-            throwPOSIXException(errno, "pread");
+            THROW_POSIX_EXCEPTION(errno, "pread");
         return rc;
     }
 
@@ -108,7 +108,7 @@ public:
     {
         auto rc = ::pwrite(m_fd, input, length, offset);
         if (rc < 0)
-            throwPOSIXException(errno, "pwrite");
+            THROW_POSIX_EXCEPTION(errno, "pwrite");
         if (static_cast<length_type>(rc) != length)
             throwVFSException(EIO);
         if (offset + length > m_size)
@@ -121,7 +121,7 @@ public:
     {
         auto rc = ::ftruncate(m_fd, new_length);
         if (rc < 0)
-            throwPOSIXException(errno, "truncate");
+            THROW_POSIX_EXCEPTION(errno, "truncate");
         m_size = new_length;
     }
 
@@ -150,7 +150,7 @@ public:
         }
 #endif
         if (rc < 0)
-            throwPOSIXException(errno, "utimens");
+            THROW_POSIX_EXCEPTION(errno, "utimens");
     }
 
 #ifdef __APPLE__
@@ -159,14 +159,14 @@ public:
     {
         auto rc = ::fremovexattr(m_fd, name, 0);
         if (rc < 0)
-            throwPOSIXException(errno, "fremovexattr");
+            THROW_POSIX_EXCEPTION(errno, "fremovexattr");
     }
 
     ssize_t getxattr(const char* name, void* value, size_t size) override
     {
         ssize_t rc = ::fgetxattr(m_fd, name, value, size, 0, 0);
         if (rc < 0)
-            throwPOSIXException(errno, "fgetxattr");
+            THROW_POSIX_EXCEPTION(errno, "fgetxattr");
         return rc;
     }
 
@@ -174,7 +174,7 @@ public:
     {
         auto rc = ::flistxattr(m_fd, buffer, size, 0);
         if (rc < 0)
-            throwPOSIXException(errno, "flistxattr");
+            THROW_POSIX_EXCEPTION(errno, "flistxattr");
         return rc;
     }
 
@@ -182,7 +182,7 @@ public:
     {
         auto rc = ::fsetxattr(m_fd, name, value, size, 0, flags);
         if (rc < 0)
-            throwPOSIXException(errno, "fsetxattr");
+            THROW_POSIX_EXCEPTION(errno, "fsetxattr");
     }
 #endif
 };
@@ -197,7 +197,7 @@ public:
     {
         m_dir = ::opendir(path.c_str());
         if (!m_dir)
-            throwPOSIXException(errno, "opendir " + path);
+            THROW_POSIX_EXCEPTION(errno, "opendir " + path);
     }
     ~UnixDirectoryTraverser() { ::closedir(m_dir); }
 
@@ -210,7 +210,7 @@ public:
             if (!entry)
             {
                 if (errno)
-                    throwPOSIXException(errno, "readdir");
+                    THROW_POSIX_EXCEPTION(errno, "readdir");
                 return false;
             }
             if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
@@ -264,7 +264,7 @@ OSService::OSService(StringRef path)
     char buffer[PATH_MAX + 1] = {0};
     char* rc = ::realpath(path.c_str(), buffer);
     if (!rc)
-        throwPOSIXException(errno, "realpath on " + path);
+        THROW_POSIX_EXCEPTION(errno, "realpath on " + path);
     m_dir_name.reserve(strlen(buffer) + 1);
     m_dir_name.assign(buffer);
     m_dir_name.push_back('/');
@@ -272,7 +272,7 @@ OSService::OSService(StringRef path)
 #ifdef HAS_AT_FUNCTIONS
     int dir_fd = ::open(path.c_str(), O_RDONLY);
     if (dir_fd < 0)
-        throwPOSIXException(errno, "Opening directory " + path);
+        THROW_POSIX_EXCEPTION(errno, "Opening directory " + path);
     m_dir_fd = dir_fd;
 #endif
 }
@@ -286,7 +286,7 @@ OSService::open_file_stream(StringRef path, int flags, unsigned mode) const
     int fd = ::open(norm_path(path).c_str(), flags, mode);
 #endif
     if (fd < 0)
-        throwPOSIXException(errno,
+        THROW_POSIX_EXCEPTION(errno,
                             strprintf("Opening %s with flags %#o", norm_path(path).c_str(), flags));
     return std::make_shared<UnixFileStream>(fd);
 }
@@ -299,7 +299,7 @@ void OSService::remove_file(StringRef path) const
     int rc = ::unlink(norm_path(path).c_str()) == 0;
 #endif
     if (rc < 0)
-        throwPOSIXException(errno, "unlinking " + norm_path(path));
+        THROW_POSIX_EXCEPTION(errno, "unlinking " + norm_path(path));
 }
 
 void OSService::remove_directory(StringRef path) const
@@ -310,14 +310,14 @@ void OSService::remove_directory(StringRef path) const
     int rc = ::rmdir(norm_path(path).c_str()) == 0;
 #endif
     if (rc < 0)
-        throwPOSIXException(errno, "removing directory " + norm_path(path));
+        THROW_POSIX_EXCEPTION(errno, "removing directory " + norm_path(path));
 }
 
 void OSService::lock() const
 {
     int rc = ::flock(m_dir_fd, LOCK_NB | LOCK_EX);
     if (rc < 0)
-        throwPOSIXException(errno,
+        THROW_POSIX_EXCEPTION(errno,
                             strprintf("Fail to obtain exclusive lock on %s", m_dir_name.c_str()));
 }
 
@@ -329,7 +329,7 @@ void OSService::mkdir(StringRef path, unsigned mode) const
     int rc = ::mkdir(norm_path(path).c_str(), mode);
 #endif
     if (rc < 0)
-        throwPOSIXException(errno,
+        THROW_POSIX_EXCEPTION(errno,
                             strprintf("Fail to create directory %s", norm_path(path).c_str()));
 }
 
@@ -341,7 +341,7 @@ void OSService::symlink(StringRef to, StringRef from) const
     int rc = ::symlink(to.c_str(), norm_path(from).c_str());
 #endif
     if (rc < 0)
-        throwPOSIXException(
+        THROW_POSIX_EXCEPTION(
             errno, strprintf("symlink to=%s and from=%s", to.c_str(), norm_path(from).c_str()));
 }
 
@@ -354,7 +354,7 @@ void OSService::link(StringRef source, StringRef dest) const
 #endif
     if (rc < 0)
     {
-        throwPOSIXException(errno, strprintf("link src=%s dest=%s", source.c_str(), dest.c_str()));
+        THROW_POSIX_EXCEPTION(errno, strprintf("link src=%s dest=%s", source.c_str(), dest.c_str()));
     }
 }
 
@@ -362,7 +362,7 @@ void OSService::statfs(struct fuse_statvfs* fs_info) const
 {
     int rc = ::fstatvfs(m_dir_fd, fs_info);
     if (rc < 0)
-        throwPOSIXException(errno, "statvfs");
+        THROW_POSIX_EXCEPTION(errno, "statvfs");
 }
 
 void OSService::rename(StringRef a, StringRef b) const
@@ -373,7 +373,7 @@ void OSService::rename(StringRef a, StringRef b) const
     int rc = ::rename(norm_path(a).c_str(), norm_path(b).c_str());
 #endif
     if (rc < 0)
-        throwPOSIXException(
+        THROW_POSIX_EXCEPTION(
             errno, strprintf("Renaming from %s to %s", norm_path(a).c_str(), norm_path(b).c_str()));
 }
 
@@ -388,7 +388,7 @@ bool OSService::stat(StringRef path, struct fuse_stat* stat) const
     {
         if (errno == ENOENT)
             return false;
-        throwPOSIXException(errno, strprintf("stating %s", norm_path(path).c_str()));
+        THROW_POSIX_EXCEPTION(errno, strprintf("stating %s", norm_path(path).c_str()));
     }
     return true;
 }
@@ -401,7 +401,7 @@ void OSService::chmod(StringRef path, fuse_mode_t mode) const
     int rc = ::lchmod(norm_path(path).c_str(), mode);
 #endif
     if (rc < 0)
-        throwPOSIXException(errno,
+        THROW_POSIX_EXCEPTION(errno,
                             strprintf("chmod %s with mode=0%o", norm_path(path).c_str(), mode));
 }
 
@@ -413,7 +413,7 @@ ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
     ssize_t rc = ::readlink(norm_path(path).c_str(), output, size);
 #endif
     if (rc < 0)
-        throwPOSIXException(
+        THROW_POSIX_EXCEPTION(
             errno, strprintf("readlink %s with buffer size=%zu", norm_path(path).c_str(), size));
     return rc;
 }
@@ -423,7 +423,7 @@ void OSService::utimens(StringRef path, const fuse_timespec* ts) const
 #if defined(HAS_AT_FUNCTIONS) && defined(HAS_FUTIMENS)
     int rc = ::utimensat(m_dir_fd, path.c_str(), ts, AT_SYMLINK_NOFOLLOW);
     if (rc < 0)
-        throwPOSIXException(errno, "utimensat");
+        THROW_POSIX_EXCEPTION(errno, "utimensat");
 #else
     int rc;
     if (!ts)
@@ -440,7 +440,7 @@ void OSService::utimens(StringRef path, const fuse_timespec* ts) const
         rc = ::lutimes(norm_path(path).c_str(), tv);
     }
     if (rc < 0)
-        throwPOSIXException(errno, "lutimes");
+        THROW_POSIX_EXCEPTION(errno, "lutimes");
 #endif
 }
 
@@ -457,7 +457,7 @@ int OSService::raise_fd_limit()
     struct rlimit rl;
     int rc = ::getrlimit(RLIMIT_NOFILE, &rl);
     if (rc < 0)
-        throwPOSIXException(errno, "getrlimit");
+        THROW_POSIX_EXCEPTION(errno, "getrlimit");
 
     rl.rlim_cur = 10240 * 16;
     do
@@ -467,7 +467,7 @@ int OSService::raise_fd_limit()
     } while (rc < 0 && rl.rlim_cur >= 1024);
 
     if (rc < 0)
-        throwPOSIXException(errno, "setrlimit");
+        THROW_POSIX_EXCEPTION(errno, "setrlimit");
 
     for (auto lim = rl.rlim_cur * 2 - 1, bound = rl.rlim_cur; lim >= bound; --lim)
     {
@@ -476,7 +476,7 @@ int OSService::raise_fd_limit()
         if (rc == 0)
             return static_cast<int>(lim);
     }
-    throwPOSIXException(errno, "setrlimit");
+    THROW_POSIX_EXCEPTION(errno, "setrlimit");
 }
 
 bool OSService::isatty(int fd) noexcept { return ::isatty(fd) != 0; }
