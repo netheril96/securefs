@@ -70,27 +70,17 @@ namespace stdex
 template <typename Func>
 struct scope_guard
 {
-    explicit scope_guard(Func&& on_exit) : on_exit_(std::move(on_exit)), enabled_(true) {}
+    explicit scope_guard(Func&& on_exit) : on_exit_(std::move(on_exit)) {}
 
     scope_guard(scope_guard const&) = delete;
     scope_guard& operator=(scope_guard const&) = delete;
 
-    scope_guard(scope_guard&& other) : on_exit_(std::move(other.on_exit_)), enabled_(other.enabled_)
-    {
-        other.enabled_ = false;
-    }
+    scope_guard(scope_guard&& other) : on_exit_(std::move(other.on_exit_)) {}
 
-    ~scope_guard() noexcept
-    {
-        if (enabled_)
-            on_exit_();
-    }
-
-    void dismiss() { enabled_ = false; }
+    ~scope_guard() noexcept { on_exit_(); }
 
 private:
     Func on_exit_;
-    bool enabled_;
 };
 
 template <typename Func>
