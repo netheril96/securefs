@@ -2,6 +2,8 @@
 #include "myutils.h"
 #include "platform.h"
 
+#include <cryptopp/base32.h>
+
 TEST_CASE("Test endian")
 {
     using namespace securefs;
@@ -92,4 +94,22 @@ TEST_CASE("Test hkdf")
                    test_derived,
                    sizeof(test_derived));
     REQUIRE(memcmp(test_derived, true_derived_key, sizeof(test_derived)) == 0);
+}
+
+TEST_CASE("Base32")
+{
+    CryptoPP::Base32Encoder enc;
+    const byte from[] = "hello";
+    byte out[256] = {}, out2[256] = {};
+    enc.Put(from, sizeof(from));
+    enc.MessageEnd();
+    enc.Get(out, sizeof(out));
+
+    enc.Initialize();
+    enc.Put(from, sizeof(from));
+    enc.MessageEnd();
+    enc.Get(out2, sizeof(out2));
+    CAPTURE(out);
+    CAPTURE(out2);
+    REQUIRE(strcmp((char*)out, (char*)out2) == 0);
 }

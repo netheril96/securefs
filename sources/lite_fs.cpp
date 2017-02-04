@@ -63,6 +63,7 @@ namespace lite
 
     std::string encrypt_path(AES_SIV& encryptor, StringRef path)
     {
+        CryptoPP::Base32Encoder encoder;
         byte buffer[2032];
         std::string result;
         result.reserve((path.size() * 8 + 4) / 5);
@@ -84,7 +85,7 @@ namespace lite
                                                        last_nonseparator_index,
                                                        buffer + AES_SIV::IV_SIZE,
                                                        buffer);
-                    CryptoPP::Base32Encoder encoder;
+                    encoder.Initialize();
                     encoder.Put(buffer, slice_size + AES_SIV::IV_SIZE);
                     encoder.MessageEnd();
                     auto encoded_size = encoder.MaxRetrievable();
@@ -110,6 +111,7 @@ namespace lite
         std::string result;
         result.reserve(path.size() * 5 / 8);
         size_t last_nonseparator_index = 0;
+        CryptoPP::Base32Decoder decoder;
 
         for (size_t i = 0; i <= path.size(); ++i)
         {
@@ -120,7 +122,7 @@ namespace lite
                     const char* slice = path.data() + last_nonseparator_index;
                     size_t slice_size = i - last_nonseparator_index;
 
-                    CryptoPP::Base32Decoder decoder;
+                    decoder.Initialize();
                     decoder.Put(reinterpret_cast<const byte*>(slice), slice_size);
                     decoder.MessageEnd();
 
@@ -300,6 +302,7 @@ namespace lite
     class LiteDirectoryTraverser : public DirectoryTraverser
     {
     private:
+        CryptoPP::Base32Decoder decoder;
         std::string m_prefix;
         std::unique_ptr<DirectoryTraverser> m_underlying_traverser;
         AES_SIV* m_name_encryptor;
@@ -332,7 +335,7 @@ namespace lite
 
                 try
                 {
-                    CryptoPP::Base32Decoder decoder;
+                    decoder.Initialize();
                     decoder.Put(reinterpret_cast<const byte*>(under_name.data()),
                                 under_name.size());
                     decoder.MessageEnd();
