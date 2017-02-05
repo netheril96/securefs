@@ -11,12 +11,6 @@ namespace securefs
 // Implementation of AES-SIV according to https://tools.ietf.org/html/rfc5297
 class AES_SIV
 {
-public:
-    AES_SIV(const AES_SIV&) = delete;
-    AES_SIV(AES_SIV&&) = delete;
-    AES_SIV& operator=(const AES_SIV&) = delete;
-    AES_SIV& operator=(AES_SIV&&) = delete;
-
 private:
     CryptoPP::CMAC<CryptoPP::AES> m_cmac;
     CryptoPP::CTR_Mode<CryptoPP::AES>::Encryption m_ctr;

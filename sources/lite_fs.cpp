@@ -305,11 +305,11 @@ namespace lite
     private:
         CryptoPP::Base32Decoder decoder;
         std::unique_ptr<DirectoryTraverser> m_underlying_traverser;
-        AES_SIV* m_name_encryptor;
+        AES_SIV m_name_encryptor;
 
     public:
         explicit LiteDirectoryTraverser(std::unique_ptr<DirectoryTraverser> underlying_traverser,
-                                        AES_SIV* name_encryptor)
+                                        const AES_SIV& name_encryptor)
             : m_underlying_traverser(std::move(underlying_traverser))
             , m_name_encryptor(name_encryptor)
         {
@@ -347,12 +347,12 @@ namespace lite
 
                     decoder.Get(buffer, sizeof(buffer));
                     name->assign(size - AES_SIV::IV_SIZE, '\0');
-                    bool success = m_name_encryptor->decrypt_and_verify(buffer + AES_SIV::IV_SIZE,
-                                                                        size - AES_SIV::IV_SIZE,
-                                                                        nullptr,
-                                                                        0,
-                                                                        &(*name)[0],
-                                                                        buffer);
+                    bool success = m_name_encryptor.decrypt_and_verify(buffer + AES_SIV::IV_SIZE,
+                                                                       size - AES_SIV::IV_SIZE,
+                                                                       nullptr,
+                                                                       0,
+                                                                       &(*name)[0],
+                                                                       buffer);
                     if (!success)
                     {
                         global_logger->warn("Skipping filename %s (decrypted to %s) since it fails "
@@ -379,7 +379,7 @@ namespace lite
         if (path.empty())
             throwVFSException(EINVAL);
         return securefs::make_unique<LiteDirectoryTraverser>(
-            m_root->create_traverser(translate_path(path, false)), &this->m_name_encryptor);
+            m_root->create_traverser(translate_path(path, false)), this->m_name_encryptor);
     }
 
 #ifdef __APPLE__
