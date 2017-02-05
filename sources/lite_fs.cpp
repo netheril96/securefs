@@ -256,7 +256,7 @@ namespace lite
     {
         if (!(mode & 0400))
         {
-            global_logger->warn("Change the mode of file %s to 0%o which denies user write access. "
+            global_logger->warn("Change the mode of file %s to 0%o which denies user read access. "
                                 "Mysterious bugs will occur.",
                                 path.c_str(),
                                 static_cast<unsigned>(mode));
