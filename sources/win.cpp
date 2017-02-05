@@ -257,7 +257,7 @@ public:
             EINVAL,       /* 124 */
             EINVAL,       /* 125 */
             EINVAL,       /* 126 */
-            EINVAL,       /* ERROR_PROC_NOT_FOUND		127 */
+            ESRCH,        /* ERROR_PROC_NOT_FOUND		127 */
             ECHILD,       /* ERROR_WAIT_NO_CHILDREN	128 */
             ECHILD,       /* ERROR_CHILD_NOT_COMPLETE	129 */
             EBADF,        /* ERROR_DIRECT_ACCESS_HANDLE	130 */
@@ -275,7 +275,7 @@ public:
             EAGAIN,       /* ERROR_BUSY_DRIVE		142 */
             EINVAL,       /* 143 */
             EINVAL,       /* 144 */
-            EEXIST,       /* ERROR_DIR_NOT_EMPTY		145 */
+            ENOTEMPTY,    /* ERROR_DIR_NOT_EMPTY		145 */
             EINVAL,       /* 146 */
             EINVAL,       /* 147 */
             EINVAL,       /* 148 */
@@ -297,7 +297,7 @@ public:
             EINVAL,       /* 164 */
             EINVAL,       /* 165 */
             EINVAL,       /* 166 */
-            EACCES,       /* ERROR_LOCK_FAILED		167 */
+            EAGAIN,       /* ERROR_LOCK_FAILED		167 */
             EINVAL,       /* 168 */
             EINVAL,       /* 169 */
             EINVAL,       /* 170 */
