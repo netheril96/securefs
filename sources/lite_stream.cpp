@@ -56,6 +56,12 @@ namespace lite
         const byte null_iv[12] = {0};
         m_encryptor.SetKeyWithIV(session_key.data(), session_key.size(), null_iv, sizeof(null_iv));
         m_decryptor.SetKeyWithIV(session_key.data(), session_key.size(), null_iv, sizeof(null_iv));
+
+        // Guard against programming failures of nonrandom keys
+        if (is_all_zeros(master_key.data(), master_key.size())
+            || is_all_zeros(header.data(), header.size())
+            || is_all_zeros(session_key.data(), session_key.size()))
+            throw_runtime_error("A serious bug in securefs occurs that uses zeroes as key");
     }
 
     AESGCMCryptStream::~AESGCMCryptStream() {}

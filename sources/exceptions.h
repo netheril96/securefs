@@ -112,8 +112,10 @@ public:
     do                                                                                             \
     {                                                                                              \
         int code = errc;                                                                           \
-        throw POSIXException(code, msg);                                                           \
+        throwPOSIXExceptionDoNotUseDirectly(code, msg);                                            \
     } while (0)
+
+[[noreturn]] void throwPOSIXExceptionDoNotUseDirectly(int err, std::string msg);
 
 class VerificationException : public ExceptionBase
 {
@@ -269,4 +271,7 @@ public:
 };
 
 [[noreturn]] void throwFileTypeInconsistencyException();
+
+[[noreturn]] void throw_runtime_error(const char*);
+[[noreturn]] void throw_runtime_error(const std::string&);
 }

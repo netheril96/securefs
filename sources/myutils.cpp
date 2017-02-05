@@ -380,7 +380,7 @@ static void find_ids_helper(const std::string& current_dir,
                 }
                 else if (namechar != '/' && namechar != '\\')
                 {
-                    throw std::runtime_error(
+                    throw_runtime_error(
                         strprintf("File \"%s\" has extension .meta, but not a valid securefs "
                                   "meta filename. Please cleanup the underlying storage first.",
                                   total_name.c_str()));

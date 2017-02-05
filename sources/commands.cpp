@@ -378,7 +378,7 @@ size_t try_read_password_with_confirmation(void* password, size_t length)
     }
     if (len1 != len2 || memcmp(password, second_password.data(), len1) != 0)
     {
-        throw std::runtime_error("Error: mismatched passwords");
+        throw_runtime_error("Error: mismatched passwords");
     }
     return len1;
 }
@@ -464,12 +464,12 @@ FSConfig CommandBase::read_config(StreamBase* stream, const void* password, size
     Json::Reader reader;
     Json::Value value;
     if (!reader.parse(str, value))
-        throw std::runtime_error(strprintf("Failure to parse the config file: %s",
-                                           reader.getFormattedErrorMessages().c_str()));
+        throw_runtime_error(strprintf("Failure to parse the config file: %s",
+                                      reader.getFormattedErrorMessages().c_str()));
 
     if (!parse_config(
             value, password, pass_len, result.master_key, result.block_size, result.iv_size))
-        throw std::runtime_error("Invalid password");
+        throw_runtime_error("Invalid password");
     result.version = value["version"].asUInt();
     return result;
 }
@@ -477,7 +477,7 @@ FSConfig CommandBase::read_config(StreamBase* stream, const void* password, size
 static void copy_key(const CryptoPP::AlignedSecByteBlock& in_key, key_type* out_key)
 {
     if (in_key.size() != out_key->size())
-        throw std::runtime_error("Invalid key size");
+        throw_runtime_error("Invalid key size");
     memcpy(out_key->data(), in_key.data(), out_key->size());
 }
 

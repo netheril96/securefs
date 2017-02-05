@@ -21,9 +21,21 @@ securefs::VFSException::~VFSException() {}
 
 securefs::POSIXException::~POSIXException() {}
 
-securefs::InvalidArgumentException::~InvalidArgumentException() {}
+securefs::InvalidArgumentException::~InvalidArgumentException(){}
 
-void securefs::throwFileTypeInconsistencyException()
+    [[noreturn]] void securefs::throwFileTypeInconsistencyException()
 {
     throw ::securefs::FileTypeInconsistencyException();
+}
+
+[[noreturn]] void securefs::throwPOSIXExceptionDoNotUseDirectly(int err, std::string msg)
+{
+    throw POSIXException(err, std::move(msg));
+}
+
+[[noreturn]] void securefs::throw_runtime_error(const char* msg) { throw std::runtime_error(msg); }
+
+[[noreturn]] void securefs::throw_runtime_error(const std::string& msg)
+{
+    throw std::runtime_error(msg);
 }
