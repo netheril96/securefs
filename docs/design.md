@@ -53,15 +53,15 @@ The respective algorithms are
 
 ### File contents
 
-Each file starts with a 32-byte random block which is XOR-ed with the master content key to derive the file specific key. 
+Each file starts with a 16-byte random block which is then encrypted by AES with the master content key (256 bits) to derive the file specific key (128 bits). The AES block cipher is a pseudorandom permutation so the derived key is still sufficiently random.
 
 Each block (with tunable block size at creation time) is encrypted with AES-GCM at each mutation, with a different IV at each time. The block number is an input to AES-GCM as associated data so blocks cannot be copied within or across files without verification failures.
 
-Unlike in full format, where a meta file is used, in lite format the IV is prepended, tag appended to the ciphertext and then written to the underlying file. This is much faster, but an attacker may replace a file block with an old one at the same position (which has valid tag) without being noticed.
+Unlike in full format, where a meta file is used, in lite format the IV is prepended, tag appended to the ciphertext and then written to the underlying file. Copying/moving blocks within the file will generate errors since the block number affects the tag, and copying/moving blocks across files will generate errors since the keys are different. However, an attacker may replace a file block with an old one at the same position (which has valid tag) without being noticed by the security check.
 
 All zeros blocks are passed through so that sparse files can be easily supported.
 
-The XOR-ing is necessary because NIST recommends that a single key is not used with more than 2^32 IVs for AES-GCM. For this reason, the file sizes are limited to 2^31 - 1 blocks.
+The file specific key is necessary because NIST recommends that a single key is not used with more than 2^32 IVs for AES-GCM. For this reason, the file sizes are limited to 2^31 - 1 blocks (for the default block size of 4KiB, the max file size is about 8TiB), accounting for possible overwrites of the same blocks. In the catastrophic event of leaking the file specific key (because too many IVs have been used), the master key remains safe and other files are still out of reach for the attackers.
 
 ### Names of files, directories and symlinks
 
@@ -69,7 +69,7 @@ We cannot use probabilistic encryption for file names, for otherwise name lookup
 
 The encrypted names are converted to ASCII in base32 encoding (in DUDE alphabet without padding). Base64 is not used because it won't work properly over case insensitive filesystems.
 
-Because of the added IV and the base32 encoding, the underlying filename is longer than the virtual filename. Therefore the maximum filename length in the mounted filesystem is always shorter than its underlying filesystem. On Windows we use Unicode long names (prefixed with \\?\) but other programs may not work well with the encrypted filenames.
+Because of the added IV and the base32 encoding, the underlying filename is longer than the virtual filename. Therefore the maximum filename length in the mounted filesystem is always shorter than its underlying filesystem. On Windows we use Unicode long names (prefixed with \\\\?\\) but other programs may not work well with the encrypted filenames.
 
 The key for name encryption is independent from the master content key.
 
