@@ -1031,9 +1031,10 @@ static inline NTSTATUS FspLoad(PVOID* PModule)
 
 static int win_init(void)
 {
-    SetConsoleOutputCP(CP_UTF8);
-    FspLoad(nullptr);
-    OSService::getuid();    // Force the call to WinFsp so that DLL failure will be caught sooner
+    ::SetConsoleOutputCP(CP_UTF8);
+    ::securefs::FspLoad(nullptr);
+    ::securefs::OSService::getuid();    // Force the call to WinFsp so that DLL failure will be
+                                        // caught sooner
     return 0;
 }
 
