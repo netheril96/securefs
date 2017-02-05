@@ -17,6 +17,7 @@
 #include <Windows.h>
 #include <io.h>
 #include <sddl.h>
+#include <strsafe.h>
 
 static inline uint64_t convert_dword_pair(uint64_t low_part, uint64_t high_part)
 {
@@ -49,27 +50,81 @@ class WindowsException : public SystemException
 {
 private:
     DWORD err;
-    std::string msg;
+    const wchar_t* funcname;
+    std::wstring path1, path2;
 
 public:
-    explicit WindowsException(DWORD err, std::string msg) : err(err), msg(std::move(msg)) {}
+    explicit WindowsException(DWORD err,
+                              const wchar_t* funcname,
+                              std::wstring path1,
+                              std::wstring path2)
+        : err(err), funcname(funcname), path1(std::move(path1)), path2(std::move(path2))
+    {
+    }
+    explicit WindowsException(DWORD err, const wchar_t* funcname, std::wstring path)
+        : err(err), funcname(funcname), path1(std::move(path))
+    {
+    }
+    explicit WindowsException(DWORD err, const wchar_t* funcname) : err(err), funcname(funcname) {}
+    ~WindowsException() {}
+
     const char* type_name() const noexcept override { return "WindowsException"; }
+
     std::string message() const override
     {
-        char buffer[2000];
-
-        if (!FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM,
+        wchar_t system_buffer[2000];
+        wchar_t final_buffer[6000];
+        if (!FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM,
                             nullptr,
                             err,
-                            MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US),
-                            buffer,
-                            sizeof(buffer),
+                            0,
+                            system_buffer,
+                            sizeof(system_buffer) / sizeof(*system_buffer),
                             nullptr))
-            return strprintf("error %lu (%s)", err, msg.c_str());
-        auto str = strprintf("error %lu (%s) %s", err, msg.c_str(), buffer);
-        while (str.size() > 0 && (str.back() == ' ' || str.back() == '\r' || str.back() == '\n'))
-            str.pop_back();
-        return str;
+        {
+            system_buffer[sizeof(system_buffer) - 1] = 0;
+        }
+
+        // Strip any trailing CRLF
+        for (ptrdiff_t i = wcslen(system_buffer) - 1; i >= 0; --i)
+        {
+            if (system_buffer[i] == L'\r' || system_buffer[i] == L'\n')
+                system_buffer[i] = 0;
+            else
+                break;
+        }
+
+        if (!path1.empty() && !path2.empty())
+        {
+            StringCbPrintfW(final_buffer,
+                            sizeof(final_buffer),
+                            L"error %lu %s (%s(path1=%s, path2=%s))",
+                            err,
+                            system_buffer,
+                            funcname,
+                            path1.c_str(),
+                            path2.c_str());
+        }
+        else if (!path1.empty())
+        {
+            StringCbPrintfW(final_buffer,
+                            sizeof(final_buffer),
+                            L"error %lu %s (%s(path=%s))",
+                            err,
+                            system_buffer,
+                            funcname,
+                            path1.c_str());
+        }
+        else
+        {
+            StringCbPrintfW(final_buffer,
+                            sizeof(final_buffer),
+                            L"error %lu %s (%s)",
+                            err,
+                            system_buffer,
+                            funcname);
+        }
+        return narrow_string(final_buffer);
     }
     DWORD win32_code() const noexcept { return err; }
     int error_number() const noexcept override
@@ -357,9 +412,23 @@ public:
         throw WindowsException(code, exp);                                                         \
     } while (0)
 
+#define THROW_WINDOWS_EXCEPTION_WITH_PATH(err, exp, path)                                          \
+    do                                                                                             \
+    {                                                                                              \
+        DWORD code = err;                                                                          \
+        throw WindowsException(code, exp, path);                                                   \
+    } while (0)
+
+#define THROW_WINDOWS_EXCEPTION_WITH_TWO_PATHS(err, exp, path1, path2)                             \
+    do                                                                                             \
+    {                                                                                              \
+        DWORD code = err;                                                                          \
+        throw WindowsException(code, exp, path1, path2);                                           \
+    } while (0)
+
 #define CHECK_CALL(exp)                                                                            \
     if (!(exp))                                                                                    \
-        THROW_WINDOWS_EXCEPTION(GetLastError(), #exp);
+        THROW_WINDOWS_EXCEPTION(GetLastError(), L"" #exp);
 
 static void stat_file_handle(HANDLE hd, struct fuse_stat* st)
 {
@@ -435,12 +504,7 @@ public:
         if (m_handle == INVALID_HANDLE_VALUE)
         {
             DWORD err = GetLastError();
-            throw WindowsException(
-                err,
-                strprintf("CreateFileW with path=%s, access rights %lu, create flags %lu",
-                          narrow_string(path).c_str(),
-                          access_flags,
-                          create_flags));
+            throw WindowsException(err, L"CreateFileW", path.to_string());
         }
     }
 
@@ -479,7 +543,7 @@ public:
             DWORD err = GetLastError();
             if (err == ERROR_HANDLE_EOF)
                 return 0;
-            THROW_WINDOWS_EXCEPTION(err, "ReadFile");
+            THROW_WINDOWS_EXCEPTION(err, L"ReadFile");
         }
         return readlen;
     }
@@ -665,11 +729,12 @@ void OSService::lock() const
 
 void OSService::mkdir(StringRef path, unsigned mode) const
 {
-    if (CreateDirectoryW(norm_path(path).c_str(), nullptr) == 0)
+    auto npath = norm_path(path);
+    if (CreateDirectoryW(npath.c_str(), nullptr) == 0)
     {
         DWORD err = GetLastError();
         if (err != ERROR_ALREADY_EXISTS)
-            THROW_WINDOWS_EXCEPTION(err, "CreateDirectory");
+            THROW_WINDOWS_EXCEPTION_WITH_PATH(err, L"CreateDirectory", npath);
     }
 }
 
@@ -682,7 +747,7 @@ void OSService::statfs(struct fuse_statvfs* fs_info) const
                             &TotalNumberOfBytes,
                             &TotalNumberOfFreeBytes)
         == 0)
-        THROW_WINDOWS_EXCEPTION(GetLastError(), "GetDiskFreeSpaceEx");
+        THROW_WINDOWS_EXCEPTION(GetLastError(), L"GetDiskFreeSpaceEx");
     auto maximum = static_cast<unsigned>(-1);
     fs_info->f_bsize = 4096;
     fs_info->f_frsize = fs_info->f_bsize;
@@ -708,7 +773,8 @@ void OSService::utimens(StringRef path, const fuse_timespec ts[2]) const
         atime = unix_time_to_filetime(ts);
         mtime = unix_time_to_filetime(ts + 1);
     }
-    HANDLE hd = CreateFileW(norm_path(path).c_str(),
+    auto npath = norm_path(path);
+    HANDLE hd = CreateFileW(npath.c_str(),
                             FILE_WRITE_ATTRIBUTES,
                             FILE_SHARE_READ | FILE_SHARE_DELETE | FILE_SHARE_WRITE,
                             nullptr,
@@ -716,7 +782,7 @@ void OSService::utimens(StringRef path, const fuse_timespec ts[2]) const
                             FILE_FLAG_BACKUP_SEMANTICS,
                             nullptr);
     if (hd == INVALID_HANDLE_VALUE)
-        THROW_WINDOWS_EXCEPTION(GetLastError(), "CreateFileW");
+        THROW_WINDOWS_EXCEPTION_WITH_PATH(GetLastError(), L"CreateFileW", npath);
     DEFER(CloseHandle(hd));
     CHECK_CALL(SetFileTime(hd, nullptr, &atime, &mtime));
 }
@@ -729,9 +795,10 @@ bool OSService::stat(StringRef path, struct fuse_stat* stat) const
         stat_file_handle(m_root_handle, stat);
         return true;
     }
-    HANDLE handle = CreateFileW(norm_path(path).c_str(),
-                                GENERIC_READ,
-                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+    auto npath = norm_path(path);
+    HANDLE handle = CreateFileW(npath.c_str(),
+                                FILE_WRITE_ATTRIBUTES,
+                                FILE_SHARE_READ | FILE_SHARE_DELETE | FILE_SHARE_WRITE,
                                 nullptr,
                                 OPEN_EXISTING,
                                 FILE_FLAG_BACKUP_SEMANTICS,
@@ -741,7 +808,7 @@ bool OSService::stat(StringRef path, struct fuse_stat* stat) const
         DWORD err = GetLastError();
         if (err == ERROR_PATH_NOT_FOUND || err == ERROR_FILE_NOT_FOUND || err == ERROR_NOT_FOUND)
             return false;
-        THROW_WINDOWS_EXCEPTION(err, "CreateFileW");
+        THROW_WINDOWS_EXCEPTION_WITH_PATH(err, L"CreateFileW", npath);
     }
 
     DEFER(CloseHandle(handle));
@@ -750,12 +817,7 @@ bool OSService::stat(StringRef path, struct fuse_stat* stat) const
 }
 
 void OSService::link(StringRef source, StringRef dest) const { throwVFSException(ENOSYS); }
-void OSService::chmod(StringRef path, fuse_mode_t mode) const
-{
-    int rc = ::_wchmod(norm_path(path).c_str(), mode);
-    if (rc < 0)
-        THROW_POSIX_EXCEPTION(errno, "_wchmod");
-}
+void OSService::chmod(StringRef path, fuse_mode_t mode) const { throwVFSException(ENOSYS); }
 
 ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
 {
@@ -767,7 +829,8 @@ void OSService::rename(StringRef a, StringRef b) const
 {
     auto wa = norm_path(a);
     auto wb = norm_path(b);
-    CHECK_CALL(MoveFileExW(wa.c_str(), wb.c_str(), MOVEFILE_REPLACE_EXISTING));
+    if (!MoveFileExW(wa.c_str(), wb.c_str(), MOVEFILE_REPLACE_EXISTING))
+        THROW_WINDOWS_EXCEPTION_WITH_TWO_PATHS(GetLastError(), L"MoveFileExW", wa, wb);
 }
 
 int OSService::raise_fd_limit()
@@ -829,7 +892,8 @@ public:
         m_handle = FindFirstFileW(pattern.c_str(), &m_data);
         if (m_handle == INVALID_HANDLE_VALUE)
         {
-            THROW_WINDOWS_EXCEPTION(GetLastError(), "FindFirstFileW");
+            THROW_WINDOWS_EXCEPTION_WITH_PATH(
+                GetLastError(), L"FindFirstFileW", pattern.to_string());
         }
     }
 
@@ -848,7 +912,7 @@ public:
                 DWORD err = GetLastError();
                 if (err == ERROR_NO_MORE_FILES)
                     return false;
-                THROW_WINDOWS_EXCEPTION(err, "FindNextFileW");
+                THROW_WINDOWS_EXCEPTION(err, L"FindNextFileW");
             }
         }
 
@@ -982,7 +1046,7 @@ std::wstring widen_string(StringRef str)
         throwInvalidArgumentException("String too long");
     int sz = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), nullptr, 0);
     if (sz <= 0)
-        THROW_WINDOWS_EXCEPTION(GetLastError(), "MultiByteToWideChar");
+        THROW_WINDOWS_EXCEPTION(GetLastError(), L"MultiByteToWideChar");
     std::wstring result(sz, 0);
     MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), &result[0], sz);
     return result;
@@ -995,7 +1059,7 @@ std::string narrow_string(WideStringRef str)
     int sz = WideCharToMultiByte(
         CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), nullptr, 0, 0, 0);
     if (sz <= 0)
-        THROW_WINDOWS_EXCEPTION(GetLastError(), "WideCharToMultiByte");
+        THROW_WINDOWS_EXCEPTION(GetLastError(), L"WideCharToMultiByte");
     std::string result(sz, 0);
     WideCharToMultiByte(
         CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), &result[0], sz, 0, 0);
