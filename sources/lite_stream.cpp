@@ -1,5 +1,7 @@
 #include "lite_stream.h"
 
+#include <cryptopp/aes.h>
+#include <cryptopp/modes.h>
 #include <cryptopp/osrng.h>
 
 namespace securefs
@@ -32,22 +34,21 @@ namespace lite
         if (block_size < 32)
             throwInvalidArgumentException("Block size too small");
 
-        CryptoPP::FixedSizeAlignedSecBlock<byte, securefs::KEY_LENGTH> header, session_key;
+        CryptoPP::FixedSizeAlignedSecBlock<byte, get_header_size()> header, session_key;
         auto rc = m_stream->read(header.data(), 0, header.size());
+
         if (rc == 0)
         {
-            CryptoPP::OS_GenerateRandomBlock(false, session_key.data(), session_key.size());
-            CryptoPP::xorbuf(header.data(), master_key.data(), session_key.data(), KEY_LENGTH);
+            CryptoPP::OS_GenerateRandomBlock(false, header.data(), header.size());
             m_stream->write(header.data(), 0, header.size());
         }
-        else if (rc == header.size())
-        {
-            CryptoPP::xorbuf(session_key.data(), master_key.data(), header.data(), KEY_LENGTH);
-        }
-        else
+        else if (rc != header.size())
         {
             throwInvalidArgumentException("Underlying stream has invalid header size");
         }
+
+        CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption ecenc(master_key.data(), master_key.size());
+        ecenc.ProcessData(session_key.data(), header.data(), get_header_size());
 
         m_buffer.reset(new byte[get_underlying_block_size()]);
 

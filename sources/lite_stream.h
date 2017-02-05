@@ -33,9 +33,9 @@ namespace lite
 
         length_type get_iv_size() const noexcept { return m_iv_size; }
 
-        static unsigned get_mac_size() noexcept { return 16; }
+        static constexpr unsigned get_mac_size() noexcept { return 16; }
 
-        static length_type get_header_size() noexcept { return KEY_LENGTH; }
+        static constexpr length_type get_header_size() noexcept { return 16; }
 
         length_type get_underlying_block_size() const noexcept
         {
