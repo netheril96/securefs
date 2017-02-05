@@ -700,7 +700,7 @@ OSService::OSService(StringRef path)
                                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                                 nullptr,
                                 OPEN_EXISTING,
-                                0,
+                                FILE_FLAG_BACKUP_SEMANTICS,
                                 nullptr);
 }
 
