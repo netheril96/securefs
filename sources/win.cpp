@@ -129,7 +129,7 @@ public:
     DWORD win32_code() const noexcept { return err; }
     int error_number() const noexcept override
     {
-        static int errorTable[] = {
+        static const int errorTable[] = {
             0,
             EINVAL,       /* ERROR_INVALID_FUNCTION	1 */
             ENOENT,       /* ERROR_FILE_NOT_FOUND		2 */
@@ -457,6 +457,7 @@ class WindowsFileStream final : public FileStream
 {
 private:
     HANDLE m_handle;
+    bool m_is_ntfs;
 
 private:
     void write32(const void* input, offset_type offset, DWORD length)
@@ -539,9 +540,9 @@ public:
             throw WindowsException(err, L"CreateFileW", path.to_string());
         }
 
-        bool is_ntfs = false;
+        bool committed = false;
         DEFER({
-            if (!is_ntfs)
+            if (!committed)
                 CloseHandle(m_handle);
         });
 
@@ -549,12 +550,11 @@ public:
         wchar_t fsname[buflen];
         CHECK_CALL(GetVolumeInformationByHandleW(
             m_handle, nullptr, 0, nullptr, nullptr, 0, fsname, buflen));
-        if (CompareStringEx(
-                LOCALE_NAME_INVARIANT, NORM_IGNORECASE, fsname, -1, L"NTFS", -1, 0, 0, 0)
-            != CSTR_EQUAL)
-            throwInvalidArgumentException(
-                strprintf("File %s not on a NTFS volume", narrow_string(path).c_str()));
-        is_ntfs = true;    // Commit the result so the it won't closed in the deferred handler
+        m_is_ntfs = (CompareStringEx(
+                         LOCALE_NAME_INVARIANT, NORM_IGNORECASE, fsname, -1, L"NTFS", -1, 0, 0, 0)
+                     == CSTR_EQUAL);
+        TRACE_LOG("Opening file on a %s volume", narrow_string(fsname).c_str());
+        committed = true;    // Commit the result so the it won't closed in the deferred handler
     }
 
     ~WindowsFileStream() { CloseHandle(m_handle); }
@@ -627,6 +627,19 @@ public:
 
     void resize(length_type len) override
     {
+        if (!m_is_ntfs)
+        {
+            // For files on other filesystems, SetEndOfFile beyond end will leave intervening bytes
+            // uninitialized
+            // Manually zeroing ourselves
+            auto old_size = this->size();
+            if (old_size < len)
+            {
+                std::vector<byte> zeros(len - old_size);
+                write(zeros.data(), old_size, len - old_size);
+                return;
+            }
+        }
         LARGE_INTEGER llen;
         llen.QuadPart = len;
         CHECK_CALL(SetFilePointerEx(m_handle, llen, nullptr, FILE_BEGIN));
@@ -652,7 +665,7 @@ public:
         CHECK_CALL(SetFileTime(m_handle, nullptr, &access_time, &mod_time));
     }
     void fstat(struct fuse_stat* st) override { stat_file_handle(m_handle, st); }
-    bool is_sparse() const noexcept override { return true; }
+    bool is_sparse() const noexcept override { return m_is_ntfs; }
 };
 
 OSService::OSService() : m_root_handle(INVALID_HANDLE_VALUE) {}
