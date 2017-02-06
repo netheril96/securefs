@@ -453,10 +453,42 @@ static void stat_file_handle(HANDLE hd, struct fuse_stat* st)
     st->st_blocks = (st->st_size + 4095) / 4096 * (4096 / 512);
 }
 
-class WindowsFileStream : public FileStream
+class WindowsFileStream final : public FileStream
 {
 private:
     HANDLE m_handle;
+
+private:
+    void write32(const void* input, offset_type offset, DWORD length)
+    {
+        OVERLAPPED ol;
+        memset(&ol, 0, sizeof(ol));
+        ol.Offset = static_cast<DWORD>(offset);
+        ol.OffsetHigh = static_cast<DWORD>(offset >> 32);
+
+        DWORD writelen;
+        CHECK_CALL(WriteFile(m_handle, input, length, &writelen, &ol));
+        if (writelen != length)
+            throwVFSException(EIO);
+    }
+
+    length_type read32(void* output, offset_type offset, DWORD length)
+    {
+        OVERLAPPED ol;
+        memset(&ol, 0, sizeof(ol));
+        ol.Offset = static_cast<DWORD>(offset);
+        ol.OffsetHigh = static_cast<DWORD>(offset >> 32);
+
+        DWORD readlen;
+        if (!ReadFile(m_handle, output, length, &readlen, &ol))
+        {
+            DWORD err = GetLastError();
+            if (err == ERROR_HANDLE_EOF)
+                return 0;
+            THROW_WINDOWS_EXCEPTION(err, L"ReadFile");
+        }
+        return readlen;
+    }
 
 public:
     explicit WindowsFileStream(WideStringRef path, int flags, unsigned mode)
@@ -506,6 +538,23 @@ public:
             DWORD err = GetLastError();
             throw WindowsException(err, L"CreateFileW", path.to_string());
         }
+
+        bool is_ntfs = false;
+        DEFER({
+            if (!is_ntfs)
+                CloseHandle(m_handle);
+        });
+
+        constexpr DWORD buflen = 256;
+        wchar_t fsname[buflen];
+        CHECK_CALL(GetVolumeInformationByHandleW(
+            m_handle, nullptr, 0, nullptr, nullptr, 0, fsname, buflen));
+        if (CompareStringEx(
+                LOCALE_NAME_INVARIANT, NORM_IGNORECASE, fsname, -1, L"NTFS", -1, 0, 0, 0)
+            != CSTR_EQUAL)
+            throwInvalidArgumentException(
+                strprintf("File %s not on a NTFS volume", narrow_string(path).c_str()));
+        is_ntfs = true;    // Commit the result so the it won't closed in the deferred handler
     }
 
     ~WindowsFileStream() { CloseHandle(m_handle); }
@@ -530,41 +579,10 @@ public:
             m_handle, 0, std::numeric_limits<DWORD>::max(), std::numeric_limits<DWORD>::max(), &o));
     }
 
-    length_type read32(void* output, offset_type offset, DWORD length)
-    {
-        OVERLAPPED ol;
-        memset(&ol, 0, sizeof(ol));
-        ol.Offset = static_cast<DWORD>(offset);
-        ol.OffsetHigh = static_cast<DWORD>(offset >> 32);
-
-        DWORD readlen;
-        if (!ReadFile(m_handle, output, length, &readlen, &ol))
-        {
-            DWORD err = GetLastError();
-            if (err == ERROR_HANDLE_EOF)
-                return 0;
-            THROW_WINDOWS_EXCEPTION(err, L"ReadFile");
-        }
-        return readlen;
-    }
-
     void close() noexcept override
     {
         CloseHandle(m_handle);
         m_handle = INVALID_HANDLE_VALUE;
-    }
-
-    void write32(const void* input, offset_type offset, DWORD length)
-    {
-        OVERLAPPED ol;
-        memset(&ol, 0, sizeof(ol));
-        ol.Offset = static_cast<DWORD>(offset);
-        ol.OffsetHigh = static_cast<DWORD>(offset >> 32);
-
-        DWORD writelen;
-        CHECK_CALL(WriteFile(m_handle, input, length, &writelen, &ol));
-        if (writelen != length)
-            throwVFSException(EIO);
     }
 
     length_type read(void* output, offset_type offset, length_type length) override
@@ -586,6 +604,8 @@ public:
 
     void write(const void* input, offset_type offset, length_type length) override
     {
+        if (offset > size())
+            resize(offset + length);    // Ensure that intervening data is zeroed
         while (length > MAX_SINGLE_BLOCK)
         {
             write32(input, offset, MAX_SINGLE_BLOCK);
@@ -607,19 +627,10 @@ public:
 
     void resize(length_type len) override
     {
-        auto sz = size();
-        if (len > sz)
-        {
-            std::vector<byte> zeros(len - sz);
-            write(zeros.data(), sz, len - sz);
-        }
-        else if (len < sz)
-        {
-            LARGE_INTEGER llen;
-            llen.QuadPart = len;
-            CHECK_CALL(SetFilePointerEx(m_handle, llen, nullptr, FILE_BEGIN));
-            CHECK_CALL(SetEndOfFile(m_handle));
-        }
+        LARGE_INTEGER llen;
+        llen.QuadPart = len;
+        CHECK_CALL(SetFilePointerEx(m_handle, llen, nullptr, FILE_BEGIN));
+        CHECK_CALL(SetEndOfFile(m_handle));
     }
 
     length_type optimal_block_size() const noexcept override { return 4096; }
@@ -641,6 +652,7 @@ public:
         CHECK_CALL(SetFileTime(m_handle, nullptr, &access_time, &mod_time));
     }
     void fstat(struct fuse_stat* st) override { stat_file_handle(m_handle, st); }
+    bool is_sparse() const noexcept override { return true; }
 };
 
 OSService::OSService() : m_root_handle(INVALID_HANDLE_VALUE) {}
@@ -797,7 +809,7 @@ bool OSService::stat(StringRef path, struct fuse_stat* stat) const
     }
     auto npath = norm_path(path);
     HANDLE handle = CreateFileW(npath.c_str(),
-                                FILE_WRITE_ATTRIBUTES,
+                                FILE_READ_ATTRIBUTES,
                                 FILE_SHARE_READ | FILE_SHARE_DELETE | FILE_SHARE_WRITE,
                                 nullptr,
                                 OPEN_EXISTING,
