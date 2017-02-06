@@ -73,7 +73,11 @@ namespace lite
         SINGLE_COMMON_PROLOGUE
         try
         {
+            if (!buf)
+                return -EFAULT;
             filesystem->statvfs(buf);
+            // Due to the Base32 encoding and the extra 16 bytes of synthesized IV
+            buf->f_namemax = buf->f_namemax * 5 / 8 - 16;
             return 0;
         }
         SINGLE_COMMON_EPILOGUE
