@@ -237,7 +237,7 @@ void BlockBasedStream::write(const void* input, offset_type offset, length_type 
 {
     auto current_size = this->size();
     if (offset > current_size)
-        resize(offset);
+        unchecked_resize(current_size, offset);
 
     unchecked_write(input, offset, length);
 }
@@ -274,9 +274,10 @@ void BlockBasedStream::zero_fill(offset_type offset, offset_type finish)
     }
 }
 
-void BlockBasedStream::resize(length_type new_size)
+void BlockBasedStream::resize(length_type new_size) { unchecked_resize(size(), new_size); }
+
+void BlockBasedStream::unchecked_resize(length_type current_size, length_type new_size)
 {
-    auto current_size = this->size();
     if (new_size == current_size)
         return;
     else if (new_size < current_size)
@@ -420,7 +421,7 @@ namespace internal
             const byte* iv = buffer.get();
             byte* mac = buffer.get() + get_iv_size();
 
-            if (is_all_zeros(iv, get_iv_size()))
+            if (is_all_zeros(buffer.get(), get_meta_size()) && is_all_zeros(input, length))
             {
                 memset(output, 0, length);
                 return;

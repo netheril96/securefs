@@ -37,21 +37,12 @@ class UnixFileStream final : public FileStream
 {
 private:
     int m_fd;
-    length_type m_size;
 
 public:
     explicit UnixFileStream(int fd) : m_fd(fd)
     {
         if (fd < 0)
             throwVFSException(EBADF);
-        struct stat st;
-        int rc = ::fstat(m_fd, &st);
-        if (rc < 0)
-        {
-            ::close(fd);
-            THROW_POSIX_EXCEPTION(errno, "fstat");
-        }
-        m_size = st.st_size;
     }
 
     ~UnixFileStream() { this->close(); }
@@ -101,7 +92,7 @@ public:
         auto rc = ::pread(m_fd, output, length, offset);
         if (rc < 0)
             THROW_POSIX_EXCEPTION(errno, "pread");
-        return rc;
+        return static_cast<length_type>(rc);
     }
 
     void write(const void* input, offset_type offset, length_type length) override
@@ -111,8 +102,6 @@ public:
             THROW_POSIX_EXCEPTION(errno, "pwrite");
         if (static_cast<length_type>(rc) != length)
             throwVFSException(EIO);
-        if (offset + length > m_size)
-            m_size = offset + length;
     }
 
     void flush() override {}
@@ -122,10 +111,15 @@ public:
         auto rc = ::ftruncate(m_fd, new_length);
         if (rc < 0)
             THROW_POSIX_EXCEPTION(errno, "truncate");
-        m_size = new_length;
     }
 
-    length_type size() const override { return m_size; }
+    length_type size() const override
+    {
+        off_t rc = ::lseek(m_fd, 0, SEEK_END);
+        if (rc < 0)
+            THROW_POSIX_EXCEPTION(errno, "lseek");
+        return static_cast<length_type>(rc);
+    }
 
     bool is_sparse() const noexcept override { return true; }
 

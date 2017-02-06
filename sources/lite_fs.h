@@ -92,7 +92,7 @@ namespace lite
         key_type m_content_key;
         CryptoPP::GCM<CryptoPP::AES>::Encryption m_xattr_enc;
         CryptoPP::GCM<CryptoPP::AES>::Decryption m_xattr_dec;
-        std::shared_ptr<securefs::OSService> m_root;
+        std::shared_ptr<const securefs::OSService> m_root;
         unsigned m_block_size, m_iv_size;
         unsigned m_flags;
 
@@ -100,7 +100,7 @@ namespace lite
         std::string translate_path(StringRef path, bool preserve_leading_slash);
 
     public:
-        FileSystem(std::shared_ptr<securefs::OSService> root,
+        FileSystem(std::shared_ptr<const securefs::OSService> root,
                    const key_type& name_key,
                    const key_type& content_key,
                    const key_type& xattr_key,

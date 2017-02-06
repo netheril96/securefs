@@ -349,7 +349,7 @@ size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t
     new_termios.c_lflag |= ECHONL;
     rc = ::tcsetattr(fd, TCSAFLUSH, &new_termios);
     if (rc < 0)
-        throwVFSException(errno);
+        THROW_POSIX_EXCEPTION(errno, "tcsetattr");
     auto retval = insecure_read_password(fp, prompt, password, max_length);
     (void)::tcsetattr(fd, TCSAFLUSH, &old_termios);
     return retval;

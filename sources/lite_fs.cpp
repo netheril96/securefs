@@ -32,7 +32,7 @@ namespace lite
             stat->st_size, m_crypt_stream->get_block_size(), m_crypt_stream->get_iv_size());
     }
 
-    FileSystem::FileSystem(std::shared_ptr<securefs::OSService> root,
+    FileSystem::FileSystem(std::shared_ptr<const securefs::OSService> root,
                            const key_type& name_key,
                            const key_type& content_key,
                            const key_type& xattr_key,

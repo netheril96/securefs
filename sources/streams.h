@@ -102,6 +102,7 @@ private:
 
     void unchecked_write(const void* input, offset_type offset, length_type length);
     void zero_fill(offset_type offset, length_type length);
+    void unchecked_resize(length_type current_size, length_type new_size);
 
 public:
     BlockBasedStream(length_type block_size) : m_block_size(block_size) {}
