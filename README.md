@@ -21,8 +21,6 @@ There are already many encrypting filesystem in widespread use. Some notable one
 * Supported on all major platforms (Mac, Linux, BSDs and Windows)
 * Efficient cloud synchronization (not a single preallocated file as container)
 
-*Caveat: The FUSE driver on Windows is unstable for now. Nothing we can fix.*
-
 ## Install
 
 [![Build Status](https://api.travis-ci.org/netheril96/securefs.svg?branch=master)](https://travis-ci.org/netheril96/securefs)
@@ -47,7 +45,7 @@ brew install homebrew/fuse/securefs
 
 ### Manual Build
 
-Run `cmake .` then `make install -j8`. The compiler must be new enough (g++ >= 4.8, clang >= 3.4, Visual Studio >= 2015). If you encounter build errors and the compiler is new enough, try `cmake -DPORTABLE_BUILD=ON .` instead. Windows support is now only experimental.
+Run `cmake .` then `make install -j8`. The compiler must be new enough (g++ >= 4.8, clang >= 3.4, Visual Studio >= 2015). If you encounter build errors and the compiler is new enough, try `cmake -DPORTABLE_BUILD=ON .` instead.
 
 ## Basic usage
 
