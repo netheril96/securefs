@@ -26,8 +26,7 @@ static inline uint64_t convert_dword_pair(uint64_t low_part, uint64_t high_part)
 
 static void filetime_to_unix_time(const FILETIME* ft, struct fuse_timespec* out)
 {
-    long long ll = (static_cast<long long>(ft->dwHighDateTime) << 32)
-        + static_cast<long long>(ft->dwLowDateTime) - 116444736000000000LL;
+    long long ll = convert_dword_pair(ft->dwLowDateTime, ft->dwHighDateTime) - 116444736000000000LL;
     static const long long FACTOR = 10000000LL;
     out->tv_sec = ll / FACTOR;
     out->tv_nsec = (ll % FACTOR) * 100;
@@ -700,11 +699,12 @@ std::wstring OSService::norm_path(StringRef path) const
             {
                 if (norm_components.size() > 0)
                     norm_components.pop_back();
+                continue;
             }
             norm_components.push_back(&name);
         }
         std::string str;
-        str.reserve(m_dir_name.size() + path.size() + 24);
+        str.reserve(prepath.size() + 8);
         str.assign(("\\\\?"));
         for (const std::string* name : norm_components)
         {
@@ -727,6 +727,8 @@ OSService::OSService(StringRef path)
                                 OPEN_EXISTING,
                                 FILE_FLAG_BACKUP_SEMANTICS,
                                 nullptr);
+    if (m_root_handle == INVALID_HANDLE_VALUE)
+        THROW_WINDOWS_EXCEPTION_WITH_PATH(GetLastError(), L"CreateFileW", resolved);
 }
 
 std::shared_ptr<FileStream>
@@ -758,8 +760,7 @@ void OSService::mkdir(StringRef path, unsigned mode) const
     if (CreateDirectoryW(npath.c_str(), nullptr) == 0)
     {
         DWORD err = GetLastError();
-        if (err != ERROR_ALREADY_EXISTS)
-            THROW_WINDOWS_EXCEPTION_WITH_PATH(err, L"CreateDirectory", npath);
+        THROW_WINDOWS_EXCEPTION_WITH_PATH(err, L"CreateDirectory", npath);
     }
 }
 
@@ -964,8 +965,8 @@ std::unique_ptr<DirectoryTraverser> OSService::create_traverser(StringRef dir) c
 
 uint32_t OSService::getuid()
 {
-    thread_local uint32_t cached_uid = 0;
-    if (cached_uid > 0)
+    thread_local uint32_t cached_uid = static_cast<uint32_t>(-1);
+    if (cached_uid != static_cast<uint32_t>(-1))
         return static_cast<uint32_t>(cached_uid);
 
     HANDLE token;
@@ -978,9 +979,7 @@ uint32_t OSService::getuid()
     GetTokenInformation(token, TokenUser, nullptr, 0, &outsize);
     tkuser = (TOKEN_USER*)malloc(outsize);
     CHECK_CALL(GetTokenInformation(token, TokenUser, tkuser, outsize, &outsize));
-    NTSTATUS rc = FspPosixMapSidToUid(tkuser->User.Sid, &cached_uid);
-    if (rc)
-        WARN_LOG("FspPosixMapSidToUid returns NTSTATUS %d", (int)rc);
+    (void)FspPosixMapSidToUid(tkuser->User.Sid, &cached_uid);
     return cached_uid;
 }
 
@@ -1007,12 +1006,14 @@ void OSService::get_current_time(fuse_timespec& current_time)
 
 static inline NTSTATUS FspLoad(PVOID* PModule)
 {
+#ifndef FSP_DLLNAME
 #if defined(_WIN64)
 #define FSP_DLLNAME "winfsp-x64.dll"
 #else
 #define FSP_DLLNAME "winfsp-x86.dll"
 #endif
 #define FSP_DLLPATH "bin\\" FSP_DLLNAME
+#endif
 
     WCHAR PathBuf[MAX_PATH];
     DWORD Size;
