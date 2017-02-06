@@ -440,11 +440,11 @@ static void stat_file_handle(HANDLE hd, struct fuse_stat* st)
     st->st_ctim = st->st_mtim;
     st->st_nlink = static_cast<fuse_nlink_t>(info.nNumberOfLinks);
     st->st_uid = securefs::OSService::getuid();
-    st->st_gid = st->st_uid;
+    st->st_gid = securefs::OSService::getgid();
     if (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-        st->st_mode = S_IFDIR | 0777;
+        st->st_mode = S_IFDIR | 0755;
     else
-        st->st_mode = S_IFREG | 0777;
+        st->st_mode = S_IFREG | 0755;
     st->st_dev = info.dwVolumeSerialNumber;
     st->st_ino = convert_dword_pair(info.nFileIndexLow, info.nFileIndexHigh);
     st->st_size = convert_dword_pair(info.nFileSizeLow, info.nFileSizeHigh);
@@ -983,7 +983,25 @@ uint32_t OSService::getuid()
     return cached_uid;
 }
 
-uint32_t OSService::getgid() { return getuid(); }
+uint32_t OSService::getgid()
+{
+    thread_local uint32_t cached_gid = static_cast<uint32_t>(-1);
+    if (cached_gid != static_cast<uint32_t>(-1))
+        return static_cast<uint32_t>(cached_gid);
+
+    HANDLE token;
+    CHECK_CALL(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token));
+    DEFER(CloseHandle(token));
+
+    DWORD outsize = 1;
+    TOKEN_GROUPS* tkgroup = nullptr;
+    DEFER(free(tkgroup));
+    GetTokenInformation(token, TokenGroups, nullptr, 0, &outsize);
+    tkgroup = (TOKEN_GROUPS*)malloc(outsize);
+    CHECK_CALL(GetTokenInformation(token, TokenGroups, tkgroup, outsize, &outsize));
+    (void)FspPosixMapSidToUid(tkgroup->Groups[0].Sid, &cached_gid);
+    return cached_gid;
+}
 
 bool OSService::isatty(int fd) noexcept { return ::_isatty(fd) != 0; }
 
