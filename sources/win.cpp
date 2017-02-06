@@ -82,7 +82,7 @@ public:
                             sizeof(system_buffer) / sizeof(*system_buffer),
                             nullptr))
         {
-            system_buffer[sizeof(system_buffer) - 1] = 0;
+            system_buffer[0] = 0;
         }
 
         // Strip any trailing CRLF
