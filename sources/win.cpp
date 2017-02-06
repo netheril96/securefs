@@ -767,12 +767,11 @@ void OSService::statfs(struct fuse_statvfs* fs_info) const
 {
     memset(fs_info, 0, sizeof(*fs_info));
     ULARGE_INTEGER FreeBytesAvailable, TotalNumberOfBytes, TotalNumberOfFreeBytes;
-    if (GetDiskFreeSpaceExW(norm_path(".").c_str(),
-                            &FreeBytesAvailable,
-                            &TotalNumberOfBytes,
-                            &TotalNumberOfFreeBytes)
-        == 0)
-        THROW_WINDOWS_EXCEPTION(GetLastError(), L"GetDiskFreeSpaceEx");
+    DWORD namemax = 0;
+    CHECK_CALL(GetDiskFreeSpaceExW(
+        norm_path(".").c_str(), &FreeBytesAvailable, &TotalNumberOfBytes, &TotalNumberOfFreeBytes));
+    CHECK_CALL(GetVolumeInformationByHandleW(
+        m_root_handle, nullptr, 0, nullptr, &namemax, nullptr, nullptr, 0));
     auto maximum = static_cast<unsigned>(-1);
     fs_info->f_bsize = 4096;
     fs_info->f_frsize = fs_info->f_bsize;
@@ -782,7 +781,7 @@ void OSService::statfs(struct fuse_statvfs* fs_info) const
     fs_info->f_files = maximum;
     fs_info->f_ffree = maximum;
     fs_info->f_favail = maximum;
-    fs_info->f_namemax = 255;
+    fs_info->f_namemax = namemax;
 }
 
 void OSService::utimens(StringRef path, const fuse_timespec ts[2]) const
