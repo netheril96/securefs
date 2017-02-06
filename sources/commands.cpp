@@ -812,12 +812,12 @@ public:
         }
         else if (background.getValue())
         {
-            global_logger->warn("securefs is about to enter background without a log file. You "
-                                "won't be able to inspect what goes wrong. You can remount with "
-                                "option --log instead.");
-            global_logger.reset(Logger::create_null_logger());
+            WARN_LOG("securefs is about to enter background without a log file. You "
+                     "won't be able to inspect what goes wrong. You can remount with "
+                     "option --log instead.");
+            global_logger.reset(nullptr);
         }
-        if (trace.getValue())
+        if (global_logger && trace.getValue())
             global_logger->set_level(kLogTrace);
     }
 
@@ -825,7 +825,7 @@ public:
     {
         if (data_dir.getValue() == mount_point.getValue())
         {
-            global_logger->warn("Mounting a directory on itself may cause securefs to hang");
+            WARN_LOG("Mounting a directory on itself may cause securefs to hang");
         }
 
         recreate_logger();
@@ -834,7 +834,7 @@ public:
             || mount_point.getValue().front() < 'A'
             || mount_point.getValue().front() > 'Z')
         {
-            global_logger->error("The mount point must be a drive path, such as Z:");
+            ERROR_LOG("The mount point must be a drive path, such as Z:");
             return 33;
         }
 #else
@@ -849,7 +849,7 @@ public:
         {
             if (e.error_number() == ENOENT)
             {
-                global_logger->error(
+                ERROR_LOG(
                     "Config file %s does not exist. Perhaps you forget to run `create` command "
                     "first?",
                     get_real_config_path().c_str());
@@ -863,7 +863,7 @@ public:
         if (config.master_key.size() == KEY_LENGTH
             && std::count(config.master_key.begin(), config.master_key.end(), (byte)0) >= 20)
         {
-            global_logger->warn(
+            WARN_LOG(
                 "%s",
                 "Your filesystem is created by a vulnerable version of securefs.\n"
                 "Please immediate migrate your old data to a newly created securefs filesystem,\n"
@@ -877,14 +877,14 @@ public:
 
         try
         {
-            global_logger->info("Raising the number of file descriptor limit to %d",
-                                OSService::raise_fd_limit());
+            INFO_LOG("Raising the number of file descriptor limit to %d",
+                     OSService::raise_fd_limit());
         }
         catch (const ExceptionBase& e)
         {
-            global_logger->warn("Failure to raise the maximum file descriptor limit (%s: %s)",
-                                e.type_name(),
-                                e.what());
+            WARN_LOG("Failure to raise the maximum file descriptor limit (%s: %s)",
+                     e.type_name(),
+                     e.what());
         }
 
         std::vector<const char*> fuse_args;
@@ -907,20 +907,19 @@ public:
         const char* copyfile_disable = ::getenv("COPYFILE_DISABLE");
         if (copyfile_disable)
         {
-            global_logger->info(
-                "Mounting without .DS_Store and other apple dot files because environmental "
-                "variable COPYFILE_DISABLE is set to \"%s\"",
-                copyfile_disable);
+            INFO_LOG("Mounting without .DS_Store and other apple dot files because environmental "
+                     "variable COPYFILE_DISABLE is set to \"%s\"",
+                     copyfile_disable);
             fuse_args.push_back("-o");
             fuse_args.push_back("noappledouble");
         }
 #endif
         fuse_args.push_back(mount_point.getValue().c_str());
 
-        global_logger->info("Mounting filesystem stored at %s onto %s with format version: %u",
-                            data_dir.getValue().c_str(),
-                            mount_point.getValue().c_str(),
-                            config.version);
+        INFO_LOG("Mounting filesystem stored at %s onto %s with format version: %u",
+                 data_dir.getValue().c_str(),
+                 mount_point.getValue().c_str(),
+                 config.version);
 
         if (config.version < 4)
         {
@@ -933,16 +932,15 @@ public:
             }
             catch (const ExceptionBase& e)
             {
-                global_logger->error(
-                    "Encountering error %s when creating the lock file %s/%s.\n"
-                    "Perhaps multiple securefs instances are trying to operate on a single "
-                    "directory.\n"
-                    "Close other instances, including on other machines, and try again.\n"
-                    "Or remove the lock file manually if you are sure no other instances are "
-                    "holding the lock.",
-                    e.what(),
-                    data_dir.getValue().c_str(),
-                    securefs::operations::LOCK_FILENAME.c_str());
+                ERROR_LOG("Encountering error %s when creating the lock file %s/%s.\n"
+                          "Perhaps multiple securefs instances are trying to operate on a single "
+                          "directory.\n"
+                          "Close other instances, including on other machines, and try again.\n"
+                          "Or remove the lock file manually if you are sure no other instances are "
+                          "holding the lock.",
+                          e.what(),
+                          data_dir.getValue().c_str(),
+                          securefs::operations::LOCK_FILENAME.c_str());
                 return 18;
             }
             fsopt.block_size = config.block_size;
@@ -978,10 +976,9 @@ public:
             fsopt.iv_size = config.iv_size;
             if (config.master_key.size() != 3 * KEY_LENGTH)
             {
-                global_logger->error(
-                    "The config file has an invalid master key size %zu (expect %zu)",
-                    config.master_key.size(),
-                    static_cast<size_t>(3 * KEY_LENGTH));
+                ERROR_LOG("The config file has an invalid master key size %zu (expect %zu)",
+                          config.master_key.size(),
+                          static_cast<size_t>(3 * KEY_LENGTH));
                 return 100;
             }
 
@@ -1164,23 +1161,22 @@ int commands_main(int argc, const char* const* argv)
     }
     catch (const TCLAP::ArgException& e)
     {
-        global_logger->error(
-            "Error parsing arguments: %s at %s\n", e.error().c_str(), e.argId().c_str());
+        ERROR_LOG("Error parsing arguments: %s at %s\n", e.error().c_str(), e.argId().c_str());
         return 5;
     }
     catch (const std::runtime_error& e)
     {
-        global_logger->error("%s\n", e.what());
+        ERROR_LOG("%s\n", e.what());
         return 1;
     }
     catch (const securefs::ExceptionBase& e)
     {
-        global_logger->error("%s: %s\n", e.type_name(), e.what());
+        ERROR_LOG("%s: %s\n", e.type_name(), e.what());
         return 2;
     }
     catch (const std::exception& e)
     {
-        global_logger->error("%s: %s\n", typeid(e).name(), e.what());
+        ERROR_LOG("%s: %s\n", typeid(e).name(), e.what());
         return 3;
     }
 }

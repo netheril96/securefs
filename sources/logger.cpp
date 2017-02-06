@@ -108,8 +108,6 @@ Logger::~Logger()
         fclose(m_fp);
 }
 
-Logger* Logger::create_null_logger() { return new Logger(nullptr, false); }
-
 Logger* Logger::create_stderr_logger() { return new Logger(stderr, false); }
 
 Logger* Logger::create_file_logger(const std::string& path)

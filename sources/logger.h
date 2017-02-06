@@ -50,7 +50,6 @@ private:
 
 public:
     static Logger* create_stderr_logger();
-    static Logger* create_null_logger();
     static Logger* create_file_logger(const std::string& path);
 
     void vlog(LoggingLevel level, const char* format, va_list args) noexcept;
@@ -63,60 +62,22 @@ public:
     LoggingLevel get_level() const noexcept { return m_level; }
     void set_level(LoggingLevel lvl) noexcept { m_level = lvl; }
 
-    void trace(const char* format, ...) noexcept
-    {
-        if (!m_fp || get_level() > kLogTrace)
-            return;
-
-        va_list ap;
-        va_start(ap, format);
-        vlog(kLogTrace, format, ap);
-        va_end(ap);
-    }
-
-    void debug(const char* format, ...) noexcept
-    {
-        if (!m_fp || get_level() > kLogDebug)
-            return;
-
-        va_list ap;
-        va_start(ap, format);
-        vlog(kLogDebug, format, ap);
-        va_end(ap);
-    }
-    void info(const char* format, ...) noexcept
-    {
-        if (!m_fp || get_level() > kLogInfo)
-            return;
-
-        va_list ap;
-        va_start(ap, format);
-        vlog(kLogInfo, format, ap);
-        va_end(ap);
-    }
-    void warn(const char* format, ...) noexcept
-    {
-        if (!m_fp || get_level() > kLogWarning)
-            return;
-
-        va_list ap;
-        va_start(ap, format);
-        vlog(kLogWarning, format, ap);
-        va_end(ap);
-    }
-    void error(const char* format, ...) noexcept
-    {
-        if (!m_fp || get_level() > kLogError)
-            return;
-
-        va_list ap;
-        va_start(ap, format);
-        vlog(kLogError, format, ap);
-        va_end(ap);
-    }
-
     ~Logger();
 };
 
 extern std::unique_ptr<Logger> global_logger;
+
+#define GENERIC_LOG(log_level, ...)                                                                \
+    do                                                                                             \
+    {                                                                                              \
+        if (global_logger && global_logger->get_level() <= log_level)                              \
+        {                                                                                          \
+            global_logger->log(log_level, __VA_ARGS__);                                            \
+        }                                                                                          \
+    } while (0)
+#define TRACE_LOG(...) GENERIC_LOG(kLogTrace, __VA_ARGS__)
+#define DEBUG_LOG(...) GENERIC_LOG(kLogDebug, __VA_ARGS__)
+#define INFO_LOG(...) GENERIC_LOG(kLogInfo, __VA_ARGS__)
+#define WARN_LOG(...) GENERIC_LOG(kLogWarning, __VA_ARGS__)
+#define ERROR_LOG(...) GENERIC_LOG(kLogError, __VA_ARGS__)
 }

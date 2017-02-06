@@ -163,9 +163,9 @@ namespace internal
                     contents += str;
                     return true;
                 });
-            global_logger->warn("Trying to remove a non-empty directory \"%s\" with contents: %s",
-                                path,
-                                contents.c_str());
+            WARN_LOG("Trying to remove a non-empty directory \"%s\" with contents: %s",
+                     path,
+                     contents.c_str());
             throwVFSException(ENOTEMPTY);
         }
         dir->remove_entry(last_component, id, type);
@@ -215,7 +215,7 @@ namespace operations
     {
         auto args = static_cast<MountOptions*>(fuse_get_context()->private_data);
         auto fs = new FileSystemContext(*args);
-        global_logger->trace("%s", __FUNCTION__);
+        TRACE_LOG("%s", __FUNCTION__);
         fputs("Filesystem mounted successfully\n", stderr);
         return fs;
     }
@@ -223,7 +223,7 @@ namespace operations
     void destroy(void* data)
     {
         auto fs = static_cast<FileSystemContext*>(data);
-        global_logger->trace("%s", __FUNCTION__);
+        TRACE_LOG("%s", __FUNCTION__);
         delete fs;
         fputs("Filesystem unmounted successfully\n", stderr);
     }
@@ -311,7 +311,7 @@ namespace operations
                 bool success = filler(buffer, name.c_str(), &st, 0) == 0;
                 if (!success)
                 {
-                    global_logger->warn("Filling directory buffer failed");
+                    WARN_LOG("Filling directory buffer failed");
                 }
                 return success;
             };
@@ -692,7 +692,7 @@ namespace operations
 #define XATTR_COMMON_PROLOGUE                                                                      \
     auto ctx = fuse_get_context();                                                                 \
     auto fs = internal::get_fs(ctx);                                                               \
-    global_logger->trace("%s (path=%s, name=%s)", __func__, path, name);
+    TRACE_LOG("%s (path=%s, name=%s)", __func__, path, name);
 
 #define XATTR_COMMON_CATCH_BLOCK                                                                   \
     catch (const ExceptionBase& e)                                                                 \
@@ -700,12 +700,12 @@ namespace operations
         int errc = e.error_number();                                                               \
         if (errc != ENOATTR) /* Attribute not found is very common and normal; no need to log it   \
                                 as an error */                                                     \
-            global_logger->error("%s (path=%s, name=%s) encounters %s: %s",                        \
-                                 __FUNCTION__,                                                     \
-                                 path,                                                             \
-                                 name,                                                             \
-                                 e.type_name(),                                                    \
-                                 e.what());                                                        \
+            ERROR_LOG("%s (path=%s, name=%s) encounters %s: %s",                                   \
+                      __FUNCTION__,                                                                \
+                      path,                                                                        \
+                      name,                                                                        \
+                      e.type_name(),                                                               \
+                      e.what());                                                                   \
         return -errc;                                                                              \
     }
 

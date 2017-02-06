@@ -62,11 +62,11 @@ namespace lite
     void* init(struct fuse_conn_info*)
     {
         auto args = fuse_get_context()->private_data;
-        global_logger->info("init");
+        INFO_LOG("init");
         return args;
     }
 
-    void destroy(void*) { global_logger->info("destroy"); }
+    void destroy(void*) { INFO_LOG("destroy"); }
 
     int statfs(const char* path, struct fuse_statvfs* buf)
     {
@@ -90,12 +90,12 @@ namespace lite
         {
             if (!filesystem->stat(path, st))
                 return -ENOENT;
-            global_logger->trace("stat (%s): mode=0%o, uid=%u, gid=%u, size=%zu",
-                                 path,
-                                 st->st_mode,
-                                 (unsigned)st->st_uid,
-                                 (unsigned)st->st_gid,
-                                 (size_t)st->st_size);
+            TRACE_LOG("stat (%s): mode=0%o, uid=%u, gid=%u, size=%zu",
+                      path,
+                      st->st_mode,
+                      (unsigned)st->st_uid,
+                      (unsigned)st->st_gid,
+                      (size_t)st->st_size);
             if (is_windows())
                 st->st_mode |= 0777;
             return 0;
@@ -117,7 +117,7 @@ namespace lite
 
     int releasedir(const char* path, struct fuse_file_info* info)
     {
-        global_logger->trace("%s %s", __func__, path);
+        TRACE_LOG("%s %s", __func__, path);
         try
         {
             delete reinterpret_cast<DirectoryTraverser*>(info->fh);
@@ -192,7 +192,7 @@ namespace lite
 
     int release(const char* path, struct fuse_file_info* info)
     {
-        global_logger->trace("%s %s", __func__, path);
+        TRACE_LOG("%s %s", __func__, path);
         try
         {
             delete reinterpret_cast<File*>(info->fh);
@@ -241,7 +241,7 @@ namespace lite
 
     int flush(const char* path, struct fuse_file_info* info)
     {
-        global_logger->trace("%s %s", __func__, path);
+        TRACE_LOG("%s %s", __func__, path);
         auto fp = reinterpret_cast<File*>(info->fh);
         if (!fp)
             return -EFAULT;
@@ -258,7 +258,7 @@ namespace lite
 
     int ftruncate(const char* path, fuse_off_t len, struct fuse_file_info* info)
     {
-        global_logger->trace("%s %s with length=%lld", __func__, path, static_cast<long long>(len));
+        TRACE_LOG("%s %s with length=%lld", __func__, path, static_cast<long long>(len));
         auto fp = reinterpret_cast<File*>(info->fh);
         if (!fp)
             return -EFAULT;
@@ -275,13 +275,13 @@ namespace lite
             auto ebase = dynamic_cast<const ExceptionBase*>(&e);
             auto code = ebase ? ebase->error_number() : EPERM;
             auto type_name = ebase ? ebase->type_name() : typeid(e).name();
-            global_logger->error("%s %s (length=%lld) encounters exception %s (code=%d): %s",
-                                 __func__,
-                                 path,
-                                 static_cast<long long>(len),
-                                 type_name,
-                                 code,
-                                 e.what());
+            ERROR_LOG("%s %s (length=%lld) encounters exception %s (code=%d): %s",
+                      __func__,
+                      path,
+                      static_cast<long long>(len),
+                      type_name,
+                      code,
+                      e.what());
             return -code;
         }
     }
@@ -382,7 +382,7 @@ namespace lite
 
     int fsync(const char* path, int, struct fuse_file_info* info)
     {
-        global_logger->trace("%s %s", __func__, path);
+        TRACE_LOG("%s %s", __func__, path);
         auto fp = reinterpret_cast<File*>(info->fh);
         if (!fp)
             return -EFAULT;
@@ -402,7 +402,7 @@ namespace lite
         if (len < 0)
             return -EINVAL;
 
-        global_logger->trace("%s %s (len=%lld)", __func__, path, static_cast<long long>(len));
+        TRACE_LOG("%s %s (len=%lld)", __func__, path, static_cast<long long>(len));
         auto filesystem = get_local_filesystem();
 
         try
@@ -512,9 +512,9 @@ namespace lite
         auto rc = OSService::get_default().listxattr(data_dir.c_str(), nullptr, 0);
         if (rc < 0)
         {
-            global_logger->warn("Underlying directory %s does not support extended attribute (%s)",
-                                data_dir.c_str(),
-                                sane_strerror(-static_cast<int>(rc)).c_str());
+            WARN_LOG("Underlying directory %s does not support extended attribute (%s)",
+                     data_dir.c_str(),
+                     sane_strerror(-static_cast<int>(rc)).c_str());
             return;
         }
 

@@ -956,7 +956,7 @@ uint32_t OSService::getuid()
     CHECK_CALL(GetTokenInformation(token, TokenUser, tkuser, outsize, &outsize));
     NTSTATUS rc = FspPosixMapSidToUid(tkuser->User.Sid, &cached_uid);
     if (rc)
-        global_logger->warn("FspPosixMapSidToUid returns NTSTATUS %d", (int)rc);
+        WARN_LOG("FspPosixMapSidToUid returns NTSTATUS %d", (int)rc);
     return cached_uid;
 }
 

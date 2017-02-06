@@ -50,10 +50,13 @@ namespace lite
         m_xattr_enc.SetKeyWithIV(xattr_key.data(), xattr_key.size(), null_iv, sizeof(null_iv));
         m_xattr_dec.SetKeyWithIV(xattr_key.data(), xattr_key.size(), null_iv, sizeof(null_iv));
 
-        global_logger->trace("Filesystem created at %p", this);
+        TRACE_LOG("Filesystem created at %p", static_cast<const void*>(this));
     }
 
-    FileSystem::~FileSystem() { global_logger->trace("Filesystem destroyed at %p", this); }
+    FileSystem::~FileSystem()
+    {
+        TRACE_LOG("Filesystem destroyed at %p", static_cast<const void*>(this));
+    }
 
     InvalidFilenameException::~InvalidFilenameException() {}
     std::string InvalidFilenameException::message() const
@@ -177,7 +180,7 @@ namespace lite
             {
                 str.erase(str.begin());
             }
-            global_logger->trace("Translate path %s into %s", path.c_str(), str.c_str());
+            TRACE_LOG("Translate path %s into %s", path.c_str(), str.c_str());
             return str;
         }
     }
@@ -256,10 +259,10 @@ namespace lite
     {
         if (!(mode & 0400))
         {
-            global_logger->warn("Change the mode of file %s to 0%o which denies user read access. "
-                                "Mysterious bugs will occur.",
-                                path.c_str(),
-                                static_cast<unsigned>(mode));
+            WARN_LOG("Change the mode of file %s to 0%o which denies user read access. "
+                     "Mysterious bugs will occur.",
+                     path.c_str(),
+                     static_cast<unsigned>(mode));
         }
         m_root->chmod(translate_path(path, false), mode);
     }
@@ -340,8 +343,8 @@ namespace lite
                     auto size = decoder.MaxRetrievable();
                     if (size > sizeof(buffer) || size <= AES_SIV::IV_SIZE)
                     {
-                        global_logger->warn("Skipping too large/small encrypted filename %s",
-                                            under_name.c_str());
+                        WARN_LOG("Skipping too large/small encrypted filename %s",
+                                 under_name.c_str());
                         continue;
                     }
 
@@ -355,18 +358,18 @@ namespace lite
                                                                        buffer);
                     if (!success)
                     {
-                        global_logger->warn("Skipping filename %s (decrypted to %s) since it fails "
-                                            "authentication check",
-                                            under_name.c_str(),
-                                            name->c_str());
+                        WARN_LOG("Skipping filename %s (decrypted to %s) since it fails "
+                                 "authentication check",
+                                 under_name.c_str(),
+                                 name->c_str());
                         continue;
                     }
                 }
                 catch (const std::exception& e)
                 {
-                    global_logger->warn("Skipping filename %s due to exception in decoding: %s",
-                                        under_name.c_str(),
-                                        e.what());
+                    WARN_LOG("Skipping filename %s due to exception in decoding: %s",
+                             under_name.c_str(),
+                             e.what());
                     continue;
                 }
                 return true;
@@ -416,20 +419,20 @@ namespace lite
                                                static_cast<size_t>(readlen) - iv_size - mac_size);
             if (!success)
             {
-                global_logger->error("Encrypted extended attribute for file %s and name %s fails "
-                                     "ciphertext integrity check",
-                                     path,
-                                     name);
+                ERROR_LOG("Encrypted extended attribute for file %s and name %s fails "
+                          "ciphertext integrity check",
+                          path,
+                          name);
                 return -EIO;
             }
             return readlen - iv_size - mac_size;
         }
         catch (const std::exception& e)
         {
-            global_logger->error("Error decrypting extended attribute for file %s and name %s (%s)",
-                                 path,
-                                 name,
-                                 e.what());
+            ERROR_LOG("Error decrypting extended attribute for file %s and name %s (%s)",
+                      path,
+                      name,
+                      e.what());
             return -EIO;
         }
     }
@@ -460,10 +463,10 @@ namespace lite
         }
         catch (const std::exception& e)
         {
-            global_logger->error("Error encrypting extended attribute for file %s and name %s (%s)",
-                                 path,
-                                 name,
-                                 e.what());
+            ERROR_LOG("Error encrypting extended attribute for file %s and name %s (%s)",
+                      path,
+                      name,
+                      e.what());
             return -EIO;
         }
     }
