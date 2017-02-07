@@ -9,8 +9,8 @@
 #include <Windows.h>
 #include <time.h>
 
-static void flockfile(FILE*) {}
-static void funlockfile(FILE*) {}
+static void flockfile(FILE* fp) { _lock_file(fp); }
+static void funlockfile(FILE* fp) { _unlock_file(fp); }
 
 static const void* current_thread_id(void)
 {
@@ -33,6 +33,7 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
     OSService::get_current_time_in_tm(&now, &now_ns);
 
     flockfile(m_fp);
+    DEFER(funlockfile(m_fp));
 
     if (m_fp == stderr)
     {
@@ -69,7 +70,6 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
 
     putc('\n', m_fp);
     fflush(m_fp);
-    funlockfile(m_fp);
 }
 
 void Logger::log(LoggingLevel level, const char* format, ...) noexcept
