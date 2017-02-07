@@ -35,8 +35,11 @@ namespace lite
 
 #define SINGLE_COMMON_EPILOGUE OPT_CATCH_WITH_PATH
 
-    void* init(struct fuse_conn_info*)
+    void* init(struct fuse_conn_info* fsinfo)
     {
+        fsinfo->want |= FUSE_CAP_BIG_WRITES;
+        fsinfo->max_readahead = static_cast<unsigned>(-1);
+        fsinfo->max_write = static_cast<unsigned>(-1);
         void* args = fuse_get_context()->private_data;
         INFO_LOG("init");
         auto ctx = new BundledContext;

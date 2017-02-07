@@ -211,8 +211,11 @@ namespace operations
 
 #define COMMON_CATCH_BLOCK OPT_CATCH_WITH_PATH
 
-    void* init(struct fuse_conn_info*)
+    void* init(struct fuse_conn_info* fsinfo)
     {
+        fsinfo->want |= FUSE_CAP_BIG_WRITES;
+        fsinfo->max_readahead = static_cast<unsigned>(-1);
+        fsinfo->max_write = static_cast<unsigned>(-1);
         auto args = static_cast<MountOptions*>(fuse_get_context()->private_data);
         auto fs = new FileSystemContext(*args);
         TRACE_LOG("%s", __FUNCTION__);
