@@ -21,10 +21,6 @@ static const void* current_thread_id(void)
 static const void* current_thread_id(void) { return (void*)(pthread_self()); }
 #endif
 
-static const char* WARNING_COLOR = "\033[1;30m";
-static const char* ERROR_COLOR = "\033[1;31m";
-static const char* DEFAULT_COLOR = "\033[0;39m";
-
 namespace securefs
 {
 void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
@@ -32,55 +28,44 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
     if (!m_fp || level < this->get_level())
         return;
 
-    struct fuse_timespec now;
-    OSService::get_current_time(now);
-    struct tm tm;
-
-#ifndef WIN32
-    gmtime_r(&now.tv_sec, &tm);
-#else
-    time_t now_in_seconds = now.tv_sec;
-    gmtime_s(&tm, &now_in_seconds);
-#endif
+    struct tm now;
+    int now_ns = 0;
+    OSService::get_current_time_in_tm(&now, &now_ns);
 
     flockfile(m_fp);
 
-#ifndef WIN32
     if (m_fp == stderr)
     {
         switch (level)
         {
         case kLogWarning:
-            fputs(WARNING_COLOR, m_fp);
+            OSService::set_color_on_stderr(Color::DarkGrey);
             break;
         case kLogError:
-            fputs(ERROR_COLOR, m_fp);
+            OSService::set_color_on_stderr(Color::BrightRed);
             break;
         default:
             break;
         }
     }
-#endif
 
     fprintf(m_fp,
             "[%s] [%p] [%d-%02d-%02d %02d:%02d:%02d.%09d UTC]    ",
             stringify(level),
             current_thread_id(),
-            tm.tm_year + 1900,
-            tm.tm_mon + 1,
-            tm.tm_mday,
-            tm.tm_hour,
-            tm.tm_min,
-            tm.tm_sec,
-            static_cast<int>(now.tv_nsec));
+            now.tm_year + 1900,
+            now.tm_mon + 1,
+            now.tm_mday,
+            now.tm_hour,
+            now.tm_min,
+            now.tm_sec,
+            now_ns);
     vfprintf(m_fp, format, args);
 
-#ifndef WIN32
     if (m_fp == stderr && (level == kLogWarning || level == kLogError))
     {
-        fputs(DEFAULT_COLOR, m_fp);
+        OSService::set_color_on_stderr(Color::Default);
     }
-#endif
 
     putc('\n', m_fp);
     fflush(m_fp);

@@ -566,6 +566,16 @@ void OSService::read_password_no_confirmation(const char* prompt,
     memcpy(output->data(), buffer.data(), buffer.size());
 }
 
+void OSService::get_current_time_in_tm(struct tm* tm, int* nanoseconds)
+{
+    timespec now;
+    get_current_time(now);
+    if (tm)
+        gmtime_r(&now.tv_sec, tm);
+    if (nanoseconds)
+        *nanoseconds = static_cast<int>(now.tv_nsec);
+}
+
 void OSService::read_password_with_confirmation(const char* prompt,
                                                 CryptoPP::AlignedSecByteBlock* output)
 {
@@ -604,6 +614,27 @@ std::string OSService::stringify_system_error(int errcode)
 {
     char buffer[4000];
     return postprocess_strerror(strerror_r(errcode, buffer, sizeof(buffer)), buffer, errcode);
+}
+
+void OSService::set_color_on_stderr(Color color) noexcept
+{
+    if (::isatty(STDERR_FILENO))
+    {
+        switch (color)
+        {
+        case Color::DarkGrey:
+            fputs(ANSI_COLOR_CODE_DARK_GRAY, stderr);
+            break;
+        case Color::BrightRed:
+            fputs(ANSI_COLOR_CODE_BRIGHT_RED, stderr);
+            break;
+        case Color::Default:
+            fputs(ANSI_COLOR_CODE_DEFAULT, stderr);
+            break;
+        default:
+            break;
+        }
+    }
 }
 #endif
 }

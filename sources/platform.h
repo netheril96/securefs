@@ -109,6 +109,13 @@ std::wstring widen_string(StringRef str);
 std::string narrow_string(WideStringRef str);
 #endif
 
+enum class Color
+{
+    Default,
+    BrightRed,
+    DarkGrey
+};
+
 class OSService
 {
 private:
@@ -170,10 +177,17 @@ public:
     static std::string temp_name(StringRef prefix, StringRef suffix);
     static const OSService& get_default();
     static void get_current_time(fuse_timespec& out);
+    static void get_current_time_in_tm(struct tm* tm, int* nanoseconds);
+
     static void read_password_no_confirmation(const char* prompt,
                                               CryptoPP::AlignedSecByteBlock* output);
     static void read_password_with_confirmation(const char* prompt,
                                                 CryptoPP::AlignedSecByteBlock* output);
     static std::string stringify_system_error(int errcode);
+    static void set_color_on_stderr(Color color) noexcept;    // Ignore any failures
 };
+
+#define ANSI_COLOR_CODE_DARK_GRAY "\033[1;30m";
+#define ANSI_COLOR_CODE_BRIGHT_RED "\033[1;31m";
+#define ANSI_COLOR_CODE_DEFAULT "\033[0;39m";
 }

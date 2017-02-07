@@ -17,13 +17,6 @@
 #include <time.h>
 #include <vector>
 
-#ifndef WIN32
-#include <termios.h>
-#include <unistd.h>
-#else
-#include <conio.h>
-#endif
-
 namespace securefs
 {
 void hmac_sha256_calculate(
