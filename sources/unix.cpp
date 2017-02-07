@@ -498,7 +498,6 @@ void OSService::get_current_time(fuse_timespec& current_time)
 }
 
 #ifdef __APPLE__
-
 ssize_t OSService::listxattr(const char* path, char* buf, size_t size) const noexcept
 {
     auto rc = ::listxattr(norm_path(path).c_str(), buf, size, XATTR_NOFOLLOW);
@@ -524,6 +523,7 @@ int OSService::removexattr(const char* path, const char* name) const noexcept
     auto rc = ::removexattr(norm_path(path).c_str(), name, XATTR_NOFOLLOW);
     return rc < 0 ? -errno : rc;
 }
+#endif // __APPLE__
 
 void OSService::read_password_no_confirmation(const char* prompt,
                                               CryptoPP::AlignedSecByteBlock* output)
@@ -637,6 +637,5 @@ void OSService::set_color_on_stderr(Color color) noexcept
         }
     }
 }
-#endif
 }
 #endif
