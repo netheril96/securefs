@@ -512,7 +512,7 @@ namespace lite
         {
             WARN_LOG("Underlying directory %s does not support extended attribute (%s)",
                      data_dir.c_str(),
-                     sane_strerror(-static_cast<int>(rc)).c_str());
+                     OSService::stringify_system_error(-static_cast<int>(rc)).c_str());
             return;
         }
 

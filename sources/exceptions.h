@@ -79,7 +79,7 @@ public:
 
     int error_number() const noexcept override { return m_errno; }
 
-    std::string message() const override { return sane_strerror(m_errno); }
+    std::string message() const override;
 };
 
 [[noreturn]] void throwVFSException(int errc);
@@ -102,7 +102,7 @@ public:
 
     int error_number() const noexcept override { return m_errno; }
 
-    std::string message() const override { return sane_strerror(m_errno) + " # " + m_msg; }
+    std::string message() const override;
 };
 
 // This macro is needed because errno expands to a function, which has unspecified evaluation order

@@ -14,6 +14,7 @@
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/file.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
@@ -578,6 +579,31 @@ void OSService::read_password_with_confirmation(const char* prompt,
     if (output->size() != another.size()
         || memcmp(output->data(), another.data(), another.size()) != 0)
         throw_runtime_error("Password mismatch");
+}
+
+// These two overloads are used to distinguish the GNU and XSI version of strerror_r
+
+// GNU
+static std::string postprocess_strerror(const char* rc, const char* buffer, int code)
+{
+    if (rc)
+        return rc;
+    (void)buffer;
+    return strprintf("Unknown POSIX error %d", code);
+}
+
+// XSI
+static std::string postprocess_strerror(int rc, const char* buffer, int code)
+{
+    if (rc == 0)
+        return buffer;
+    return strprintf("Unknown POSIX error %d", code);
+}
+
+std::string OSService::stringify_system_error(int errcode)
+{
+    char buffer[4000];
+    return postprocess_strerror(strerror_r(errcode, buffer, sizeof(buffer)), buffer, errcode);
 }
 #endif
 }

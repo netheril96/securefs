@@ -133,19 +133,10 @@ std::vector<std::string> split(const char* str, char separator);
 
 std::string hexify(const byte* data, size_t length);
 void parse_hex(StringRef hex, byte* output, size_t len);
-std::string sane_strerror(int error_number);
-std::string errno_to_string();
 
 template <class ByteContainer>
 inline std::string hexify(const ByteContainer& c)
 {
     return hexify(c.data(), c.size());
 }
-
-std::string sane_strerror(int error_number);
-
-#ifdef WIN32
-std::wstring widen_string(StringRef str);
-std::string narrow_string(WideStringRef str);
-#endif
 }

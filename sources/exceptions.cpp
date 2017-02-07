@@ -1,5 +1,6 @@
 #include "exceptions.h"
 #include "logger.h"
+#include "platform.h"
 
 securefs::ExceptionBase::ExceptionBase() {}
 
@@ -38,4 +39,15 @@ securefs::InvalidArgumentException::~InvalidArgumentException(){}
 [[noreturn]] void securefs::throw_runtime_error(const std::string& msg)
 {
     throw std::runtime_error(msg);
+}
+
+std::string securefs::VFSException::message() const
+{
+    return securefs::OSService::stringify_system_error(m_errno);
+}
+
+std::string securefs::POSIXException::message() const
+{
+    return strprintf(
+        "%s (%s)", securefs::OSService::stringify_system_error(m_errno).c_str(), m_msg.c_str());
 }

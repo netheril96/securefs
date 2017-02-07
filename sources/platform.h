@@ -104,6 +104,11 @@ typedef std::wstring native_string_type;
 typedef std::string native_string_type;
 #endif
 
+#ifdef WIN32
+std::wstring widen_string(StringRef str);
+std::string narrow_string(WideStringRef str);
+#endif
+
 class OSService
 {
 private:
@@ -169,5 +174,6 @@ public:
                                               CryptoPP::AlignedSecByteBlock* output);
     static void read_password_with_confirmation(const char* prompt,
                                                 CryptoPP::AlignedSecByteBlock* output);
+    static std::string stringify_system_error(int errcode);
 };
 }

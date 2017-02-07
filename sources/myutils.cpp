@@ -26,8 +26,6 @@
 
 namespace securefs
 {
-std::string errno_to_string() { return sane_strerror(errno); }
-
 void hmac_sha256_calculate(
     const void* message, size_t msg_len, const void* key, size_t key_len, void* mac, size_t mac_len)
 {
