@@ -54,6 +54,7 @@ typedef unsigned char byte;
 #ifndef _STDEX_DEFER_H
 #define _STDEX_DEFER_H
 
+#include <cryptopp/secblock.h>
 #include <utility>
 
 #define DEFER(...)                                                                                 \
@@ -94,6 +95,12 @@ auto make_guard(Func&& f) -> scope_guard<Func>
 
 namespace securefs
 {
+template <class T, size_t N>
+constexpr inline size_t array_length(const T (&)[N])
+{
+    return N;
+};
+
 inline constexpr bool is_windows(void)
 {
 #ifdef WIN32
@@ -223,38 +230,7 @@ inline typename std::remove_reference<T>::type from_little_endian(const void* in
     return value;
 }
 
-void generate_random(void* data, size_t size);
-
-inline std::string random_hex_string(size_t size)
-{
-    auto buffer = make_unique_array<byte>(size);
-    generate_random(buffer.get(), size);
-    return hexify(buffer.get(), size);
-}
-
-void aes_gcm_encrypt(const void* plaintext,
-                     size_t text_len,
-                     const void* header,
-                     size_t header_len,
-                     const void* key,
-                     size_t key_len,
-                     const void* iv,
-                     size_t iv_len,
-                     void* mac,
-                     size_t mac_len,
-                     void* ciphertext);
-
-bool aes_gcm_decrypt(const void* ciphertext,
-                     size_t text_len,
-                     const void* header,
-                     size_t header_len,
-                     const void* key,
-                     size_t key_len,
-                     const void* iv,
-                     size_t iv_len,
-                     const void* mac,
-                     size_t mac_len,
-                     void* plaintext);
+std::string random_hex_string(size_t size);
 
 void hmac_sha256_calculate(const void* message,
                            size_t msg_len,
@@ -290,8 +266,7 @@ unsigned int pbkdf_hmac_sha256(const void* password,
                                void* derived,
                                size_t derive_len);
 
-size_t insecure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length);
-size_t secure_read_password(FILE* fp, const char* prompt, void* password, size_t max_length);
+void read_password(const char* prompt, CryptoPP::AlignedSecByteBlock* output);
 
 struct id_hash
 {

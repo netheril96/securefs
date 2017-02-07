@@ -4,6 +4,8 @@
 
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
+#include <cryptopp/osrng.h>
+#include <cryptopp/rng.h>
 #include <cryptopp/secblock.h>
 
 namespace securefs
@@ -23,6 +25,7 @@ namespace lite
     private:
         CryptoPP::GCM<CryptoPP::AES>::Encryption m_encryptor;
         CryptoPP::GCM<CryptoPP::AES>::Decryption m_decryptor;
+        CryptoPP::AutoSeededRandomPool m_rng;
         std::shared_ptr<StreamBase> m_stream;
         std::unique_ptr<byte[]> m_buffer;
         unsigned m_iv_size;

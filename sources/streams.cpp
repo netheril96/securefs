@@ -8,7 +8,11 @@
 #include <string.h>
 #include <utility>
 
+#include <cryptopp/aes.h>
+#include <cryptopp/gcm.h>
 #include <cryptopp/hmac.h>
+#include <cryptopp/osrng.h>
+#include <cryptopp/rng.h>
 #include <cryptopp/salsa.h>
 #include <cryptopp/secblock.h>
 #include <cryptopp/sha.h>
@@ -313,7 +317,7 @@ namespace internal
     class AESGCMCryptStream final : public CryptStream, public HeaderBase
     {
     public:
-        unsigned get_iv_size() const noexcept { return m_iv_size; }
+        int get_iv_size() const noexcept { return m_iv_size; }
 
         unsigned get_mac_size() const noexcept { return 16; }
 
@@ -329,8 +333,10 @@ namespace internal
         static const int64_t max_block_number = 1 << 30;
 
     private:
+        CryptoPP::GCM<CryptoPP::AES>::Encryption m_enc;
+        CryptoPP::GCM<CryptoPP::AES>::Decryption m_dec;
+        CryptoPP::AutoSeededRandomPool m_csrng;
         HMACStream m_metastream;
-        key_type m_key;
         id_type m_id;
         unsigned m_iv_size, m_header_size;
         bool m_check;
@@ -349,7 +355,6 @@ namespace internal
         }
 
         const id_type& id() const noexcept { return m_id; }
-        const key_type& key() const noexcept { return m_key; }
 
     public:
         explicit AESGCMCryptStream(std::shared_ptr<StreamBase> data_stream,
@@ -363,12 +368,14 @@ namespace internal
                                    unsigned header_size)
             : CryptStream(data_stream, block_size)
             , m_metastream(meta_key, id_, meta_stream, check)
-            , m_key(data_key)
             , m_id(id_)
             , m_iv_size(iv_size)
             , m_header_size(header_size)
             , m_check(check)
         {
+            const byte null_iv[12] = {};
+            m_enc.SetKeyWithIV(data_key.data(), data_key.size(), null_iv, array_length(null_iv));
+            m_dec.SetKeyWithIV(data_key.data(), data_key.size(), null_iv, array_length(null_iv));
         }
 
     protected:
@@ -387,19 +394,17 @@ namespace internal
 
             do
             {
-                generate_random(iv, get_iv_size());
+                m_csrng.GenerateBlock(iv, get_iv_size());
             } while (is_all_zeros(iv, get_iv_size()));    // Null IVs are markers for sparse blocks
-            aes_gcm_encrypt(input,
-                            length,
-                            id().data(),
-                            id().size(),
-                            key().data(),
-                            key().size(),
-                            iv,
-                            get_iv_size(),
-                            mac,
-                            get_mac_size(),
-                            output);
+            m_enc.EncryptAndAuthenticate(static_cast<byte*>(output),
+                                         mac,
+                                         get_mac_size(),
+                                         iv,
+                                         get_iv_size(),
+                                         id().data(),
+                                         id().size(),
+                                         static_cast<const byte*>(input),
+                                         length);
             auto pos = meta_position_for_iv(block_number);
             m_metastream.write(buffer.get(), pos, get_meta_size());
         }
@@ -426,17 +431,15 @@ namespace internal
                 memset(output, 0, length);
                 return;
             }
-            bool success = aes_gcm_decrypt(input,
-                                           length,
-                                           id().data(),
-                                           id().size(),
-                                           key().data(),
-                                           key().size(),
-                                           iv,
-                                           get_iv_size(),
-                                           mac,
-                                           get_mac_size(),
-                                           output);
+            bool success = m_dec.DecryptAndVerify(static_cast<byte*>(output),
+                                                  mac,
+                                                  get_mac_size(),
+                                                  iv,
+                                                  get_iv_size(),
+                                                  id().data(),
+                                                  id().size(),
+                                                  static_cast<const byte*>(input),
+                                                  length);
             if (m_check && !success)
                 throw MessageVerificationException(id(), block_number * m_block_size);
         }
@@ -473,17 +476,15 @@ namespace internal
             byte* iv = buffer.get();
             byte* mac = iv + get_iv_size();
             byte* ciphertext = mac + get_mac_size();
-            aes_gcm_decrypt(ciphertext,
-                            get_header_size(),
-                            id().data(),
-                            id().size(),
-                            key().data(),
-                            key().size(),
-                            iv,
-                            get_iv_size(),
-                            mac,
-                            get_mac_size(),
-                            output);
+            m_dec.DecryptAndVerify(static_cast<byte*>(output),
+                                   mac,
+                                   get_mac_size(),
+                                   iv,
+                                   get_iv_size(),
+                                   id().data(),
+                                   id().size(),
+                                   ciphertext,
+                                   get_header_size());
             return get_header_size();
         }
 
@@ -493,19 +494,17 @@ namespace internal
             byte* iv = buffer.get();
             byte* mac = iv + get_iv_size();
             byte* ciphertext = mac + get_mac_size();
-            generate_random(iv, get_iv_size());
+            m_csrng.GenerateBlock(iv, get_iv_size());
 
-            aes_gcm_encrypt(input,
-                            get_header_size(),
-                            id().data(),
-                            id().size(),
-                            key().data(),
-                            key().size(),
-                            iv,
-                            get_iv_size(),
-                            mac,
-                            get_mac_size(),
-                            ciphertext);
+            m_enc.EncryptAndAuthenticate(ciphertext,
+                                         mac,
+                                         get_mac_size(),
+                                         iv,
+                                         get_iv_size(),
+                                         id().data(),
+                                         id().size(),
+                                         static_cast<const byte*>(input),
+                                         get_header_size());
             m_metastream.write(buffer.get(), 0, get_encrypted_header_size());
         }
 

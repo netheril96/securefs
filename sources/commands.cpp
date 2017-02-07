@@ -261,19 +261,19 @@ Json::Value generate_config(unsigned int version,
 
     byte iv[CONFIG_IV_LENGTH];
     byte mac[CONFIG_MAC_LENGTH];
-    securefs::generate_random(iv, sizeof(iv));
+    CryptoPP::OS_GenerateRandomBlock(false, iv, sizeof(iv));
 
-    securefs::aes_gcm_encrypt(master_key.data(),
-                              master_key.size(),
-                              get_version_header(version),
-                              strlen(get_version_header(version)),
-                              key_to_encrypt.data(),
-                              key_to_encrypt.size(),
-                              iv,
-                              sizeof(iv),
-                              mac,
-                              sizeof(mac),
-                              encrypted_master_key.data());
+    CryptoPP::GCM<CryptoPP::AES>::Encryption encryptor;
+    encryptor.SetKeyWithIV(key_to_encrypt.data(), key_to_encrypt.size(), iv, sizeof(iv));
+    encryptor.EncryptAndAuthenticate(encrypted_master_key.data(),
+                                     mac,
+                                     sizeof(mac),
+                                     iv,
+                                     sizeof(iv),
+                                     reinterpret_cast<const byte*>(get_version_header(version)),
+                                     strlen(get_version_header(version)),
+                                     master_key.data(),
+                                     master_key.size());
 
     Json::Value encrypted_key;
     encrypted_key["IV"] = securefs::hexify(iv, sizeof(iv));
@@ -323,7 +323,7 @@ bool parse_config(const Json::Value& config,
     CryptoPP::AlignedSecByteBlock encrypted_key;
 
     std::string salt_hex = config["salt"].asString();
-    auto&& encrypted_key_json_value = config["encrypted_key"];
+    const auto& encrypted_key_json_value = config["encrypted_key"];
     std::string iv_hex = encrypted_key_json_value["IV"].asString();
     std::string mac_hex = encrypted_key_json_value["MAC"].asString();
     std::string ekey_hex = encrypted_key_json_value["key"].asString();
@@ -345,42 +345,40 @@ bool parse_config(const Json::Value& config,
                       key_to_encrypt_master_key.data(),
                       key_to_encrypt_master_key.size());
 
-    return aes_gcm_decrypt(encrypted_key.data(),
-                           encrypted_key.size(),
-                           get_version_header(version),
-                           strlen(get_version_header(version)),
-                           key_to_encrypt_master_key.data(),
-                           key_to_encrypt_master_key.size(),
-                           iv,
-                           sizeof(iv),
-                           mac,
-                           sizeof(mac),
-                           master_key.data());
+    CryptoPP::GCM<CryptoPP::AES>::Decryption decryptor;
+    decryptor.SetKeyWithIV(
+        key_to_encrypt_master_key.data(), key_to_encrypt_master_key.size(), iv, sizeof(iv));
+    return decryptor.DecryptAndVerify(master_key.data(),
+                                      mac,
+                                      sizeof(mac),
+                                      iv,
+                                      sizeof(iv),
+                                      reinterpret_cast<const byte*>(get_version_header(version)),
+                                      strlen(get_version_header(version)),
+                                      encrypted_key.data(),
+                                      encrypted_key.size());
 }
 
-size_t try_read_password_with_confirmation(void* password, size_t length)
+size_t try_read_password_with_confirmation(CryptoPP::AlignedSecByteBlock* output)
 {
-    CryptoPP::AlignedSecByteBlock second_password(length);
+    CryptoPP::AlignedSecByteBlock second_password;
     static const char* first_prompt = "Password: ";
     static const char* second_prompt = "Retype password: ";
     size_t len1, len2;
-    try
-    {
-        len1 = securefs::secure_read_password(stdin, first_prompt, password, length);
-        len2 = securefs::secure_read_password(stdin, second_prompt, second_password.data(), length);
-    }
-    catch (const std::exception& e)
-    {
-        fprintf(stderr, "Warning: failed to disable echoing of passwords (%s)\n", e.what());
-        len1 = securefs::insecure_read_password(stdin, first_prompt, password, length);
-        len2 = securefs::insecure_read_password(
-            stdin, second_prompt, second_password.data(), length);
-    }
-    if (len1 != len2 || memcmp(password, second_password.data(), len1) != 0)
-    {
-        throw_runtime_error("Error: mismatched passwords");
-    }
-    return len1;
+    len1 = securefs::read_password(stdin, first_prompt, password, length);
+    len2 = securefs::secure_read_password(stdin, second_prompt, second_password.data(), length);
+}
+catch (const std::exception& e)
+{
+    fprintf(stderr, "Warning: failed to disable echoing of passwords (%s)\n", e.what());
+    len1 = securefs::insecure_read_password(stdin, first_prompt, password, length);
+    len2 = securefs::insecure_read_password(stdin, second_prompt, second_password.data(), length);
+}
+if (len1 != len2 || memcmp(password, second_password.data(), len1) != 0)
+{
+    throw_runtime_error("Error: mismatched passwords");
+}
+return len1;
 }
 
 void init_fuse_operations(const char* underlying_path, struct fuse_operations& opt, bool noxattr)
@@ -494,7 +492,7 @@ void CommandBase::write_config(StreamBase* stream,
                                unsigned rounds)
 {
     key_type salt;
-    generate_random(salt.data(), salt.size());
+    CryptoPP::OS_GenerateRandomBlock(false, salt.data(), salt.size());
     auto str = generate_config(config.version,
                                config.master_key,
                                salt,
@@ -684,7 +682,7 @@ public:
     {
         auto original_path = get_real_config_path();
         byte buffer[16];
-        generate_random(buffer, sizeof(buffer));
+        CryptoPP::OS_GenerateRandomBlock(false, buffer, sizeof(buffer));
         auto tmp_path = original_path + hexify(buffer, sizeof(buffer));
         auto stream = OSService::get_default().open_file_stream(original_path, O_RDONLY, 0644);
         auto config = read_config(stream.get(), old_password.data(), old_password.size());
@@ -771,7 +769,8 @@ public:
         {
             password.resize(pass.getValue().size());
             memcpy(password.data(), pass.getValue().data(), password.size());
-            generate_random(&pass.getValue()[0], pass.getValue().size());
+            CryptoPP::OS_GenerateRandomBlock(
+                false, reinterpret_cast<byte*>(&pass.getValue()[0]), pass.getValue().size());
             return;
         }
 
@@ -873,7 +872,8 @@ public:
             if (getc(stdout) != 'y')
                 return 0;
         }
-        generate_random(password.data(), password.size());    // Erase user input
+        CryptoPP::OS_GenerateRandomBlock(
+            false, password.data(), password.size());    // Erase user input
 
         try
         {
@@ -1040,7 +1040,8 @@ public:
                     config.version);
             return 3;
         }
-        generate_random(password.data(), password.size());    // Erase user input
+        CryptoPP::OS_GenerateRandomBlock(
+            false, password.data(), password.size());    // Erase user input
 
         operations::MountOptions fsopt;
         fsopt.root = std::make_shared<OSService>(data_dir.getValue());

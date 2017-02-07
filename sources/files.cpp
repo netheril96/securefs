@@ -132,7 +132,6 @@ FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
          sizeof(generated_keys));
     memcpy(data_key.data(), generated_keys, KEY_LENGTH);
     memcpy(meta_key.data(), generated_keys + KEY_LENGTH, KEY_LENGTH);
-    memcpy(m_key.data(), generated_keys + 2 * KEY_LENGTH, KEY_LENGTH);
     auto crypt = make_cryptstream_aes_gcm(std::static_pointer_cast<StreamBase>(data_stream),
                                           std::static_pointer_cast<StreamBase>(meta_stream),
                                           data_key,
@@ -148,6 +147,12 @@ FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
     m_stream = crypt.first;
     m_header = crypt.second;
     read_header();
+
+    const byte null_iv[12] = {};
+    m_xattr_enc.SetKeyWithIV(
+        generated_keys + 2 * KEY_LENGTH, KEY_LENGTH, null_iv, array_length(null_iv));
+    m_xattr_dec.SetKeyWithIV(
+        generated_keys + 2 * KEY_LENGTH, KEY_LENGTH, null_iv, array_length(null_iv));
 }
 
 void FileBase::read_header()
@@ -286,17 +291,15 @@ ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
     byte* mac = meta + XATTR_IV_LENGTH;
     byte* ciphertext = reinterpret_cast<byte*>(value);
 
-    bool success = aes_gcm_decrypt(ciphertext,
-                                   true_size,
-                                   header.get(),
-                                   name_len + ID_LENGTH,
-                                   get_key().data(),
-                                   get_key().size(),
-                                   iv,
-                                   XATTR_IV_LENGTH,
-                                   mac,
-                                   XATTR_MAC_LENGTH,
-                                   value);
+    bool success = m_xattr_dec.DecryptAndVerify(reinterpret_cast<byte*>(value),
+                                                mac,
+                                                XATTR_MAC_LENGTH,
+                                                iv,
+                                                XATTR_IV_LENGTH,
+                                                header.get(),
+                                                name_len + ID_LENGTH,
+                                                ciphertext,
+                                                static_cast<size_t>(true_size));
     if (m_check && !success)
         throw XattrVerificationException(get_id(), name);
     return true_size;
@@ -338,24 +341,22 @@ void FileBase::setxattr(const char* name, const char* value, size_t size, int fl
     byte meta[XATTR_MAC_LENGTH + XATTR_IV_LENGTH];
     byte* iv = meta;
     byte* mac = iv + XATTR_IV_LENGTH;
-    generate_random(iv, XATTR_IV_LENGTH);
+    m_csrng.GenerateBlock(iv, XATTR_IV_LENGTH);
 
     auto name_len = strlen(name);
     auto header = make_unique_array<byte>(name_len + ID_LENGTH);
     memcpy(header.get(), get_id().data(), ID_LENGTH);
     memcpy(header.get() + ID_LENGTH, name, name_len);
 
-    aes_gcm_encrypt(value,
-                    size,
-                    header.get(),
-                    name_len + ID_LENGTH,
-                    get_key().data(),
-                    get_key().size(),
-                    iv,
-                    XATTR_IV_LENGTH,
-                    mac,
-                    XATTR_MAC_LENGTH,
-                    ciphertext);
+    m_xattr_enc.EncryptAndAuthenticate(ciphertext,
+                                       mac,
+                                       XATTR_MAC_LENGTH,
+                                       iv,
+                                       XATTR_IV_LENGTH,
+                                       header.get(),
+                                       name_len + ID_LENGTH,
+                                       reinterpret_cast<const byte*>(value),
+                                       size);
 
     m_data_stream->setxattr(name, ciphertext, size, flags);
     m_meta_stream->setxattr(name, meta, sizeof(meta), flags);

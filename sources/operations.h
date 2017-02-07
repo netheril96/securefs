@@ -100,6 +100,7 @@ namespace operations
         optional<fuse_uid_t> uid_override;
         optional<fuse_gid_t> gid_override;
         uint32_t flags;
+        CryptoPP::AutoSeededRandomPool csrng;
 
         explicit FileSystemContext(const MountOptions& opt);
 

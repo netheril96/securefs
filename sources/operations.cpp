@@ -107,7 +107,7 @@ namespace internal
         std::string last_component;
         auto dir = open_base_dir(fs, path, last_component);
         id_type id;
-        generate_random(id.data(), id.size());
+        fs->csrng.GenerateBlock(id.data(), id.size());
 
         FileGuard result(&fs->table, fs->table.create_as(id, type));
         result->initialize_empty(mode, uid, gid);

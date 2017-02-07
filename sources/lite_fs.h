@@ -92,6 +92,7 @@ namespace lite
         key_type m_content_key;
         CryptoPP::GCM<CryptoPP::AES>::Encryption m_xattr_enc;
         CryptoPP::GCM<CryptoPP::AES>::Decryption m_xattr_dec;
+        CryptoPP::AutoSeededRandomPool m_csrng;
         std::shared_ptr<const securefs::OSService> m_root;
         unsigned m_block_size, m_iv_size;
         unsigned m_flags;

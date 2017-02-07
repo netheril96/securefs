@@ -11,6 +11,11 @@
 #include <string>
 #include <unordered_map>
 
+#include <cryptopp/aes.h>
+#include <cryptopp/gcm.h>
+#include <cryptopp/osrng.h>
+#include <cryptopp/rng.h>
+
 namespace securefs
 {
 class RegularFile;
@@ -32,11 +37,13 @@ private:
 private:
     ptrdiff_t m_refcount;
     std::shared_ptr<HeaderBase> m_header;
-    key_type m_key;
     id_type m_id;
     uint32_t m_flags[NUM_FLAGS];
     fuse_timespec m_atime, m_mtime, m_ctime, m_birthtime;
     std::shared_ptr<FileStream> m_data_stream, m_meta_stream;
+    CryptoPP::GCM<CryptoPP::AES>::Encryption m_xattr_enc;
+    CryptoPP::GCM<CryptoPP::AES>::Decryption m_xattr_dec;
+    CryptoPP::AutoSeededRandomPool m_csrng;
     bool m_dirty, m_check, m_store_time;
 
 private:
@@ -232,8 +239,6 @@ public:
     // --End of getters and setters for stats---
 
     const id_type& get_id() const { return m_id; }
-
-    const key_type& get_key() const { return m_key; }
 
     ptrdiff_t incref() noexcept { return ++m_refcount; }
 

@@ -39,7 +39,7 @@ namespace lite
 
         if (rc == 0)
         {
-            CryptoPP::OS_GenerateRandomBlock(false, header.data(), header.size());
+            m_rng.GenerateBlock(header.data(), header.size());
             m_stream->write(header.data(), 0, header.size());
         }
         else if (rc != header.size())
@@ -54,8 +54,10 @@ namespace lite
 
         // The null iv is only a placeholder; it will replaced during encryption and decryption
         const byte null_iv[12] = {0};
-        m_encryptor.SetKeyWithIV(session_key.data(), session_key.size(), null_iv, sizeof(null_iv));
-        m_decryptor.SetKeyWithIV(session_key.data(), session_key.size(), null_iv, sizeof(null_iv));
+        m_encryptor.SetKeyWithIV(
+            session_key.data(), session_key.size(), null_iv, array_length(null_iv));
+        m_decryptor.SetKeyWithIV(
+            session_key.data(), session_key.size(), null_iv, array_length(null_iv));
 
         // Guard against programming failures of nonrandom keys
         if (is_all_zeros(master_key.data(), master_key.size())
@@ -135,7 +137,7 @@ namespace lite
 
         do
         {
-            generate_random(m_buffer.get(), get_iv_size());
+            m_rng.GenerateBlock(m_buffer.get(), get_iv_size());
         } while (is_all_zeros(m_buffer.get(), get_iv_size()));
 
         m_encryptor.EncryptAndAuthenticate(m_buffer.get() + get_iv_size(),
