@@ -25,3 +25,23 @@ endif ()
 if (HAS_CLOCK_GETTIME)
     add_definitions(-DHAS_CLOCK_GETTIME)
 endif ()
+
+set(CMAKE_REQUIRED_INCLUDES ${FUSE_INCLUDE_DIR})
+
+CHECK_CXX_SOURCE_COMPILES("
+#define _FILE_OFFSET_BITS 64
+#define FUSE_USE_VERSION 28
+#include <fuse.h>
+int main()
+{
+    struct fuse_conn_info* fsinfo = 0;
+    fsinfo->want |= FUSE_CAP_BIG_WRITES;
+    fsinfo->max_readahead = static_cast<unsigned>(-1);
+    fsinfo->max_write = static_cast<unsigned>(-1);
+    return 0;
+}
+" CAN_SET_FUSE_CONN_INFO)
+
+if (CAN_SET_FUSE_CONN_INFO)
+    add_definitions(-DCAN_SET_FUSE_CONN_INFO)
+endif ()

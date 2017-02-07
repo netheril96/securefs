@@ -37,9 +37,11 @@ namespace lite
 
     void* init(struct fuse_conn_info* fsinfo)
     {
+#ifdef CAN_SET_FUSE_CONN_INFO
         fsinfo->want |= FUSE_CAP_BIG_WRITES;
         fsinfo->max_readahead = static_cast<unsigned>(-1);
         fsinfo->max_write = static_cast<unsigned>(-1);
+#endif
         void* args = fuse_get_context()->private_data;
         INFO_LOG("init");
         auto ctx = new BundledContext;
