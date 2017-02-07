@@ -535,6 +535,7 @@ void OSService::read_password_no_confirmation(const char* prompt,
     {
         if (::isatty(STDERR_FILENO))
         {
+            fflush(stderr);
             ::write(STDERR_FILENO, prompt, strlen(prompt));
         }
         struct termios old_tios, new_tios;
