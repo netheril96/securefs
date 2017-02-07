@@ -9,6 +9,7 @@
 
 int wmain(int argc, wchar_t** wargv)
 {
+	::securefs::windows_init();
 	auto str_argv = securefs::make_unique_array<std::string>(argc);
 	for (int i = 0; i < argc; ++i)
 		str_argv[i] = securefs::narrow_string(wargv[i]);

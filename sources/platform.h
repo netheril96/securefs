@@ -111,6 +111,7 @@ typedef std::string native_string_type;
 std::wstring widen_string(StringRef str);
 std::string narrow_string(WideStringRef str);
 [[noreturn]] void throw_windows_exception(const wchar_t* func_name);
+void windows_init(void);
 #endif
 
 enum class Color

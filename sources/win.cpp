@@ -970,12 +970,14 @@ std::unique_ptr<DirectoryTraverser> OSService::create_traverser(StringRef dir) c
     return securefs::make_unique<WindowsDirectoryTraverser>(norm_path(dir) + L"\\*");
 }
 
-uint32_t OSService::getuid()
-{
-    thread_local uint32_t cached_uid = static_cast<uint32_t>(-1);
-    if (cached_uid != static_cast<uint32_t>(-1))
-        return static_cast<uint32_t>(cached_uid);
+static uint32_t cached_uid = 0;
+static uint32_t cached_gid = 0;
 
+uint32_t OSService::getuid() { return cached_uid; }
+
+static uint32_t calc_uid()
+{
+    uint32_t uid;
     HANDLE token;
     CHECK_CALL(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token));
     DEFER(CloseHandle(token));
@@ -986,16 +988,15 @@ uint32_t OSService::getuid()
     GetTokenInformation(token, TokenUser, nullptr, 0, &outsize);
     tkuser = (TOKEN_USER*)malloc(outsize);
     CHECK_CALL(GetTokenInformation(token, TokenUser, tkuser, outsize, &outsize));
-    (void)FspPosixMapSidToUid(tkuser->User.Sid, &cached_uid);
-    return cached_uid;
+    (void)FspPosixMapSidToUid(tkuser->User.Sid, &uid);
+    return uid;
 }
 
-uint32_t OSService::getgid()
-{
-    thread_local uint32_t cached_gid = static_cast<uint32_t>(-1);
-    if (cached_gid != static_cast<uint32_t>(-1))
-        return static_cast<uint32_t>(cached_gid);
+uint32_t OSService::getgid() { return cached_gid; }
 
+static uint32_t calc_gid()
+{
+    uint32_t gid;
     HANDLE token;
     CHECK_CALL(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token));
     DEFER(CloseHandle(token));
@@ -1006,8 +1007,8 @@ uint32_t OSService::getgid()
     GetTokenInformation(token, TokenGroups, nullptr, 0, &outsize);
     tkgroup = (TOKEN_GROUPS*)malloc(outsize);
     CHECK_CALL(GetTokenInformation(token, TokenGroups, tkgroup, outsize, &outsize));
-    (void)FspPosixMapSidToUid(tkgroup->Groups[0].Sid, &cached_gid);
-    return cached_gid;
+    (void)FspPosixMapSidToUid(tkgroup->Groups[0].Sid, &gid);
+    return gid;
 }
 
 void OSService::get_current_time(fuse_timespec& current_time)
@@ -1052,7 +1053,8 @@ void OSService::read_password_no_confirmation(const char* prompt,
         buffer.push_back(static_cast<byte>(c));
     }
 
-    SetConsoleMode(in, old_mode);    // Well, we don't care if it fails
+    if (SetConsoleMode(in, old_mode))
+        putc('\n', stderr);
     output->resize(buffer.size());
     memcpy(output->data(), buffer.data(), buffer.size());
 }
@@ -1075,27 +1077,27 @@ std::string OSService::stringify_system_error(int errcode)
     return buffer;
 }
 
-static bool is_win10 = false;
-
 void OSService::set_color_on_stderr(Color color) noexcept
 {
-    if (is_win10 && ::_isatty(2))
-    {
-        switch (color)
-        {
-        case Color::DarkGrey:
-            fputs(ANSI_COLOR_CODE_DARK_GRAY, stderr);
-            break;
-        case Color::BrightRed:
-            fputs(ANSI_COLOR_CODE_BRIGHT_RED, stderr);
-            break;
-        case Color::Default:
-            fputs(ANSI_COLOR_CODE_DEFAULT, stderr);
-            break;
-        default:
-            break;
-        }
-    }
+    // Disable for now
+    // May implement it later
+    /*   if (is_win10 && ::_isatty(2))
+       {
+           switch (color)
+           {
+           case Color::DarkGrey:
+               fputs(ANSI_COLOR_CODE_DARK_GRAY, stderr);
+               break;
+           case Color::BrightRed:
+               fputs(ANSI_COLOR_CODE_BRIGHT_RED, stderr);
+               break;
+           case Color::Default:
+               fputs(ANSI_COLOR_CODE_DEFAULT, stderr);
+               break;
+           default:
+               break;
+           }
+       }*/
 }
 
 /*
@@ -1158,16 +1160,13 @@ static inline NTSTATUS FspLoad(PVOID* PModule)
 #undef FSP_DLLPATH
 }
 
-static int win_init(void)
+void windows_init(void)
 {
     ::SetConsoleOutputCP(CP_UTF8);
     ::securefs::FspLoad(nullptr);
-    ::securefs::OSService::getuid();    // Force the call to WinFsp so that DLL failure will be
-                                        // caught sooner
-    return 0;
+    cached_uid = calc_uid();
+    cached_gid = calc_gid();
 }
-
-static int win_inited_flag = win_init();
 
 std::wstring widen_string(StringRef str)
 {
