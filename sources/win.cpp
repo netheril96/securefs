@@ -14,6 +14,7 @@
 #include <sys/utime.h>
 #include <time.h>
 
+#include <VersionHelpers.h>
 #include <Windows.h>
 #include <io.h>
 #include <sddl.h>
@@ -1016,6 +1017,87 @@ void OSService::get_current_time(fuse_timespec& current_time)
     filetime_to_unix_time(&ft, &current_time);
 }
 
+void OSService::get_current_time_in_tm(struct tm* tm, int* ns)
+{
+    fuse_timespec spec;
+    get_current_time(spec);
+    time_t tts = spec.tv_sec;
+    gmtime_s(tm, &tts);
+    *ns = spec.tv_nsec;
+}
+
+void OSService::read_password_no_confirmation(const char* prompt,
+                                              CryptoPP::AlignedSecByteBlock* output)
+{
+    std::vector<byte> buffer;
+    DEFER(CryptoPP::SecureWipeBuffer(buffer.data(), buffer.size()));
+
+    HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
+    DWORD old_mode, new_mode;
+    if (GetConsoleMode(in, &old_mode))
+    {
+        // Success, guess we are reading from user input instead of a pipe
+        fputs(prompt, stderr);
+        fflush(stderr);
+
+        new_mode = old_mode & ~(DWORD)ENABLE_ECHO_INPUT;
+        SetConsoleMode(in, new_mode);
+    }
+
+    while (1)
+    {
+        int c = getchar();
+        if (c == '\r' || c == '\n' || c == EOF)
+            break;
+        buffer.push_back(static_cast<byte>(c));
+    }
+
+    SetConsoleMode(in, old_mode);    // Well, we don't care if it fails
+    output->resize(buffer.size());
+    memcpy(output->data(), buffer.data(), buffer.size());
+}
+
+void OSService::read_password_with_confirmation(const char* prompt,
+                                                CryptoPP::AlignedSecByteBlock* output)
+{
+    CryptoPP::AlignedSecByteBlock another;
+    read_password_no_confirmation(prompt, output);
+    read_password_no_confirmation("Another: ", &another);
+    if (output->size() != another.size()
+        || memcmp(output->data(), another.data(), another.size()) != 0)
+        throw_runtime_error("Password mismatch!");
+}
+
+std::string OSService::stringify_system_error(int errcode)
+{
+    char buffer[4000];
+    strerror_s(buffer, sizeof(buffer), errcode);
+    return buffer;
+}
+
+static bool is_win10 = false;
+
+void OSService::set_color_on_stderr(Color color) noexcept
+{
+    if (is_win10 && ::_isatty(2))
+    {
+        switch (color)
+        {
+        case Color::DarkGrey:
+            fputs(ANSI_COLOR_CODE_DARK_GRAY, stderr);
+            break;
+        case Color::BrightRed:
+            fputs(ANSI_COLOR_CODE_BRIGHT_RED, stderr);
+            break;
+        case Color::Default:
+            fputs(ANSI_COLOR_CODE_DEFAULT, stderr);
+            break;
+        default:
+            break;
+        }
+    }
+}
+
 /*
 * Use the following function to delay load the WinFsp DLL
 * directly from the WinFsp installation directory.
@@ -1087,7 +1169,6 @@ static int win_init(void)
 
 static int win_inited_flag = win_init();
 
-#ifdef WIN32
 std::wstring widen_string(StringRef str)
 {
     if (str.size() >= std::numeric_limits<int>::max())
@@ -1113,7 +1194,6 @@ std::string narrow_string(WideStringRef str)
         CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), &result[0], sz, 0, 0);
     return result;
 }
-#endif
 }
 
 #endif
