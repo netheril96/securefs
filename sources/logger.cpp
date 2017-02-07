@@ -107,5 +107,5 @@ Logger* Logger::create_file_logger(const std::string& path)
     return new Logger(fp, true);
 }
 
-std::unique_ptr<Logger> global_logger(Logger::create_stderr_logger());
+Logger* global_logger = Logger::create_stderr_logger();
 }

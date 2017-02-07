@@ -65,7 +65,7 @@ public:
     ~Logger();
 };
 
-extern std::unique_ptr<Logger> global_logger;
+extern Logger* global_logger;
 
 #define GENERIC_LOG(log_level, ...)                                                                \
     do                                                                                             \

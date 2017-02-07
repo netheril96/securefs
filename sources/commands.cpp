@@ -747,14 +747,16 @@ public:
     {
         if (log.isSet())
         {
-            global_logger.reset(Logger::create_file_logger(log.getValue()));
+            delete global_logger;
+            global_logger = Logger::create_file_logger(log.getValue());
         }
         else if (background.getValue())
         {
             WARN_LOG("securefs is about to enter background without a log file. You "
                      "won't be able to inspect what goes wrong. You can remount with "
                      "option --log instead.");
-            global_logger.reset(nullptr);
+            delete global_logger;
+            global_logger = nullptr;
         }
         if (global_logger && trace.getValue())
             global_logger->set_level(kLogTrace);

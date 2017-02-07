@@ -49,14 +49,9 @@ namespace lite
         byte null_iv[12] = {0};
         m_xattr_enc.SetKeyWithIV(xattr_key.data(), xattr_key.size(), null_iv, sizeof(null_iv));
         m_xattr_dec.SetKeyWithIV(xattr_key.data(), xattr_key.size(), null_iv, sizeof(null_iv));
-
-        TRACE_LOG("Filesystem created at %p", static_cast<const void*>(this));
     }
 
-    FileSystem::~FileSystem()
-    {
-        TRACE_LOG("Filesystem destroyed at %p", static_cast<const void*>(this));
-    }
+    FileSystem::~FileSystem() {}
 
     InvalidFilenameException::~InvalidFilenameException() {}
     std::string InvalidFilenameException::message() const
