@@ -59,9 +59,6 @@ typedef unsigned char byte;
 
 #define DEFER(...)                                                                                 \
     auto STDEX_NAMELNO__(_stdex_defer_, __LINE__) = stdex::make_guard([&] { __VA_ARGS__; });
-#define NAMELY(name)                                                                               \
-    ;                                                                                              \
-    auto& name = STDEX_NAMELNO__(_stdex_defer_, __LINE__)
 #define STDEX_NAMELNO__(name, lno) STDEX_CAT__(name, lno)
 #define STDEX_CAT__(a, b) a##b
 
@@ -85,7 +82,7 @@ private:
 };
 
 template <typename Func>
-auto make_guard(Func&& f) -> scope_guard<Func>
+scope_guard<Func> make_guard(Func&& f)
 {
     return scope_guard<Func>(std::forward<Func>(f));
 }

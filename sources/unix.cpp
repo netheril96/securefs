@@ -523,7 +523,7 @@ int OSService::removexattr(const char* path, const char* name) const noexcept
     auto rc = ::removexattr(norm_path(path).c_str(), name, XATTR_NOFOLLOW);
     return rc < 0 ? -errno : rc;
 }
-#endif // __APPLE__
+#endif    // __APPLE__
 
 void OSService::read_password_no_confirmation(const char* prompt,
                                               CryptoPP::AlignedSecByteBlock* output)
