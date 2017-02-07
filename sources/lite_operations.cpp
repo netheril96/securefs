@@ -6,10 +6,6 @@
 #include "operations.h"
 #include "platform.h"
 
-#ifndef HAS_THREAD_LOCAL
-#include <pthread.h>
-#endif
-
 #include <math.h>
 
 namespace securefs

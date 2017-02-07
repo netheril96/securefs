@@ -404,6 +404,12 @@ public:
     }
 };
 
+[[noreturn]] void throw_windows_exception(const wchar_t* funcname)
+{
+    DWORD err = GetLastError();
+    throw WindowsException(err, funcname);
+}
+
 #define THROW_WINDOWS_EXCEPTION(err, exp)                                                          \
     do                                                                                             \
     {                                                                                              \
@@ -1002,8 +1008,6 @@ uint32_t OSService::getgid()
     (void)FspPosixMapSidToUid(tkgroup->Groups[0].Sid, &cached_gid);
     return cached_gid;
 }
-
-bool OSService::isatty(int fd) noexcept { return ::_isatty(fd) != 0; }
 
 void OSService::get_current_time(fuse_timespec& current_time)
 {

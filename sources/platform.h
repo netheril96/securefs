@@ -1,5 +1,6 @@
 #pragma once
 
+#include "exceptions.h"
 #include "mystring.h"
 #include "myutils.h"
 #include "streams.h"
@@ -109,6 +110,7 @@ typedef std::string native_string_type;
 #ifdef WIN32
 std::wstring widen_string(StringRef str);
 std::string narrow_string(WideStringRef str);
+[[noreturn]] void throw_windows_exception(const wchar_t* func_name);
 #endif
 
 enum class Color
@@ -196,6 +198,29 @@ public:
 namespace tls
 {
 #ifdef WIN32
+    typedef DWORD tls_key_type;
+
+    template <class T>
+    inline void CALLBACK destroy(void* ptr)
+    {
+        delete static_cast<T*>(ptr);
+    }
+
+    template <class T>
+    inline void init(tls_key_type* key)
+    {
+        *key = FlsAlloc(&destroy<T>);
+        if (*key == FLS_OUT_OF_INDEXES)
+            throw_windows_exception(L"FlsAlloc");
+    }
+
+    inline void* get(tls_key_type key) { return FlsGetValue(key); }
+
+    inline void set(tls_key_type key, void* value)
+    {
+        if (!FlsSetValue(key, value))
+            throw_windows_exception(L"FlsSetValue");
+    }
 
 #else
     typedef pthread_key_t tls_key_type;

@@ -14,7 +14,7 @@ static void funlockfile(FILE*) {}
 
 static const void* current_thread_id(void)
 {
-    return reinterpret_cast<const void*>(GetCurrentThreadId());
+    return reinterpret_cast<const void*>(static_cast<uintptr_t>(GetCurrentThreadId()));
 }
 #else
 #include <pthread.h>
