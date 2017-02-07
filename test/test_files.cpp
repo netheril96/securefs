@@ -19,7 +19,7 @@ TEST_CASE("File table")
     id_type null_id, file_id;
     memset(master_key.data(), 0xFF, master_key.size());
     memset(null_id.data(), 0, null_id.size());
-    securefs::generate_random(file_id.data(), file_id.size());
+    CryptoPP::OS_GenerateRandomBlock(false, file_id.data(), file_id.size());
     const char* xattr_name = "com.apple.FinderInfo...";
     const securefs::PODArray<char, 32> xattr_value(0x11);
 

@@ -1,4 +1,7 @@
+#include "myutils.h"
 #include "platform.h"
+
+#include <cryptopp/osrng.h>
 
 namespace securefs
 {
@@ -10,7 +13,14 @@ const OSService& OSService::get_default()
 
 std::string OSService::temp_name(StringRef prefix, StringRef suffix)
 {
-    return prefix + random_hex_string(16) + suffix;
+    byte random[16];
+    CryptoPP::OS_GenerateRandomBlock(false, random, sizeof(random));
+    std::string result;
+    result.reserve(prefix.size() + 32 + suffix.size());
+    result.append(prefix.data(), prefix.size());
+    result.append(hexify(random, sizeof(random)));
+    result.append(suffix.data(), suffix.size());
+    return result;
 }
 
 void OSService::ensure_directory(StringRef path, unsigned mode) const

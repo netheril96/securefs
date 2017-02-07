@@ -3,6 +3,7 @@
 #include "platform.h"
 
 #include <cryptopp/base32.h>
+#include <cryptopp/osrng.h>
 
 TEST_CASE("Test endian")
 {
@@ -34,7 +35,7 @@ TEST_CASE("Test string")
 TEST_CASE("Test conversion of hex")
 {
     securefs::id_type id;
-    securefs::generate_random(id.data(), id.size());
+    CryptoPP::OS_GenerateRandomBlock(false, id.data(), id.size());
     auto hex = securefs::hexify(id);
     securefs::id_type id_copy;
     securefs::parse_hex(hex, id_copy.data(), id_copy.size());
