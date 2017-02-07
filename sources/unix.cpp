@@ -20,6 +20,7 @@
 #include <sys/statvfs.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <termios.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -483,8 +484,6 @@ int OSService::raise_fd_limit()
     THROW_POSIX_EXCEPTION(errno, "setrlimit");
 }
 
-bool OSService::isatty(int fd) noexcept { return ::isatty(fd) != 0; }
-
 void OSService::get_current_time(fuse_timespec& current_time)
 {
 #ifdef HAS_CLOCK_GETTIME
@@ -523,6 +522,62 @@ int OSService::removexattr(const char* path, const char* name) const noexcept
 {
     auto rc = ::removexattr(norm_path(path).c_str(), name, XATTR_NOFOLLOW);
     return rc < 0 ? -errno : rc;
+}
+
+void OSService::read_password_no_confirmation(const char* prompt,
+                                              CryptoPP::AlignedSecByteBlock* output)
+{
+    std::vector<byte> buffer;
+    DEFER(CryptoPP::SecureWipeBuffer(buffer.data(), buffer.size()));
+
+    if (::isatty(STDIN_FILENO))
+    {
+        if (::isatty(STDERR_FILENO))
+        {
+            ::write(STDERR_FILENO, prompt, strlen(prompt));
+        }
+        struct termios old_tios, new_tios;
+        tcgetattr(STDIN_FILENO, &old_tios);
+        new_tios = old_tios;
+        new_tios.c_lflag &= ~ECHO;
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &new_tios);
+
+        while (1)
+        {
+            int c = getchar();
+            if (c == '\r' || c == '\n' || c == EOF)
+                break;
+            buffer.push_back(static_cast<byte>(c));
+        }
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &old_tios);
+    }
+    else
+    {
+        while (1)
+        {
+            int c = getchar();
+            if (c == '\r' || c == '\n' || c == EOF)
+                break;
+            buffer.push_back(static_cast<byte>(c));
+        }
+    }
+    output->resize(buffer.size());
+    memcpy(output->data(), buffer.data(), buffer.size());
+}
+
+void OSService::read_password_with_confirmation(const char* prompt,
+                                                CryptoPP::AlignedSecByteBlock* output)
+{
+    read_password_no_confirmation(prompt, output);
+    if (!::isatty(STDIN_FILENO) || !::isatty(STDERR_FILENO))
+    {
+        return;
+    }
+    CryptoPP::AlignedSecByteBlock another;
+    read_password_with_confirmation("Again: ", &another);
+    if (output->size() != another.size()
+        || memcmp(output->data(), another.data(), another.size()) != 0)
+        throw_runtime_error("Password mismatch");
 }
 #endif
 }

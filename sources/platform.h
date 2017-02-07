@@ -161,10 +161,13 @@ public:
     static uint32_t getuid();
     static uint32_t getgid();
     static int raise_fd_limit();
-    static bool isatty(int fd) noexcept;
 
     static std::string temp_name(StringRef prefix, StringRef suffix);
     static const OSService& get_default();
     static void get_current_time(fuse_timespec& out);
+    static void read_password_no_confirmation(const char* prompt,
+                                              CryptoPP::AlignedSecByteBlock* output);
+    static void read_password_with_confirmation(const char* prompt,
+                                                CryptoPP::AlignedSecByteBlock* output);
 };
 }

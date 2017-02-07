@@ -266,8 +266,6 @@ unsigned int pbkdf_hmac_sha256(const void* password,
                                void* derived,
                                size_t derive_len);
 
-void read_password(const char* prompt, CryptoPP::AlignedSecByteBlock* output);
-
 struct id_hash
 {
     size_t operator()(const id_type& id) const noexcept

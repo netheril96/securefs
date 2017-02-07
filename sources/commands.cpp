@@ -40,7 +40,6 @@ static const std::string CONFIG_FILE_NAME = ".securefs.json";
 static const unsigned MIN_ITERATIONS = 20000;
 static const unsigned MIN_DERIVE_SECONDS = 1;
 static const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
-static const size_t MAX_PASS_LEN = 4000;
 
 static const char* get_version_header(unsigned version)
 {
@@ -359,28 +358,6 @@ bool parse_config(const Json::Value& config,
                                       encrypted_key.size());
 }
 
-size_t try_read_password_with_confirmation(CryptoPP::AlignedSecByteBlock* output)
-{
-    CryptoPP::AlignedSecByteBlock second_password;
-    static const char* first_prompt = "Password: ";
-    static const char* second_prompt = "Retype password: ";
-    size_t len1, len2;
-    len1 = securefs::read_password(stdin, first_prompt, password, length);
-    len2 = securefs::secure_read_password(stdin, second_prompt, second_password.data(), length);
-}
-catch (const std::exception& e)
-{
-    fprintf(stderr, "Warning: failed to disable echoing of passwords (%s)\n", e.what());
-    len1 = securefs::insecure_read_password(stdin, first_prompt, password, length);
-    len2 = securefs::insecure_read_password(stdin, second_prompt, second_password.data(), length);
-}
-if (len1 != len2 || memcmp(password, second_password.data(), len1) != 0)
-{
-    throw_runtime_error("Error: mismatched passwords");
-}
-return len1;
-}
-
 void init_fuse_operations(const char* underlying_path, struct fuse_operations& opt, bool noxattr)
 {
     memset(&opt, 0, sizeof(opt));
@@ -428,20 +405,6 @@ void init_fuse_operations(const char* underlying_path, struct fuse_operations& o
     opt.setxattr = &securefs::operations::setxattr;
     opt.removexattr = &securefs::operations::removexattr;
 #endif
-}
-
-size_t try_read_password(void* password, size_t size)
-{
-    static const char* prompt = "Password: ";
-    try
-    {
-        return securefs::secure_read_password(stdin, prompt, password, size);
-    }
-    catch (const std::exception& e)
-    {
-        fprintf(stderr, "Warning: failed to disable echoing of passwords (%s)\n", e.what());
-        return securefs::insecure_read_password(stdin, prompt, password, size);
-    }
 }
 }
 
@@ -577,16 +540,7 @@ public:
             return;
         }
 
-        password.resize(MAX_PASS_LEN);
-        if (!OSService::isatty(0))
-        {
-            password.resize(
-                insecure_read_password(stdin, nullptr, password.data(), password.size()));
-        }
-        else
-        {
-            password.resize(try_read_password_with_confirmation(password.data(), password.size()));
-        }
+        OSService::read_password_with_confirmation("Password: ", &password);
     }
 
     int execute() override
@@ -669,13 +623,8 @@ public:
         cmdline.add(&data_dir);
         cmdline.add(&config_path);
         cmdline.parse(argc, argv);
-        old_password.resize(MAX_PASS_LEN);
-        old_password.resize(try_read_password(old_password.data(), old_password.size()));
-
-        fputs("\nNow enter new password\n", stderr);
-        new_password.resize(MAX_PASS_LEN);
-        new_password.resize(
-            try_read_password_with_confirmation(new_password.data(), new_password.size()));
+        OSService::read_password_no_confirmation("Old password: ", &old_password);
+        OSService::read_password_with_confirmation("New password: ", &new_password);
     }
 
     int execute() override
@@ -708,7 +657,7 @@ public:
 class MountCommand : public CommonCommandBase
 {
 private:
-    std::vector<byte> password;
+    CryptoPP::AlignedSecByteBlock password;
     TCLAP::SwitchArg single_threaded{"s", "single", "Single threaded mode"};
     TCLAP::SwitchArg background{"b", "background", "Run securefs in the background"};
     TCLAP::SwitchArg insecure{
@@ -774,16 +723,7 @@ public:
             return;
         }
 
-        password.resize(MAX_PASS_LEN);
-        if (!OSService::isatty(0))
-        {
-            password.resize(
-                insecure_read_password(stdin, nullptr, password.data(), password.size()));
-        }
-        else
-        {
-            password.resize(try_read_password(password.data(), password.size()));
-        }
+        OSService::read_password_no_confirmation("Password: ", &password);
     }
 
     const char* get_tmp_dir()
@@ -872,8 +812,8 @@ public:
             if (getc(stdout) != 'y')
                 return 0;
         }
-        CryptoPP::OS_GenerateRandomBlock(
-            false, password.data(), password.size());    // Erase user input
+
+        CryptoPP::SecureWipeBuffer(password.data(), password.size());
 
         try
         {
@@ -1015,16 +955,7 @@ public:
         cmdline.add(&config_path);
         cmdline.parse(argc, argv);
 
-        password.resize(MAX_PASS_LEN);
-        if (!OSService::isatty(0))
-        {
-            password.resize(
-                insecure_read_password(stdin, nullptr, password.data(), password.size()));
-        }
-        else
-        {
-            password.resize(try_read_password(password.data(), password.size()));
-        }
+        OSService::read_password_no_confirmation("Password: ", &password);
     }
 
     int execute() override
