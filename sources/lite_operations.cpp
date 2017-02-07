@@ -16,41 +16,21 @@ namespace securefs
 {
 namespace lite
 {
-    namespace
+    struct BundledContext
     {
-        FileSystem* get_local_filesystem(void)
-        {
-#ifdef HAS_THREAD_LOCAL
-            thread_local FileSystem local_fs(
-                *static_cast<const FileSystemOptions*>(fuse_get_context()->private_data));
-            return &local_fs;
-#else
-            struct FileSystemKey
-            {
-                pthread_key_t key;
+        ::securefs::lite::FileSystemOptions* opt;
+        ::securefs::tls::tls_key_type key;
+    };
 
-                FileSystemKey()
-                {
-                    int rc = pthread_key_create(
-                        &key, [](void* ptr) { delete static_cast<FileSystem*>(ptr); });
-                    if (rc != 0)
-                        THROW_POSIX_EXCEPTION(rc, "pthread_key_create");
-                }
-                ~FileSystemKey() { pthread_key_delete(key); }
-            };
-
-            static FileSystemKey fskey;
-
-            auto result = static_cast<FileSystem*>(pthread_getspecific(fskey.key));
-            if (!result)
-            {
-                result = new FileSystem(
-                    *static_cast<const FileSystemOptions*>(fuse_get_context()->private_data));
-                pthread_setspecific(fskey.key, result);
-            }
-            return result;
-#endif
-        }
+    FileSystem* get_local_filesystem(void)
+    {
+        auto ctx = static_cast<BundledContext*>(fuse_get_context()->private_data);
+        auto fs = static_cast<FileSystem*>(::securefs::tls::get(ctx->key));
+        if (fs)
+            return fs;
+        std::unique_ptr<FileSystem> guarded_fs(new FileSystem(*ctx->opt));
+        ::securefs::tls::set(ctx->key, guarded_fs.get());
+        return guarded_fs.release();
     }
 
 #define SINGLE_COMMON_PROLOGUE                                                                     \
@@ -61,12 +41,19 @@ namespace lite
 
     void* init(struct fuse_conn_info*)
     {
-        auto args = fuse_get_context()->private_data;
+        void* args = fuse_get_context()->private_data;
         INFO_LOG("init");
-        return args;
+        auto ctx = new BundledContext;
+        ctx->opt = static_cast<FileSystemOptions*>(args);
+        ::securefs::tls::init<FileSystem>(&ctx->key);
+        return ctx;
     }
 
-    void destroy(void*) { INFO_LOG("destroy"); }
+    void destroy(void*)
+    {
+        delete static_cast<BundledContext*>(fuse_get_context()->private_data);
+        INFO_LOG("destroy");
+    }
 
     int statfs(const char* path, struct fuse_statvfs* buf)
     {

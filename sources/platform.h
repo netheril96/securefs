@@ -17,7 +17,7 @@
 #include <fuse.h>
 
 #ifdef WIN32
-#include <io.h>
+#include <Windows.h>
 
 typedef ptrdiff_t ssize_t;
 
@@ -47,6 +47,8 @@ typedef ptrdiff_t ssize_t;
 #define S_IFSOCK 0140000  /* socket */
 
 #else
+
+#include <pthread.h>
 #define fuse_uid_t uid_t
 #define fuse_gid_t gid_t
 #define fuse_pid_t pid_t
@@ -187,7 +189,41 @@ public:
     static void set_color_on_stderr(Color color) noexcept;    // Ignore any failures
 };
 
-#define ANSI_COLOR_CODE_DARK_GRAY "\033[1;30m";
-#define ANSI_COLOR_CODE_BRIGHT_RED "\033[1;31m";
-#define ANSI_COLOR_CODE_DEFAULT "\033[0;39m";
+#define ANSI_COLOR_CODE_DARK_GRAY "\033[1;30m"
+#define ANSI_COLOR_CODE_BRIGHT_RED "\033[1;31m"
+#define ANSI_COLOR_CODE_DEFAULT "\033[0;39m"
+
+namespace tls
+{
+#ifdef WIN32
+
+#else
+    typedef pthread_key_t tls_key_type;
+
+    template <class T>
+    inline void destroy(void* ptr)
+    {
+        delete static_cast<T*>(ptr);
+    }
+
+    template <class T>
+    inline void init(tls_key_type* key)
+    {
+        int rc = ::pthread_key_create(key, &::securefs::tls::destroy<T>);
+        if (rc != 0)
+            THROW_POSIX_EXCEPTION(rc, "pthread_key_create");
+    }
+
+    inline void* get(tls_key_type key) { return ::pthread_getspecific(key); }
+
+    inline void set(tls_key_type key, void* value)
+    {
+        int rc = ::pthread_setspecific(key, value);
+        if (rc != 0)
+            THROW_POSIX_EXCEPTION(rc, "pthread_setspecific");
+    }
+
+// Key delete is intentionally left out, for its semantics are useless
+#endif
+}
 }
