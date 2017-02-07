@@ -260,23 +260,23 @@ Json::Value generate_config(unsigned int version,
 
     byte iv[CONFIG_IV_LENGTH];
     byte mac[CONFIG_MAC_LENGTH];
-    CryptoPP::OS_GenerateRandomBlock(false, iv, sizeof(iv));
+    CryptoPP::OS_GenerateRandomBlock(false, iv, array_length(iv));
 
     CryptoPP::GCM<CryptoPP::AES>::Encryption encryptor;
-    encryptor.SetKeyWithIV(key_to_encrypt.data(), key_to_encrypt.size(), iv, sizeof(iv));
+    encryptor.SetKeyWithIV(key_to_encrypt.data(), key_to_encrypt.size(), iv, array_length(iv));
     encryptor.EncryptAndAuthenticate(encrypted_master_key.data(),
                                      mac,
-                                     sizeof(mac),
+                                     array_length(mac),
                                      iv,
-                                     sizeof(iv),
+                                     array_length(iv),
                                      reinterpret_cast<const byte*>(get_version_header(version)),
                                      strlen(get_version_header(version)),
                                      master_key.data(),
                                      master_key.size());
 
     Json::Value encrypted_key;
-    encrypted_key["IV"] = securefs::hexify(iv, sizeof(iv));
-    encrypted_key["MAC"] = securefs::hexify(mac, sizeof(mac));
+    encrypted_key["IV"] = securefs::hexify(iv, array_length(iv));
+    encrypted_key["MAC"] = securefs::hexify(mac, array_length(mac));
     encrypted_key["key"] = securefs::hexify(encrypted_master_key);
 
     config["encrypted_key"] = std::move(encrypted_key);
@@ -328,8 +328,8 @@ bool parse_config(const Json::Value& config,
     std::string ekey_hex = encrypted_key_json_value["key"].asString();
 
     parse_hex(salt_hex, salt.data(), salt.size());
-    parse_hex(iv_hex, iv, sizeof(iv));
-    parse_hex(mac_hex, mac, sizeof(mac));
+    parse_hex(iv_hex, iv, array_length(iv));
+    parse_hex(mac_hex, mac, array_length(mac));
 
     encrypted_key.resize(ekey_hex.size() / 2);
     parse_hex(ekey_hex, encrypted_key.data(), encrypted_key.size());
@@ -346,12 +346,12 @@ bool parse_config(const Json::Value& config,
 
     CryptoPP::GCM<CryptoPP::AES>::Decryption decryptor;
     decryptor.SetKeyWithIV(
-        key_to_encrypt_master_key.data(), key_to_encrypt_master_key.size(), iv, sizeof(iv));
+        key_to_encrypt_master_key.data(), key_to_encrypt_master_key.size(), iv, array_length(iv));
     return decryptor.DecryptAndVerify(master_key.data(),
                                       mac,
-                                      sizeof(mac),
+                                      array_length(mac),
                                       iv,
-                                      sizeof(iv),
+                                      array_length(iv),
                                       reinterpret_cast<const byte*>(get_version_header(version)),
                                       strlen(get_version_header(version)),
                                       encrypted_key.data(),
@@ -631,8 +631,8 @@ public:
     {
         auto original_path = get_real_config_path();
         byte buffer[16];
-        CryptoPP::OS_GenerateRandomBlock(false, buffer, sizeof(buffer));
-        auto tmp_path = original_path + hexify(buffer, sizeof(buffer));
+        CryptoPP::OS_GenerateRandomBlock(false, buffer, array_length(buffer));
+        auto tmp_path = original_path + hexify(buffer, array_length(buffer));
         auto stream = OSService::get_default().open_file_stream(original_path, O_RDONLY, 0644);
         auto config = read_config(stream.get(), old_password.data(), old_password.size());
         stream = OSService::get_default().open_file_stream(

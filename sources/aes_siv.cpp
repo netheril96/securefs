@@ -66,7 +66,7 @@ void AES_SIV::s2v(const void* plaintext,
                   void* iv)
 {
     byte D[AES_SIV::IV_SIZE];
-    m_cmac.CalculateDigest(D, aes256_siv_zero_block, sizeof(aes256_siv_zero_block));
+    m_cmac.CalculateDigest(D, aes256_siv_zero_block, array_length(aes256_siv_zero_block));
 
     if (additional_data && additional_len)
     {
@@ -79,7 +79,7 @@ void AES_SIV::s2v(const void* plaintext,
     if (text_len >= AES_SIV::IV_SIZE)
     {
         CryptoPP::AlignedSecByteBlock T(static_cast<const byte*>(plaintext), text_len);
-        CryptoPP::xorbuf(T.data() + text_len - sizeof(D), D, sizeof(D));
+        CryptoPP::xorbuf(T.data() + text_len - array_length(D), D, array_length(D));
         m_cmac.CalculateDigest(static_cast<byte*>(iv), T.data(), T.size());
     }
     else
@@ -88,12 +88,12 @@ void AES_SIV::s2v(const void* plaintext,
         byte padded[AES_SIV::IV_SIZE];
         memcpy(padded, plaintext, text_len);
         padded[text_len] = aes256_iso_pad;
-        for (size_t i = text_len + 1; i < sizeof(padded); ++i)
+        for (size_t i = text_len + 1; i < array_length(padded); ++i)
         {
             padded[i] = 0;
         }
         CryptoPP::xorbuf(D, padded, AES_SIV::IV_SIZE);
-        m_cmac.CalculateDigest(static_cast<byte*>(iv), D, sizeof(D));
+        m_cmac.CalculateDigest(static_cast<byte*>(iv), D, array_length(D));
     }
 }
 
@@ -112,7 +112,7 @@ void AES_SIV::encrypt_and_authenticate(const void* plaintext,
     modded_iv[8] &= 0x7f;
     modded_iv[12] &= 0x7f;
 
-    m_ctr.Resynchronize(modded_iv, sizeof(modded_iv));
+    m_ctr.Resynchronize(modded_iv, array_length(modded_iv));
     m_ctr.ProcessData(
         static_cast<byte*>(ciphertext), static_cast<const byte*>(plaintext), text_len);
 }
@@ -130,7 +130,7 @@ bool AES_SIV::decrypt_and_verify(const void* ciphertext,
     temp_iv[8] &= 0x7f;
     temp_iv[12] &= 0x7f;
 
-    m_ctr.Resynchronize(temp_iv, sizeof(temp_iv));
+    m_ctr.Resynchronize(temp_iv, array_length(temp_iv));
     m_ctr.ProcessData(
         static_cast<byte*>(plaintext), static_cast<const byte*>(ciphertext), text_len);
 

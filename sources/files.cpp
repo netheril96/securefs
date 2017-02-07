@@ -129,7 +129,7 @@ FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
          id_.data(),
          id_.size(),
          generated_keys,
-         sizeof(generated_keys));
+         array_length(generated_keys));
     memcpy(data_key.data(), generated_keys, KEY_LENGTH);
     memcpy(meta_key.data(), generated_keys + KEY_LENGTH, KEY_LENGTH);
     auto crypt = make_cryptstream_aes_gcm(std::static_pointer_cast<StreamBase>(data_stream),
@@ -279,7 +279,7 @@ ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
         return true_size;
 
     byte meta[XATTR_IV_LENGTH + XATTR_MAC_LENGTH];
-    if (m_meta_stream->getxattr(name, meta, sizeof(meta)) != sizeof(meta))
+    if (m_meta_stream->getxattr(name, meta, array_length(meta)) != array_length(meta))
         throwVFSException(EIO);
 
     auto name_len = strlen(name);
@@ -359,7 +359,7 @@ void FileBase::setxattr(const char* name, const char* value, size_t size, int fl
                                        size);
 
     m_data_stream->setxattr(name, ciphertext, size, flags);
-    m_meta_stream->setxattr(name, meta, sizeof(meta), flags);
+    m_meta_stream->setxattr(name, meta, array_length(meta), flags);
 }
 
 void FileBase::removexattr(const char* name)
@@ -376,15 +376,16 @@ void SimpleDirectory::initialize()
     std::pair<id_type, int> value;
     while (true)
     {
-        auto rv = this->m_stream->read(buffer, off, sizeof(buffer));
-        if (rv < sizeof(buffer))
+        auto rv = this->m_stream->read(buffer, off, array_length(buffer));
+        if (rv < array_length(buffer))
             break;
         buffer[MAX_FILENAME_LENGTH] = 0;    // Set the null terminator in case the data is corrupted
         name = buffer;
         memcpy(value.first.data(), buffer + Directory::MAX_FILENAME_LENGTH + 1, ID_LENGTH);
-        value.second = from_little_endian<uint32_t>(buffer + sizeof(buffer) - sizeof(uint32_t));
+        value.second
+            = from_little_endian<uint32_t>(buffer + array_length(buffer) - sizeof(uint32_t));
         m_table.emplace(std::move(name), std::move(value));
-        off += sizeof(buffer);
+        off += array_length(buffer);
     }
 }
 
@@ -435,9 +436,9 @@ void SimpleDirectory::subflush()
             memcpy(buffer, pair.first.data(), pair.first.size());
             memcpy(buffer + MAX_FILENAME_LENGTH + 1, pair.second.first.data(), ID_LENGTH);
             to_little_endian(static_cast<uint32_t>(pair.second.second),
-                             buffer + sizeof(buffer) - sizeof(uint32_t));
-            this->m_stream->write(buffer, off, sizeof(buffer));
-            off += sizeof(buffer);
+                             buffer + array_length(buffer) - sizeof(uint32_t));
+            this->m_stream->write(buffer, off, array_length(buffer));
+            off += array_length(buffer);
         }
         m_dirty = false;
     }

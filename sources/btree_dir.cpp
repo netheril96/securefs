@@ -369,7 +369,7 @@ bool BtreeDirectory::read_node(uint32_t num, BtreeDirectory::Node& n)
         throw CorruptedDirectoryException();
     byte buffer[BLOCK_SIZE];
     dir_check(m_stream->read(buffer, num * BLOCK_SIZE, BLOCK_SIZE) == BLOCK_SIZE);
-    return n.from_buffer(buffer, sizeof(buffer));
+    return n.from_buffer(buffer, array_length(buffer));
 }
 
 void BtreeDirectory::write_node(uint32_t num, const BtreeDirectory::Node& n)
@@ -377,7 +377,7 @@ void BtreeDirectory::write_node(uint32_t num, const BtreeDirectory::Node& n)
     if (num == INVALID_PAGE)
         throw CorruptedDirectoryException();
     byte buffer[BLOCK_SIZE];
-    n.to_buffer(buffer, sizeof(buffer));
+    n.to_buffer(buffer, array_length(buffer));
     m_stream->write(buffer, num * BLOCK_SIZE, BLOCK_SIZE);
 }
 

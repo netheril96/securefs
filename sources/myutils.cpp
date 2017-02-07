@@ -99,8 +99,9 @@ void hkdf(const void* key,
     if (salt && salt_len)
     {
         byte distilled_key[32];
-        hmac_sha256_calculate(key, key_len, salt, salt_len, distilled_key, sizeof(distilled_key));
-        hkdf_expand(distilled_key, sizeof(distilled_key), info, info_len, output, out_len);
+        hmac_sha256_calculate(
+            key, key_len, salt, salt_len, distilled_key, array_length(distilled_key));
+        hkdf_expand(distilled_key, array_length(distilled_key), info, info_len, output, out_len);
     }
     else
     {

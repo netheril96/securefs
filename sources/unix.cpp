@@ -615,7 +615,7 @@ static std::string postprocess_strerror(int rc, const char* buffer, int code)
 std::string OSService::stringify_system_error(int errcode)
 {
     char buffer[4000];
-    return postprocess_strerror(strerror_r(errcode, buffer, sizeof(buffer)), buffer, errcode);
+    return postprocess_strerror(strerror_r(errcode, buffer, array_length(buffer)), buffer, errcode);
 }
 
 void OSService::set_color_on_stderr(Color color) noexcept

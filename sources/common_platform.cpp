@@ -14,11 +14,11 @@ const OSService& OSService::get_default()
 std::string OSService::temp_name(StringRef prefix, StringRef suffix)
 {
     byte random[16];
-    CryptoPP::OS_GenerateRandomBlock(false, random, sizeof(random));
+    CryptoPP::OS_GenerateRandomBlock(false, random, array_length(random));
     std::string result;
     result.reserve(prefix.size() + 32 + suffix.size());
     result.append(prefix.data(), prefix.size());
-    result.append(hexify(random, sizeof(random)));
+    result.append(hexify(random, array_length(random)));
     result.append(suffix.data(), suffix.size());
     return result;
 }

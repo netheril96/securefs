@@ -79,7 +79,7 @@ public:
                             err,
                             0,
                             system_buffer,
-                            sizeof(system_buffer) / sizeof(*system_buffer),
+                            array_length(system_buffer),
                             nullptr))
         {
             system_buffer[0] = 0;
@@ -96,33 +96,33 @@ public:
 
         if (!path1.empty() && !path2.empty())
         {
-            StringCbPrintfW(final_buffer,
-                            sizeof(final_buffer),
-                            L"error %lu %s (%s(path1=%s, path2=%s))",
-                            err,
-                            system_buffer,
-                            funcname,
-                            path1.c_str(),
-                            path2.c_str());
+            StringCchPrintfW(final_buffer,
+                             array_length(final_buffer),
+                             L"error %lu %s (%s(path1=%s, path2=%s))",
+                             err,
+                             system_buffer,
+                             funcname,
+                             path1.c_str(),
+                             path2.c_str());
         }
         else if (!path1.empty())
         {
-            StringCbPrintfW(final_buffer,
-                            sizeof(final_buffer),
-                            L"error %lu %s (%s(path=%s))",
-                            err,
-                            system_buffer,
-                            funcname,
-                            path1.c_str());
+            StringCchPrintfW(final_buffer,
+                             array_length(final_buffer),
+                             L"error %lu %s (%s(path=%s))",
+                             err,
+                             system_buffer,
+                             funcname,
+                             path1.c_str());
         }
         else
         {
-            StringCbPrintfW(final_buffer,
-                            sizeof(final_buffer),
-                            L"error %lu %s (%s)",
-                            err,
-                            system_buffer,
-                            funcname);
+            StringCchPrintfW(final_buffer,
+                             array_length(final_buffer),
+                             L"error %lu %s (%s)",
+                             err,
+                             system_buffer,
+                             funcname);
         }
         return narrow_string(final_buffer);
     }
@@ -399,7 +399,7 @@ public:
             EINVAL,       /* 266 */
             ENOTDIR,      /* ERROR_DIRECTORY		267 */
         };
-        if (err >= 0 && err < sizeof(errorTable))
+        if (err >= 0 && err < array_length(errorTable))
             return errorTable[err];
         return EPERM;
     }
@@ -1031,7 +1031,7 @@ void OSService::read_password_no_confirmation(const char* prompt,
                                               CryptoPP::AlignedSecByteBlock* output)
 {
     byte buffer[4000];
-    DEFER(CryptoPP::SecureWipeBuffer(buffer, sizeof(buffer)));
+    DEFER(CryptoPP::SecureWipeBuffer(buffer, array_length(buffer)));
     size_t bufsize = 0;
 
     HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
@@ -1051,7 +1051,7 @@ void OSService::read_password_no_confirmation(const char* prompt,
         int c = getchar();
         if (c == '\r' || c == '\n' || c == EOF)
             break;
-        if (bufsize < sizeof(buffer))
+        if (bufsize < array_length(buffer))
         {
             buffer[bufsize] = static_cast<byte>(c);
             ++bufsize;
@@ -1082,7 +1082,7 @@ void OSService::read_password_with_confirmation(const char* prompt,
 std::string OSService::stringify_system_error(int errcode)
 {
     char buffer[4000];
-    strerror_s(buffer, sizeof(buffer), errcode);
+    strerror_s(buffer, array_length(buffer), errcode);
     return buffer;
 }
 
