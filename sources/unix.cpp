@@ -528,44 +528,44 @@ int OSService::removexattr(const char* path, const char* name) const noexcept
 void OSService::read_password_no_confirmation(const char* prompt,
                                               CryptoPP::AlignedSecByteBlock* output)
 {
-    std::vector<byte> buffer;
-    DEFER(CryptoPP::SecureWipeBuffer(buffer.data(), buffer.size()));
+    byte buffer[4000];
+    DEFER(CryptoPP::SecureWipeBuffer(buffer, sizeof(buffer)));
+    size_t bufsize = 0;
 
+    struct termios old_tios, new_tios;
     if (::isatty(STDIN_FILENO))
     {
         if (::isatty(STDERR_FILENO))
         {
-            fputs(prompt, stder);
+            fputs(prompt, stderr);
             fflush(stderr);
         }
-        struct termios old_tios, new_tios;
+
         tcgetattr(STDIN_FILENO, &old_tios);
         new_tios = old_tios;
-        new_tios.c_lflag &= ~ECHO;
+        new_tios.c_lflag &= ~(unsigned)ECHO;
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &new_tios);
-
-        while (1)
-        {
-            int c = getchar();
-            if (c == '\r' || c == '\n' || c == EOF)
-                break;
-            buffer.push_back(static_cast<byte>(c));
-        }
-        putc('\n', stderr);
-        tcsetattr(STDIN_FILENO, TCSAFLUSH, &old_tios);
     }
-    else
+    while (1)
     {
-        while (1)
+        int c = getchar();
+        if (c == '\r' || c == '\n' || c == EOF)
+            break;
+        if (bufsize < sizeof(buffer))
         {
-            int c = getchar();
-            if (c == '\r' || c == '\n' || c == EOF)
-                break;
-            buffer.push_back(static_cast<byte>(c));
+            buffer[bufsize] = static_cast<byte>(c);
+            ++bufsize;
+        }
+        else
+        {
+            throw_runtime_error("Password exceeds 4000 characters");
         }
     }
-    output->resize(buffer.size());
-    memcpy(output->data(), buffer.data(), buffer.size());
+    putc('\n', stderr);
+    if (::isatty(STDIN_FILENO))
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &old_tios);
+    output->resize(bufsize);
+    memcpy(output->data(), buffer, bufsize);
 }
 
 void OSService::get_current_time_in_tm(struct tm* tm, int* nanoseconds)

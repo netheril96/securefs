@@ -1030,8 +1030,9 @@ void OSService::get_current_time_in_tm(struct tm* tm, int* ns)
 void OSService::read_password_no_confirmation(const char* prompt,
                                               CryptoPP::AlignedSecByteBlock* output)
 {
-    std::vector<byte> buffer;
-    DEFER(CryptoPP::SecureWipeBuffer(buffer.data(), buffer.size()));
+    byte buffer[4000];
+    DEFER(CryptoPP::SecureWipeBuffer(buffer, sizeof(buffer)));
+    size_t bufsize = 0;
 
     HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
     DWORD old_mode, new_mode;
@@ -1050,13 +1051,21 @@ void OSService::read_password_no_confirmation(const char* prompt,
         int c = getchar();
         if (c == '\r' || c == '\n' || c == EOF)
             break;
-        buffer.push_back(static_cast<byte>(c));
+        if (bufsize < sizeof(buffer))
+        {
+            buffer[bufsize] = static_cast<byte>(c);
+            ++bufsize;
+        }
+        else
+        {
+            throw_runtime_error("Password exceeds 4000 characters");
+        }
     }
 
     if (SetConsoleMode(in, old_mode))
         putc('\n', stderr);
-    output->resize(buffer.size());
-    memcpy(output->data(), buffer.data(), buffer.size());
+    output->resize(bufsize);
+    memcpy(output->data(), buffer, bufsize);
 }
 
 void OSService::read_password_with_confirmation(const char* prompt,
