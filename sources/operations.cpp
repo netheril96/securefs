@@ -213,7 +213,7 @@ namespace operations
 
     void* init(struct fuse_conn_info* fsinfo)
     {
-#ifdef CAN_SET_FUSE_CONN_INFO
+#ifdef FUSE_CAP_BIG_WRITES
         fsinfo->want |= FUSE_CAP_BIG_WRITES;
         fsinfo->max_readahead = static_cast<unsigned>(-1);
         fsinfo->max_write = static_cast<unsigned>(-1);

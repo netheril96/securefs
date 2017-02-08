@@ -29,9 +29,33 @@
 #include <sys/xattr.h>
 #endif
 
-#ifndef AT_FDCWD
-#define AT_FDCWD -2
-#endif
+// This provides definition for futimens when it is not already defined (e.g. on Apple)
+// When it is defined, the template is selected later in overload resolution
+template <class T>
+static int futimens(T fd, const struct fuse_timespec ts[2])
+{
+    int rc;
+    if (!ts)
+        rc = ::futimes(fd, nullptr);
+    else
+    {
+        struct timeval time_values[2];
+        for (size_t i = 0; i < 2; ++i)
+        {
+            time_values[i].tv_sec = ts[i].tv_sec;
+            time_values[i].tv_usec
+                = static_cast<decltype(time_values[i].tv_usec)>(ts[i].tv_nsec / 1000);
+        }
+        rc = ::futimes(fd, time_values);
+    }
+    return rc;
+}
+
+template <class T>
+static int utimensat(int, const char*, const struct fuse_timespec*, T)
+{
+    return 1;
+}
 
 namespace securefs
 {
@@ -127,24 +151,7 @@ public:
 
     void utimens(const struct fuse_timespec ts[2]) override
     {
-        int rc;
-#ifdef HAS_FUTIMENS
-        rc = ::futimens(m_fd, ts);
-#else
-        if (!ts)
-            rc = ::futimes(m_fd, nullptr);
-        else
-        {
-            struct timeval time_values[2];
-            for (size_t i = 0; i < 2; ++i)
-            {
-                time_values[i].tv_sec = ts[i].tv_sec;
-                time_values[i].tv_usec
-                    = static_cast<decltype(time_values[i].tv_usec)>(ts[i].tv_nsec / 1000);
-            }
-            rc = ::futimes(m_fd, time_values);
-        }
-#endif
+        int rc = ::futimens(m_fd, ts);
         if (rc < 0)
             THROW_POSIX_EXCEPTION(errno, "utimens");
     }
@@ -240,7 +247,7 @@ public:
 
 std::string OSService::norm_path(StringRef path) const
 {
-#ifdef HAS_AT_FUNCTIONS
+#ifdef AT_FDCWD
     if (m_dir_fd < 0)
         return path.to_string();
 #endif
@@ -251,14 +258,14 @@ std::string OSService::norm_path(StringRef path) const
 
 OSService::OSService()
 {
-#ifdef HAS_AT_FUNCTIONS
+#ifdef AT_FDCWD
     m_dir_fd = AT_FDCWD;
 #endif
 }
 
 OSService::~OSService()
 {
-#ifdef HAS_AT_FUNCTIONS
+#ifdef AT_FDCWD
     if (m_dir_fd >= 0)
         ::close(m_dir_fd);
 #endif
@@ -274,7 +281,7 @@ OSService::OSService(StringRef path)
     m_dir_name.assign(buffer);
     m_dir_name.push_back('/');
 
-#ifdef HAS_AT_FUNCTIONS
+#ifdef AT_FDCWD
     int dir_fd = ::open(path.c_str(), O_RDONLY);
     if (dir_fd < 0)
         THROW_POSIX_EXCEPTION(errno, "Opening directory " + path);
@@ -285,7 +292,7 @@ OSService::OSService(StringRef path)
 std::shared_ptr<FileStream>
 OSService::open_file_stream(StringRef path, int flags, unsigned mode) const
 {
-#ifdef HAS_AT_FUNCTIONS
+#ifdef AT_FDCWD
     int fd = ::openat(m_dir_fd, path.c_str(), flags, mode);
 #else
     int fd = ::open(norm_path(path).c_str(), flags, mode);
@@ -298,7 +305,7 @@ OSService::open_file_stream(StringRef path, int flags, unsigned mode) const
 
 void OSService::remove_file(StringRef path) const
 {
-#ifdef HAS_AT_FUNCTIONS
+#ifdef AT_FDCWD
     int rc = ::unlinkat(m_dir_fd, path.c_str(), 0) == 0;
 #else
     int rc = ::unlink(norm_path(path).c_str()) == 0;
@@ -309,7 +316,7 @@ void OSService::remove_file(StringRef path) const
 
 void OSService::remove_directory(StringRef path) const
 {
-#ifdef HAS_AT_FUNCTIONS
+#ifdef AT_REMOVEDIR
     int rc = ::unlinkat(m_dir_fd, path.c_str(), AT_REMOVEDIR);
 #else
     int rc = ::rmdir(norm_path(path).c_str()) == 0;
@@ -328,7 +335,7 @@ void OSService::lock() const
 
 void OSService::mkdir(StringRef path, unsigned mode) const
 {
-#ifdef HAS_AT_FUNCTIONS
+#ifdef AT_FDCWD
     int rc = ::mkdirat(m_dir_fd, path.c_str(), mode);
 #else
     int rc = ::mkdir(norm_path(path).c_str(), mode);
@@ -340,7 +347,7 @@ void OSService::mkdir(StringRef path, unsigned mode) const
 
 void OSService::symlink(StringRef to, StringRef from) const
 {
-#ifdef HAS_AT_FUNCTIONS
+#ifdef AT_FDCWD
     int rc = ::symlinkat(to.c_str(), m_dir_fd, from.c_str());
 #else
     int rc = ::symlink(to.c_str(), norm_path(from).c_str());
@@ -352,7 +359,7 @@ void OSService::symlink(StringRef to, StringRef from) const
 
 void OSService::link(StringRef source, StringRef dest) const
 {
-#ifdef HAS_AT_FUNCTIONS
+#ifdef AT_FDCWD
     int rc = ::linkat(m_dir_fd, source.c_str(), m_dir_fd, dest.c_str(), 0);
 #else
     int rc = ::link(norm_path(source).c_str(), norm_path(dest).c_str());
@@ -373,7 +380,7 @@ void OSService::statfs(struct fuse_statvfs* fs_info) const
 
 void OSService::rename(StringRef a, StringRef b) const
 {
-#ifdef HAS_AT_FUNCTIONS
+#ifdef AT_FDCWD
     int rc = ::renameat(m_dir_fd, a.c_str(), m_dir_fd, b.c_str());
 #else
     int rc = ::rename(norm_path(a).c_str(), norm_path(b).c_str());
@@ -385,7 +392,7 @@ void OSService::rename(StringRef a, StringRef b) const
 
 bool OSService::stat(StringRef path, struct fuse_stat* stat) const
 {
-#ifdef HAS_AT_FUNCTIONS
+#ifdef AT_SYMLINK_NOFOLLOW
     int rc = ::fstatat(m_dir_fd, path.c_str(), stat, AT_SYMLINK_NOFOLLOW);
 #else
     int rc = ::lstat(norm_path(path).c_str(), stat);
@@ -401,7 +408,7 @@ bool OSService::stat(StringRef path, struct fuse_stat* stat) const
 
 void OSService::chmod(StringRef path, fuse_mode_t mode) const
 {
-#ifdef HAS_AT_FUNCTIONS
+#ifdef AT_SYMLINK_NOFOLLOW
     int rc = ::fchmodat(m_dir_fd, path.c_str(), mode, AT_SYMLINK_NOFOLLOW);
 #else
     int rc = ::lchmod(norm_path(path).c_str(), mode);
@@ -413,7 +420,7 @@ void OSService::chmod(StringRef path, fuse_mode_t mode) const
 
 ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
 {
-#ifdef HAS_AT_FUNCTIONS
+#ifdef AT_FDCWD
     ssize_t rc = ::readlinkat(m_dir_fd, path.c_str(), output, size);
 #else
     ssize_t rc = ::readlink(norm_path(path).c_str(), output, size);
@@ -426,12 +433,13 @@ ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
 
 void OSService::utimens(StringRef path, const fuse_timespec* ts) const
 {
-#if defined(HAS_AT_FUNCTIONS) && defined(HAS_FUTIMENS)
     int rc = ::utimensat(m_dir_fd, path.c_str(), ts, AT_SYMLINK_NOFOLLOW);
+    if (rc == 0)
+        return;
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno, "utimensat");
-#else
-    int rc;
+
+    // When controls flows to here, the stub function has been called
     if (!ts)
     {
         rc = ::lutimes(norm_path(path).c_str(), nullptr);
@@ -447,7 +455,6 @@ void OSService::utimens(StringRef path, const fuse_timespec* ts) const
     }
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno, "lutimes");
-#endif
 }
 
 std::unique_ptr<DirectoryTraverser> OSService::create_traverser(StringRef dir) const
@@ -487,7 +494,7 @@ int OSService::raise_fd_limit()
 
 void OSService::get_current_time(fuse_timespec& current_time)
 {
-#ifdef HAS_CLOCK_GETTIME
+#ifdef CLOCK_REALTIME
     clock_gettime(CLOCK_REALTIME, &current_time);
 #else
     timeval tv;
@@ -529,7 +536,7 @@ void OSService::read_password_no_confirmation(const char* prompt,
                                               CryptoPP::AlignedSecByteBlock* output)
 {
     byte buffer[4000];
-    DEFER(CryptoPP::SecureWipeBuffer(buffer, sizeof(buffer)));
+    DEFER(CryptoPP::SecureWipeBuffer(buffer, array_length(buffer)));
     size_t bufsize = 0;
 
     struct termios old_tios, new_tios;
@@ -551,7 +558,7 @@ void OSService::read_password_no_confirmation(const char* prompt,
         int c = getchar();
         if (c == '\r' || c == '\n' || c == EOF)
             break;
-        if (bufsize < sizeof(buffer))
+        if (bufsize < array_length(buffer))
         {
             buffer[bufsize] = static_cast<byte>(c);
             ++bufsize;

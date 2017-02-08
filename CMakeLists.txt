@@ -50,8 +50,6 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif ()
 
-include(FeatureDetection)
-
 include_directories(${PROJECT_SOURCE_DIR}/sources)
 set(EXTERNAL_DIR ${PROJECT_SOURCE_DIR}/external)
 include_directories(${EXTERNAL_DIR})

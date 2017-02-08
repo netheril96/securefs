@@ -70,14 +70,15 @@ extern Logger* global_logger;
 #define GENERIC_LOG(log_level, ...)                                                                \
     do                                                                                             \
     {                                                                                              \
+        using securefs::global_logger;                                                             \
         if (global_logger && global_logger->get_level() <= log_level)                              \
         {                                                                                          \
             global_logger->log(log_level, __VA_ARGS__);                                            \
         }                                                                                          \
     } while (0)
-#define TRACE_LOG(...) GENERIC_LOG(kLogTrace, __VA_ARGS__)
-#define DEBUG_LOG(...) GENERIC_LOG(kLogDebug, __VA_ARGS__)
-#define INFO_LOG(...) GENERIC_LOG(kLogInfo, __VA_ARGS__)
-#define WARN_LOG(...) GENERIC_LOG(kLogWarning, __VA_ARGS__)
-#define ERROR_LOG(...) GENERIC_LOG(kLogError, __VA_ARGS__)
+#define TRACE_LOG(...) GENERIC_LOG(securefs::kLogTrace, __VA_ARGS__)
+#define DEBUG_LOG(...) GENERIC_LOG(securefs::kLogDebug, __VA_ARGS__)
+#define INFO_LOG(...) GENERIC_LOG(securefs::kLogInfo, __VA_ARGS__)
+#define WARN_LOG(...) GENERIC_LOG(securefs::kLogWarning, __VA_ARGS__)
+#define ERROR_LOG(...) GENERIC_LOG(securefs::kLogError, __VA_ARGS__)
 }

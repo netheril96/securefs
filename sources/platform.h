@@ -124,10 +124,10 @@ enum class Color
 class OSService
 {
 private:
-#ifdef HAS_AT_FUNCTIONS
-    int m_dir_fd;
-#elif defined(WIN32)
+#if defined(WIN32)
     void* m_root_handle;
+#else
+    int m_dir_fd;
 #endif
     std::string m_dir_name;
 
