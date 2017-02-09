@@ -185,14 +185,15 @@ namespace lite
         if (flags & O_APPEND)
             throwVFSException(ENOTSUP);
 
+        // Files cannot be opened write-only because the header must be read in order to derive the
+        // session key
         if ((flags & O_ACCMODE) == O_WRONLY)
         {
             flags = (flags & ~O_ACCMODE) | O_RDWR;
         }
-        if ((flags & O_CREAT) && !(mode & 0400))
+        if ((flags & O_CREAT))
         {
-            THROW_POSIX_EXCEPTION(
-                EINVAL, "Creating a file without read access is not supported on this filesystem");
+            mode |= S_IRUSR;
         }
         auto file_stream = m_root->open_file_stream(translate_path(path, false), flags, mode);
         AutoClosedFile fp(new File(file_stream,
@@ -252,7 +253,7 @@ namespace lite
 
     void FileSystem::chmod(StringRef path, fuse_mode_t mode)
     {
-        if (!(mode & 0400))
+        if (!(mode & S_IRUSR))
         {
             WARN_LOG("Change the mode of file %s to 0%o which denies user read access. "
                      "Mysterious bugs will occur.",
