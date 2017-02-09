@@ -433,11 +433,14 @@ ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
 
 void OSService::utimens(StringRef path, const fuse_timespec* ts) const
 {
-    int rc = ::utimensat(m_dir_fd, path.c_str(), ts, AT_SYMLINK_NOFOLLOW);
+    int rc;
+#ifdef AT_SYMLINK_NOFOLLOW
+    rc = ::utimensat(m_dir_fd, path.c_str(), ts, AT_SYMLINK_NOFOLLOW);
     if (rc == 0)
         return;
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno, "utimensat");
+#endif
 
     // When controls flows to here, the stub function has been called
     if (!ts)
@@ -568,9 +571,11 @@ void OSService::read_password_no_confirmation(const char* prompt,
             throw_runtime_error("Password exceeds 4000 characters");
         }
     }
-    putc('\n', stderr);
     if (::isatty(STDIN_FILENO))
+    {
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &old_tios);
+        putc('\n', stderr);
+    }
     output->resize(bufsize);
     memcpy(output->data(), buffer, bufsize);
 }
