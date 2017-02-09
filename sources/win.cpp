@@ -499,6 +499,7 @@ private:
 
 public:
     explicit WindowsFileStream(WideStringRef path, int flags, unsigned mode)
+        : m_handle(INVALID_HANDLE_VALUE), m_is_ntfs(false)
     {
         DWORD access_flags = 0;
         switch (flags & O_ACCMODE)
@@ -546,21 +547,14 @@ public:
             throw WindowsException(err, L"CreateFileW", path.to_string());
         }
 
-        bool committed = false;
-        DEFER({
-            if (!committed)
-                CloseHandle(m_handle);
-        });
-
-        constexpr DWORD buflen = 256;
-        wchar_t fsname[buflen];
-        CHECK_CALL(GetVolumeInformationByHandleW(
-            m_handle, nullptr, 0, nullptr, nullptr, 0, fsname, buflen));
+        wchar_t fsname[128];
+        if (!GetVolumeInformationByHandleW(
+                m_handle, nullptr, 0, nullptr, nullptr, 0, fsname, array_length(fsname)))
+            return;
         m_is_ntfs = (CompareStringEx(
                          LOCALE_NAME_INVARIANT, NORM_IGNORECASE, fsname, -1, L"NTFS", -1, 0, 0, 0)
                      == CSTR_EQUAL);
         TRACE_LOG("Opening file on a %s volume", narrow_string(fsname).c_str());
-        committed = true;    // Commit the result so the it won't closed in the deferred handler
     }
 
     ~WindowsFileStream() { CloseHandle(m_handle); }
