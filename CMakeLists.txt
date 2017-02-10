@@ -9,7 +9,7 @@ if (UNIX)
     find_package(FUSE REQUIRED)
     include_directories(${FUSE_INCLUDE_DIR})
     link_libraries(${FUSE_LIBRARIES})
-    add_compile_options(-Wall -Wextra -pedantic -std=gnu++11)
+    add_compile_options(-Wall -Wextra -Wno-unknown-pragmas -std=gnu++11)
 
     if (NOT ${PORTABLE_BUILD})
         add_compile_options(-march=native -mtune=native)
