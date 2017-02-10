@@ -769,7 +769,6 @@ public:
             WARN_LOG("Mounting a directory on itself may cause securefs to hang");
         }
 
-        recreate_logger();
 #ifdef WIN32
         if (mount_point.getValue().size() != 2 || mount_point.getValue()[1] != ':'
             || mount_point.getValue().front() < 'A'
@@ -811,8 +810,8 @@ public:
                 "and remove all traces of old data to avoid information leakage!");
             fputs("Do you wish to continue with mounting? (y/n)", stdout);
             fflush(stdout);
-            if (getc(stdout) != 'y')
-                return 0;
+            if (getchar() != 'y')
+                return 110;
         }
 
         CryptoPP::SecureWipeBuffer(password.data(), password.size());
@@ -905,6 +904,7 @@ public:
 
             init_fuse_operations(data_dir.getValue().c_str(), operations, noxattr.getValue());
 
+            recreate_logger();
             return fuse_main(static_cast<int>(fuse_args.size()),
                              const_cast<char**>(fuse_args.data()),
                              &operations,
@@ -930,6 +930,8 @@ public:
 
             struct fuse_operations operations;
             lite::init_fuse_operations(&operations, data_dir.getValue(), noxattr.getValue());
+
+            recreate_logger();
             return fuse_main(static_cast<int>(fuse_args.size()),
                              const_cast<char**>(fuse_args.data()),
                              &operations,
