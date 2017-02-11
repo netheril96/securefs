@@ -72,7 +72,7 @@ class FileStream;
 
 namespace operations
 {
-    extern const std::string LOCK_FILENAME;
+    extern const char* LOCK_FILENAME;
     struct MountOptions
     {
         optional<int> version;

@@ -35,7 +35,7 @@ using namespace securefs;
 namespace
 {
 
-static const std::string CONFIG_FILE_NAME = ".securefs.json";
+static const char* CONFIG_FILE_NAME = ".securefs.json";
 static const unsigned MIN_ITERATIONS = 20000;
 static const unsigned MIN_DERIVE_SECONDS = 1;
 static const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
@@ -776,7 +776,7 @@ public:
         config_stream.reset();
 
         if (std::count(config.master_key.begin(), config.master_key.end(), (byte)0)
-            >= config.master_key.size() * 4 / 5)
+            >= static_cast<long>(config.master_key.size() * 4 / 5))
         {
             WARN_LOG(
                 "%s",
@@ -860,7 +860,7 @@ public:
                           "holding the lock.",
                           e.what(),
                           data_dir.getValue().c_str(),
-                          securefs::operations::LOCK_FILENAME.c_str());
+                          securefs::operations::LOCK_FILENAME);
                 return 18;
             }
             fsopt.block_size = config.block_size;

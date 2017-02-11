@@ -21,7 +21,7 @@ namespace securefs
 {
 namespace operations
 {
-    const std::string LOCK_FILENAME = ".securefs.lock";
+    const char* LOCK_FILENAME = ".securefs.lock";
 
     MountOptions::MountOptions() {}
     MountOptions::~MountOptions() {}
