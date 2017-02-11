@@ -12,7 +12,7 @@ namespace securefs
 enum LoggingLevel
 {
     kLogTrace = 0,
-    kLogDebug = 1,
+    kLogVerbose = 1,
     kLogInfo = 2,
     kLogWarning = 3,
     kLogError = 4
@@ -24,8 +24,8 @@ inline const char* stringify(LoggingLevel lvl)
     {
     case kLogTrace:
         return "Trace";
-    case kLogDebug:
-        return "Debug";
+    case kLogVerbose:
+        return "Verbose";
     case kLogInfo:
         return "Info";
     case kLogWarning:
@@ -77,7 +77,7 @@ extern Logger* global_logger;
         }                                                                                          \
     } while (0)
 #define TRACE_LOG(...) GENERIC_LOG(securefs::kLogTrace, __VA_ARGS__)
-#define DEBUG_LOG(...) GENERIC_LOG(securefs::kLogDebug, __VA_ARGS__)
+#define VERBOSE_LOG(...) GENERIC_LOG(securefs::kLogVerbose, __VA_ARGS__)
 #define INFO_LOG(...) GENERIC_LOG(securefs::kLogInfo, __VA_ARGS__)
 #define WARN_LOG(...) GENERIC_LOG(securefs::kLogWarning, __VA_ARGS__)
 #define ERROR_LOG(...) GENERIC_LOG(securefs::kLogError, __VA_ARGS__)

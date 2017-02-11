@@ -662,7 +662,8 @@ private:
     TCLAP::SwitchArg insecure{
         "i", "insecure", "Disable all integrity verification (insecure mode)"};
     TCLAP::SwitchArg noxattr{"x", "noxattr", "Disable built-in xattr support"};
-    TCLAP::SwitchArg trace{"", "trace", "Trace all calls into `securefs` (implies --info)"};
+    TCLAP::SwitchArg verbose{"v", "verbose", "Logs more verbose messages"};
+    TCLAP::SwitchArg trace{"", "trace", "Trace all calls into `securefs` (implies --verbose)"};
     TCLAP::ValueArg<std::string> log{
         "", "log", "Path of the log file (may contain sensitive information)", false, "", "path"};
     TCLAP::MultiArg<std::string> fuse_options{
@@ -700,7 +701,8 @@ public:
 #endif
 
         cmdline.add(&background);
-        cmdline.add(&insecure);
+        // cmdline.add(&insecure);
+        cmdline.add(&verbose);
         cmdline.add(&trace);
         cmdline.add(&log);
         cmdline.add(&data_dir);
@@ -719,27 +721,16 @@ public:
             memcpy(password.data(), pass.getValue().data(), password.size());
             CryptoPP::OS_GenerateRandomBlock(
                 false, reinterpret_cast<byte*>(&pass.getValue()[0]), pass.getValue().size());
-            return;
+        }
+        else
+        {
+            OSService::read_password_no_confirmation("Password: ", &password);
         }
 
-        OSService::read_password_no_confirmation("Password: ", &password);
-    }
-
-    const char* get_tmp_dir()
-    {
-        const char* ret = getenv("TMP");
-        if (ret)
-            return ret;
-        ret = getenv("TEMP");
-        if (ret)
-            return ret;
-        ret = getenv("TMPDIR");
-        if (ret)
-            return ret;
-        ret = getenv("TEMPDIR");
-        if (ret)
-            return ret;
-        return "/tmp";
+        if (global_logger && verbose.getValue())
+            global_logger->set_level(kLogVerbose);
+        if (global_logger && trace.getValue())
+            global_logger->set_level(kLogTrace);
     }
 
     void recreate_logger()
@@ -758,6 +749,8 @@ public:
             delete global_logger;
             global_logger = nullptr;
         }
+        if (global_logger && verbose.getValue())
+            global_logger->set_level(kLogVerbose);
         if (global_logger && trace.getValue())
             global_logger->set_level(kLogTrace);
     }
@@ -800,8 +793,8 @@ public:
         auto config = read_config(config_stream.get(), password.data(), password.size());
         config_stream.reset();
 
-        if (config.master_key.size() == KEY_LENGTH
-            && std::count(config.master_key.begin(), config.master_key.end(), (byte)0) >= 20)
+        if (std::count(config.master_key.begin(), config.master_key.end(), (byte)0)
+            >= config.master_key.size() * 4 / 5)
         {
             WARN_LOG(
                 "%s",
@@ -818,8 +811,8 @@ public:
 
         try
         {
-            INFO_LOG("Raising the number of file descriptor limit to %d",
-                     OSService::raise_fd_limit());
+            int fd_limit = OSService::raise_fd_limit();
+            VERBOSE_LOG("Raising the number of file descriptor limit to %d", fd_limit);
         }
         catch (const ExceptionBase& e)
         {
@@ -848,19 +841,23 @@ public:
         const char* copyfile_disable = ::getenv("COPYFILE_DISABLE");
         if (copyfile_disable)
         {
-            INFO_LOG("Mounting without .DS_Store and other apple dot files because environmental "
-                     "variable COPYFILE_DISABLE is set to \"%s\"",
-                     copyfile_disable);
+            VERBOSE_LOG("Mounting without .DS_Store and other apple dot files because "
+                        "environmental "
+                        "variable COPYFILE_DISABLE is set to \"%s\"",
+                        copyfile_disable);
             fuse_args.push_back("-o");
             fuse_args.push_back("noappledouble");
         }
 #endif
         fuse_args.push_back(mount_point.getValue().c_str());
 
-        INFO_LOG("Mounting filesystem stored at %s onto %s with format version: %u",
-                 data_dir.getValue().c_str(),
-                 mount_point.getValue().c_str(),
-                 config.version);
+        VERBOSE_LOG("Filesystem parameters: format version %d, block size %u (bytes), iv size %u "
+                    "(bytes)",
+                    config.version,
+                    config.block_size,
+                    config.iv_size);
+
+        VERBOSE_LOG("Master key: %s", hexify(config.master_key).c_str());
 
         if (config.version < 4)
         {
