@@ -775,8 +775,10 @@ public:
         auto config = read_config(config_stream.get(), password.data(), password.size());
         config_stream.reset();
 
-        if (std::count(config.master_key.begin(), config.master_key.end(), (byte)0)
-            >= static_cast<long>(config.master_key.size() * 4 / 5))
+        bool is_vulnerable
+            = (std::count(config.master_key.begin(), config.master_key.end(), (byte)0)
+               >= static_cast<long>(config.master_key.size() * 4 / 5));
+        if (is_vulnerable)
         {
             WARN_LOG(
                 "%s",
@@ -839,7 +841,10 @@ public:
                     config.block_size,
                     config.iv_size);
 
-        VERBOSE_LOG("Master key: %s", hexify(config.master_key).c_str());
+        if (!is_vulnerable)
+        {
+            VERBOSE_LOG("Master key: %s", hexify(config.master_key).c_str());
+        }
 
         if (config.version < 4)
         {
@@ -863,6 +868,13 @@ public:
                           securefs::operations::LOCK_FILENAME);
                 return 18;
             }
+            bool should_lock_be_deleted = true;
+            DEFER(if (should_lock_be_deleted && fsopt.lock_stream) {
+                fsopt.lock_stream->close();
+                fsopt.lock_stream.reset();
+                fsopt.root->remove_file_nothrow(operations::LOCK_FILENAME);
+            });
+
             fsopt.block_size = config.block_size;
             fsopt.iv_size = config.iv_size;
             fsopt.version = config.version;
@@ -876,6 +888,9 @@ public:
             init_fuse_operations(data_dir.getValue().c_str(), operations, noxattr.getValue());
 
             recreate_logger();
+
+            should_lock_be_deleted = false;    // Now the "destroy" function in fuse_operations will
+            // take care of the deletion of lock file
             return fuse_main(static_cast<int>(fuse_args.size()),
                              const_cast<char**>(fuse_args.data()),
                              &operations,
