@@ -1080,29 +1080,6 @@ std::string OSService::stringify_system_error(int errcode)
     return buffer;
 }
 
-void OSService::set_color_on_stderr(Color color) noexcept
-{
-    // Disable for now
-    // May implement it later
-    /*   if (is_win10 && ::_isatty(2))
-       {
-           switch (color)
-           {
-           case Color::DarkGrey:
-               fputs(ANSI_COLOR_CODE_DARK_GRAY, stderr);
-               break;
-           case Color::BrightRed:
-               fputs(ANSI_COLOR_CODE_BRIGHT_RED, stderr);
-               break;
-           case Color::Default:
-               fputs(ANSI_COLOR_CODE_DEFAULT, stderr);
-               break;
-           default:
-               break;
-           }
-       }*/
-}
-
 /*
 * Use the following function to delay load the WinFsp DLL
 * directly from the WinFsp installation directory.
@@ -1195,6 +1172,78 @@ std::string narrow_string(WideStringRef str)
     WideCharToMultiByte(
         CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), &result[0], sz, 0, 0);
     return result;
+}
+
+class WindowsColourSetter : public ConsoleColourSetter
+{
+private:
+    HANDLE hd;
+    WORD originalForegroundAttributes;
+    WORD originalBackgroundAttributes;
+
+    void setTextAttribute(WORD _textAttribute) noexcept
+    {
+        SetConsoleTextAttribute(hd, _textAttribute | originalBackgroundAttributes);
+    }
+
+public:
+    explicit WindowsColourSetter(HANDLE hd) : hd(hd)
+    {
+        CONSOLE_SCREEN_BUFFER_INFO csbiInfo;
+        GetConsoleScreenBufferInfo(hd, &csbiInfo);
+        originalForegroundAttributes = csbiInfo.wAttributes
+            & ~(BACKGROUND_GREEN | BACKGROUND_RED | BACKGROUND_BLUE | BACKGROUND_INTENSITY);
+        originalBackgroundAttributes = csbiInfo.wAttributes
+            & ~(FOREGROUND_GREEN | FOREGROUND_RED | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+    }
+
+    void use(Colour::Code _colourCode) noexcept override
+    {
+        switch (_colourCode)
+        {
+        case Colour::Default:
+            return setTextAttribute(originalForegroundAttributes);
+        case Colour::White:
+            return setTextAttribute(FOREGROUND_GREEN | FOREGROUND_RED | FOREGROUND_BLUE);
+        case Colour::Red:
+            return setTextAttribute(FOREGROUND_RED);
+        case Colour::Green:
+            return setTextAttribute(FOREGROUND_GREEN);
+        case Colour::Blue:
+            return setTextAttribute(FOREGROUND_BLUE);
+        case Colour::Cyan:
+            return setTextAttribute(FOREGROUND_BLUE | FOREGROUND_GREEN);
+        case Colour::Yellow:
+            return setTextAttribute(FOREGROUND_RED | FOREGROUND_GREEN);
+        case Colour::Grey:
+            return setTextAttribute(0);
+
+        case Colour::LightGrey:
+            return setTextAttribute(FOREGROUND_INTENSITY);
+        case Colour::BrightRed:
+            return setTextAttribute(FOREGROUND_INTENSITY | FOREGROUND_RED);
+        case Colour::BrightGreen:
+            return setTextAttribute(FOREGROUND_INTENSITY | FOREGROUND_GREEN);
+        case Colour::BrightWhite:
+            return setTextAttribute(FOREGROUND_INTENSITY | FOREGROUND_GREEN | FOREGROUND_RED
+                                    | FOREGROUND_BLUE);
+
+        default:
+            break;
+        }
+    }
+};
+
+std::unique_ptr<ConsoleColourSetter> ConsoleColourSetter::create_setter(FILE* fp)
+{
+    if (!fp)
+        return {};
+
+    auto hd = reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(fp)));
+    DWORD mode;
+    if (!GetConsoleMode(hd, &mode))
+        return {};    // Not a console
+    return securefs::make_unique<WindowsColourSetter>(hd);
 }
 }
 

@@ -672,7 +672,7 @@ public:
 
 private:
     FILE* m_fp;
-    void setColour(const char* _escapeCode)
+    void setColour(const char* _escapeCode) noexcept
     {
         putc('\033', m_fp);
         fputs(_escapeCode, m_fp);
