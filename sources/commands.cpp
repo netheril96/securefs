@@ -746,8 +746,9 @@ public:
     {
         if (log.isSet())
         {
+            auto logger = Logger::create_file_logger(log.getValue());
             delete global_logger;
-            global_logger = Logger::create_file_logger(log.getValue());
+            global_logger = logger;
         }
         else if (background.getValue())
         {
