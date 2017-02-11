@@ -35,15 +35,15 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
     flockfile(m_fp);
     DEFER(funlockfile(m_fp));
 
-    if (m_fp == stderr)
+    if (m_console_color)
     {
         switch (level)
         {
         case kLogWarning:
-            OSService::set_color_on_stderr(Color::DarkGrey);
+            m_console_color->use(Colour::Warning);
             break;
         case kLogError:
-            OSService::set_color_on_stderr(Color::BrightRed);
+            m_console_color->use(Colour::Error);
             break;
         default:
             break;
@@ -63,9 +63,9 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
             now_ns);
     vfprintf(m_fp, format, args);
 
-    if (m_fp == stderr && (level == kLogWarning || level == kLogError))
+    if (m_console_color && (level == kLogWarning || level == kLogError))
     {
-        OSService::set_color_on_stderr(Color::Default);
+        m_console_color->use(Colour::Default);
     }
 
     putc('\n', m_fp);
@@ -85,6 +85,7 @@ void Logger::log(LoggingLevel level, const char* format, ...) noexcept
 Logger::Logger(FILE* fp, bool close_on_exit)
     : m_level(kLogInfo), m_fp(fp), m_close_on_exit(close_on_exit)
 {
+    m_console_color = ConsoleColourSetter::create_setter(m_fp);
 }
 
 Logger::~Logger()

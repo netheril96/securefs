@@ -5,14 +5,11 @@
 #include "myutils.h"
 #include "streams.h"
 
-#include <fcntl.h>
 #include <functional>
 #include <memory>
 #include <stddef.h>
 #include <stdint.h>
 #include <string>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <vector>
 
 #include <fuse.h>
@@ -71,7 +68,11 @@ typedef ptrdiff_t ssize_t;
 
 #else
 
+#include <fcntl.h>
 #include <pthread.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
 #define fuse_uid_t uid_t
 #define fuse_gid_t gid_t
 #define fuse_pid_t pid_t
@@ -135,13 +136,6 @@ std::string narrow_string(WideStringRef str);
 [[noreturn]] void throw_windows_exception(const wchar_t* func_name);
 void windows_init(void);
 #endif
-
-enum class Color
-{
-    Default,
-    BrightRed,
-    DarkGrey
-};
 
 class OSService
 {
@@ -211,12 +205,59 @@ public:
     static void read_password_with_confirmation(const char* prompt,
                                                 CryptoPP::AlignedSecByteBlock* output);
     static std::string stringify_system_error(int errcode);
-    static void set_color_on_stderr(Color color) noexcept;    // Ignore any failures
 };
 
-#define ANSI_COLOR_CODE_DARK_GRAY "\033[1;30m"
-#define ANSI_COLOR_CODE_BRIGHT_RED "\033[1;31m"
-#define ANSI_COLOR_CODE_DEFAULT "\033[0;39m"
+struct Colour
+{
+    enum Code
+    {
+        Default = 0,
+
+        White,
+        Red,
+        Green,
+        Blue,
+        Cyan,
+        Yellow,
+        Grey,
+
+        Bright = 0x10,
+
+        BrightRed = Bright | Red,
+        BrightGreen = Bright | Green,
+        LightGrey = Bright | Grey,
+        BrightWhite = Bright | White,
+
+        // By intention
+        FileName = LightGrey,
+        Warning = Yellow,
+        ResultError = BrightRed,
+        ResultSuccess = BrightGreen,
+        ResultExpectedFailure = Warning,
+
+        Error = BrightRed,
+        Success = Green,
+
+        OriginalExpression = Cyan,
+        ReconstructedExpression = Yellow,
+
+        SecondaryText = LightGrey,
+        Headers = White
+    };
+};
+
+class ConsoleColourSetter
+{
+public:
+    DISABLE_COPY_MOVE(ConsoleColourSetter)
+
+    explicit ConsoleColourSetter() {}
+    virtual ~ConsoleColourSetter() {}
+    virtual void use(Colour::Code colour) noexcept = 0;
+
+    // Returns null if fp is not connected to console/tty
+    static std::unique_ptr<ConsoleColourSetter> create_setter(FILE* fp);
+};
 
 namespace tls
 {

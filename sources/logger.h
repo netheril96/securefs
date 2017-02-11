@@ -1,6 +1,5 @@
 #pragma once
-#include "exceptions.h"
-#include "streams.h"
+#include "platform.h"
 
 #include <memory>
 #include <stdarg.h>
@@ -44,6 +43,7 @@ class Logger
 private:
     LoggingLevel m_level;
     FILE* m_fp;
+    std::unique_ptr<ConsoleColourSetter> m_console_color;
     bool m_close_on_exit;
 
     explicit Logger(FILE* fp, bool close_on_exit);
@@ -54,7 +54,7 @@ public:
 
     void vlog(LoggingLevel level, const char* format, va_list args) noexcept;
     void log(LoggingLevel level, const char* format, ...) noexcept
-#ifndef WIN32
+#ifndef _MSC_VER
         __attribute__((format(printf, 3, 4)))
 #endif
         ;

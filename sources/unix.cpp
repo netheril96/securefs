@@ -630,25 +630,60 @@ std::string OSService::stringify_system_error(int errcode)
     return postprocess_strerror(strerror_r(errcode, buffer, array_length(buffer)), buffer, errcode);
 }
 
-void OSService::set_color_on_stderr(Color color) noexcept
+class POSIXColourSetter : public ConsoleColourSetter
 {
-    if (::isatty(STDERR_FILENO))
+public:
+    explicit POSIXColourSetter(FILE* fp) : m_fp(fp) {}
+
+    void use(Colour::Code _colourCode) noexcept override
     {
-        switch (color)
+        switch (_colourCode)
         {
-        case Color::DarkGrey:
-            fputs(ANSI_COLOR_CODE_DARK_GRAY, stderr);
-            break;
-        case Color::BrightRed:
-            fputs(ANSI_COLOR_CODE_BRIGHT_RED, stderr);
-            break;
-        case Color::Default:
-            fputs(ANSI_COLOR_CODE_DEFAULT, stderr);
-            break;
+        case Colour::Default:
+            return setColour("[0;39m");
+        case Colour::White:
+            return setColour("[0m");
+        case Colour::Red:
+            return setColour("[0;31m");
+        case Colour::Green:
+            return setColour("[0;32m");
+        case Colour::Blue:
+            return setColour("[0:34m");
+        case Colour::Cyan:
+            return setColour("[0;36m");
+        case Colour::Yellow:
+            return setColour("[0;33m");
+        case Colour::Grey:
+            return setColour("[1;30m");
+
+        case Colour::LightGrey:
+            return setColour("[0;37m");
+        case Colour::BrightRed:
+            return setColour("[1;31m");
+        case Colour::BrightGreen:
+            return setColour("[1;32m");
+        case Colour::BrightWhite:
+            return setColour("[1;37m");
+
         default:
             break;
         }
     }
+
+private:
+    FILE* m_fp;
+    void setColour(const char* _escapeCode)
+    {
+        putc('\033', m_fp);
+        fputs(_escapeCode, m_fp);
+    }
+};
+
+std::unique_ptr<ConsoleColourSetter> ConsoleColourSetter::create_setter(FILE* fp)
+{
+    if (!fp || !::isatty(::fileno(fp)))
+        return {};
+    return securefs::make_unique<POSIXColourSetter>(fp);
 }
 }
 #endif
