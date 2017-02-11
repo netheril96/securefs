@@ -188,8 +188,6 @@ namespace operations
         , root(opt.root)
         , lock_stream(opt.lock_stream)
         , root_id()
-        , uid_override(opt.uid_override)
-        , gid_override(opt.gid_override)
         , flags(opt.flags.value())
     {
         block_size = opt.block_size.value();
@@ -257,14 +255,8 @@ namespace operations
             if (!internal::open_all(fs, path, fg))
                 return -ENOENT;
             fg->stat(st);
-            if (fs->uid_override)
-            {
-                st->st_uid = *fs->uid_override;
-            }
-            if (fs->gid_override)
-            {
-                st->st_gid = *fs->gid_override;
-            }
+            st->st_uid = OSService::getuid();
+            st->st_gid = OSService::getgid();
             return 0;
         }
         COMMON_CATCH_BLOCK

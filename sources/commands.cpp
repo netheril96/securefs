@@ -672,22 +672,6 @@ private:
         "Additional FUSE options; this may crash the filesystem; use only for testing!",
         false,
         "options"};
-    TCLAP::ValueArg<unsigned> uid_override{
-        "",
-        "override-uid",
-        "Override the owner UID of all files to this; allows bypass of "
-        "the permission system",
-        false,
-        0,
-        "uid"};
-    TCLAP::ValueArg<unsigned> gid_override{
-        "",
-        "override-gid",
-        "Override the owner GID of all files to this; allows bypass of "
-        "the permission system",
-        false,
-        0,
-        "gid"};
     TCLAP::UnlabeledValueArg<std::string> mount_point{
         "mount_point", "Mount point", true, "", "mount_point"};
 
@@ -710,8 +694,6 @@ public:
         cmdline.add(&mount_point);
         cmdline.add(&pass);
         cmdline.add(&fuse_options);
-        cmdline.add(&uid_override);
-        cmdline.add(&gid_override);
         cmdline.add(&single_threaded);
         cmdline.parse(argc, argv);
 
@@ -889,14 +871,6 @@ public:
             fsopt.flags = config.version < 3 ? 0 : kOptionStoreTime;
             if (insecure.getValue())
                 fsopt.flags.value() |= kOptionNoAuthentication;
-            if (uid_override.isSet())
-            {
-                fsopt.uid_override = uid_override.getValue();
-            }
-            if (gid_override.isSet())
-            {
-                fsopt.gid_override = gid_override.getValue();
-            }
             struct fuse_operations operations;
 
             init_fuse_operations(data_dir.getValue().c_str(), operations, noxattr.getValue());

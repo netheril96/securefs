@@ -82,8 +82,6 @@ namespace operations
         optional<uint32_t> flags;
         optional<unsigned> block_size;
         optional<unsigned> iv_size;
-        optional<fuse_uid_t> uid_override;
-        optional<fuse_gid_t> gid_override;
 
         MountOptions();
         ~MountOptions();
