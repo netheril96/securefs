@@ -11,7 +11,7 @@ namespace securefs
 {
 namespace lite
 {
-    void init_fuse_operations(fuse_operations* opt, const std::string& data_dir, bool noxattr);
+    void init_fuse_operations(struct fuse_operations* opt, bool xattr);
 
     int statfs(const char*, struct fuse_statvfs*);
 

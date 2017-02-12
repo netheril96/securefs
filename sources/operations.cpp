@@ -15,8 +15,6 @@
 #include <sys/xattr.h>
 #endif
 
-using securefs::operations::FileSystemContext;
-
 namespace securefs
 {
 namespace operations
@@ -25,8 +23,29 @@ namespace operations
 
     MountOptions::MountOptions() {}
     MountOptions::~MountOptions() {}
+
+    FileSystemContext::FileSystemContext(const MountOptions& opt)
+        : table(opt.version.value(),
+                opt.root,
+                from_cryptopp_key(opt.master_key),
+                opt.flags.value(),
+                opt.block_size.value(),
+                opt.iv_size.value())
+        , root(opt.root)
+        , root_id()
+        , flags(opt.flags.value())
+    {
+        if (opt.version.value() > 3)
+            throwInvalidArgumentException("This context object only works with format 1,2,3");
+        block_size = opt.block_size.value();
+    }
+
+    FileSystemContext::~FileSystemContext() {}
 }
 }
+
+using securefs::operations::FileSystemContext;
+
 namespace securefs
 {
 namespace internal
@@ -177,23 +196,6 @@ namespace internal
 
 namespace operations
 {
-
-    FileSystemContext::FileSystemContext(const MountOptions& opt)
-        : table(opt.version.value(),
-                opt.root,
-                opt.master_key.value(),
-                opt.flags.value(),
-                opt.block_size.value(),
-                opt.iv_size.value())
-        , root(opt.root)
-        , root_id()
-        , flags(opt.flags.value())
-    {
-        block_size = opt.block_size.value();
-    }
-
-    FileSystemContext::~FileSystemContext() {}
-
 #define COMMON_PROLOGUE                                                                            \
     auto ctx = fuse_get_context();                                                                 \
     auto fs = internal::get_fs(ctx);                                                               \
@@ -751,5 +753,46 @@ namespace operations
         XATTR_COMMON_CATCH_BLOCK
     }
 #endif
+
+    void init_fuse_operations(struct fuse_operations* opt, bool xattr)
+    {
+        memset(opt, 0, sizeof(*opt));
+        opt->getattr = &securefs::operations::getattr;
+        opt->init = &securefs::operations::init;
+        opt->destroy = &securefs::operations::destroy;
+        opt->opendir = &securefs::operations::opendir;
+        opt->releasedir = &securefs::operations::releasedir;
+        opt->readdir = &securefs::operations::readdir;
+        opt->create = &securefs::operations::create;
+        opt->open = &securefs::operations::open;
+        opt->read = &securefs::operations::read;
+        opt->write = &securefs::operations::write;
+        opt->truncate = &securefs::operations::truncate;
+        opt->unlink = &securefs::operations::unlink;
+        opt->mkdir = &securefs::operations::mkdir;
+        opt->rmdir = &securefs::operations::rmdir;
+        opt->release = &securefs::operations::release;
+        opt->ftruncate = &securefs::operations::ftruncate;
+        opt->flush = &securefs::operations::flush;
+        opt->chmod = &securefs::operations::chmod;
+        opt->chown = &securefs::operations::chown;
+        opt->symlink = &securefs::operations::symlink;
+        opt->readlink = &securefs::operations::readlink;
+        opt->rename = &securefs::operations::rename;
+        opt->link = &securefs::operations::link;
+        opt->fsync = &securefs::operations::fsync;
+        opt->fsyncdir = &securefs::operations::fsyncdir;
+        opt->utimens = &securefs::operations::utimens;
+        opt->statfs = &securefs::operations::statfs;
+
+        if (!xattr)
+            return;
+#ifdef __APPLE__
+        opt->listxattr = &securefs::operations::listxattr;
+        opt->getxattr = &securefs::operations::getxattr;
+        opt->setxattr = &securefs::operations::setxattr;
+        opt->removexattr = &securefs::operations::removexattr;
+#endif
+    }
 }
 }

@@ -77,7 +77,7 @@ namespace operations
     {
         optional<int> version;
         std::shared_ptr<const OSService> root;
-        optional<key_type> master_key;
+        CryptoPP::AlignedSecByteBlock master_key;
         optional<uint32_t> flags;
         optional<unsigned> block_size;
         optional<unsigned> iv_size;
@@ -88,6 +88,16 @@ namespace operations
 
     struct FileSystemContext
     {
+    private:
+        static key_type from_cryptopp_key(const CryptoPP::AlignedSecByteBlock& key)
+        {
+            if (key.size() != KEY_LENGTH)
+                throwInvalidArgumentException("Invalid key length");
+            key_type result;
+            memcpy(result.data(), key.data(), key.size());
+            return result;
+        }
+
     public:
         FileTable table;
         std::shared_ptr<const OSService> root;
@@ -102,6 +112,8 @@ namespace operations
 
         ~FileSystemContext();
     };
+
+    void init_fuse_operations(struct fuse_operations* opt, bool xattr);
 
     int statfs(const char*, struct fuse_statvfs*);
 

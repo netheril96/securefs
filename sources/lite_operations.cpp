@@ -14,7 +14,7 @@ namespace lite
 {
     struct BundledContext
     {
-        ::securefs::lite::FileSystemOptions* opt;
+        ::securefs::operations::MountOptions* opt;
         ::securefs::tls::tls_key_type key;
     };
 
@@ -24,9 +24,32 @@ namespace lite
         auto fs = static_cast<FileSystem*>(::securefs::tls::get(ctx->key));
         if (fs)
             return fs;
-        std::unique_ptr<FileSystem> guarded_fs(new FileSystem(*ctx->opt));
-        ::securefs::tls::set(ctx->key, guarded_fs.get());
-        return guarded_fs.release();
+
+        if (ctx->opt->version.value() != 4)
+            throwInvalidArgumentException("This function only supports filesystem format 4");
+
+        key_type name_key, content_key, xattr_key;
+        if (ctx->opt->master_key.size() != 3 * KEY_LENGTH)
+            throwInvalidArgumentException("Master key has wrong length");
+        DEFER({
+            CryptoPP::SecureWipeBuffer(name_key.data(), name_key.size());
+            CryptoPP::SecureWipeArray(content_key.data(), content_key.size());
+            CryptoPP::SecureWipeArray(xattr_key.data(), xattr_key.size());
+        });
+
+        memcpy(name_key.data(), ctx->opt->master_key.data(), KEY_LENGTH);
+        memcpy(content_key.data(), ctx->opt->master_key.data() + KEY_LENGTH, KEY_LENGTH);
+        memcpy(xattr_key.data(), ctx->opt->master_key.data() + 2 * KEY_LENGTH, KEY_LENGTH);
+
+        std::unique_ptr<FileSystem> guard(new FileSystem(ctx->opt->root,
+                                                         name_key,
+                                                         content_key,
+                                                         xattr_key,
+                                                         ctx->opt->block_size.value(),
+                                                         ctx->opt->iv_size.value(),
+                                                         ctx->opt->flags.value()));
+        ::securefs::tls::set(ctx->key, guard.get());
+        return guard.release();
     }
 
 #define SINGLE_COMMON_PROLOGUE                                                                     \
@@ -45,7 +68,7 @@ namespace lite
         void* args = fuse_get_context()->private_data;
         INFO_LOG("init");
         auto ctx = new BundledContext;
-        ctx->opt = static_cast<FileSystemOptions*>(args);
+        ctx->opt = static_cast<operations::MountOptions*>(args);
         ::securefs::tls::init<FileSystem>(&ctx->key);
         return ctx;
     }
@@ -459,10 +482,8 @@ namespace lite
     }
 #endif
 
-    void init_fuse_operations(fuse_operations* opt, const std::string& data_dir, bool noxattr)
+    void init_fuse_operations(struct fuse_operations* opt, bool xattr)
     {
-        (void)data_dir;
-
         memset(opt, 0, sizeof(*opt));
 
         opt->init = &::securefs::lite::init;
@@ -491,24 +512,14 @@ namespace lite
         opt->fsync = &::securefs::lite::fsync;
         opt->utimens = &::securefs::lite::utimens;
 
-        if (noxattr)
+        if (!xattr)
             return;
 
 #ifdef __APPLE__
-        auto rc = OSService::get_default().listxattr(data_dir.c_str(), nullptr, 0);
-        if (rc < 0)
-        {
-            WARN_LOG("Underlying directory %s does not support extended attribute (%s)",
-                     data_dir.c_str(),
-                     OSService::stringify_system_error(-static_cast<int>(rc)).c_str());
-            return;
-        }
-
         opt->listxattr = &::securefs::lite::listxattr;
         opt->getxattr = &::securefs::lite::getxattr;
         opt->setxattr = &::securefs::lite::setxattr;
         opt->removexattr = &::securefs::lite::removexattr;
-
 #endif
     }
 }

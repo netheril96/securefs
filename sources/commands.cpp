@@ -356,55 +356,6 @@ bool parse_config(const Json::Value& config,
                                       encrypted_key.data(),
                                       encrypted_key.size());
 }
-
-void init_fuse_operations(const char* underlying_path, struct fuse_operations& opt, bool noxattr)
-{
-    memset(&opt, 0, sizeof(opt));
-    opt.getattr = &securefs::operations::getattr;
-    opt.init = &securefs::operations::init;
-    opt.destroy = &securefs::operations::destroy;
-    opt.opendir = &securefs::operations::opendir;
-    opt.releasedir = &securefs::operations::releasedir;
-    opt.readdir = &securefs::operations::readdir;
-    opt.create = &securefs::operations::create;
-    opt.open = &securefs::operations::open;
-    opt.read = &securefs::operations::read;
-    opt.write = &securefs::operations::write;
-    opt.truncate = &securefs::operations::truncate;
-    opt.unlink = &securefs::operations::unlink;
-    opt.mkdir = &securefs::operations::mkdir;
-    opt.rmdir = &securefs::operations::rmdir;
-    opt.release = &securefs::operations::release;
-    opt.ftruncate = &securefs::operations::ftruncate;
-    opt.flush = &securefs::operations::flush;
-    opt.chmod = &securefs::operations::chmod;
-    opt.chown = &securefs::operations::chown;
-    opt.symlink = &securefs::operations::symlink;
-    opt.readlink = &securefs::operations::readlink;
-    opt.rename = &securefs::operations::rename;
-    opt.link = &securefs::operations::link;
-    opt.fsync = &securefs::operations::fsync;
-    opt.fsyncdir = &securefs::operations::fsyncdir;
-    opt.utimens = &securefs::operations::utimens;
-    opt.statfs = &securefs::operations::statfs;
-
-    if (noxattr)
-        return;
-#ifdef __APPLE__
-    auto rc = ::listxattr(underlying_path, nullptr, 0, 0);
-    if (rc < 0)
-    {
-        fprintf(stderr,
-                "Warning: %s has no extended attribute support.\nXattr is disabled\n",
-                underlying_path);
-        return;    // The underlying filesystem does not support extended attributes
-    }
-    opt.listxattr = &securefs::operations::listxattr;
-    opt.getxattr = &securefs::operations::getxattr;
-    opt.setxattr = &securefs::operations::setxattr;
-    opt.removexattr = &securefs::operations::removexattr;
-#endif
-}
 }
 
 namespace securefs
@@ -579,7 +530,7 @@ public:
             operations::MountOptions opt;
             opt.version = format_version;
             opt.root = std::make_shared<OSService>(data_dir.getValue());
-            copy_key(config.master_key, &opt.master_key);
+            opt.master_key = config.master_key;
             opt.flags = format_version < 3 ? 0 : kOptionStoreTime;
             opt.block_size = config.block_size;
             opt.iv_size = config.iv_size;
@@ -774,6 +725,7 @@ public:
         }
         auto config = read_config(config_stream.get(), password.data(), password.size());
         config_stream.reset();
+        CryptoPP::SecureWipeBuffer(password.data(), password.size());
 
         bool is_vulnerable
             = (std::count(config.master_key.begin(), config.master_key.end(), (byte)0)
@@ -790,8 +742,6 @@ public:
             if (getchar() != 'y')
                 return 110;
         }
-
-        CryptoPP::SecureWipeBuffer(password.data(), password.size());
 
         try
         {
@@ -846,11 +796,26 @@ public:
             VERBOSE_LOG("Master key: %s", hexify(config.master_key).c_str());
         }
 
+        operations::MountOptions fsopt;
+        fsopt.root = std::make_shared<OSService>(data_dir.getValue());
+        fsopt.block_size = config.block_size;
+        fsopt.iv_size = config.iv_size;
+        fsopt.version = config.version;
+        fsopt.master_key = config.master_key;
+        fsopt.flags = config.version < 3 ? 0 : kOptionStoreTime;
+        if (insecure.getValue())
+            fsopt.flags.value() |= kOptionNoAuthentication;
+
+        std::shared_ptr<FileStream> lock_stream;
+        DEFER(if (lock_stream) {
+            lock_stream->close();
+            lock_stream.reset();
+            fsopt.root->remove_file_nothrow(operations::LOCK_FILENAME);
+        });
+
         if (config.version < 4)
         {
-            operations::MountOptions fsopt;
-            std::shared_ptr<FileStream> lock_stream;
-            fsopt.root = std::make_shared<OSService>(data_dir.getValue());
+
             try
             {
                 lock_stream = fsopt.root->open_file_stream(
@@ -869,58 +834,37 @@ public:
                           securefs::operations::LOCK_FILENAME);
                 return 18;
             }
-            DEFER(if (lock_stream) {
-                lock_stream->close();
-                lock_stream.reset();
-                fsopt.root->remove_file_nothrow(operations::LOCK_FILENAME);
-            });
+        }
 
-            fsopt.block_size = config.block_size;
-            fsopt.iv_size = config.iv_size;
-            fsopt.version = config.version;
+        bool native_xattr = !noxattr.getValue();
+#ifdef __APPLE__
+        if (native_xattr)
+        {
+            auto rc = fsopt.root->listxattr(".", nullptr, 0);
+            if (rc < 0)
+            {
+                fprintf(stderr,
+                        "Warning: %s has no extended attribute support.\nXattr is disabled\n",
+                        data_dir.getValue().c_str());
+                native_xattr = false;
+            }
+        }
+#endif
 
-            copy_key(config.master_key, &fsopt.master_key);
-            fsopt.flags = config.version < 3 ? 0 : kOptionStoreTime;
-            if (insecure.getValue())
-                fsopt.flags.value() |= kOptionNoAuthentication;
-            struct fuse_operations operations;
-
-            init_fuse_operations(data_dir.getValue().c_str(), operations, noxattr.getValue());
-
-            recreate_logger();
-
-            return fuse_main(static_cast<int>(fuse_args.size()),
-                             const_cast<char**>(fuse_args.data()),
-                             &operations,
-                             &fsopt);
+        struct fuse_operations operations;
+        if (config.version <= 3)
+        {
+            operations::init_fuse_operations(&operations, native_xattr);
         }
         else
         {
-            lite::FileSystemOptions fsopt;
-            fsopt.root = std::make_shared<OSService>(data_dir.getValue());
-            fsopt.block_size = config.block_size;
-            fsopt.iv_size = config.iv_size;
-            if (config.master_key.size() != 3 * KEY_LENGTH)
-            {
-                ERROR_LOG("The config file has an invalid master key size %zu (expect %zu)",
-                          config.master_key.size(),
-                          static_cast<size_t>(3 * KEY_LENGTH));
-                return 100;
-            }
-
-            memcpy(fsopt.name_key.data(), config.master_key.data(), KEY_LENGTH);
-            memcpy(fsopt.content_key.data(), config.master_key.data() + KEY_LENGTH, KEY_LENGTH);
-            memcpy(fsopt.xattr_key.data(), config.master_key.data() + 2 * KEY_LENGTH, KEY_LENGTH);
-
-            struct fuse_operations operations;
-            lite::init_fuse_operations(&operations, data_dir.getValue(), noxattr.getValue());
-
-            recreate_logger();
-            return fuse_main(static_cast<int>(fuse_args.size()),
-                             const_cast<char**>(fuse_args.data()),
-                             &operations,
-                             &fsopt);
+            lite::init_fuse_operations(&operations, native_xattr);
         }
+        recreate_logger();
+        return fuse_main(static_cast<int>(fuse_args.size()),
+                         const_cast<char**>(fuse_args.data()),
+                         &operations,
+                         &fsopt);
     }
 
     const char* long_name() const noexcept override { return "mount"; }
@@ -968,7 +912,7 @@ public:
         fsopt.block_size = config.block_size;
         fsopt.iv_size = config.iv_size;
         fsopt.version = config.version;
-        copy_key(config.master_key, &fsopt.master_key);
+        fsopt.master_key = config.master_key;
         fsopt.flags = 0;
 
         operations::FileSystemContext fs(fsopt);
