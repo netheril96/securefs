@@ -75,7 +75,16 @@ struct scope_guard
 
     scope_guard(scope_guard&& other) : on_exit_(std::move(other.on_exit_)) {}
 
-    ~scope_guard() noexcept { on_exit_(); }
+    ~scope_guard()
+    {
+        try
+        {
+            on_exit_();
+        }
+        catch (...)
+        {
+        }
+    }
 
 private:
     Func on_exit_;

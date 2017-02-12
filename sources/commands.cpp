@@ -22,14 +22,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include <fcntl.h>
-
-#ifdef __APPLE__
-
-#include <sys/xattr.h>
-
-#endif
-
 using namespace securefs;
 
 namespace
