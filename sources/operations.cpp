@@ -186,20 +186,13 @@ namespace operations
                 opt.block_size.value(),
                 opt.iv_size.value())
         , root(opt.root)
-        , lock_stream(opt.lock_stream)
         , root_id()
         , flags(opt.flags.value())
     {
         block_size = opt.block_size.value();
     }
 
-    FileSystemContext::~FileSystemContext()
-    {
-        if (!lock_stream)
-            return;
-        lock_stream->close();
-        root->remove_file_nothrow(LOCK_FILENAME);
-    }
+    FileSystemContext::~FileSystemContext() {}
 
 #define COMMON_PROLOGUE                                                                            \
     auto ctx = fuse_get_context();                                                                 \

@@ -77,7 +77,6 @@ namespace operations
     {
         optional<int> version;
         std::shared_ptr<const OSService> root;
-        std::shared_ptr<FileStream> lock_stream;
         optional<key_type> master_key;
         optional<uint32_t> flags;
         optional<unsigned> block_size;
@@ -92,7 +91,6 @@ namespace operations
     public:
         FileTable table;
         std::shared_ptr<const OSService> root;
-        std::shared_ptr<FileStream> lock_stream;
         id_type root_id;
         unsigned block_size;
         optional<fuse_uid_t> uid_override;

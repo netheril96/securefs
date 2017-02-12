@@ -849,10 +849,11 @@ public:
         if (config.version < 4)
         {
             operations::MountOptions fsopt;
+            std::shared_ptr<FileStream> lock_stream;
             fsopt.root = std::make_shared<OSService>(data_dir.getValue());
             try
             {
-                fsopt.lock_stream = fsopt.root->open_file_stream(
+                lock_stream = fsopt.root->open_file_stream(
                     securefs::operations::LOCK_FILENAME, O_CREAT | O_EXCL | O_RDONLY, 0644);
             }
             catch (const ExceptionBase& e)
@@ -868,10 +869,9 @@ public:
                           securefs::operations::LOCK_FILENAME);
                 return 18;
             }
-            bool should_lock_be_deleted = true;
-            DEFER(if (should_lock_be_deleted && fsopt.lock_stream) {
-                fsopt.lock_stream->close();
-                fsopt.lock_stream.reset();
+            DEFER(if (lock_stream) {
+                lock_stream->close();
+                lock_stream.reset();
                 fsopt.root->remove_file_nothrow(operations::LOCK_FILENAME);
             });
 
@@ -889,8 +889,6 @@ public:
 
             recreate_logger();
 
-            should_lock_be_deleted = false;    // Now the "destroy" function in fuse_operations will
-            // take care of the deletion of lock file
             return fuse_main(static_cast<int>(fuse_args.size()),
                              const_cast<char**>(fuse_args.data()),
                              &operations,
