@@ -740,10 +740,10 @@ public:
             int fd_limit = OSService::raise_fd_limit();
             VERBOSE_LOG("Raising the number of file descriptor limit to %d", fd_limit);
         }
-        catch (const ExceptionBase& e)
+        catch (const std::exception& e)
         {
             WARN_LOG("Failure to raise the maximum file descriptor limit (%s: %s)",
-                     e.type_name(),
+                     get_type_name(e).get(),
                      e.what());
         }
 
@@ -1025,15 +1025,10 @@ int commands_main(int argc, const char* const* argv)
         ERROR_LOG("%s\n", e.what());
         return 1;
     }
-    catch (const securefs::ExceptionBase& e)
-    {
-        ERROR_LOG("%s: %s\n", e.type_name(), e.what());
-        return 2;
-    }
     catch (const std::exception& e)
     {
-        ERROR_LOG("%s: %s\n", typeid(e).name(), e.what());
-        return 3;
+        ERROR_LOG("%s: %s\n", get_type_name(e).get(), e.what());
+        return 2;
     }
 }
 }

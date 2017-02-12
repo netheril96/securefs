@@ -26,7 +26,6 @@ static_assert(BTREE_MAX_NUM_ENTRIES * (Directory::MAX_FILENAME_LENGTH + 1 + ID_L
 class CorruptedDirectoryException : public VerificationException
 {
 public:
-    const char* type_name() const noexcept override { return "CorruptedDirectoryException"; }
     std::string message() const override { return "Directory corrupted"; }
 };
 

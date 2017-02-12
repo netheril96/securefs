@@ -283,12 +283,11 @@ namespace lite
         {
             auto ebase = dynamic_cast<const ExceptionBase*>(&e);
             auto code = ebase ? ebase->error_number() : EPERM;
-            auto type_name = ebase ? ebase->type_name() : typeid(e).name();
             ERROR_LOG("%s %s (length=%lld) encounters exception %s (code=%d): %s",
                       __func__,
                       path,
                       static_cast<long long>(len),
-                      type_name,
+                      get_type_name(e).get(),
                       code,
                       e.what());
             return -code;

@@ -21,11 +21,10 @@
     {                                                                                              \
         auto ebase = dynamic_cast<const ExceptionBase*>(&e);                                       \
         auto code = ebase ? ebase->error_number() : EPERM;                                         \
-        auto type_name = ebase ? ebase->type_name() : typeid(e).name();                            \
         ERROR_LOG("%s path=%s encounters exception %s (code=%d): %s",                              \
                   __func__,                                                                        \
                   path,                                                                            \
-                  type_name,                                                                       \
+                  get_type_name(e).get(),                                                          \
                   code,                                                                            \
                   e.what());                                                                       \
         return -code;                                                                              \
@@ -36,13 +35,12 @@
     {                                                                                              \
         auto ebase = dynamic_cast<const ExceptionBase*>(&e);                                       \
         auto code = ebase ? ebase->error_number() : EPERM;                                         \
-        auto type_name = ebase ? ebase->type_name() : typeid(e).name();                            \
         ERROR_LOG("%s path=%s offset=%lld length=%zu encounters exception %s (code=%d): %s",       \
                   __func__,                                                                        \
                   path,                                                                            \
                   static_cast<long long>(off),                                                     \
                   static_cast<size_t>(len),                                                        \
-                  type_name,                                                                       \
+                  get_type_name(e).get(),                                                          \
                   code,                                                                            \
                   e.what());                                                                       \
         return -code;                                                                              \
@@ -53,14 +51,13 @@
     {                                                                                              \
         auto ebase = dynamic_cast<const ExceptionBase*>(&e);                                       \
         auto code = ebase ? ebase->error_number() : EPERM;                                         \
-        auto type_name = ebase ? ebase->type_name() : typeid(e).name();                            \
         ERROR_LOG("%s %s=%s %s=%s encounters exception %s (code=%d): %s",                          \
                   __func__,                                                                        \
                   #path1,                                                                          \
                   path1,                                                                           \
                   #path2,                                                                          \
                   path2,                                                                           \
-                  type_name,                                                                       \
+                  get_type_name(e).get(),                                                          \
                   code,                                                                            \
                   e.what());                                                                       \
         return -code;                                                                              \

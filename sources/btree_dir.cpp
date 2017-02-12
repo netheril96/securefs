@@ -21,7 +21,6 @@ namespace securefs
 class NotBTreeNodeException : public CorruptedDirectoryException
 {
 public:
-    const char* type_name() const noexcept override { return "NotBTreeNodeException"; }
 };
 
 template <class T>

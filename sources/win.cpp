@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 #include <sys/utime.h>
 #include <time.h>
+#include <typeinfo>
 
 #include <VersionHelpers.h>
 #include <Windows.h>
@@ -67,8 +68,6 @@ public:
     }
     explicit WindowsException(DWORD err, const wchar_t* funcname) : err(err), funcname(funcname) {}
     ~WindowsException() {}
-
-    const char* type_name() const noexcept override { return "WindowsException"; }
 
     std::string message() const override
     {
@@ -1244,6 +1243,11 @@ std::unique_ptr<ConsoleColourSetter> ConsoleColourSetter::create_setter(FILE* fp
     if (!GetConsoleMode(hd, &mode))
         return {};    // Not a console
     return securefs::make_unique<WindowsColourSetter>(hd);
+}
+
+std::unique_ptr<const char, void (*)(const char*)> get_type_name(const std::exception& e) noexcept
+{
+    return {typeid(e).name(), [](const char*) { /* no op */ }};
 }
 }
 

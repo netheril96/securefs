@@ -34,7 +34,6 @@ namespace internal
             m_msg.swap(msg);
         }
 
-        const char* type_name() const noexcept override { return "InvalidHMACStreamException"; }
         std::string message() const override { return m_msg; }
     };
 

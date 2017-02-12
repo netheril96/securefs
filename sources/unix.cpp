@@ -9,6 +9,7 @@
 #include <locale.h>
 #include <vector>
 
+#include <cxxabi.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -23,6 +24,7 @@
 #include <sys/types.h>
 #include <termios.h>
 #include <time.h>
+#include <typeinfo>
 #include <unistd.h>
 
 #ifdef __APPLE__
@@ -685,5 +687,14 @@ std::unique_ptr<ConsoleColourSetter> ConsoleColourSetter::create_setter(FILE* fp
         return {};
     return securefs::make_unique<POSIXColourSetter>(fp);
 }
+
+std::unique_ptr<const char, void (*)(const char*)> get_type_name(const std::exception& e) noexcept
+{
+    const char* name = typeid(e).name();
+    const char* demangled = abi::__cxa_demangle(name, nullptr, nullptr, nullptr);
+    if (demangled)
+        return {demangled, [](const char* ptr) { free((void*)ptr); }};
+    return {name, [](const char*) { /* no op */ }};
+};
 }
 #endif

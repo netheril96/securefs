@@ -10,11 +10,6 @@ namespace lite
 {
     std::string CorruptedStreamException::message() const { return "Stream is corrupted"; }
 
-    const char* CorruptedStreamException::type_name() const noexcept
-    {
-        return "CorruptedStreamException";
-    }
-
     static const offset_type MAX_BLOCKS = (1ULL << 31) - 1;
 
     AESGCMCryptStream::AESGCMCryptStream(std::shared_ptr<StreamBase> stream,

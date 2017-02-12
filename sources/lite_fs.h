@@ -69,7 +69,7 @@ namespace lite
     public:
         explicit InvalidFilenameException(std::string filename) : m_filename(filename) {}
         ~InvalidFilenameException();
-        const char* type_name() const noexcept override { return "InvalidFilenameException"; }
+
         std::string message() const override;
         int error_number() const noexcept override { return EINVAL; }
     };

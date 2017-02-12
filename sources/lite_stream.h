@@ -16,8 +16,6 @@ namespace lite
     {
     public:
         std::string message() const override;
-
-        const char* type_name() const noexcept override;
     };
 
     class AESGCMCryptStream : public BlockBasedStream

@@ -685,16 +685,17 @@ namespace operations
     TRACE_LOG("%s (path=%s, name=%s)", __func__, path, name);
 
 #define XATTR_COMMON_CATCH_BLOCK                                                                   \
-    catch (const ExceptionBase& e)                                                                 \
+    catch (const std::exception& e)                                                                \
     {                                                                                              \
-        int errc = e.error_number();                                                               \
+        auto ebase = dynamic_cast<const ExceptionBase*>(&e);                                       \
+        int errc = ebase ? ebase->error_number() : EPERM;                                          \
         if (errc != ENOATTR) /* Attribute not found is very common and normal; no need to log it   \
                                 as an error */                                                     \
             ERROR_LOG("%s (path=%s, name=%s) encounters %s: %s",                                   \
                       __FUNCTION__,                                                                \
                       path,                                                                        \
                       name,                                                                        \
-                      e.type_name(),                                                               \
+                      get_type_name(e).get(),                                                      \
                       e.what());                                                                   \
         return -errc;                                                                              \
     }

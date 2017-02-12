@@ -3,6 +3,7 @@
 
 #include <cerrno>
 #include <exception>
+#include <memory>
 #include <stdint.h>
 #include <string.h>
 #include <string>
@@ -22,24 +23,9 @@ protected:
 
 public:
     virtual ~ExceptionBase();
-    virtual const char* type_name() const noexcept = 0;
     virtual std::string message() const = 0;
     virtual int error_number() const noexcept { return EPERM; }
-    const char* what() const noexcept override
-    {
-        if (m_cached_msg.empty())
-        {
-            try
-            {
-                message().swap(m_cached_msg);
-            }
-            catch (...)
-            {
-                return type_name();
-            }
-        }
-        return m_cached_msg.c_str();
-    }
+    const char* what() const noexcept override;
 };
 
 class UnreachableCodeException : public ExceptionBase
@@ -54,8 +40,6 @@ public:
         : m_func(func), m_file(file), m_line(line)
     {
     }
-
-    const char* type_name() const noexcept override { return "UnreachableCodeException"; }
 
     std::string message() const override
     {
@@ -74,8 +58,6 @@ private:
 public:
     explicit VFSException(int errc) : m_errno(errc) {}
     ~VFSException();
-
-    const char* type_name() const noexcept override { return "VFSException"; }
 
     int error_number() const noexcept override { return m_errno; }
 
@@ -97,8 +79,6 @@ private:
 public:
     explicit POSIXException(int errc, std::string msg) : m_errno(errc), m_msg(std::move(msg)) {}
     ~POSIXException();
-
-    const char* type_name() const noexcept override { return "POSIXException"; }
 
     int error_number() const noexcept override { return m_errno; }
 
@@ -133,7 +113,6 @@ private:
 public:
     explicit InvalidArgumentException(std::string why) { m_msg.swap(why); }
     ~InvalidArgumentException();
-    const char* type_name() const noexcept override { return "InvalidArgumentException"; }
 
     std::string message() const override { return m_msg; }
 
@@ -155,8 +134,6 @@ public:
         memcpy(m_id.data(), id.data(), id.size());
     }
 
-    const char* type_name() const noexcept override { return "CorruptedMetaDataException"; }
-
     std::string message() const override
     {
         return strprintf("Metadata for ID %s is corrupted (%s)",
@@ -176,7 +153,6 @@ public:
     {
         memcpy(m_id.data(), id.data(), id.size());
     }
-    const char* type_name() const noexcept override { return "MessageVerificationException"; }
 
     std::string message() const override
     {
@@ -199,8 +175,6 @@ public:
         m_name.swap(name);
     }
 
-    const char* type_name() const noexcept override { return "XattrVerificationException"; }
-
     std::string message() const override
     {
         return strprintf("Extended attribute for ID %s and name \"%s\" has wrong checksum",
@@ -212,8 +186,6 @@ public:
 class LiteMessageVerificationException : public VerificationException
 {
 public:
-    const char* type_name() const noexcept override { return "LiteMessageVerificationException"; }
-
     std::string message() const override { return "File content has invalid checksum"; }
 };
 
@@ -228,7 +200,7 @@ public:
         : m_max_size(max_size), m_size(size)
     {
     }
-    const char* type_name() const noexcept override { return "StreamTooLongException"; }
+
     std::string message() const override
     {
         return strprintf("Operation on stream at point %lld, which exceeds its maximum size %lld",
@@ -250,8 +222,6 @@ public:
     {
     }
 
-    const char* type_name() const noexcept override { return "InvalidCastException"; }
-
     std::string message() const override
     {
         return strprintf("Invalid cast from %s to %s", from_name, to_name);
@@ -261,8 +231,6 @@ public:
 class FileTypeInconsistencyException : public ExceptionBase
 {
 public:
-    const char* type_name() const noexcept override { return "InvalidCastException"; }
-
     std::string message() const override
     {
         return "A file object has inconsistent type. This indicates that a bug or corruption in "
@@ -274,4 +242,6 @@ public:
 
 [[noreturn]] void throw_runtime_error(const char*);
 [[noreturn]] void throw_runtime_error(const std::string&);
+
+std::unique_ptr<const char, void (*)(const char*)> get_type_name(const std::exception& e) noexcept;
 }

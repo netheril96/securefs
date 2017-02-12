@@ -51,3 +51,19 @@ std::string securefs::POSIXException::message() const
     return strprintf(
         "%s (%s)", securefs::OSService::stringify_system_error(m_errno).c_str(), m_msg.c_str());
 }
+
+const char* ::securefs::ExceptionBase::what() const noexcept
+{
+    if (m_cached_msg.empty())
+    {
+        try
+        {
+            message().swap(m_cached_msg);
+        }
+        catch (...)
+        {
+            return "An exception occurred while formatting exception message";
+        }
+    }
+    return m_cached_msg.c_str();
+}
