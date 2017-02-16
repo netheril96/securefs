@@ -688,9 +688,9 @@ public:
         }
 
 #ifdef WIN32
+        auto is_letter = [](char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); };
         if (mount_point.getValue().size() != 2 || mount_point.getValue()[1] != ':'
-            || mount_point.getValue().front() < 'A'
-            || mount_point.getValue().front() > 'Z')
+            || !is_letter(mount_point.getValue().front()))
         {
             ERROR_LOG("The mount point must be a drive path, such as Z:");
             return 33;
