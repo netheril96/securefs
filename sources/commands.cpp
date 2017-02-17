@@ -22,6 +22,14 @@
 #include <unordered_map>
 #include <vector>
 
+#include <fuse.h>
+
+#ifdef __APPLE__
+
+#include <fuse/fuse_darwin.h>
+
+#endif
+
 using namespace securefs;
 
 namespace
@@ -937,19 +945,28 @@ public:
     int execute() override
     {
         using namespace CryptoPP;
-        fprintf(
-            stdout, "securefs %s (with Crypto++ %g)\n\n", version_string, CRYPTOPP_VERSION / 100.0);
+        printf("securefs %s\n", version_string);
+        printf("Crypto++ %g\n", CRYPTOPP_VERSION / 100.0);
+#ifdef WIN32
+
+#elif defined(__APPLE__)
+        printf("osxfuse %s\n", osxfuse_version());
+#else
+        printf("libfuse version: %d\n", fuse_version());
+#endif
+
 #ifdef CRYPTOPP_DISABLE_ASM
-        fputs("Built without hardware acceleration\n", stdout);
+        fputs("\nBuilt without hardware acceleration\n", stdout);
 #else
 #if CRYPTOPP_BOOL_X86 || CRYPTOPP_BOOL_X32 || CRYPTOPP_BOOL_X64
-        fprintf(stdout,
-                "Hardware features available:\nSSE2: %s\nSSE3: %s\nAES-NI: "
-                "%s\nCLMUL: %s\n",
-                HasSSE2() ? "true" : "false",
-                HasSSSE3() ? "true" : "false",
-                HasAESNI() ? "true" : "false",
-                HasCLMUL() ? "true" : "false");
+        fprintf(
+            stdout,
+            "\nHardware features available:\nSSE2: %s\nSSE3: %s\nSSE4: %s\nAES-NI: %s\nCLMUL: %s\n",
+            HasSSE2() ? "true" : "false",
+            HasSSSE3() ? "true" : "false",
+            HasSSE4() ? "true" : "false",
+            HasAESNI() ? "true" : "false",
+            HasCLMUL() ? "true" : "false");
 #endif
 #endif
         return 0;
