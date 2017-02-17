@@ -930,6 +930,8 @@ public:
     }
 };
 
+static inline const char* true_or_false(bool v) { return v ? "true" : "false"; }
+
 class VersionCommand : public CommandBase
 {
 private:
@@ -979,17 +981,101 @@ public:
     const char* help_message() const noexcept override { return "Show version of the program"; }
 };
 
+class InfoCommand : public CommandBase
+{
+private:
+    TCLAP::UnlabeledValueArg<std::string> path{
+        "path", "Directory or the filename of the config file", true, "", "path"};
+
+public:
+    void parse_cmdline(int argc, const char* const* argv) override
+    {
+        TCLAP::CmdLine cmdline(help_message());
+        cmdline.add(&path);
+        cmdline.parse(argc, argv);
+    }
+
+    const char* long_name() const noexcept override { return "info"; }
+
+    char short_name() const noexcept override { return 'i'; }
+
+    const char* help_message() const noexcept override
+    {
+        return "Display information about the filesystem";
+    }
+
+    int execute() override
+    {
+        std::shared_ptr<FileStream> fs;
+        std::string real_config_path = path.getValue() + "/.securefs.json";
+        try
+        {
+            fs = OSService::get_default().open_file_stream(real_config_path, O_RDONLY, 0);
+        }
+        catch (const ExceptionBase& e)
+        {
+            if (e.error_number() == ENOENT)
+            {
+                ERROR_LOG("The path %s does not exist. Perhaps you are pointing to the wrong "
+                          "data directory?",
+                          real_config_path.c_str());
+                return 33;
+            }
+            else if (e.error_number() == ENOTDIR)
+            {
+                real_config_path = path.getValue();
+                fs = OSService::get_default().open_file_stream(real_config_path, O_RDONLY, 0);
+            }
+            else
+            {
+                throw;
+            }
+        }
+        Json::Value config_json;
+
+        {
+            Json::Reader reader;
+            std::string buffer(fs->size(), 0);
+            fs->read(&buffer[0], 0, buffer.size());
+            reader.parse(buffer, config_json);
+        }
+
+        unsigned format_version = config_json["version"].asUInt();
+        if (format_version < 1 || format_version > 4)
+        {
+            ERROR_LOG("Unknown filesystem format version %u", format_version);
+            return 44;
+        }
+        printf("Config file path: %s\n", real_config_path.c_str());
+        printf("Filesystem format version: %u\n", format_version);
+        printf("Is full or lite format: %s\n", (format_version < 4) ? "full" : "lite");
+        printf("Is underlying directory flattened: %s\n", true_or_false(format_version < 4));
+        printf("Is multiple mounts allowed: %s\n", true_or_false(format_version >= 4));
+        printf("Is timestamp stored within the fs: %s\n\n", true_or_false(format_version == 3));
+
+        printf("Content block size: %u bytes\n",
+               format_version == 1 ? 4096 : config_json["block_size"].asUInt());
+        printf("Content IV size: %u bits\n",
+               format_version == 1 ? 256 : config_json["iv_size"].asUInt() * 8);
+        printf("Password derivation algorithm: PBKDF2-HMAC-SHA256\n");
+        printf("Password derivation iterations: %u\n", config_json["iterations"].asUInt());
+        printf("Per file key generation algorithm: %s\n",
+               format_version < 4 ? "HMAC-SHA256" : "AES");
+        printf("Content cipher: %s\n", format_version < 4 ? "AES-256-GCM" : "AES-128-GCM");
+        return 0;
+    }
+};
+
 int commands_main(int argc, const char* const* argv)
 {
     try
     {
-        std::vector<std::unique_ptr<CommandBase>> cmds;
-        cmds.reserve(6);
-        cmds.push_back(make_unique<MountCommand>());
-        cmds.push_back(make_unique<CreateCommand>());
-        cmds.push_back(make_unique<ChangePasswordCommand>());
-        cmds.push_back(make_unique<FixCommand>());
-        cmds.push_back(make_unique<VersionCommand>());
+        std::unique_ptr<CommandBase> cmds[] = {make_unique<MountCommand>(),
+                                               make_unique<CreateCommand>(),
+                                               make_unique<ChangePasswordCommand>(),
+                                               make_unique<FixCommand>(),
+                                               make_unique<VersionCommand>(),
+                                               make_unique<InfoCommand>()};
 
         auto print_usage = [&]() {
             fputs("Available subcommands:\n\n", stderr);
