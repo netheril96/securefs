@@ -8,6 +8,6 @@ matrix:
       script: "cmake . && make -j4 && ctest -V"
     - os: osx
       compiler: clang
-      install: "brew update && brew cask install osxfuse"
+      install: "brew update && brew cask update && brew cask install osxfuse"
       sudo: required
       script: "cmake . && make -j4 && ctest -V"
