@@ -10,8 +10,6 @@ namespace securefs
 {
 int commands_main(int argc, const char* const* argv);
 
-extern std::string process_name;    // Store the process name during startup to enable testing
-
 struct FSConfig
 {
     CryptoPP::AlignedSecByteBlock master_key;

@@ -979,8 +979,6 @@ public:
     const char* help_message() const noexcept override { return "Show version of the program"; }
 };
 
-std::string process_name;
-
 int commands_main(int argc, const char* const* argv)
 {
     try
