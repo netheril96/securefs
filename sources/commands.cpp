@@ -24,12 +24,10 @@
 
 #include <fuse.h>
 
-#ifdef __APPLE__
-#include <dlfcn.h>
-#endif
-
 #ifdef _MSC_VER
 #include <Windows.h>
+#else
+#include <dlfcn.h>
 #endif
 
 using namespace securefs;
@@ -952,7 +950,7 @@ public:
         printf("Crypto++ %g\n", CRYPTOPP_VERSION / 100.0);
 #ifdef WIN32
         HMODULE hd = GetModuleHandleW((sizeof(void*) == 8) ? L"winfsp-x64.dll" : L"winfsp-x86.dll");
-        NTSTATUS (*fsp_version_func)
+        NTSTATUS(*fsp_version_func)
         (uint32_t*)
             = reinterpret_cast<decltype(fsp_version_func)>(GetProcAddress(hd, "FspVersion"));
         if (fsp_version_func)
