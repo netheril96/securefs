@@ -1,6 +1,7 @@
 #include "mystring.h"
 #include "exceptions.h"
 #include "logger.h"
+#include "myutils.h"
 #include <stdint.h>
 #include <system_error>
 
@@ -10,7 +11,7 @@ std::string vstrprintf(const char* format, va_list args)
 {
     va_list copied_args;
     va_copy(copied_args, args);
-    const int MAX_SIZE = 499;
+    const int MAX_SIZE = 4000;
     char buffer[MAX_SIZE + 1];
     int size = vsnprintf(buffer, sizeof(buffer), format, copied_args);
     va_end(copied_args);
@@ -27,17 +28,8 @@ std::string strprintf(const char* format, ...)
 {
     va_list args;
     va_start(args, format);
-    try
-    {
-        auto result = vstrprintf(format, args);
-        va_end(args);
-        return result;
-    }
-    catch (...)
-    {
-        va_end(args);
-        throw;
-    }
+    DEFER(va_end(args));
+    return vstrprintf(format, args);
 }
 
 std::string to_lower(const std::string& str)
