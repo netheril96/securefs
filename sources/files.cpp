@@ -120,6 +120,7 @@ FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
     , m_store_time(store_time)
     , m_stream()
 {
+    warn_if_key_not_random(key_, __FILE__, __LINE__);
     key_type data_key, meta_key;
     byte generated_keys[KEY_LENGTH * 3];
     hkdf(key_.data(),

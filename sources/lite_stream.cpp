@@ -29,6 +29,8 @@ namespace lite
         if (block_size < 32)
             throwInvalidArgumentException("Block size too small");
 
+        warn_if_key_not_random(master_key, __FILE__, __LINE__);
+
         CryptoPP::FixedSizeAlignedSecBlock<byte, get_header_size()> header, session_key;
         auto rc = m_stream->read(header.data(), 0, header.size());
 
@@ -54,11 +56,8 @@ namespace lite
         m_decryptor.SetKeyWithIV(
             session_key.data(), session_key.size(), null_iv, array_length(null_iv));
 
-        // Guard against programming failures of nonrandom keys
-        if (is_all_zeros(master_key.data(), master_key.size())
-            || is_all_zeros(header.data(), header.size())
-            || is_all_zeros(session_key.data(), session_key.size()))
-            throw_runtime_error("A serious bug in securefs occurs that uses zeroes as key");
+        warn_if_key_not_random(header, __FILE__, __LINE__);
+        warn_if_key_not_random(session_key, __FILE__, __LINE__);
     }
 
     AESGCMCryptStream::~AESGCMCryptStream() {}

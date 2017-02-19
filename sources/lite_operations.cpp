@@ -31,15 +31,14 @@ namespace lite
         key_type name_key, content_key, xattr_key;
         if (ctx->opt->master_key.size() != 3 * KEY_LENGTH)
             throwInvalidArgumentException("Master key has wrong length");
-        DEFER({
-            CryptoPP::SecureWipeBuffer(name_key.data(), name_key.size());
-            CryptoPP::SecureWipeArray(content_key.data(), content_key.size());
-            CryptoPP::SecureWipeArray(xattr_key.data(), xattr_key.size());
-        });
 
         memcpy(name_key.data(), ctx->opt->master_key.data(), KEY_LENGTH);
         memcpy(content_key.data(), ctx->opt->master_key.data() + KEY_LENGTH, KEY_LENGTH);
         memcpy(xattr_key.data(), ctx->opt->master_key.data() + 2 * KEY_LENGTH, KEY_LENGTH);
+
+        warn_if_key_not_random(name_key, __FILE__, __LINE__);
+        warn_if_key_not_random(content_key, __FILE__, __LINE__);
+        warn_if_key_not_random(xattr_key, __FILE__, __LINE__);
 
         std::unique_ptr<FileSystem> guard(new FileSystem(ctx->opt->root,
                                                          name_key,

@@ -171,22 +171,26 @@ private:
     static_assert(std::is_pod<T>::value, "Only POD types are supported");
 
 public:
-    explicit PODArray() { memset(m_data, 0, sizeof(m_data)); }
-    explicit PODArray(const T& value) { std::fill(std::begin(m_data), std::end(m_data), value); }
-    PODArray(const PODArray& other) { memcpy(m_data, other.m_data, size()); }
-    PODArray& operator=(const PODArray& other)
+    explicit PODArray() noexcept { memset(m_data, 0, sizeof(m_data)); }
+    explicit PODArray(const T& value) noexcept
+    {
+        std::fill(std::begin(m_data), std::end(m_data), value);
+    }
+    PODArray(const PODArray& other) noexcept { memcpy(m_data, other.m_data, size()); }
+    PODArray& operator=(const PODArray& other) noexcept
     {
         memmove(m_data, other.m_data, size());
         return *this;
     }
-    const T* data() const { return m_data; }
-    T* data() { return m_data; }
-    static constexpr size_t size() { return Size; };
-    bool operator==(const PODArray& other) const
+    const T* data() const noexcept { return m_data; }
+    T* data() noexcept { return m_data; }
+    static constexpr size_t size() noexcept { return Size; };
+    bool operator==(const PODArray& other) const noexcept
     {
         return memcmp(m_data, other.m_data, size()) == 0;
     }
-    bool operator!=(const PODArray& other) const { return !(*this == other); }
+    bool operator!=(const PODArray& other) const noexcept { return !(*this == other); }
+    ~PODArray() { CryptoPP::SecureWipeArray(m_data, Size); }
 };
 
 typedef PODArray<byte, KEY_LENGTH> key_type;
@@ -288,4 +292,14 @@ std::string get_user_input_until_enter();
 
 void respond_to_user_action(
     const std::unordered_map<std::string, std::function<void(void)>>& actionMap);
+
+size_t popcount(const byte* data, size_t size) noexcept;
+
+void warn_if_key_not_random(const byte* key, size_t size, const char* file, int line) noexcept;
+
+template <class Container>
+void warn_if_key_not_random(const Container& c, const char* file, int line) noexcept
+{
+    warn_if_key_not_random(c.data(), c.size(), file, line);
+}
 }

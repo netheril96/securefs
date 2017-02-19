@@ -1,5 +1,6 @@
 #include "myutils.h"
 #include "exceptions.h"
+#include "logger.h"
 #include "platform.h"
 
 #include <cryptopp/aes.h>
@@ -200,6 +201,37 @@ void respond_to_user_action(
         }
         it->second();
         break;
+    }
+}
+
+size_t popcount(const byte* data, size_t size) noexcept
+{
+    static const size_t TABLE[256]
+        = {0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3,
+           4, 4, 5, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4,
+           4, 5, 4, 5, 5, 6, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4,
+           5, 3, 4, 4, 5, 4, 5, 5, 6, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5,
+           4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2,
+           3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5,
+           5, 6, 3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4,
+           5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 3, 4, 4, 5, 4, 5, 5, 6,
+           4, 5, 5, 6, 5, 6, 6, 7, 4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8};
+    size_t res = 0;
+    for (size_t i = 0; i < size; ++i)
+        res += TABLE[data[i]];
+    return res;
+}
+
+void warn_if_key_not_random(const byte* key, size_t size, const char* file, int line) noexcept
+{
+    size_t pp = popcount(key, size);
+    if (pp <= size || pp >= 7 * size)
+    {
+        WARN_LOG("Encounter a key with %g%% bits all ones, therefore not \"random enough\". "
+                 "Please report as a bug (%s:%d).",
+                 double(pp) / double(8 * size) * 100.0,
+                 file,
+                 line);
     }
 }
 }

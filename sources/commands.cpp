@@ -734,9 +734,8 @@ public:
         config_stream.reset();
         CryptoPP::SecureWipeBuffer(password.data(), password.size());
 
-        bool is_vulnerable
-            = (std::count(config.master_key.begin(), config.master_key.end(), (byte)0)
-               >= static_cast<long>(config.master_key.size() * 4 / 5));
+        bool is_vulnerable = popcount(config.master_key.data(), config.master_key.size())
+            <= config.master_key.size();
         if (is_vulnerable)
         {
             WARN_LOG(

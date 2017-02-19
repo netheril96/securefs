@@ -375,6 +375,8 @@ namespace internal
             const byte null_iv[12] = {};
             m_enc.SetKeyWithIV(data_key.data(), data_key.size(), null_iv, array_length(null_iv));
             m_dec.SetKeyWithIV(data_key.data(), data_key.size(), null_iv, array_length(null_iv));
+            warn_if_key_not_random(data_key, __FILE__, __LINE__);
+            warn_if_key_not_random(meta_key, __FILE__, __LINE__);
         }
 
     protected:

@@ -171,10 +171,8 @@ TEST_CASE("Test streams")
 {
     auto filename = OSService::temp_name("tmp/", ".stream");
 
-    securefs::key_type key;
-    securefs::id_type id;
-    memset(key.data(), 0xff, key.size());
-    memset(id.data(), 0xee, id.size());
+    securefs::key_type key(0xf4);
+    securefs::id_type id(0xee);
     auto posix_stream
         = OSService::get_default().open_file_stream(filename, O_RDWR | O_CREAT | O_EXCL, 0644);
 

@@ -105,7 +105,7 @@ TEST_CASE("Test BtreeDirectory")
 
     std::mt19937 engine{std::random_device{}()};
 
-    securefs::key_type null_key{};
+    securefs::key_type key(0x3e);
     securefs::id_type null_id{};
 
     securefs::OSService service("tmp");
@@ -119,14 +119,14 @@ TEST_CASE("Test BtreeDirectory")
     {
         securefs::BtreeDirectory dir(service.open_file_stream(tmp1, flags, 0644),
                                      service.open_file_stream(tmp2, flags, 0644),
-                                     null_key,
+                                     key,
                                      null_id,
                                      true,
                                      8000,
                                      12);
         securefs::SimpleDirectory ref_dir(service.open_file_stream(tmp3, flags, 0644),
                                           service.open_file_stream(tmp4, flags, 0644),
-                                          null_key,
+                                          key,
                                           null_id,
                                           true,
                                           8000,
@@ -142,14 +142,14 @@ TEST_CASE("Test BtreeDirectory")
         // Test if the data persists on the disk
         securefs::BtreeDirectory dir(service.open_file_stream(tmp1, O_RDWR, 0),
                                      service.open_file_stream(tmp2, O_RDWR, 0),
-                                     null_key,
+                                     key,
                                      null_id,
                                      true,
                                      8000,
                                      12);
         securefs::SimpleDirectory ref_dir(service.open_file_stream(tmp3, O_RDWR, 0),
                                           service.open_file_stream(tmp4, O_RDWR, 0),
-                                          null_key,
+                                          key,
                                           null_id,
                                           true,
                                           8000,
