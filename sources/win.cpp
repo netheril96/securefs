@@ -21,6 +21,8 @@
 #include <sddl.h>
 #include <strsafe.h>
 
+static void(WINAPI* best_get_time_func)(LPFILETIME) = nullptr;
+
 static inline uint64_t convert_dword_pair(uint64_t low_part, uint64_t high_part)
 {
     return low_part | (high_part << 32);
@@ -653,7 +655,7 @@ public:
         FILETIME access_time, mod_time;
         if (!ts)
         {
-            GetSystemTimeAsFileTime(&access_time);
+            best_get_time_func(&access_time);
             mod_time = access_time;
         }
         else
@@ -790,7 +792,7 @@ void OSService::utimens(StringRef path, const fuse_timespec ts[2]) const
     FILETIME atime, mtime;
     if (!ts)
     {
-        GetSystemTimeAsFileTime(&atime);
+        best_get_time_func(&atime);
         mtime = atime;
     }
     else
@@ -1007,7 +1009,7 @@ static uint32_t calc_gid()
 void OSService::get_current_time(fuse_timespec& current_time)
 {
     FILETIME ft;
-    GetSystemTimeAsFileTime(&ft);
+    best_get_time_func(&ft);
     filetime_to_unix_time(&ft, &current_time);
 }
 
@@ -1145,6 +1147,12 @@ void windows_init(void)
     ::securefs::FspLoad(nullptr);
     cached_uid = calc_uid();
     cached_gid = calc_gid();
+
+    HMODULE hd = GetModuleHandleW(L"kernel32.dll");
+    best_get_time_func = reinterpret_cast<decltype(best_get_time_func)>(
+        GetProcAddress(hd, "GetSystemTimePreciseAsFileTime"));
+    if (best_get_time_func == nullptr)
+        best_get_time_func = &GetSystemTimeAsFileTime;
 }
 
 std::wstring widen_string(StringRef str)
