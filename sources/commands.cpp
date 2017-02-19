@@ -25,16 +25,7 @@
 #include <fuse.h>
 
 #ifdef __APPLE__
-
-#include <fuse/fuse_darwin.h>
-
-// Fallback function
-template <class T = int>
-static inline const char* osxfuse_version(void)
-{
-    return "unknown";
-}
-
+#include <dlfcn.h>
 #endif
 
 using namespace securefs;
@@ -958,9 +949,16 @@ public:
 #ifdef WIN32
 
 #elif defined(__APPLE__)
-        printf("osxfuse %s\n", ::osxfuse_version());
+        typedef const char* version_function(void);
+        auto osx_version_func
+            = reinterpret_cast<version_function*>(::dlsym(RTLD_DEFAULT, "osxfuse_version"));
+        if (osx_version_func)
+            printf("osxfuse %s\n", osx_version_func());
 #else
-        printf("libfuse version: %d\n", ::fuse_version());
+        typedef int version_function(void);
+        auto fuse_version_func
+            = reinterpret_cast<version_function*>(::dlsym(RTLD_DEFAULT, "fuse_version"));
+        printf("libfuse %d\n", fuse_version_func());
 #endif
 
 #ifdef CRYPTOPP_DISABLE_ASM
