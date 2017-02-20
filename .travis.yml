@@ -3,11 +3,11 @@ matrix:
   include:
     - os: osx
       compiler: clang
-      install: "brew update && brew cask update && brew cask install osxfuse && brew install cryptopp --c++11"
+      install: "brew update && brew cask update && brew cask install osxfuse"
       sudo: required
       script: "cmake . && make -j4 && ./securefs v && ctest -V"
     - os: linux
       dist: trusty
       sudo: required
-      install: "sudo apt-get update && sudo apt-get install -y cmake fuse libfuse-dev libcrypto++-dev"
+      install: "sudo apt-get update && sudo apt-get install -y cmake fuse libfuse-dev"
       script: "cmake . && make -j4 && ./securefs v && ctest -V"

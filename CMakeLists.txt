@@ -4,9 +4,6 @@ option(PORTABLE_BUILD "Build for the general architecture instead of this cpu" O
 
 project(securefs)
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-find_package(CryptoPP REQUIRED)
-include_directories(${CRYPTOPP_INCLUDE_DIR})
-link_libraries(${CRYPTOPP_LIBRARY})
 
 if (UNIX)
     find_package(FUSE REQUIRED)
@@ -40,7 +37,7 @@ else ()
     endif ()
     set(FUSE_INCLUDE_DIR ${WINFSP_PREFIX}/inc/fuse)
     include_directories(${WINFSP_PREFIX}/inc)
-    include_directories(${FUSE_INCLUDE_DIR})
+    include_directories(${WINFSP_PREFIX}/inc/fuse)
     link_libraries(${WINFSP_PREFIX}/lib/winfsp-${ARCH}.lib)
     link_libraries(-DELAYLOAD:winfsp-${ARCH}.dll)
     link_libraries(delayimp.lib)
@@ -50,12 +47,16 @@ endif ()
 add_definitions(-D_REENTRANT -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=28)
 
 if (NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE RelWithDebInfo)
+    set(CMAKE_BUILD_TYPE Release)
 endif ()
 
 include_directories(${PROJECT_SOURCE_DIR}/sources)
 set(EXTERNAL_DIR ${PROJECT_SOURCE_DIR}/external)
 include_directories(${EXTERNAL_DIR})
+
+set(CRYPTOPP_DIR ${EXTERNAL_DIR}/cryptopp)
+add_subdirectory(${CRYPTOPP_DIR})
+link_libraries(cryptopp-static)
 
 file(GLOB SOURCES ${PROJECT_SOURCE_DIR}/sources/*.cpp ${PROJECT_SOURCE_DIR}/sources/*.h ${EXTERNAL_DIR}/*.h ${EXTERNAL_DIR}/*.hpp ${EXTERNAL_DIR}/*.cpp)
 file(GLOB TEST_SOURCES ${PROJECT_SOURCE_DIR}/test/*.cpp)
