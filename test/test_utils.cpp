@@ -1,3 +1,4 @@
+#include "case_fold.h"
 #include "catch.hpp"
 #include "myutils.h"
 #include "platform.h"
@@ -113,4 +114,15 @@ TEST_CASE("Base32")
     CAPTURE(out);
     CAPTURE(out2);
     REQUIRE(strcmp((char*)out, (char*)out2) == 0);
+}
+
+TEST_CASE("case fold")
+{
+    using securefs::case_fold;
+
+    REQUIRE(case_fold(570) == 11365);
+    REQUIRE(case_fold("\xc8\xba") == "\xe2\xb1\xa5");
+    REQUIRE(case_fold(
+                "AabC\xce\xa3\xce\xaf\xcf\x83\xcf\x85\xcf\x86\xce\xbf\xcf\x82\xef\xac\x81\xc3\x86")
+            == "aabc\xcf\x83\xce\xaf\xcf\x83\xcf\x85\xcf\x86\xce\xbf\xcf\x83\xef\xac\x81\xc3\xa6");
 }
