@@ -1,4 +1,5 @@
 #include "operations.h"
+#include "case_fold.h"
 #include "constants.h"
 #include "platform.h"
 
@@ -59,7 +60,8 @@ namespace internal
 
     FileGuard open_base_dir(FileSystemContext* fs, const char* path, std::string& last_component)
     {
-        std::vector<std::string> components = split(path, '/');
+        std::vector<std::string> components
+            = split((fs->flags & kOptionCaseFoldFileName) ? case_fold(path) : path, '/');
 
         FileGuard result(&fs->table, fs->table.open_as(fs->root_id, FileBase::DIRECTORY));
         if (components.empty())

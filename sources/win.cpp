@@ -690,7 +690,7 @@ std::wstring OSService::norm_path(StringRef path) const
             if (c == '\\')
                 c = '/';
         }
-        std::vector<std::string> components = split(prepath.c_str(), '/');
+        std::vector<std::string> components = split(prepath, '/');
         std::vector<const std::string*> norm_components;
         norm_components.reserve(components.size());
         for (const std::string& name : components)

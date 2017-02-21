@@ -129,7 +129,7 @@ std::string strprintf(const char* format, ...)
     ;
 std::string vstrprintf(const char* format, va_list args);
 
-std::vector<std::string> split(const char* str, char separator);
+std::vector<std::string> split(StringRef str, char separator);
 
 std::string hexify(const byte* data, size_t length);
 void parse_hex(StringRef hex, byte* output, size_t len);

@@ -625,6 +625,10 @@ private:
         "options"};
     TCLAP::UnlabeledValueArg<std::string> mount_point{
         "mount_point", "Mount point", true, "", "mount_point"};
+    TCLAP::SwitchArg case_insensitive{"i",
+                                      "insensitive",
+                                      "Converts the case of all filenames so "
+                                      "that it works case insensitively"};
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
@@ -646,6 +650,7 @@ public:
         cmdline.add(&pass);
         cmdline.add(&fuse_options);
         cmdline.add(&single_threaded);
+        cmdline.add(&case_insensitive);
         cmdline.parse(argc, argv);
 
         if (pass.isSet() && !pass.getValue().empty())
@@ -804,6 +809,8 @@ public:
         fsopt.flags = config.version < 3 ? 0 : kOptionStoreTime;
         if (insecure.getValue())
             fsopt.flags.value() |= kOptionNoAuthentication;
+        if (case_insensitive.getValue())
+            fsopt.flags.value() |= kOptionCaseFoldFileName;
 
         std::shared_ptr<FileStream> lock_stream;
         DEFER(if (lock_stream) {
