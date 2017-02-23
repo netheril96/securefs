@@ -24,7 +24,6 @@ int wmain(int argc, wchar_t** wargv)
 #else
 int main(int argc, char** argv)
 {
-	setlocale(LC_ALL, "");
     return securefs::commands_main(argc, argv);
 }
 #endif
