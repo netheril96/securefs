@@ -219,7 +219,7 @@ namespace lite
 
         try
         {
-            fp->lock(false);
+            fp->lock();
             DEFER(fp->unlock());
             return static_cast<int>(fp->read(buf, offset, size));
         }
@@ -239,7 +239,7 @@ namespace lite
 
         try
         {
-            fp->lock(true);
+            fp->lock();
             DEFER(fp->unlock());
             fp->write(buf, offset, size);
             return static_cast<int>(size);
@@ -256,7 +256,7 @@ namespace lite
 
         try
         {
-            fp->lock(true);
+            fp->lock();
             DEFER(fp->unlock());
             fp->flush();
             return 0;
@@ -273,7 +273,7 @@ namespace lite
 
         try
         {
-            fp->lock(true);
+            fp->lock();
             DEFER(fp->unlock());
             fp->resize(len);
             return 0;
@@ -396,7 +396,7 @@ namespace lite
 
         try
         {
-            fp->lock(true);
+            fp->lock();
             DEFER(fp->unlock());
             fp->fsync();
             return 0;
@@ -415,7 +415,7 @@ namespace lite
         try
         {
             AutoClosedFile fp = filesystem->open(path, O_RDWR, 0644);
-            fp->lock(true);
+            fp->lock();
             DEFER(fp->unlock());
             fp->resize(static_cast<size_t>(len));
             return 0;
