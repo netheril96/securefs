@@ -90,13 +90,10 @@ public:
         }
     }
 
-    void unlock() override
+    void unlock() noexcept override
     {
         int rc = ::flock(m_fd, LOCK_UN);
-        if (rc < 0)
-        {
-            THROW_POSIX_EXCEPTION(errno, "flock");
-        }
+        (void)rc;
     }
 
     void fsync() override

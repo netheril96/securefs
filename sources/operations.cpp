@@ -210,7 +210,6 @@ namespace operations
     {
 #ifdef FUSE_CAP_BIG_WRITES
         fsinfo->want |= FUSE_CAP_BIG_WRITES;
-        fsinfo->max_readahead = static_cast<unsigned>(-1);
         fsinfo->max_write = static_cast<unsigned>(-1);
 #endif
         auto args = static_cast<MountOptions*>(fuse_get_context()->private_data);

@@ -52,27 +52,15 @@ namespace lite
         void fstat(struct fuse_stat* stat);
         void fsync() { m_file_stream->fsync(); }
         void utimens(const fuse_timespec ts[2]) { m_file_stream->utimens(ts); }
-        void lock(bool exclusive=true)
+        void lock(bool exclusive = true)
         {
-            m_file_stream->lock(exclusive);
             m_lock.lock();
+            m_file_stream->lock(exclusive);
         }
         void unlock() noexcept
         {
-            try
-            {
-                m_lock.unlock();
-            }
-            catch (...)
-            {
-            }
-            try
-            {
-                m_file_stream->unlock();
-            }
-            catch (...)
-            {
-            }
+            m_file_stream->unlock();
+            m_lock.unlock();
         }
     };
 

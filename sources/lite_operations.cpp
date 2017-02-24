@@ -61,7 +61,6 @@ namespace lite
     {
 #ifdef FUSE_CAP_BIG_WRITES
         fsinfo->want |= FUSE_CAP_BIG_WRITES;
-        fsinfo->max_readahead = static_cast<unsigned>(-1);
         fsinfo->max_write = static_cast<unsigned>(-1);
 #endif
         void* args = fuse_get_context()->private_data;

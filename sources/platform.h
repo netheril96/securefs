@@ -111,7 +111,7 @@ public:
     virtual void setxattr(const char*, void*, size_t, int) { throwVFSException(ENOTSUP); }
     virtual void removexattr(const char*) { throwVFSException(ENOTSUP); }
     virtual void lock(bool exclusive) = 0;
-    virtual void unlock() = 0;
+    virtual void unlock() noexcept = 0;
 };
 
 class DirectoryTraverser

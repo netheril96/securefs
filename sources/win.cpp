@@ -572,11 +572,11 @@ public:
                               &o));
     }
 
-    void unlock() override
+    void unlock() noexcept override
     {
         OVERLAPPED o;
         memset(&o, 0, sizeof(o));
-        CHECK_CALL(UnlockFileEx(
+        (void)(UnlockFileEx(
             m_handle, 0, std::numeric_limits<DWORD>::max(), std::numeric_limits<DWORD>::max(), &o));
     }
 
