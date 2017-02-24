@@ -8,6 +8,7 @@
 
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include <cryptopp/aes.h>
@@ -26,6 +27,7 @@ namespace lite
     private:
         securefs::optional<lite::AESGCMCryptStream> m_crypt_stream;
         std::shared_ptr<securefs::FileStream> m_file_stream;
+        std::mutex m_lock;
 
     public:
         explicit File(std::shared_ptr<securefs::FileStream> file_stream,
@@ -50,8 +52,28 @@ namespace lite
         void fstat(struct fuse_stat* stat);
         void fsync() { m_file_stream->fsync(); }
         void utimens(const fuse_timespec ts[2]) { m_file_stream->utimens(ts); }
-        void lock() { m_file_stream->lock(true); }
-        void unlock() { m_file_stream->unlock(); }
+        void lock(bool exclusive=true)
+        {
+            m_file_stream->lock(exclusive);
+            m_lock.lock();
+        }
+        void unlock() noexcept
+        {
+            try
+            {
+                m_lock.unlock();
+            }
+            catch (...)
+            {
+            }
+            try
+            {
+                m_file_stream->unlock();
+            }
+            catch (...)
+            {
+            }
+        }
     };
 
     class FileSystem;

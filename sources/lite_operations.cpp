@@ -219,7 +219,7 @@ namespace lite
 
         try
         {
-            fp->lock();
+            fp->lock(false);
             DEFER(fp->unlock());
             return static_cast<int>(fp->read(buf, offset, size));
         }
