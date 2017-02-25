@@ -55,7 +55,15 @@ namespace lite
         void lock(bool exclusive = true)
         {
             m_lock.lock();
-            m_file_stream->lock(exclusive);
+            try
+            {
+                m_file_stream->lock(exclusive);
+            }
+            catch (...)
+            {
+                m_lock.unlock();
+                throw;
+            }
         }
         void unlock() noexcept
         {
