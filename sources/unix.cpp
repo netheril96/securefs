@@ -410,7 +410,7 @@ void OSService::chmod(StringRef path, fuse_mode_t mode) const
 #ifdef AT_SYMLINK_NOFOLLOW
     int rc = ::fchmodat(m_dir_fd, path.c_str(), mode, AT_SYMLINK_NOFOLLOW);
     if (rc < 0 && errno == ENOTSUP)
-        rc = ::lchmod(norm_path(path).c_str(), mode);
+        rc = ::fchmodat(m_dir_fd, path.c_str(), mode, 0);
 #else
     int rc = ::lchmod(norm_path(path).c_str(), mode);
 #endif
