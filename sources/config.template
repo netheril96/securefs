@@ -1,4 +1,0 @@
-#pragma once
-#cmakedefine HAS_UTIMENSAT
-#cmakedefine HAS_FUTIMENS
-#cmakedefine HAS_CLOCK_GETTIME

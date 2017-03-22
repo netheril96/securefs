@@ -50,13 +50,6 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif ()
 
-include(CheckFunctionExists)
-CHECK_FUNCTION_EXISTS(utimensat HAS_UTIMENSAT)
-CHECK_FUNCTION_EXISTS(futimens HAS_FUTIMENS)
-CHECK_FUNCTION_EXISTS(clock_gettime HAS_CLOCK_GETTIME)
-
-configure_file(${PROJECT_SOURCE_DIR}/sources/config.template ${PROJECT_SOURCE_DIR}/sources/securefs_config.h)
-
 include_directories(${PROJECT_SOURCE_DIR}/sources)
 set(EXTERNAL_DIR ${PROJECT_SOURCE_DIR}/external)
 include_directories(${EXTERNAL_DIR})

@@ -4,7 +4,6 @@
 #include "logger.h"
 #include "platform.h"
 #include "streams.h"
-#include "securefs_config.h"
 
 #include <algorithm>
 #include <locale.h>
@@ -32,8 +31,10 @@
 #include <sys/xattr.h>
 #endif
 
-#ifndef HAS_FUTIMENS
-static int futimens(int fd, const struct fuse_timespec ts[2])
+// This provides definition for futimens when it is not already defined (e.g. on Apple)
+// When it is defined, the template is selected later in overload resolution
+template <class T>
+static int futimens(T fd, const struct fuse_timespec ts[2])
 {
     int rc;
     if (!ts)
@@ -51,7 +52,12 @@ static int futimens(int fd, const struct fuse_timespec ts[2])
     }
     return rc;
 }
-#endif
+
+template <class T>
+static int utimensat(int, const char*, const struct fuse_timespec*, T)
+{
+    return 1;
+}
 
 namespace securefs
 {
@@ -429,12 +435,15 @@ ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
 void OSService::utimens(StringRef path, const fuse_timespec* ts) const
 {
     int rc;
-#ifdef HAS_UTIMENSAT
+#ifdef AT_SYMLINK_NOFOLLOW
     rc = ::utimensat(m_dir_fd, path.c_str(), ts, AT_SYMLINK_NOFOLLOW);
-    if (rc)
+    if (rc == 0)
+        return;
+    if (rc < 0)
         THROW_POSIX_EXCEPTION(errno, "utimensat");
-#else
+#endif
 
+    // When controls flows to here, the stub function has been called
     if (!ts)
     {
         rc = ::lutimes(norm_path(path).c_str(), nullptr);
@@ -450,7 +459,6 @@ void OSService::utimens(StringRef path, const fuse_timespec* ts) const
     }
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno, "lutimes");
-#endif
 }
 
 std::unique_ptr<DirectoryTraverser> OSService::create_traverser(StringRef dir) const
@@ -490,7 +498,7 @@ int OSService::raise_fd_limit()
 
 void OSService::get_current_time(fuse_timespec& current_time)
 {
-#ifdef HAS_CLOCK_GETTIME
+#ifdef CLOCK_REALTIME
     clock_gettime(CLOCK_REALTIME, &current_time);
 #else
     timeval tv;
