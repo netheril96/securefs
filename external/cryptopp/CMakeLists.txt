@@ -9,9 +9,9 @@ cmake_minimum_required(VERSION 2.8.5 FATAL_ERROR)
 project(cryptopp)
 
 # Make RelWithDebInfo the default (it does e.g. add '-O2 -g -DNDEBUG' for GNU)
-#   If not in multi-configuration environments, no explicit build type or CXX 
+#   If not in multi-configuration environments, no explicit build type or CXX
 #   flags are set by the user and if we are the root CMakeLists.txt file.
-if (NOT CMAKE_CONFIGURATION_TYPES AND 
+if (NOT CMAKE_CONFIGURATION_TYPES AND
     NOT CMAKE_NO_BUILD_TYPE AND
     NOT CMAKE_BUILD_TYPE AND
     NOT CMAKE_CXX_FLAGS AND
@@ -115,15 +115,6 @@ if(WINDOWS_STORE OR WINDOWS_PHONE)
 	SET( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} /FI\"winapifamily.h\"" )
 endif()
 
-# Enable PIC for all targets except Windows and 32-bit x86.
-#   Avoid on 32-bit x86 due to register pressures.
-if ((NOT CRYPTOPP_CROSS_COMPILE) AND (NOT (WINDOWS OR WINDOWS_STORE OR WINDOWS_PHONE)))
-	# Use Regex; match i386, i486, i586 and i686
-	if (NOT (${UNAME_MACHINE} MATCHES "i.86"))
-		SET(CMAKE_POSITION_INDEPENDENT_CODE 1)
-	endif()
-endif()
-
 # Link is driven through the compiler, but CXXFLAGS are not used. Also see
 #   http://public.kitware.com/pipermail/cmake/2003-June/003967.html
 if (NOT (WINDOWS OR WINDOWS_STORE OR WINDOWS_PHONE))
@@ -189,32 +180,13 @@ if(CMAKE_VERSION VERSION_LESS 2.8.12)
 	include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
 
-if(NOT CMAKE_VERSION VERSION_LESS 2.8.8)
-	add_library(cryptopp-object OBJECT ${cryptopp_SOURCES})
-endif()
 
 if (BUILD_STATIC)
-	if(NOT CMAKE_VERSION VERSION_LESS 2.8.8)
-		add_library(cryptopp-static STATIC $<TARGET_OBJECTS:cryptopp-object>)
-	else()
-		add_library(cryptopp-static STATIC ${cryptopp_SOURCES})
-	endif()
-
-	if (NOT CMAKE_VERSION VERSION_LESS 2.8.12)
-		target_include_directories(cryptopp-static PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}> $<INSTALL_INTERFACE:include/cryptopp>)
-	endif()
+	add_library(cryptopp-static STATIC ${cryptopp_SOURCES})
 endif()
 
 if (BUILD_SHARED)
-	if(NOT CMAKE_VERSION VERSION_LESS 2.8.8)
-		add_library(cryptopp-shared SHARED $<TARGET_OBJECTS:cryptopp-object>)
-	else()
-		add_library(cryptopp-shared SHARED ${cryptopp_SOURCES})
-	endif()
-
-	if (NOT CMAKE_VERSION VERSION_LESS 2.8.12)
-		target_include_directories(cryptopp-shared PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}> $<INSTALL_INTERFACE:include/cryptopp>)
-	endif()
+	add_library(cryptopp-shared SHARED ${cryptopp_SOURCES})
 endif()
 
 # Set filenames for targets to be "cryptopp"
