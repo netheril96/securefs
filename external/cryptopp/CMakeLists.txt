@@ -4,6 +4,10 @@
 #   please set up a Ubuntu 12.04 LTS system. Then, manually install Cmake 2.8.5
 #   from http://cmake.org/Wiki/CMake_Released_Versions.
 
+# This file has been tweaked for cryptopp to be embedded in `securefs`.
+# Please download the original sources if you need to build cryptopp for
+# another project or as a general library.
+
 cmake_minimum_required(VERSION 2.8.5 FATAL_ERROR)
 
 project(cryptopp)
@@ -32,9 +36,6 @@ include(CheckCXXCompilerFlag)
 #============================================================================
 
 option(BUILD_STATIC "Build static library" ON)
-option(BUILD_SHARED "Build shared library" OFF)
-option(BUILD_TESTING "Build library tests" OFF)
-option(BUILD_DOCUMENTATION "Use Doxygen to create the HTML based API documentation" OFF)
 
 option(DISABLE_ASM "Disable ASM" OFF)
 option(DISABLE_SSSE3 "Disable SSSE3" OFF)
@@ -183,10 +184,6 @@ endif()
 
 if (BUILD_STATIC)
 	add_library(cryptopp-static STATIC ${cryptopp_SOURCES})
-endif()
-
-if (BUILD_SHARED)
-	add_library(cryptopp-shared SHARED ${cryptopp_SOURCES})
 endif()
 
 # Set filenames for targets to be "cryptopp"
