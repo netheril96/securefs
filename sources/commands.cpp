@@ -709,7 +709,14 @@ public:
             return 33;
         }
 #else
-        OSService::get_default().ensure_directory(mount_point.getValue(), 0755);
+        try
+        {
+            OSService::get_default().mkdir(mount_point.getValue(), 0755);
+        }
+        catch (const std::exception& e)
+        {
+            VERBOSE_LOG("%s (ignore this error if mounting succeeds eventually)", e.what());
+        }
 #endif
         std::shared_ptr<FileStream> config_stream;
         try
