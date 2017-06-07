@@ -1074,7 +1074,7 @@ void OSService::read_password_with_confirmation(const char* prompt,
 {
     CryptoPP::AlignedSecByteBlock another;
     read_password_no_confirmation(prompt, output);
-    read_password_no_confirmation("Another: ", &another);
+    read_password_no_confirmation("Again: ", &another);
     if (output->size() != another.size()
         || memcmp(output->data(), another.data(), another.size()) != 0)
         throw_runtime_error("Password mismatch!");
