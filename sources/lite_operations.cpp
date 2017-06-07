@@ -63,6 +63,9 @@ namespace lite
         fsinfo->want |= FUSE_CAP_BIG_WRITES;
         fsinfo->max_write = static_cast<unsigned>(-1);
 #endif
+#ifdef FSP_FUSE_CAP_READDIR_PLUS
+        conn->want |= (conn->capable & FSP_FUSE_CAP_READDIR_PLUS);
+#endif
         void* args = fuse_get_context()->private_data;
         INFO_LOG("init");
         auto ctx = new BundledContext;
@@ -152,7 +155,6 @@ namespace lite
                 traverser = guard.get();
             }
             std::string name;
-            fuse_mode_t mode;
             struct fuse_stat stbuf;
             memset(&stbuf, 0, sizeof(stbuf));
 
@@ -161,10 +163,9 @@ namespace lite
             filler(buf, "..", nullptr, 0);
 #endif
 
-            while (traverser->next(&name, &mode))
+            while (traverser->next(&name, &stbuf))
             {
-                stbuf.st_mode = mode;
-                int rc = filler(buf, name.c_str(), mode ? &stbuf : nullptr, 0);
+                int rc = filler(buf, name.c_str(), &stbuf, 0);
                 if (rc != 0)
                     return -abs(rc);
             }

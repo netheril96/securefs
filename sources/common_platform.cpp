@@ -82,4 +82,26 @@ void OSService::recursive_traverse(StringRef dir, const recursive_traverse_callb
 }
 
 DirectoryTraverser::~DirectoryTraverser() {}
+
+ssize_t FileStream::getxattr(const char*, void*, size_t) { throw VFSException(ENOTSUP); }
+
+void FileStream::setxattr(const char*, void*, size_t, int) { throw VFSException(ENOTSUP); }
+
+ssize_t FileStream::listxattr(char*, size_t) { throw VFSException(ENOTSUP); }
+
+void FileStream::removexattr(const char*) { throw VFSException(ENOTSUP); }
+
+bool DirectoryTraverser::next(std::string* name, mode_t* type) { throw VFSException(ENOSYS); }
+
+bool DirectoryTraverser::next(std::string* name, struct stat* st)
+{
+    if (st)
+    {
+        return next(name, &st->st_mode);
+    }
+    else
+    {
+        return next(name, static_cast<mode_t*>(nullptr));
+    }
+}
 }

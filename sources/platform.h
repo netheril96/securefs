@@ -106,10 +106,10 @@ public:
     virtual void utimens(const struct fuse_timespec ts[2]) = 0;
     virtual void fstat(struct fuse_stat*) = 0;
     virtual void close() noexcept = 0;
-    virtual ssize_t listxattr(char*, size_t) { throwVFSException(ENOTSUP); }
-    virtual ssize_t getxattr(const char*, void*, size_t) { throwVFSException(ENOTSUP); }
-    virtual void setxattr(const char*, void*, size_t, int) { throwVFSException(ENOTSUP); }
-    virtual void removexattr(const char*) { throwVFSException(ENOTSUP); }
+    virtual ssize_t listxattr(char*, size_t);
+    virtual ssize_t getxattr(const char*, void*, size_t);
+    virtual void setxattr(const char*, void*, size_t, int);
+    virtual void removexattr(const char*);
     virtual void lock(bool exclusive) = 0;
     virtual void unlock() noexcept = 0;
 };
@@ -121,7 +121,8 @@ class DirectoryTraverser
 public:
     DirectoryTraverser() {}
     virtual ~DirectoryTraverser();
-    virtual bool next(std::string* name, fuse_mode_t* type) = 0;
+    virtual bool next(std::string* name, fuse_mode_t* type);
+    virtual bool next(std::string* name, struct fuse_stat* st);
 };
 
 #ifdef WIN32

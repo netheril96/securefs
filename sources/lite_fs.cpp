@@ -319,14 +319,14 @@ namespace lite
         }
         ~LiteDirectoryTraverser() {}
 
-        bool next(std::string* name, fuse_mode_t* type) override
+        bool next(std::string* name, struct fuse_stat* stbuf) override
         {
             std::string under_name;
             byte buffer[2000];
 
             while (1)
             {
-                if (!m_underlying_traverser->next(&under_name, type))
+                if (!m_underlying_traverser->next(&under_name, stbuf))
                     return false;
                 if (!name)
                     return true;
