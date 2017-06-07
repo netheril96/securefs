@@ -66,11 +66,11 @@ void OSService::recursive_traverse(StringRef dir, const recursive_traverse_callb
 {
     auto traverser = create_traverser(dir);
     std::string name;
-    fuse_mode_t mode;
+    struct fuse_stat st;
 
-    while (traverser->next(&name, &mode))
+    while (traverser->next(&name, &st))
     {
-        if (mode == S_IFDIR)
+        if ((S_IFMT & st.st_mode) == S_IFDIR)
         {
             recursive_traverse(dir + "/" + name, callback);
         }
@@ -90,18 +90,4 @@ void FileStream::setxattr(const char*, void*, size_t, int) { throw VFSException(
 ssize_t FileStream::listxattr(char*, size_t) { throw VFSException(ENOTSUP); }
 
 void FileStream::removexattr(const char*) { throw VFSException(ENOTSUP); }
-
-bool DirectoryTraverser::next(std::string* name, fuse_mode_t* type) { throw VFSException(ENOSYS); }
-
-bool DirectoryTraverser::next(std::string* name, struct fuse_stat* st)
-{
-    if (st)
-    {
-        return next(name, &st->st_mode);
-    }
-    else
-    {
-        return next(name, static_cast<fuse_mode_t*>(nullptr));
-    }
-}
 }

@@ -121,8 +121,7 @@ class DirectoryTraverser
 public:
     DirectoryTraverser() {}
     virtual ~DirectoryTraverser();
-    virtual bool next(std::string* name, fuse_mode_t* type);
-    virtual bool next(std::string* name, struct fuse_stat* st);
+    virtual bool next(std::string* name, struct fuse_stat* st) = 0;
 };
 
 #ifdef WIN32

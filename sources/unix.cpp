@@ -203,7 +203,7 @@ public:
     }
     ~UnixDirectoryTraverser() { ::closedir(m_dir); }
 
-    bool next(std::string* name, fuse_mode_t* type) override
+    bool next(std::string* name, struct fuse_stat* st) override
     {
         while (1)
         {
@@ -217,21 +217,21 @@ public:
             }
             if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
                 continue;
-            if (type)
+            if (st)
             {
                 switch (entry->d_type)
                 {
                 case DT_DIR:
-                    *type = S_IFDIR;
+                    st->st_mode = S_IFDIR;
                     break;
                 case DT_LNK:
-                    *type = S_IFLNK;
+                    st->st_mode = S_IFLNK;
                     break;
                 case DT_REG:
-                    *type = S_IFREG;
+                    st->st_mode = S_IFREG;
                     break;
                 default:
-                    *type = 0;
+                    st->st_mode = 0;
                     break;
                 }
             }
