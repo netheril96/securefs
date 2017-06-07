@@ -91,9 +91,9 @@ ssize_t FileStream::listxattr(char*, size_t) { throw VFSException(ENOTSUP); }
 
 void FileStream::removexattr(const char*) { throw VFSException(ENOTSUP); }
 
-bool DirectoryTraverser::next(std::string* name, mode_t* type) { throw VFSException(ENOSYS); }
+bool DirectoryTraverser::next(std::string* name, fuse_mode_t* type) { throw VFSException(ENOSYS); }
 
-bool DirectoryTraverser::next(std::string* name, struct stat* st)
+bool DirectoryTraverser::next(std::string* name, struct fuse_stat* st)
 {
     if (st)
     {
@@ -101,7 +101,7 @@ bool DirectoryTraverser::next(std::string* name, struct stat* st)
     }
     else
     {
-        return next(name, static_cast<mode_t*>(nullptr));
+        return next(name, static_cast<fuse_mode_t*>(nullptr));
     }
 }
 }

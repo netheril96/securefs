@@ -930,7 +930,7 @@ public:
             FindClose(m_handle);
     }
 
-    bool next(std::string* name, fuse_mode_t* type) override
+    bool next(std::string* name, struct fuse_stat* st) override
     {
         while (wcscmp(m_data.cFileName, L".") == 0 || wcscmp(m_data.cFileName, L"..") == 0)
         {
@@ -945,14 +945,20 @@ public:
 
         if (name)
             *name = narrow_string(m_data.cFileName);
-        if (type)
+        if (st)
         {
-            if (m_data.dwFileAttributes == FILE_ATTRIBUTE_NORMAL)
-                *type = S_IFREG;
-            else if (m_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-                *type = S_IFDIR;
+            if (m_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                st->st_mode = 0755 | S_IFDIR;
             else
-                *type = 0;
+                st->st_mode = 0755 | S_IFREG;
+            st->st_size = convert_dword_pair(m_data.nFileSizeLow, m_data.nFileSizeHigh);
+            filetime_to_unix_time(&m_data.ftCreationTime, &st->st_birthtim);
+            filetime_to_unix_time(&m_data.ftLastAccessTime, &st->st_atim);
+            filetime_to_unix_time(&m_data.ftLastWriteTime, &st->st_mtim);
+            st->st_ctim = st->st_mtim;
+            st->st_nlink = 1;
+            st->st_blksize = 4096;
+            st->st_blocks = st->st_size / 512;
         }
         m_data.cFileName[0] = L'.';
         m_data.cFileName[1] = 0;

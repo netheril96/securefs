@@ -64,7 +64,7 @@ namespace lite
         fsinfo->max_write = static_cast<unsigned>(-1);
 #endif
 #ifdef FSP_FUSE_CAP_READDIR_PLUS
-        conn->want |= (conn->capable & FSP_FUSE_CAP_READDIR_PLUS);
+        fsinfo->want |= (fsinfo->capable & FSP_FUSE_CAP_READDIR_PLUS);
 #endif
         void* args = fuse_get_context()->private_data;
         INFO_LOG("init");
