@@ -17,7 +17,7 @@ Security, however, is often at odds with convenience, and people easily grow tir
 There are already many encrypting filesystem in widespread use. Some notable ones are TrueCrypt, FileVault, BitLocker, eCryptFS, encfs and gocryptfs. `securefs` differs from them in that it is the only one with all of the following features:
 
 * [Authenticated encryption](https://en.wikipedia.org/wiki/Authenticated_encryption) (hence secure against chosen ciphertext attacks)
-* [Probabilistic encryption](https://en.wikipedia.org/wiki/Probabilistic_encryption) (hence provides semantical security) 
+* [Probabilistic encryption](https://en.wikipedia.org/wiki/Probabilistic_encryption) (hence provides semantical security)
 * Supported on all major platforms (Mac, Linux, BSDs and Windows)
 * Efficient cloud synchronization (not a single preallocated file as container)
 
@@ -27,9 +27,9 @@ There are already many encrypting filesystem in widespread use. Some notable one
 
 ### Dependency: FUSE
 
-On OS X, you need [osxfuse](https://osxfuse.github.io).
+On macOS, you need [osxfuse](https://osxfuse.github.io).
 
-On Debian based Linux distro, `sudo apt-get install fuse libfuse-dev`. 
+On Debian based Linux distro, `sudo apt-get install fuse libfuse-dev`.
 
 On RPM based Linux, `sudo yum install fuse fuse-devel`.
 
@@ -37,15 +37,17 @@ On Windows, you need [WinFsp](https://github.com/billziss-gh/winfsp/releases).
 
 ### Install with Homebrew
 
-For OS X users, you can install `securefs` with homebrew:
+```
+brew install securefs
+```
 
-```
-brew install homebrew/fuse/securefs
-```
+### Windows
+
+Windows users can download prebuilt package from the releases section. It depends on VC++ 2015 redistribution package.
 
 ### Manual Build
 
-Run `cmake .` then `make install -j8`. The compiler must be new enough (g++ >= 4.8, clang >= 3.4, Visual Studio >= 2015). If you encounter build errors and the compiler is new enough, try `cmake -DPORTABLE_BUILD=ON .` instead.
+Use `cmake` the generate build files then build it. It requires a sufficiently new compiler that supports enough of C++11 (such as g++ 4.8, clang 3.4 or VC++ 2015).
 
 ## Basic usage
 
