@@ -38,8 +38,10 @@ On Windows, you need [WinFsp](https://github.com/billziss-gh/winfsp/releases).
 ### Install with Homebrew
 
 ```
-brew install securefs
+brew install -s securefs
 ```
+
+Building from source is recommended as it directly targets your CPU capabilities and may speed up huge amounts.
 
 ### Windows
 
