@@ -1,0 +1,5 @@
+#pragma once
+#cmakedefine01 HAS_THREAD_LOCAL
+#cmakedefine01 HAS_CLOCK_GETTIME
+#cmakedefine01 HAS_FUTIMENS
+#cmakedefine01 HAS_UTIMENSAT
