@@ -26,10 +26,13 @@ namespace lite
 #endif
     };
 
+#if HAS_THREAD_LOCAL
+    static thread_local optional<FileSystem> opt_fs;
+#endif
+
     FileSystem* get_local_filesystem(void)
     {
 #if HAS_THREAD_LOCAL
-        thread_local optional<FileSystem> opt_fs;
         if (opt_fs)
             return &(*opt_fs);
 #endif
