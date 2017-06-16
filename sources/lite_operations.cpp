@@ -6,7 +6,13 @@
 #include "operations.h"
 #include "platform.h"
 
+#include <securefs_config.h>
+
 #include <math.h>
+
+#if !HAS_THREAD_LOCAL
+#include <pthread.h>
+#endif
 
 namespace securefs
 {
@@ -15,15 +21,26 @@ namespace lite
     struct BundledContext
     {
         ::securefs::operations::MountOptions* opt;
-        ::securefs::tls::tls_key_type key;
+#if !HAS_THREAD_LOCAL
+        ::pthread_key_t key;
+#endif
     };
 
     FileSystem* get_local_filesystem(void)
     {
+#if HAS_THREAD_LOCAL
+        thread_local optional<FileSystem> opt_fs;
+        if (opt_fs)
+            return &(*opt_fs);
+#endif
+
         auto ctx = static_cast<BundledContext*>(fuse_get_context()->private_data);
-        auto fs = static_cast<FileSystem*>(::securefs::tls::get(ctx->key));
+
+#if !HAS_THREAD_LOCAL
+        auto fs = static_cast<FileSystem*>(::pthread_getspecific(ctx->key));
         if (fs)
             return fs;
+#endif
 
         if (ctx->opt->version.value() != 4)
             throwInvalidArgumentException("This function only supports filesystem format 4");
@@ -40,6 +57,16 @@ namespace lite
         warn_if_key_not_random(content_key, __FILE__, __LINE__);
         warn_if_key_not_random(xattr_key, __FILE__, __LINE__);
 
+#if HAS_THREAD_LOCAL
+        opt_fs.emplace(ctx->opt->root,
+                       name_key,
+                       content_key,
+                       xattr_key,
+                       ctx->opt->block_size.value(),
+                       ctx->opt->iv_size.value(),
+                       ctx->opt->flags.value());
+        return &(*opt_fs);
+#else
         std::unique_ptr<FileSystem> guard(new FileSystem(ctx->opt->root,
                                                          name_key,
                                                          content_key,
@@ -47,8 +74,11 @@ namespace lite
                                                          ctx->opt->block_size.value(),
                                                          ctx->opt->iv_size.value(),
                                                          ctx->opt->flags.value()));
-        ::securefs::tls::set(ctx->key, guard.get());
+        int rc = ::pthread_setspecific(ctx->key, guard.get());
+        if (rc)
+            THROW_POSIX_EXCEPTION(rc, "pthread_setspecific");
         return guard.release();
+#endif
     }
 
 #define SINGLE_COMMON_PROLOGUE                                                                     \
@@ -70,7 +100,13 @@ namespace lite
         INFO_LOG("init");
         auto ctx = new BundledContext;
         ctx->opt = static_cast<operations::MountOptions*>(args);
-        ::securefs::tls::init<FileSystem>(&ctx->key);
+
+#if !HAS_THREAD_LOCAL
+        int rc = ::pthread_key_create(&ctx->key,
+                                      [](void* p) { delete static_cast<lite::FileSystem*>(p); });
+        if (rc)
+            THROW_POSIX_EXCEPTION(rc, "pthread_key_create");
+#endif
         return ctx;
     }
 

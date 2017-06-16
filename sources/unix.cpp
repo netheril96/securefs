@@ -5,6 +5,8 @@
 #include "platform.h"
 #include "streams.h"
 
+#include <securefs_config.h>
+
 #include <algorithm>
 #include <locale.h>
 #include <vector>
@@ -30,34 +32,6 @@
 #ifdef __APPLE__
 #include <sys/xattr.h>
 #endif
-
-// This provides definition for futimens when it is not already defined (e.g. on Apple)
-// When it is defined, the template is selected later in overload resolution
-template <class T>
-static int futimens(T fd, const struct fuse_timespec ts[2])
-{
-    int rc;
-    if (!ts)
-        rc = ::futimes(fd, nullptr);
-    else
-    {
-        struct timeval time_values[2];
-        for (size_t i = 0; i < 2; ++i)
-        {
-            time_values[i].tv_sec = ts[i].tv_sec;
-            time_values[i].tv_usec
-                = static_cast<decltype(time_values[i].tv_usec)>(ts[i].tv_nsec / 1000);
-        }
-        rc = ::futimes(fd, time_values);
-    }
-    return rc;
-}
-
-template <class T>
-static int utimensat(int, const char*, const struct fuse_timespec*, T)
-{
-    return 1;
-}
 
 namespace securefs
 {
@@ -150,9 +124,28 @@ public:
 
     void utimens(const struct fuse_timespec ts[2]) override
     {
+#if HAS_FUTIMENS
         int rc = ::futimens(m_fd, ts);
         if (rc < 0)
             THROW_POSIX_EXCEPTION(errno, "utimens");
+#else
+        int rc;
+        if (!ts)
+            rc = ::futimes(m_fd, nullptr);
+        else
+        {
+            struct timeval time_values[2];
+            for (size_t i = 0; i < 2; ++i)
+            {
+                time_values[i].tv_sec = ts[i].tv_sec;
+                time_values[i].tv_usec
+                    = static_cast<decltype(time_values[i].tv_usec)>(ts[i].tv_nsec / 1000);
+            }
+            rc = ::futimes(m_fd, time_values);
+        }
+        if (rc < 0)
+            THROW_POSIX_EXCEPTION(errno, "futimes");
+#endif
     }
 
 #ifdef __APPLE__
@@ -435,14 +428,11 @@ ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
 void OSService::utimens(StringRef path, const fuse_timespec* ts) const
 {
     int rc;
-#ifdef AT_SYMLINK_NOFOLLOW
+#if HAS_UTIMENSAT
     rc = ::utimensat(m_dir_fd, path.c_str(), ts, AT_SYMLINK_NOFOLLOW);
-    if (rc == 0)
-        return;
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno, "utimensat");
-#endif
-
+#else
     // When controls flows to here, the stub function has been called
     if (!ts)
     {
@@ -459,6 +449,7 @@ void OSService::utimens(StringRef path, const fuse_timespec* ts) const
     }
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno, "lutimes");
+#endif
 }
 
 std::unique_ptr<DirectoryTraverser> OSService::create_traverser(StringRef dir) const
@@ -498,7 +489,7 @@ int OSService::raise_fd_limit()
 
 void OSService::get_current_time(fuse_timespec& current_time)
 {
-#ifdef CLOCK_REALTIME
+#if HAS_CLOCK_GETTIME
     clock_gettime(CLOCK_REALTIME, &current_time);
 #else
     timeval tv;

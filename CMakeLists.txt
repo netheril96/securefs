@@ -14,7 +14,7 @@ if (UNIX)
     else()
         find_library(FUSE_LIBRARIES fuse)
     endif()
-    include_directories(SYSTEM ${FUSE_INCLUDE_DIR})
+    include_directories(${FUSE_INCLUDE_DIR})
     link_libraries(${FUSE_LIBRARIES})
     add_compile_options(-Wall -Wextra -Wno-unknown-pragmas)
 
@@ -43,8 +43,8 @@ else ()
         set(ARCH x86)
     endif ()
     set(FUSE_INCLUDE_DIR ${WINFSP_PREFIX}/inc/fuse)
-    include_directories(SYSTEM ${WINFSP_PREFIX}/inc)
-    include_directories(SYSTEM ${WINFSP_PREFIX}/inc/fuse)
+    include_directories(${WINFSP_PREFIX}/inc)
+    include_directories(${WINFSP_PREFIX}/inc/fuse)
     link_libraries(${WINFSP_PREFIX}/lib/winfsp-${ARCH}.lib)
     link_libraries(-DELAYLOAD:winfsp-${ARCH}.dll)
     link_libraries(delayimp.lib)
@@ -72,6 +72,47 @@ link_libraries(securefs-static)
 
 add_executable(securefs main.cpp)
 add_executable(securefs_test ${TEST_SOURCES})
+
+if (UNIX)
+    set (CMAKE_REQUIRED_FLAGS "-std=c++11")
+endif()
+
+include(CheckCXXSourceRuns)
+CHECK_CXX_SOURCE_RUNS("int main() { thread_local int i = 0; return i; }" HAS_THREAD_LOCAL)
+
+CHECK_CXX_SOURCE_RUNS("
+#include <time.h>
+
+int main() {
+    timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return 0;
+}
+" HAS_CLOCK_GETTIME)
+
+CHECK_CXX_SOURCE_RUNS("
+#include <unistd.h>
+#include <sys/stat.h>
+
+int main() {
+    futimens(-1, nullptr);
+    return 0;
+}
+" HAS_FUTIMENS)
+
+CHECK_CXX_SOURCE_RUNS("
+#include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+int main() {
+    utimensat(-1, nullptr, nullptr, 0);
+    return 0;
+}
+" HAS_UTIMENSAT)
+
+configure_file(sources/securefs_config.in securefs_config.h)
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 enable_testing()
 add_test(NAME sec_test COMMAND securefs_test)
