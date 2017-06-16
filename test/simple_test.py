@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python
 # coding: utf-8
 import os
 import subprocess
@@ -19,7 +19,9 @@ if platform.system() == 'Darwin':
     try:
         import xattr
     except ImportError:
-        sys.stderr.write('Importing module "xattr" failed. Testing for extended attribute support is skipped\n')
+        sys.stderr.write(
+            'Importing module "xattr" failed. Testing for extended attribute support is skipped\n'
+        )
         xattr = None
 else:
     UNMOUNT = ['fusermount', '-u']
@@ -32,8 +34,13 @@ class TimeoutException(BaseException):
 
 
 def securefs_mount(data_dir, mount_point, password):
-    p = subprocess.Popen([SECUREFS_BINARY, 'mount', '--log', 'XXXX.log', '--trace', '--background', data_dir, mount_point],
-                         stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    p = subprocess.Popen(
+        [
+            SECUREFS_BINARY, 'mount', '--log', 'XXXX.log', '--trace',
+            '--background', data_dir, mount_point
+        ],
+        stdin=subprocess.PIPE,
+        stderr=subprocess.PIPE)
     out, err = p.communicate(input=password + '\n')
     if p.returncode:
         raise RuntimeError(err)
@@ -63,8 +70,13 @@ def securefs_unmount(mount_point):
 
 
 def securefs_create(data_dir, password, version):
-    p = subprocess.Popen([SECUREFS_BINARY, 'create', '--format', str(version), data_dir, '--rounds', '1'],
-                         stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    p = subprocess.Popen(
+        [
+            SECUREFS_BINARY, 'create', '--format',
+            str(version), data_dir, '--rounds', '1'
+        ],
+        stdin=subprocess.PIPE,
+        stderr=subprocess.PIPE)
     out, err = p.communicate(input=password + '\n')
     if p.returncode:
         raise RuntimeError(err)
@@ -79,8 +91,12 @@ def make_test_case(format_version):
             except EnvironmentError as e:
                 if e.errno != errno.EEXIST:
                     raise
-            cls.data_dir = tempfile.mkdtemp(prefix='securefs.format{}.data_dir'.format(format_version), dir='tmp')
-            cls.mount_point = tempfile.mkdtemp(prefix='securefs.format{}.mount_point'.format(format_version), dir='tmp')
+            cls.data_dir = tempfile.mkdtemp(
+                prefix='securefs.format{}.data_dir'.format(format_version),
+                dir='tmp')
+            cls.mount_point = tempfile.mkdtemp(
+                prefix='securefs.format{}.mount_point'.format(format_version),
+                dir='tmp')
             cls.password = 'madoka'
             securefs_create(cls.data_dir, cls.password, format_version)
             securefs_mount(cls.data_dir, cls.mount_point, cls.password)
@@ -107,6 +123,7 @@ def make_test_case(format_version):
                 self.assertEqual(e.errno, errno.ENAMETOOLONG)
 
         if xattr:
+
             def test_xattr(self):
                 fn = os.path.join(self.mount_point, str(uuid.uuid4()))
                 try:
@@ -128,6 +145,7 @@ def make_test_case(format_version):
                         pass
 
         if format_version < 4:
+
             def test_hardlink(self):
                 data = os.urandom(16)
                 source = os.path.join(self.mount_point, str(uuid.uuid4()))
@@ -146,7 +164,8 @@ def make_test_case(format_version):
                         self.assertEqual(data, f.read())
                     # Moving hard links onto each other is a no-op
                     os.rename(dest, source)
-                    self.assertTrue(os.path.isfile(dest) and os.path.isfile(source))
+                    self.assertTrue(
+                        os.path.isfile(dest) and os.path.isfile(source))
                 finally:
                     try:
                         os.remove(source)
@@ -227,6 +246,7 @@ def make_test_case(format_version):
                 except:
                     pass
                 os.chdir(cwd)
+
         def test_read_write_mkdir_listdir_remove(self):
             dir_names = set(str(i) for i in xrange(3))
             random_data = os.urandom(11111)
@@ -254,17 +274,24 @@ def make_test_case(format_version):
 
             self.mount()
             self.assertEqual(set(os.listdir(self.mount_point)), dir_names)
-            self.assertEqual(set(os.listdir(os.path.join(self.mount_point, '0'))), dir_names)
-            self.assertEqual(set(os.listdir(os.path.join(self.mount_point, '0', '1'))), dir_names)
+            self.assertEqual(
+                set(os.listdir(os.path.join(self.mount_point, '0'))),
+                dir_names)
+            self.assertEqual(
+                set(os.listdir(os.path.join(self.mount_point, '0', '1'))),
+                dir_names)
             for dn in dir_names:
                 shutil.rmtree(os.path.join(self.mount_point, dn))
 
         if format_version == 3:
+
             def test_time(self):
-                rand_dirname = os.path.join(self.mount_point, str(uuid.uuid4()))
+                rand_dirname = os.path.join(self.mount_point,
+                                            str(uuid.uuid4()))
                 os.mkdir(rand_dirname)
                 st = os.stat(rand_dirname)
-                self.assertTrue(st.st_atime == st.st_ctime and st.st_ctime == st.st_mtime)
+                self.assertTrue(st.st_atime == st.st_ctime and
+                                st.st_ctime == st.st_mtime)
                 self.assertAlmostEqual(st.st_atime, time.time(), delta=10)
                 rand_filename = os.path.join(rand_dirname, 'abc')
                 with open(rand_filename, 'w') as f:
@@ -276,7 +303,6 @@ def make_test_case(format_version):
                     f.write('1')
                 st = os.stat(rand_filename)
                 self.assertAlmostEqual(st.st_ctime, time.time(), delta=10)
-
 
     return SimpleSecureFSTestBase
 
@@ -292,8 +318,10 @@ class TestVersion2(make_test_case(2)):
 class TestVersion3(make_test_case(3)):
     pass
 
+
 class TestVersion4(make_test_case(4)):
     pass
+
 
 if __name__ == '__main__':
     unittest.main()
