@@ -122,6 +122,7 @@ public:
     DirectoryTraverser() {}
     virtual ~DirectoryTraverser();
     virtual bool next(std::string* name, struct fuse_stat* st) = 0;
+    virtual void rewind() = 0;
 };
 
 #ifdef WIN32

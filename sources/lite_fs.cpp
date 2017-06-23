@@ -319,6 +319,8 @@ namespace lite
         }
         ~LiteDirectoryTraverser() {}
 
+        void rewind() override { m_underlying_traverser->rewind(); }
+
         bool next(std::string* name, struct fuse_stat* stbuf) override
         {
             std::string under_name;

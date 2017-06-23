@@ -193,6 +193,10 @@ namespace lite
                 guard = filesystem->create_traverser(path);
                 traverser = guard.get();
             }
+            else
+            {
+                traverser->rewind();
+            }
             std::string name;
             struct fuse_stat stbuf;
             memset(&stbuf, 0, sizeof(stbuf));

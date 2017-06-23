@@ -235,6 +235,8 @@ public:
             return true;
         }
     }
+
+    void rewind() override { ::rewinddir(m_dir); }
 };
 
 std::string OSService::norm_path(StringRef path) const
