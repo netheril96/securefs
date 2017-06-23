@@ -267,7 +267,7 @@ namespace lite
         m_root->chmod(translate_path(path, false), mode);
     }
 
-    void FileSystem::chown(StringRef path, uid_t uid, gid_t gid)
+    void FileSystem::chown(StringRef path, fuse_uid_t uid, fuse_gid_t gid)
     {
         m_root->chown(translate_path(path, false), uid, gid);
     }

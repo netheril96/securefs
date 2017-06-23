@@ -845,6 +845,7 @@ bool OSService::stat(StringRef path, struct fuse_stat* stat) const
 
 void OSService::link(StringRef source, StringRef dest) const { throwVFSException(ENOSYS); }
 void OSService::chmod(StringRef path, fuse_mode_t mode) const { throwVFSException(ENOSYS); }
+void OSService::chown(StringRef, fuse_uid_t, fuse_gid_t) const { throwVFSException(ENOSYS); }
 
 ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
 {
@@ -907,27 +908,34 @@ int OSService::raise_fd_limit()
 //        THROW_WINDOWS_EXCEPTION(GetLastError(), "FindNextFile");
 //}
 
-class WindowsDirectoryTraverser : public DirectoryTraverser
+class WindowsDirectoryTraverser final : public DirectoryTraverser
 {
 private:
+    std::wstring m_pattern;
     HANDLE m_handle;
     WIN32_FIND_DATAW m_data;
 
 public:
     explicit WindowsDirectoryTraverser(WideStringRef pattern)
+        : m_pattern(pattern.data(), pattern.size()), m_handle(INVALID_HANDLE_VALUE)
     {
-        m_handle = FindFirstFileW(pattern.c_str(), &m_data);
-        if (m_handle == INVALID_HANDLE_VALUE)
-        {
-            THROW_WINDOWS_EXCEPTION_WITH_PATH(
-                GetLastError(), L"FindFirstFileW", pattern.to_string());
-        }
     }
 
     ~WindowsDirectoryTraverser()
     {
         if (m_handle != INVALID_HANDLE_VALUE)
             FindClose(m_handle);
+    }
+
+    void rewind() override
+    {
+        if (m_handle != INVALID_HANDLE_VALUE)
+            FindClose(m_handle);
+        m_handle = FindFirstFileW(m_pattern.c_str(), &m_data);
+        if (m_handle == INVALID_HANDLE_VALUE)
+        {
+            THROW_WINDOWS_EXCEPTION_WITH_PATH(GetLastError(), L"FindFirstFileW", m_pattern);
+        }
     }
 
     bool next(std::string* name, struct fuse_stat* st) override
