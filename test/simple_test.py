@@ -11,8 +11,26 @@ import time
 import traceback
 import uuid
 import sys
+import stat
+import traceback
 
-SECUREFS_BINARY = './securefs'
+
+def find_securefs_binary():
+    for f in (os.path.join(
+            os.environ.get('build_config_type', '.'), 'securefs'),
+              './securefs'):
+        try:
+            st = os.stat(f)
+        except EnvironmentError:
+            continue
+        else:
+            mode = st.st_mode
+            if stat.S_ISREG(mode) and (mode & stat.S_IEXEC):
+                return f
+    raise RuntimeError('securefs binary not found')
+
+
+SECUREFS_BINARY = find_securefs_binary()
 
 if platform.system() == 'Darwin':
     UNMOUNT = ['umount']

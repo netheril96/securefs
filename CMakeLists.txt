@@ -116,6 +116,6 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 enable_testing()
 add_test(NAME sec_test COMMAND securefs_test)
-add_test(NAME simple_test COMMAND ${PROJECT_SOURCE_DIR}/test/simple_test.py)
+add_test(NAME simple_test COMMAND /usr/bin/env build_config_type=${CMAKE_BUILD_TYPE} /usr/bin/python ${PROJECT_SOURCE_DIR}/test/simple_test.py)
 
 install(TARGETS securefs DESTINATION bin)
