@@ -267,6 +267,11 @@ namespace lite
         m_root->chmod(translate_path(path, false), mode);
     }
 
+    void FileSystem::chown(StringRef path, uid_t uid, gid_t gid)
+    {
+        m_root->chown(translate_path(path, false), uid, gid);
+    }
+
     size_t FileSystem::readlink(StringRef path, char* buf, size_t size)
     {
         if (size <= 0)

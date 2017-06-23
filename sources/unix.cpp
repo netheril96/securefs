@@ -414,6 +414,23 @@ void OSService::chmod(StringRef path, fuse_mode_t mode) const
                               strprintf("chmod %s with mode=0%o", norm_path(path).c_str(), mode));
 }
 
+void OSService::chown(StringRef path, uid_t uid, gid_t gid) const
+{
+#ifdef AT_SYMLINK_NOFOLLOW
+    int rc = ::fchownat(m_dir_fd, path.c_str(), uid, gid, AT_SYMLINK_NOFOLLOW);
+    if (rc < 0 && errno == ENOTSUP)
+        rc = ::fchownat(m_dir_fd, path.c_str(), uid, gid, 0);
+#else
+    int rc = ::lchown(norm_path(path).c_str(), uid, gid);
+#endif
+    if (rc < 0)
+        THROW_POSIX_EXCEPTION(errno,
+                              strprintf("chown %s with uid=%lld and gid=%lld",
+                                        norm_path(path).c_str(),
+                                        static_cast<long long>(uid),
+                                        static_cast<long long>(gid)));
+}
+
 ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
 {
 #ifdef AT_FDCWD

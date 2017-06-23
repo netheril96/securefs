@@ -126,6 +126,7 @@ namespace lite
         void mkdir(StringRef path, fuse_mode_t mode);
         void rmdir(StringRef path);
         void chmod(StringRef path, fuse_mode_t mode);
+        void chown(StringRef path, fuse_uid_t uid, fuse_gid_t gid);
         void rename(StringRef from, StringRef to);
         void unlink(StringRef path);
         void symlink(StringRef to, StringRef from);

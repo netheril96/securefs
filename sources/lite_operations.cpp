@@ -380,6 +380,17 @@ namespace lite
         SINGLE_COMMON_EPILOGUE
     }
 
+    int chown(const char* path, fuse_uid_t uid, fuse_gid_t gid)
+    {
+        SINGLE_COMMON_PROLOGUE
+        try
+        {
+            filesystem->chown(path, uid, gid);
+            return 0;
+        }
+        SINGLE_COMMON_EPILOGUE
+    }
+
     int symlink(const char* to, const char* from)
     {
         auto filesystem = get_local_filesystem();
@@ -546,6 +557,7 @@ namespace lite
         opt->mkdir = &::securefs::lite::mkdir;
         opt->rmdir = &::securefs::lite::rmdir;
         opt->chmod = &::securefs::lite::chmod;
+        opt->chown = &::securefs::lite::chown;
         opt->symlink = &::securefs::lite::symlink;
         opt->link = &::securefs::lite::link;
         opt->readlink = &::securefs::lite::readlink;

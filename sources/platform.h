@@ -174,6 +174,7 @@ public:
 
     void link(StringRef source, StringRef dest) const;
     void chmod(StringRef path, fuse_mode_t mode) const;
+    void chown(StringRef path, fuse_uid_t uid, fuse_gid_t gid) const;
     ssize_t readlink(StringRef path, char* output, size_t size) const;
     void symlink(StringRef source, StringRef dest) const;
 
