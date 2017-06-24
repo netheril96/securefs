@@ -241,28 +241,19 @@ public:
 
 std::string OSService::norm_path(StringRef path) const
 {
-#ifdef AT_FDCWD
     if (m_dir_fd < 0)
         return path.to_string();
-#endif
     if (path.size() > 0 && path[0] == '/')
         return path.to_string();
     return m_dir_name + path;
 }
 
-OSService::OSService()
-{
-#ifdef AT_FDCWD
-    m_dir_fd = AT_FDCWD;
-#endif
-}
+OSService::OSService() { m_dir_fd = AT_FDCWD; }
 
 OSService::~OSService()
 {
-#ifdef AT_FDCWD
     if (m_dir_fd >= 0)
         ::close(m_dir_fd);
-#endif
 }
 
 OSService::OSService(StringRef path)
@@ -275,22 +266,16 @@ OSService::OSService(StringRef path)
     m_dir_name.assign(buffer);
     m_dir_name.push_back('/');
 
-#ifdef AT_FDCWD
     int dir_fd = ::open(path.c_str(), O_RDONLY);
     if (dir_fd < 0)
         THROW_POSIX_EXCEPTION(errno, "Opening directory " + path);
     m_dir_fd = dir_fd;
-#endif
 }
 
 std::shared_ptr<FileStream>
 OSService::open_file_stream(StringRef path, int flags, unsigned mode) const
 {
-#ifdef AT_FDCWD
     int fd = ::openat(m_dir_fd, path.c_str(), flags, mode);
-#else
-    int fd = ::open(norm_path(path).c_str(), flags, mode);
-#endif
     if (fd < 0)
         THROW_POSIX_EXCEPTION(
             errno, strprintf("Opening %s with flags %#o", norm_path(path).c_str(), flags));
@@ -299,22 +284,14 @@ OSService::open_file_stream(StringRef path, int flags, unsigned mode) const
 
 void OSService::remove_file(StringRef path) const
 {
-#ifdef AT_FDCWD
     int rc = ::unlinkat(m_dir_fd, path.c_str(), 0) == 0;
-#else
-    int rc = ::unlink(norm_path(path).c_str()) == 0;
-#endif
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno, "unlinking " + norm_path(path));
 }
 
 void OSService::remove_directory(StringRef path) const
 {
-#ifdef AT_REMOVEDIR
     int rc = ::unlinkat(m_dir_fd, path.c_str(), AT_REMOVEDIR);
-#else
-    int rc = ::rmdir(norm_path(path).c_str()) == 0;
-#endif
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno, "removing directory " + norm_path(path));
 }
@@ -329,11 +306,7 @@ void OSService::lock() const
 
 void OSService::mkdir(StringRef path, unsigned mode) const
 {
-#ifdef AT_FDCWD
     int rc = ::mkdirat(m_dir_fd, path.c_str(), mode);
-#else
-    int rc = ::mkdir(norm_path(path).c_str(), mode);
-#endif
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno,
                               strprintf("Fail to create directory %s", norm_path(path).c_str()));
@@ -341,11 +314,7 @@ void OSService::mkdir(StringRef path, unsigned mode) const
 
 void OSService::symlink(StringRef to, StringRef from) const
 {
-#ifdef AT_FDCWD
     int rc = ::symlinkat(to.c_str(), m_dir_fd, from.c_str());
-#else
-    int rc = ::symlink(to.c_str(), norm_path(from).c_str());
-#endif
     if (rc < 0)
         THROW_POSIX_EXCEPTION(
             errno, strprintf("symlink to=%s and from=%s", to.c_str(), norm_path(from).c_str()));
@@ -353,11 +322,7 @@ void OSService::symlink(StringRef to, StringRef from) const
 
 void OSService::link(StringRef source, StringRef dest) const
 {
-#ifdef AT_FDCWD
     int rc = ::linkat(m_dir_fd, source.c_str(), m_dir_fd, dest.c_str(), 0);
-#else
-    int rc = ::link(norm_path(source).c_str(), norm_path(dest).c_str());
-#endif
     if (rc < 0)
     {
         THROW_POSIX_EXCEPTION(errno,
@@ -374,11 +339,7 @@ void OSService::statfs(struct fuse_statvfs* fs_info) const
 
 void OSService::rename(StringRef a, StringRef b) const
 {
-#ifdef AT_FDCWD
     int rc = ::renameat(m_dir_fd, a.c_str(), m_dir_fd, b.c_str());
-#else
-    int rc = ::rename(norm_path(a).c_str(), norm_path(b).c_str());
-#endif
     if (rc < 0)
         THROW_POSIX_EXCEPTION(
             errno, strprintf("Renaming from %s to %s", norm_path(a).c_str(), norm_path(b).c_str()));
@@ -386,11 +347,7 @@ void OSService::rename(StringRef a, StringRef b) const
 
 bool OSService::stat(StringRef path, struct fuse_stat* stat) const
 {
-#ifdef AT_SYMLINK_NOFOLLOW
     int rc = ::fstatat(m_dir_fd, path.c_str(), stat, AT_SYMLINK_NOFOLLOW);
-#else
-    int rc = ::lstat(norm_path(path).c_str(), stat);
-#endif
     if (rc < 0)
     {
         if (errno == ENOENT)
@@ -402,13 +359,9 @@ bool OSService::stat(StringRef path, struct fuse_stat* stat) const
 
 void OSService::chmod(StringRef path, fuse_mode_t mode) const
 {
-#ifdef AT_SYMLINK_NOFOLLOW
     int rc = ::fchmodat(m_dir_fd, path.c_str(), mode, AT_SYMLINK_NOFOLLOW);
     if (rc < 0 && errno == ENOTSUP)
         rc = ::fchmodat(m_dir_fd, path.c_str(), mode, 0);
-#else
-    int rc = ::lchmod(norm_path(path).c_str(), mode);
-#endif
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno,
                               strprintf("chmod %s with mode=0%o", norm_path(path).c_str(), mode));
@@ -416,13 +369,9 @@ void OSService::chmod(StringRef path, fuse_mode_t mode) const
 
 void OSService::chown(StringRef path, uid_t uid, gid_t gid) const
 {
-#ifdef AT_SYMLINK_NOFOLLOW
     int rc = ::fchownat(m_dir_fd, path.c_str(), uid, gid, AT_SYMLINK_NOFOLLOW);
     if (rc < 0 && errno == ENOTSUP)
         rc = ::fchownat(m_dir_fd, path.c_str(), uid, gid, 0);
-#else
-    int rc = ::lchown(norm_path(path).c_str(), uid, gid);
-#endif
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno,
                               strprintf("chown %s with uid=%lld and gid=%lld",
@@ -433,11 +382,7 @@ void OSService::chown(StringRef path, uid_t uid, gid_t gid) const
 
 ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
 {
-#ifdef AT_FDCWD
     ssize_t rc = ::readlinkat(m_dir_fd, path.c_str(), output, size);
-#else
-    ssize_t rc = ::readlink(norm_path(path).c_str(), output, size);
-#endif
     if (rc < 0)
         THROW_POSIX_EXCEPTION(
             errno, strprintf("readlink %s with buffer size=%zu", norm_path(path).c_str(), size));

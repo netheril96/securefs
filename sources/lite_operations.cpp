@@ -181,22 +181,13 @@ namespace lite
                 fuse_off_t,
                 struct fuse_file_info* info)
     {
-        SINGLE_COMMON_PROLOGUE
+        OPT_TRACE_WITH_PATH;
         try
         {
             auto traverser = reinterpret_cast<DirectoryTraverser*>(info->fh);
-            std::unique_ptr<DirectoryTraverser> guard;
             if (!traverser)
-            {
-                // Bug in WinFsp
-                // Open it ourselves
-                guard = filesystem->create_traverser(path);
-                traverser = guard.get();
-            }
-            else
-            {
-                traverser->rewind();
-            }
+                return -EFAULT;
+            traverser->rewind();
             std::string name;
             struct fuse_stat stbuf;
             memset(&stbuf, 0, sizeof(stbuf));
