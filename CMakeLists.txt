@@ -4,7 +4,6 @@ option(PORTABLE_BUILD "Build for the general architecture instead of this cpu" O
 
 project(securefs)
 
-set (CMAKE_CXX_STANDARD 11)
 set (CMAKE_FIND_FRAMEWORK NEVER)
 
 if (UNIX)
@@ -16,7 +15,7 @@ if (UNIX)
     endif()
     include_directories(${FUSE_INCLUDE_DIR})
     link_libraries(${FUSE_LIBRARIES})
-    add_compile_options(-Wall -Wextra -Wno-unknown-pragmas)
+    add_compile_options(-Wall -Wextra -Wno-unknown-pragmas -std=gnu++11)
 
     if (NOT PORTABLE_BUILD)
         add_compile_options(-march=native -mtune=native)
@@ -44,7 +43,7 @@ else ()
     endif ()
     set(FUSE_INCLUDE_DIR ${WINFSP_PREFIX}/inc/fuse)
     include_directories(${WINFSP_PREFIX}/inc)
-    include_directories(${WINFSP_PREFIX}/inc/fuse)
+    include_directories(${FUSE_INCLUDE_DIR})
     link_libraries(${WINFSP_PREFIX}/lib/winfsp-${ARCH}.lib)
     link_libraries(-DELAYLOAD:winfsp-${ARCH}.dll)
     link_libraries(delayimp.lib)
@@ -74,7 +73,7 @@ add_executable(securefs main.cpp)
 add_executable(securefs_test ${TEST_SOURCES})
 
 if (UNIX)
-    set (CMAKE_REQUIRED_FLAGS "-std=c++11")
+    set (CMAKE_REQUIRED_FLAGS "-std=gnu++11")
 endif()
 
 include(CheckCXXSourceRuns)
