@@ -793,6 +793,8 @@ public:
             fuse_args.push_back("-o");
             fuse_args.push_back("noappledouble");
         }
+#elif _WIN32
+        fuse_args.push_back("-ouid=-1,gid=-1");
 #endif
         fuse_args.push_back(mount_point.getValue().c_str());
 

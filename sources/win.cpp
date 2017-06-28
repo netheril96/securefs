@@ -979,46 +979,9 @@ std::unique_ptr<DirectoryTraverser> OSService::create_traverser(StringRef dir) c
     return securefs::make_unique<WindowsDirectoryTraverser>(norm_path(dir) + L"\\*");
 }
 
-static uint32_t cached_uid = 0;
-static uint32_t cached_gid = 0;
+uint32_t OSService::getuid() noexcept { return 0; }
 
-uint32_t OSService::getuid() { return cached_uid; }
-
-static uint32_t calc_uid()
-{
-    uint32_t uid;
-    HANDLE token;
-    CHECK_CALL(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token));
-    DEFER(CloseHandle(token));
-
-    DWORD outsize = 1;
-    TOKEN_USER* tkuser = nullptr;
-    DEFER(free(tkuser));
-    GetTokenInformation(token, TokenUser, nullptr, 0, &outsize);
-    tkuser = (TOKEN_USER*)malloc(outsize);
-    CHECK_CALL(GetTokenInformation(token, TokenUser, tkuser, outsize, &outsize));
-    (void)FspPosixMapSidToUid(tkuser->User.Sid, &uid);
-    return uid;
-}
-
-uint32_t OSService::getgid() { return cached_gid; }
-
-static uint32_t calc_gid()
-{
-    uint32_t gid;
-    HANDLE token;
-    CHECK_CALL(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token));
-    DEFER(CloseHandle(token));
-
-    DWORD outsize = 1;
-    TOKEN_GROUPS* tkgroup = nullptr;
-    DEFER(free(tkgroup));
-    GetTokenInformation(token, TokenGroups, nullptr, 0, &outsize);
-    tkgroup = (TOKEN_GROUPS*)malloc(outsize);
-    CHECK_CALL(GetTokenInformation(token, TokenGroups, tkgroup, outsize, &outsize));
-    (void)FspPosixMapSidToUid(tkgroup->Groups[0].Sid, &gid);
-    return gid;
-}
+uint32_t OSService::getgid() noexcept { return 0; }
 
 void OSService::get_current_time(fuse_timespec& current_time)
 {
@@ -1095,72 +1058,10 @@ std::string OSService::stringify_system_error(int errcode)
     return buffer;
 }
 
-/*
-* Use the following function to delay load the WinFsp DLL
-* directly from the WinFsp installation directory.
-*
-* You will also need to update your project settings:
-* - Linker > Input > Delay Loaded DLL's: winfsp-$(PlatformTarget).dll
-*
-* Written by Bill Zissimopoulos, 2017. Released to the public domain.
-*/
-
-static inline NTSTATUS FspLoad(PVOID* PModule)
-{
-#ifndef FSP_DLLNAME
-#if defined(_WIN64)
-#define FSP_DLLNAME "winfsp-x64.dll"
-#else
-#define FSP_DLLNAME "winfsp-x86.dll"
-#endif
-#define FSP_DLLPATH "bin\\" FSP_DLLNAME
-#endif
-
-    WCHAR PathBuf[MAX_PATH];
-    DWORD Size;
-    HKEY RegKey;
-    LONG Result;
-    HMODULE Module;
-
-    if (0 != PModule)
-        *PModule = 0;
-
-    Module = LoadLibraryW(L"" FSP_DLLNAME);
-    if (0 == Module)
-    {
-        Result = RegOpenKeyExW(
-            HKEY_LOCAL_MACHINE, L"Software\\WinFsp", 0, KEY_READ | KEY_WOW64_32KEY, &RegKey);
-        if (ERROR_SUCCESS == Result)
-        {
-            Size = sizeof PathBuf - sizeof L"" FSP_DLLPATH + sizeof(WCHAR);
-            Result = RegGetValueW(RegKey, 0, L"InstallDir", RRF_RT_REG_SZ, 0, PathBuf, &Size);
-            RegCloseKey(RegKey);
-        }
-        if (ERROR_SUCCESS != Result)
-            return STATUS_OBJECT_NAME_NOT_FOUND;
-
-        RtlCopyMemory(
-            PathBuf + (Size / sizeof(WCHAR) - 1), L"" FSP_DLLPATH, sizeof L"" FSP_DLLPATH);
-        Module = LoadLibraryW(PathBuf);
-        if (0 == Module)
-            return STATUS_DLL_NOT_FOUND;
-    }
-
-    if (0 != PModule)
-        *PModule = Module;
-
-    return STATUS_SUCCESS;
-
-#undef FSP_DLLNAME
-#undef FSP_DLLPATH
-}
-
 void windows_init(void)
 {
     ::SetConsoleOutputCP(CP_UTF8);
-    ::securefs::FspLoad(nullptr);
-    cached_uid = calc_uid();
-    cached_gid = calc_gid();
+    ::FspLoad(nullptr);
 
     HMODULE hd = GetModuleHandleW(L"kernel32.dll");
     best_get_time_func = reinterpret_cast<decltype(best_get_time_func)>(
