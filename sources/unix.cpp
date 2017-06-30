@@ -198,42 +198,37 @@ public:
 
     bool next(std::string* name, struct fuse_stat* st) override
     {
-        while (1)
+        errno = 0;
+        auto entry = ::readdir(m_dir);
+        if (!entry)
         {
-            errno = 0;
-            auto entry = ::readdir(m_dir);
-            if (!entry)
-            {
-                if (errno)
-                    THROW_POSIX_EXCEPTION(errno, "readdir");
-                return false;
-            }
-            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-                continue;
-            if (st)
-            {
-                switch (entry->d_type)
-                {
-                case DT_DIR:
-                    st->st_mode = S_IFDIR;
-                    break;
-                case DT_LNK:
-                    st->st_mode = S_IFLNK;
-                    break;
-                case DT_REG:
-                    st->st_mode = S_IFREG;
-                    break;
-                default:
-                    st->st_mode = 0;
-                    break;
-                }
-            }
-            if (name)
-            {
-                *name = entry->d_name;
-            }
-            return true;
+            if (errno)
+                THROW_POSIX_EXCEPTION(errno, "readdir");
+            return false;
         }
+        if (st)
+        {
+            switch (entry->d_type)
+            {
+            case DT_DIR:
+                st->st_mode = S_IFDIR;
+                break;
+            case DT_LNK:
+                st->st_mode = S_IFLNK;
+                break;
+            case DT_REG:
+                st->st_mode = S_IFREG;
+                break;
+            default:
+                st->st_mode = 0;
+                break;
+            }
+        }
+        if (name)
+        {
+            *name = entry->d_name;
+        }
+        return true;
     }
 
     void rewind() override { ::rewinddir(m_dir); }

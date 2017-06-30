@@ -192,13 +192,14 @@ namespace lite
             struct fuse_stat stbuf;
             memset(&stbuf, 0, sizeof(stbuf));
 
-#ifdef WIN32
-            filler(buf, ".", nullptr, 0);
-            filler(buf, "..", nullptr, 0);
-#endif
-
             while (traverser->next(&name, &stbuf))
             {
+#ifndef _WIN32
+                if (name == "." || name == "..")
+                {
+                    continue;
+                }
+#endif
                 int rc = filler(buf, name.c_str(), &stbuf, 0);
                 if (rc != 0)
                     return -abs(rc);

@@ -338,9 +338,14 @@ namespace lite
                 if (!name)
                     return true;
 
-                if (under_name.empty() || under_name[0] == '.')
+                if (under_name.empty())
                     continue;
-
+                if (under_name == "." || under_name == "..")
+                {
+                    if (name)
+                        name->swap(under_name);
+                    return true;
+                }
                 try
                 {
                     decoder.Initialize();

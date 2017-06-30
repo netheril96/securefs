@@ -70,6 +70,8 @@ void OSService::recursive_traverse(StringRef dir, const recursive_traverse_callb
 
     while (traverser->next(&name, &st))
     {
+        if (name == "." || name == "..")
+            continue;
         if ((S_IFMT & st.st_mode) == S_IFDIR)
         {
             recursive_traverse(dir + "/" + name, callback);
