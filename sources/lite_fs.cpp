@@ -346,6 +346,8 @@ namespace lite
                         name->swap(under_name);
                     return true;
                 }
+                if (under_name[0] == '.')
+                    continue;
                 try
                 {
                     decoder.Initialize();

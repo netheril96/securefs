@@ -47,9 +47,9 @@ private:
         first_level_dir = securefs::hexify(id.data(), FIRST_LEVEL);
         second_level_dir
             = first_level_dir + '/' + securefs::hexify(id.data() + FIRST_LEVEL, SECOND_LEVEL);
-        full_filename = second_level_dir + '/'
-            + securefs::hexify(id.data() + FIRST_LEVEL + SECOND_LEVEL,
-                               id.size() - FIRST_LEVEL - SECOND_LEVEL);
+        full_filename
+            = second_level_dir + '/' + securefs::hexify(id.data() + FIRST_LEVEL + SECOND_LEVEL,
+                                                        id.size() - FIRST_LEVEL - SECOND_LEVEL);
         meta_filename = full_filename + ".meta";
     }
 

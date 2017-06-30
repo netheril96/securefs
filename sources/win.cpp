@@ -867,58 +867,19 @@ int OSService::raise_fd_limit()
     // The handle limit on Windows is high enough that no adjustments are necessary
 }
 
-// void OSService::recursive_traverse(StringRef dir,
-//                                   const recursive_traverse_callback& callback) const
-//{
-//    struct Finder
-//    {
-//        HANDLE handle;
-//
-//        explicit Finder(HANDLE h) : handle(h) {}
-//        ~Finder()
-//        {
-//            if (handle != INVALID_HANDLE_VALUE)
-//                FindClose(handle);
-//        }
-//    };
-//
-//    WIN32_FIND_DATAA data;
-//    auto find_pattern = norm_path(dir) + "\\*";
-//    Finder finder(FindFirstFileA(find_pattern.c_str(), &data));
-//
-//    if (finder.handle == INVALID_HANDLE_VALUE)
-//        THROW_WINDOWS_EXCEPTION(GetLastError(), "FindFirstFile on pattern " + find_pattern);
-//
-//    do
-//    {
-//        if (strcmp(data.cFileName, ".") == 0 || strcmp(data.cFileName, "..") == 0)
-//            continue;
-//        if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-//        {
-//            recursive_traverse(dir + '\\' + data.cFileName, callback);
-//        }
-//        else
-//        {
-//            if (!callback(dir, data.cFileName))
-//                return;
-//        }
-//    } while (FindNextFileA(finder.handle, &data));
-//
-//    if (GetLastError() != ERROR_NO_MORE_FILES)
-//        THROW_WINDOWS_EXCEPTION(GetLastError(), "FindNextFile");
-//}
-
 class WindowsDirectoryTraverser final : public DirectoryTraverser
 {
 private:
     std::wstring m_pattern;
-    HANDLE m_handle;
     WIN32_FIND_DATAW m_data;
+    HANDLE m_handle;
+    bool m_is_initial;
 
 public:
-    explicit WindowsDirectoryTraverser(WideStringRef pattern)
-        : m_pattern(pattern.data(), pattern.size()), m_handle(INVALID_HANDLE_VALUE)
+    explicit WindowsDirectoryTraverser(std::wstring pattern)
+        : m_pattern(std::move(pattern)), m_handle(INVALID_HANDLE_VALUE), m_is_initial(false)
     {
+        rewind();
     }
 
     ~WindowsDirectoryTraverser()
@@ -929,6 +890,8 @@ public:
 
     void rewind() override
     {
+        if (m_is_initial)
+            return;    // Already at the beginning
         if (m_handle != INVALID_HANDLE_VALUE)
             FindClose(m_handle);
         m_handle = FindFirstFileW(m_pattern.c_str(), &m_data);
@@ -940,14 +903,18 @@ public:
 
     bool next(std::string* name, struct fuse_stat* st) override
     {
-        while (wcscmp(m_data.cFileName, L".") == 0 || wcscmp(m_data.cFileName, L"..") == 0)
+        if (m_is_initial)
+        {
+            m_is_initial = false;
+        }
+        else
         {
             if (!FindNextFileW(m_handle, &m_data))
             {
                 DWORD err = GetLastError();
                 if (err == ERROR_NO_MORE_FILES)
                     return false;
-                THROW_WINDOWS_EXCEPTION(err, L"FindNextFileW");
+                THROW_WINDOWS_EXCEPTION_WITH_PATH(err, L"FindNextFileW", m_pattern);
             }
         }
 
@@ -968,8 +935,6 @@ public:
             st->st_blksize = 4096;
             st->st_blocks = st->st_size / 512;
         }
-        m_data.cFileName[0] = L'.';
-        m_data.cFileName[1] = 0;
         return true;
     }
 };
