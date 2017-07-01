@@ -304,6 +304,8 @@ void base32_decode(const char* input, size_t size, std::string& output)
         size_t bit_index = i * 5;
         size_t byte_index = bit_index / 8, index_within_byte = bit_index % 8;
         auto p = get_base32_pair(group, index_within_byte);
+        if (byte_index >= output.size())
+            throw std::out_of_range("base32 decode encounters internal error");
         out[byte_index] |= p.first;
         if (byte_index + 1 < output.size())
             out[byte_index + 1] |= p.second;
