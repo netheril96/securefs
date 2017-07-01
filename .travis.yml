@@ -3,7 +3,7 @@ matrix:
   include:
     - os: osx
       compiler: clang
-      install: "brew update && sudo brew cask install osxfuse"
+      install: "brew update && brew cask install osxfuse"
       sudo: required
       script: "cmake . && make -j4 && ./securefs v && ctest -V"
     - os: linux
