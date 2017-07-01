@@ -150,15 +150,43 @@ bool AES_SIV::decrypt_and_verify(const void* ciphertext,
     return CryptoPP::VerifyBufsEqual(static_cast<const byte*>(siv), temp_iv, AES_SIV::IV_SIZE);
 }
 
+#if HAS_THREAD_LOCAL
 void generate_random(void* buffer, size_t size)
 {
-#if HAS_THREAD_LOCAL
+
     thread_local CryptoPP::AutoSeededRandomPool rng;
     rng.GenerateBlock(static_cast<byte*>(buffer), size);
-#else
-    throw_runtime_error("Not implemented");
-#endif
 }
+#else
+static pthread_once_t CSRNG_ONCE = PTHREAD_ONCE_INIT;
+static pthread_key_t CSRNG_KEY;
+
+void generate_random(void* buffer, size_t size)
+{
+    int rc = pthread_once(&CSRNG_ONCE, []() {
+        int rc = pthread_key_create(
+            &CSRNG_KEY, [](void* p) { delete static_cast<CryptoPP::AutoSeededRandomPool*>(p); });
+        if (rc)
+            abort();
+    });
+    if (rc)
+    {
+        THROW_POSIX_EXCEPTION(rc, "pthread_once");
+    }
+    auto rng = static_cast<CryptoPP::AutoSeededRandomPool*>(pthread_getspecific(CSRNG_KEY));
+    if (!rng)
+    {
+        rng = new CryptoPP::AutoSeededRandomPool();
+        rc = pthread_setspecific(CSRNG_KEY, rng);
+        if (rc)
+        {
+            delete rng;
+            THROW_POSIX_EXCEPTION(rc, "pthread_setspecific");
+        }
+    }
+    rng->GenerateBlock(static_cast<byte*>(buffer), size);
+}
+#endif
 
 void hmac_sha256_calculate(
     const void* message, size_t msg_len, const void* key, size_t key_len, void* mac, size_t mac_len)
