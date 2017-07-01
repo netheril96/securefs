@@ -92,7 +92,7 @@ public:
     do                                                                                             \
     {                                                                                              \
         int code = errc;                                                                           \
-        throwPOSIXExceptionDoNotUseDirectly(code, msg);                                            \
+        ::securefs::throwPOSIXExceptionDoNotUseDirectly(code, msg);                                \
     } while (0)
 
 [[noreturn]] void throwPOSIXExceptionDoNotUseDirectly(int err, std::string msg);
