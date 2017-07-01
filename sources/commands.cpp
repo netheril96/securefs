@@ -39,6 +39,8 @@ static const char* CONFIG_FILE_NAME = ".securefs.json";
 static const unsigned MIN_ITERATIONS = 20000;
 static const unsigned MIN_DERIVE_SECONDS = 1;
 static const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
+static const char* PBKDF_ALGO_PKCS5 = "pkcs5-pbkdf2-hmac-sha256";
+static const char* PBKDF_ALGO_SCRYPT = "scrypt";
 
 static const char* get_version_header(unsigned version)
 {
@@ -234,6 +236,7 @@ void fix(const std::string& basedir, operations::FileSystemContext* fs)
 }
 
 Json::Value generate_config(unsigned int version,
+                            const std::string& pbkdf_algorithm,
                             const CryptoPP::AlignedSecByteBlock& master_key,
                             const securefs::key_type& salt,
                             const void* password,
@@ -247,14 +250,39 @@ Json::Value generate_config(unsigned int version,
     securefs::key_type key_to_encrypt;
     CryptoPP::AlignedSecByteBlock encrypted_master_key(nullptr, master_key.size());
 
-    config["iterations"] = securefs::pbkdf_hmac_sha256(password,
-                                                       pass_len,
-                                                       salt.data(),
-                                                       salt.size(),
-                                                       rounds ? rounds : MIN_ITERATIONS,
-                                                       rounds ? 0 : MIN_DERIVE_SECONDS,
-                                                       key_to_encrypt.data(),
-                                                       key_to_encrypt.size());
+    if (pbkdf_algorithm == PBKDF_ALGO_PKCS5)
+    {
+        config["iterations"] = securefs::pbkdf_hmac_sha256(password,
+                                                           pass_len,
+                                                           salt.data(),
+                                                           salt.size(),
+                                                           rounds ? rounds : MIN_ITERATIONS,
+                                                           rounds ? 0 : MIN_DERIVE_SECONDS,
+                                                           key_to_encrypt.data(),
+                                                           key_to_encrypt.size());
+    }
+    else if (pbkdf_algorithm == PBKDF_ALGO_SCRYPT)
+    {
+        uint32_t N = rounds > 0 ? rounds : 16384, r = 8, p = 1;
+        config["iterations"] = N;
+        config["scrypt_r"] = r;
+        config["scrypt_p"] = p;
+        securefs::libscrypt_scrypt(static_cast<const byte*>(password),
+                                   pass_len,
+                                   salt.data(),
+                                   salt.size(),
+                                   N,
+                                   r,
+                                   p,
+                                   key_to_encrypt.data(),
+                                   key_to_encrypt.size());
+    }
+    else
+    {
+        throw_runtime_error("Unknown pbkdf algorithm " + pbkdf_algorithm);
+    }
+    config["pbkdf"] = pbkdf_algorithm;
+
     config["salt"] = securefs::hexify(salt);
 
     byte iv[CONFIG_IV_LENGTH];
@@ -334,14 +362,38 @@ bool parse_config(const Json::Value& config,
     parse_hex(ekey_hex, encrypted_key.data(), encrypted_key.size());
     master_key.resize(encrypted_key.size());
 
-    pbkdf_hmac_sha256(password,
-                      pass_len,
-                      salt.data(),
-                      salt.size(),
-                      iterations,
-                      0,
-                      key_to_encrypt_master_key.data(),
-                      key_to_encrypt_master_key.size());
+    std::string pbkdf_algorithm = config.get("pbkdf", "").asString();
+    VERBOSE_LOG("Setting the password key derivation function to %s", pbkdf_algorithm.c_str());
+
+    if (pbkdf_algorithm.empty() || pbkdf_algorithm == PBKDF_ALGO_PKCS5)
+    {
+        pbkdf_hmac_sha256(password,
+                          pass_len,
+                          salt.data(),
+                          salt.size(),
+                          iterations,
+                          0,
+                          key_to_encrypt_master_key.data(),
+                          key_to_encrypt_master_key.size());
+    }
+    else if (pbkdf_algorithm == PBKDF_ALGO_SCRYPT)
+    {
+        auto r = config["scrypt_r"].asUInt();
+        auto p = config["scrypt_p"].asUInt();
+        libscrypt_scrypt(static_cast<const byte*>(password),
+                         pass_len,
+                         salt.data(),
+                         salt.size(),
+                         iterations,
+                         r,
+                         p,
+                         key_to_encrypt_master_key.data(),
+                         key_to_encrypt_master_key.size());
+    }
+    else
+    {
+        throw_runtime_error("Unknown pbkdf algorithm " + pbkdf_algorithm);
+    }
 
     CryptoPP::GCM<CryptoPP::AES>::Decryption decryptor;
     decryptor.SetKeyWithIV(
@@ -399,6 +451,7 @@ static void copy_key(const CryptoPP::AlignedSecByteBlock& in_key, optional<key_t
 }
 
 void CommandBase::write_config(StreamBase* stream,
+                               const std::string& pbdkf_algorithm,
                                const FSConfig& config,
                                const void* password,
                                size_t pass_len,
@@ -407,6 +460,7 @@ void CommandBase::write_config(StreamBase* stream,
     key_type salt;
     CryptoPP::OS_GenerateRandomBlock(false, salt.data(), salt.size());
     auto str = generate_config(config.version,
+                               pbdkf_algorithm,
                                config.master_key,
                                salt,
                                password,
@@ -446,6 +500,12 @@ protected:
     }
 };
 
+static const std::string message_for_setting_pbkdf
+    = strprintf("The algorithm to stretch passwords. Use %s for maximum protection (default), or "
+                "%s for compatibility with old versions of securefs",
+                PBKDF_ALGO_SCRYPT,
+                PBKDF_ALGO_PKCS5);
+
 class CreateCommand : public CommonCommandBase
 {
 private:
@@ -468,6 +528,8 @@ private:
         "",
         "store_time",
         "alias for \"--format 3\", enables the extension where timestamp are stored and encrypted"};
+    TCLAP::ValueArg<std::string> pbkdf{
+        "", "pbkdf", message_for_setting_pbkdf, false, PBKDF_ALGO_SCRYPT, "string"};
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
@@ -521,8 +583,12 @@ public:
 
         auto config_stream
             = open_config_stream(get_real_config_path(), O_WRONLY | O_CREAT | O_EXCL);
-        write_config(
-            config_stream.get(), config, password.data(), password.size(), rounds.getValue());
+        write_config(config_stream.get(),
+                     pbkdf.getValue(),
+                     config,
+                     password.data(),
+                     password.size(),
+                     rounds.getValue());
         config_stream.reset();
 
         if (format_version < 4)
@@ -564,6 +630,7 @@ private:
         false,
         0,
         "integer"};
+    TCLAP::ValueArg<std::string> pbkdf{"", "pbkdf", message_for_setting_pbkdf, false, "", "string"};
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
@@ -587,8 +654,12 @@ public:
         auto config = read_config(stream.get(), old_password.data(), old_password.size());
         stream = OSService::get_default().open_file_stream(
             tmp_path, O_WRONLY | O_CREAT | O_EXCL, 0644);
-        write_config(
-            stream.get(), config, new_password.data(), new_password.size(), rounds.getValue());
+        write_config(stream.get(),
+                     pbkdf.getValue(),
+                     config,
+                     new_password.data(),
+                     new_password.size(),
+                     rounds.getValue());
         stream.reset();
         OSService::get_default().rename(tmp_path, original_path);
         return 0;

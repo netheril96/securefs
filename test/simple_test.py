@@ -91,7 +91,7 @@ def securefs_create(data_dir, password, version):
     p = subprocess.Popen(
         [
             SECUREFS_BINARY, 'create', '--format',
-            str(version), data_dir, '--rounds', '1'
+            str(version), data_dir, '--rounds', '4'
         ],
         stdin=subprocess.PIPE,
         stderr=subprocess.PIPE)
