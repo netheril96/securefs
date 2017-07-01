@@ -12,7 +12,6 @@
 #include <string>
 
 #include <cryptopp/aes.h>
-#include <cryptopp/base32.h>
 #include <cryptopp/gcm.h>
 #include <cryptopp/secblock.h>
 
@@ -98,7 +97,6 @@ namespace lite
 
     private:
         AES_SIV m_name_encryptor;
-        CryptoPP::Base32Encoder m_encoder;
         key_type m_content_key;
         CryptoPP::GCM<CryptoPP::AES>::Encryption m_xattr_enc;
         CryptoPP::GCM<CryptoPP::AES>::Decryption m_xattr_dec;

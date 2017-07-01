@@ -233,7 +233,7 @@ static size_t get_alphabet_index(byte b, byte next, size_t i)
     }
     throwInvalidArgumentException("Invalid index within byte");
 }
-    
+
 void base32_encode(const byte* input, size_t size, std::string& output)
 {
     output.clear();
@@ -308,6 +308,5 @@ void base32_decode(const char* input, size_t size, std::string& output)
         if (byte_index + 1 < output.size())
             out[byte_index + 1] |= p.second;
     }
-    
 }
 }

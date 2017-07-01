@@ -60,12 +60,13 @@ namespace lite
         return strprintf("Invalid filename \"%s\"", m_filename.c_str());
     }
 
-    std::string encrypt_path(CryptoPP::Base32Encoder& encoder, AES_SIV& encryptor, StringRef path)
+    std::string encrypt_path(AES_SIV& encryptor, StringRef path)
     {
         byte buffer[2032];
         std::string result;
         result.reserve((path.size() * 8 + 4) / 5);
         size_t last_nonseparator_index = 0;
+        std::string encoded_part;
 
         for (size_t i = 0; i <= path.size(); ++i)
         {
@@ -79,16 +80,8 @@ namespace lite
                         throwVFSException(ENAMETOOLONG);
                     encryptor.encrypt_and_authenticate(
                         slice, slice_size, nullptr, 0, buffer + AES_SIV::IV_SIZE, buffer);
-                    encoder.Initialize();
-                    encoder.Put(buffer, slice_size + AES_SIV::IV_SIZE);
-                    encoder.MessageEnd();
-                    auto encoded_size = encoder.MaxRetrievable();
-                    if (encoded_size > 0)
-                    {
-                        auto current_size = result.size();
-                        result.resize(current_size + encoded_size);
-                        encoder.Get(reinterpret_cast<byte*>(&result[current_size]), encoded_size);
-                    }
+                    base32_encode(buffer, slice_size + AES_SIV::IV_SIZE, encoded_part);
+                    result.append(encoded_part);
                 }
                 if (i < path.size())
                     result.push_back('/');
@@ -98,20 +91,12 @@ namespace lite
         return result;
     }
 
-    std::string encrypt_path(AES_SIV& encryptor, StringRef path)
-    {
-        CryptoPP::Base32Encoder enc;
-        return encrypt_path(enc, encryptor, path);
-    }
-
     std::string decrypt_path(AES_SIV& decryptor, StringRef path)
     {
-        byte buffer[2032];
         byte string_buffer[2032];
-        std::string result;
-        result.reserve(path.size() * 5 / 8);
+        std::string result, decoded_part;
+        result.reserve(path.size() * 5 / 8 + 10);
         size_t last_nonseparator_index = 0;
-        CryptoPP::Base32Decoder decoder;
 
         for (size_t i = 0; i <= path.size(); ++i)
         {
@@ -122,27 +107,21 @@ namespace lite
                     const char* slice = path.data() + last_nonseparator_index;
                     size_t slice_size = i - last_nonseparator_index;
 
-                    decoder.Initialize();
-                    decoder.Put(reinterpret_cast<const byte*>(slice), slice_size);
-                    decoder.MessageEnd();
-
-                    auto decoded_size = decoder.MaxRetrievable();
-                    if (decoded_size > sizeof(buffer))
+                    base32_decode(slice, slice_size, decoded_part);
+                    if (decoded_part.size() >= sizeof(string_buffer))
                         throwVFSException(ENAMETOOLONG);
-                    if (decoded_size <= AES_SIV::IV_SIZE)
-                        throwVFSException(EINVAL);
-                    decoder.Get(buffer, decoded_size);
 
-                    bool success = decryptor.decrypt_and_verify(buffer + AES_SIV::IV_SIZE,
-                                                                decoded_size - AES_SIV::IV_SIZE,
-                                                                nullptr,
-                                                                0,
-                                                                string_buffer,
-                                                                buffer);
+                    bool success
+                        = decryptor.decrypt_and_verify(&decoded_part[AES_SIV::IV_SIZE],
+                                                       decoded_part.size() - AES_SIV::IV_SIZE,
+                                                       nullptr,
+                                                       0,
+                                                       string_buffer,
+                                                       &decoded_part[0]);
                     if (!success)
                         throw InvalidFilenameException(path.to_string());
-                    result.append(reinterpret_cast<const char*>(string_buffer),
-                                  decoded_size - AES_SIV::IV_SIZE);
+                    result.append((const char*)string_buffer,
+                                  decoded_part.size() - AES_SIV::IV_SIZE);
                 }
                 if (i < path.size())
                     result.push_back('/');
@@ -171,10 +150,8 @@ namespace lite
         }
         else
         {
-            std::string str
-                = lite::encrypt_path(m_encoder,
-                                     m_name_encryptor,
-                                     (m_flags & kOptionCaseFoldFileName) ? case_fold(path) : path);
+            std::string str = lite::encrypt_path(
+                m_name_encryptor, (m_flags & kOptionCaseFoldFileName) ? case_fold(path) : path);
             if (!preserve_leading_slash && !str.empty() && str[0] == '/')
             {
                 str.erase(str.begin());
@@ -311,7 +288,6 @@ namespace lite
     class LiteDirectoryTraverser : public DirectoryTraverser
     {
     private:
-        CryptoPP::Base32Decoder decoder;
         std::unique_ptr<DirectoryTraverser> m_underlying_traverser;
         AES_SIV m_name_encryptor;
 
@@ -328,8 +304,7 @@ namespace lite
 
         bool next(std::string* name, struct fuse_stat* stbuf) override
         {
-            std::string under_name;
-            byte buffer[2000];
+            std::string under_name, decoded_bytes;
 
             while (1)
             {
@@ -350,26 +325,20 @@ namespace lite
                     continue;
                 try
                 {
-                    decoder.Initialize();
-                    decoder.Put(reinterpret_cast<const byte*>(under_name.data()),
-                                under_name.size());
-                    decoder.MessageEnd();
-                    auto size = decoder.MaxRetrievable();
-                    if (size > sizeof(buffer) || size <= AES_SIV::IV_SIZE)
+                    base32_decode(under_name.data(), under_name.size(), decoded_bytes);
+                    if (decoded_bytes.size() <= AES_SIV::IV_SIZE)
                     {
-                        WARN_LOG("Skipping too large/small encrypted filename %s",
-                                 under_name.c_str());
+                        WARN_LOG("Skipping too small encrypted filename %s", under_name.c_str());
                         continue;
                     }
-
-                    decoder.Get(buffer, sizeof(buffer));
-                    name->assign(size - AES_SIV::IV_SIZE, '\0');
-                    bool success = m_name_encryptor.decrypt_and_verify(buffer + AES_SIV::IV_SIZE,
-                                                                       size - AES_SIV::IV_SIZE,
-                                                                       nullptr,
-                                                                       0,
-                                                                       &(*name)[0],
-                                                                       buffer);
+                    name->assign(decoded_bytes.size() - AES_SIV::IV_SIZE, '\0');
+                    bool success
+                        = m_name_encryptor.decrypt_and_verify(&decoded_bytes[AES_SIV::IV_SIZE],
+                                                              name->size(),
+                                                              nullptr,
+                                                              0,
+                                                              &(*name)[0],
+                                                              &decoded_bytes[0]);
                     if (!success)
                     {
                         WARN_LOG("Skipping filename %s (decrypted to %s) since it fails "
