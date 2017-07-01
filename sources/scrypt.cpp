@@ -39,6 +39,21 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+static int posix_memalign(void** p, size_t alignment, size_t size)
+{
+    ((*(p)) = _aligned_malloc((size), (alignment)));
+    return *(p) ? 0 : errno;
+}
+static void posix_memalign_free(void* p) { _aligned_free(p); }
+
+#else
+static void posix_memalign_free(void* p) { free(p); }
+#endif
+
+namespace securefs
+{
+
 static void blkcpy(void*, void*, size_t);
 static void blkxor(void*, void*, size_t);
 static void salsa20_8(uint32_t[16]);
@@ -291,24 +306,20 @@ void libscrypt_scrypt(const uint8_t* passwd,
 #if SIZE_MAX > UINT32_MAX
     if (buflen > (((uint64_t)(1) << 32) - 1) * 32)
     {
-        errno = EFBIG;
-        goto err0;
+        throwInvalidArgumentException("buffer too big");
     }
 #endif
     if ((uint64_t)(r) * (uint64_t)(p) >= (1 << 30))
     {
-        errno = EFBIG;
-        goto err0;
+        throwInvalidArgumentException("r and p are too big");
     }
     if (r == 0 || p == 0)
     {
-        errno = EINVAL;
-        goto err0;
+        securefs::throwInvalidArgumentException("r and p must not be zero");
     }
     if (((N & (N - 1)) != 0) || (N < 2))
     {
-        errno = EINVAL;
-        goto err0;
+        throwInvalidArgumentException("N is not a power of 2");
     }
     if ((r > SIZE_MAX / 128 / p) ||
 #if SIZE_MAX / 256 <= UINT32_MAX
@@ -316,35 +327,24 @@ void libscrypt_scrypt(const uint8_t* passwd,
 #endif
         (N > SIZE_MAX / 128 / r))
     {
-        errno = ENOMEM;
-        goto err0;
+        throwInvalidArgumentException("Would require too much memory");
     }
 
-/* Allocate memory. */
-#ifdef HAVE_POSIX_MEMALIGN
-    if ((errno = posix_memalign(&B0, 64, 128 * r * p)) != 0)
-        goto err0;
+    /* Allocate memory. */
+    int rc;
+    if ((rc = posix_memalign(&B0, 64, 128 * r * p)) != 0)
+        THROW_POSIX_EXCEPTION(rc, "posix_memalign");
+    DEFER(posix_memalign_free(B0));
     B = (uint8_t*)(B0);
-    if ((errno = posix_memalign(&XY0, 64, 256 * r + 64)) != 0)
-        goto err1;
+    if ((rc = posix_memalign(&XY0, 64, 256 * r + 64)) != 0)
+        THROW_POSIX_EXCEPTION(rc, "posix_memalign");
+    DEFER(posix_memalign_free(XY0));
     XY = (uint32_t*)(XY0);
 #ifndef MAP_ANON
     if ((errno = posix_memalign(&V0, 64, 128 * r * N)) != 0)
-        goto err2;
+        THROW_POSIX_EXCEPTION(rc, "posix_memalign");
+    DEFER(posix_memalign_free(V0));
     V = (uint32_t*)(V0);
-#endif
-#else
-    if ((B0 = malloc(128 * r * p + 63)) == NULL)
-        goto err0;
-    B = (uint8_t*)(((uintptr_t)(B0) + 63) & ~(uintptr_t)(63));
-    if ((XY0 = malloc(256 * r + 64 + 63)) == NULL)
-        goto err1;
-    XY = (uint32_t*)(((uintptr_t)(XY0) + 63) & ~(uintptr_t)(63));
-#ifndef MAP_ANON
-    if ((V0 = malloc(128 * r * N + 63)) == NULL)
-        goto err2;
-    V = (uint32_t*)(((uintptr_t)(V0) + 63) & ~(uintptr_t)(63));
-#endif
 #endif
 #ifdef MAP_ANON
     if ((V0 = mmap(NULL,
@@ -358,7 +358,8 @@ void libscrypt_scrypt(const uint8_t* passwd,
                    -1,
                    0))
         == MAP_FAILED)
-        goto err2;
+        THROW_POSIX_EXCEPTION(errno, "mmap");
+    DEFER(munmap(V0, 128 * r * N));
     V = (uint32_t*)(V0);
 #endif
 
@@ -374,25 +375,5 @@ void libscrypt_scrypt(const uint8_t* passwd,
 
     /* 5: DK <-- PBKDF2(P, B, 1, dkLen) */
     libscrypt_PBKDF2_SHA256(passwd, passwdlen, B, p * 128 * r, 1, buf, buflen);
-
-/* Free memory. */
-#ifdef MAP_ANON
-    if (munmap(V0, 128 * r * N))
-        goto err2;
-#else
-    free(V0);
-#endif
-    free(XY0);
-    free(B0);
-
-    /* Success! */
-    return;
-
-err2:
-    free(XY0);
-err1:
-    free(B0);
-err0:
-    /* Failure! */
-    THROW_POSIX_EXCEPTION(errno, "scrypt");
+}
 }
