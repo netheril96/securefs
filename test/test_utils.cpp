@@ -116,6 +116,29 @@ TEST_CASE("Base32")
     REQUIRE(strcmp((char*)out, (char*)out2) == 0);
 }
 
+TEST_CASE("our base32")
+{
+    std::string input, output, decoded;
+    input.reserve(128);
+    for (size_t i = 0; i < 128; ++i)
+    {
+        if (i > 0)
+        {
+            input.resize(i, 0);
+            CryptoPP::OS_GenerateRandomBlock(false, (byte*)input.data(), i);
+        }
+        securefs::base32_encode((const byte*)input.data(), i, output);
+        CAPTURE(output);
+        securefs::base32_decode(output.data(), output.size(), decoded);
+        CHECK(input == decoded);
+    }
+}
+
+TEST_CASE("our base32 against CryptoPP")
+{
+    
+}
+
 TEST_CASE("case fold")
 {
     using securefs::case_fold;

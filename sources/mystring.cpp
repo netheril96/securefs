@@ -206,4 +206,108 @@ std::string hexify(const byte* data, size_t length)
     }
     return result;
 }
+
+static const char* UPPER_BASE32_ALPHABET = "ABCDEFGHIJKMNPQRSTUVWXYZ23456789";
+static const char* LOWER_BASE32_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789";
+
+static size_t get_alphabet_index(byte b, byte next, size_t i)
+{
+    switch (i)
+    {
+    case 0:
+        return (b >> 3) & 31u;
+    case 1:
+        return (b >> 2) & 31u;
+    case 2:
+        return (b >> 1) & 31u;
+    case 3:
+        return b & 31u;
+    case 4:
+        return ((b & 15u) << 1u) | (next >> 7u);
+    case 5:
+        return ((b & 7u) << 2u) | (next >> 6u);
+    case 6:
+        return ((b & 3u) << 3u) | (next >> 5u);
+    case 7:
+        return ((b & 1u) << 4u) | (next >> 4u);
+    }
+    throwInvalidArgumentException("Invalid index within byte");
+}
+    
+void base32_encode(const byte* input, size_t size, std::string& output)
+{
+    output.clear();
+    output.reserve((size * 8 + 4) / 5);
+
+    for (size_t bit_index = 0; bit_index < size * 8; bit_index += 5)
+    {
+        size_t byte_index = bit_index / 8, index_within_byte = bit_index % 8;
+        byte b = input[byte_index];
+        byte next = byte_index + 1 < size ? input[byte_index + 1] : 0;
+
+        size_t alphabet_index = get_alphabet_index(b, next, index_within_byte);
+        if (alphabet_index >= 32)
+            throw std::out_of_range("base32_encode encounters internal error");
+
+        output.push_back(UPPER_BASE32_ALPHABET[alphabet_index]);
+    }
+}
+
+static std::pair<unsigned, unsigned> get_base32_pair(unsigned group, size_t i)
+{
+    switch (i)
+    {
+    case 0:
+        return std::make_pair(group << 3u, 0);
+    case 1:
+        return std::make_pair(group << 2u, 0);
+    case 2:
+        return std::make_pair(group << 1u, 0);
+    case 3:
+        return std::make_pair(group, 0);
+    case 4:
+        return std::make_pair(group >> 1u, (group & 1u) << 7u);
+    case 5:
+        return std::make_pair(group >> 2u, (group & 3u) << 6u);
+    case 6:
+        return std::make_pair(group >> 3u, (group & 7u) << 5u);
+    case 7:
+        return std::make_pair(group >> 4u, (group & 15u) << 4u);
+    }
+    throwInvalidArgumentException("Invalid index within byte");
+}
+
+void base32_decode(const char* input, size_t size, std::string& output)
+{
+    output.assign(size * 5 / 8, '\0');
+    auto out = (byte*)(output.data());
+
+    for (size_t i = 0; i < size; ++i)
+    {
+        unsigned group;
+        const char* finded = std::strchr(UPPER_BASE32_ALPHABET, input[i]);
+        if (finded)
+            group = unsigned(finded - UPPER_BASE32_ALPHABET);
+        else
+        {
+            finded = std::strchr(LOWER_BASE32_ALPHABET, input[i]);
+            if (finded)
+            {
+                group = unsigned(finded - LOWER_BASE32_ALPHABET);
+            }
+            else
+            {
+                throwInvalidArgumentException("Cannot decode string with base32");
+            }
+        }
+
+        size_t bit_index = i * 5;
+        size_t byte_index = bit_index / 8, index_within_byte = bit_index % 8;
+        auto p = get_base32_pair(group, index_within_byte);
+        out[byte_index] |= p.first;
+        if (byte_index + 1 < output.size())
+            out[byte_index + 1] |= p.second;
+    }
+    
+}
 }

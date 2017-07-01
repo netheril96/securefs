@@ -139,4 +139,7 @@ inline std::string hexify(const ByteContainer& c)
 {
     return hexify(c.data(), c.size());
 }
+
+void base32_encode(const byte* input, size_t size, std::string& output);
+void base32_decode(const char* input, size_t size, std::string& output);
 }
