@@ -1,6 +1,6 @@
 #pragma once
 
-#include "aes_siv.h"
+#include "crypto.h"
 #include "lite_stream.h"
 #include "mystring.h"
 #include "myutils.h"

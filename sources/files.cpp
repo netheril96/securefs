@@ -1,4 +1,5 @@
 #include "files.h"
+#include "crypto.h"
 #include "myutils.h"
 
 #include <algorithm>

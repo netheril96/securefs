@@ -240,42 +240,6 @@ inline typename std::remove_reference<T>::type from_little_endian(const void* in
     return value;
 }
 
-std::string random_hex_string(size_t size);
-
-void hmac_sha256_calculate(const void* message,
-                           size_t msg_len,
-                           const void* key,
-                           size_t key_len,
-                           void* mac,
-                           size_t mac_len);
-
-bool hmac_sha256_verify(const void* message,
-                        size_t msg_len,
-                        const void* key,
-                        size_t key_len,
-                        const void* mac,
-                        size_t mac_len);
-
-// HMAC based key derivation function (https://tools.ietf.org/html/rfc5869)
-// This one is not implemented by Crypto++, so we implement it ourselves
-void hkdf(const void* key,
-          size_t key_len,
-          const void* salt,
-          size_t salt_len,
-          const void* info,
-          size_t info_len,
-          void* output,
-          size_t out_len);
-
-unsigned int pbkdf_hmac_sha256(const void* password,
-                               size_t pass_len,
-                               const void* salt,
-                               size_t salt_len,
-                               unsigned int min_iterations,
-                               double min_seconds,
-                               void* derived,
-                               size_t derive_len);
-
 struct id_hash
 {
     size_t operator()(const id_type& id) const noexcept
