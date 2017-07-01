@@ -151,10 +151,9 @@ bool AES_SIV::decrypt_and_verify(const void* ciphertext,
 }
 
 #if HAS_THREAD_LOCAL
+static thread_local CryptoPP::AutoSeededRandomPool rng;
 void generate_random(void* buffer, size_t size)
 {
-
-    thread_local CryptoPP::AutoSeededRandomPool rng;
     rng.GenerateBlock(static_cast<byte*>(buffer), size);
 }
 #else
