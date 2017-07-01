@@ -428,7 +428,7 @@ namespace lite
             auto iv_size = m_iv_size;
             auto mac_size = AESGCMCryptStream::get_mac_size();
             auto underbuf = securefs::make_unique_array<byte>(size + iv_size + mac_size);
-            m_csrng.GenerateBlock(underbuf.get(), iv_size);
+            generate_random(underbuf.get(), iv_size);
             m_xattr_enc.EncryptAndAuthenticate(underbuf.get() + iv_size,
                                                underbuf.get() + iv_size + size,
                                                mac_size,

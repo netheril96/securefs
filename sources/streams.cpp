@@ -1,4 +1,5 @@
 #include "streams.h"
+#include "crypto.h"
 
 #include <algorithm>
 #include <array>
@@ -334,7 +335,6 @@ namespace internal
     private:
         CryptoPP::GCM<CryptoPP::AES>::Encryption m_enc;
         CryptoPP::GCM<CryptoPP::AES>::Decryption m_dec;
-        CryptoPP::AutoSeededRandomPool m_csrng;
         HMACStream m_metastream;
         id_type m_id;
         unsigned m_iv_size, m_header_size;
@@ -395,7 +395,7 @@ namespace internal
 
             do
             {
-                m_csrng.GenerateBlock(iv, get_iv_size());
+                generate_random(iv, get_iv_size());
             } while (is_all_zeros(iv, get_iv_size()));    // Null IVs are markers for sparse blocks
             m_enc.EncryptAndAuthenticate(static_cast<byte*>(output),
                                          mac,
@@ -495,7 +495,7 @@ namespace internal
             byte* iv = buffer.get();
             byte* mac = iv + get_iv_size();
             byte* ciphertext = mac + get_mac_size();
-            m_csrng.GenerateBlock(iv, get_iv_size());
+            generate_random(iv, get_iv_size());
 
             m_enc.EncryptAndAuthenticate(ciphertext,
                                          mac,

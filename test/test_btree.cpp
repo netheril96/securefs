@@ -1,4 +1,5 @@
 #include "btree_dir.h"
+#include "crypto.h"
 #include "myutils.h"
 
 #include <catch.hpp>
@@ -26,7 +27,6 @@ static void test(securefs::BtreeDirectory& dir,
     REQUIRE(is_prob_valid);
 
     std::mt19937 engine{std::random_device{}()};
-    CryptoPP::AutoSeededRandomPool pool;
     std::uniform_real_distribution<> prob_dist(0, 1);
     std::uniform_int_distribution<int> name_dist(0, 65535);
     std::vector<std::string> filenames, filenames_prime;
@@ -73,7 +73,7 @@ static void test(securefs::BtreeDirectory& dir,
         else if (p < prob_get + prob_add)
         {
             auto name = securefs::strprintf("%12d", name_dist(engine));
-            pool.GenerateBlock(id.data(), id.size());
+            securefs::generate_random(id.data(), id.size());
             type = S_IFREG;
             bool added = dir.add_entry(name, id, type);
             bool added_prime = reference.add_entry(name, id, type);

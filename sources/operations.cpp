@@ -1,6 +1,7 @@
 #include "operations.h"
 #include "case_fold.h"
 #include "constants.h"
+#include "crypto.h"
 #include "platform.h"
 
 #include <algorithm>
@@ -128,7 +129,7 @@ namespace internal
         std::string last_component;
         auto dir = open_base_dir(fs, path, last_component);
         id_type id;
-        fs->csrng.GenerateBlock(id.data(), id.size());
+        generate_random(id.data(), id.size());
 
         FileGuard result(&fs->table, fs->table.create_as(id, type));
         result->initialize_empty(mode, uid, gid);

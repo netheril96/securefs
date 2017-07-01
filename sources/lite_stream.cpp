@@ -1,4 +1,5 @@
 #include "lite_stream.h"
+#include "crypto.h"
 
 #include <cryptopp/aes.h>
 #include <cryptopp/modes.h>
@@ -36,7 +37,7 @@ namespace lite
 
         if (rc == 0)
         {
-            m_rng.GenerateBlock(header.data(), header.size());
+            generate_random(header.data(), header.size());
             m_stream->write(header.data(), 0, header.size());
         }
         else if (rc != header.size())
@@ -131,7 +132,7 @@ namespace lite
 
         do
         {
-            m_rng.GenerateBlock(m_buffer.get(), get_iv_size());
+            generate_random(m_buffer.get(), get_iv_size());
         } while (is_all_zeros(m_buffer.get(), get_iv_size()));
 
         m_encryptor.EncryptAndAuthenticate(m_buffer.get() + get_iv_size(),

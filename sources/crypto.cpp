@@ -1,12 +1,18 @@
 #include "crypto.h"
 #include "exceptions.h"
+#include "securefs_config.h"
 
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
 #include <cryptopp/hmac.h>
 #include <cryptopp/osrng.h>
 #include <cryptopp/pwdbased.h>
+#include <cryptopp/rng.h>
 #include <cryptopp/sha.h>
+
+#if !HAS_THREAD_LOCAL
+#include <pthread.h>
+#endif
 
 // Some of the following codes are copied from https://github.com/arktronic/aes-siv.
 // The licence follows:
@@ -142,6 +148,16 @@ bool AES_SIV::decrypt_and_verify(const void* ciphertext,
 
     s2v(plaintext, text_len, additional_data, additional_len, temp_iv);
     return CryptoPP::VerifyBufsEqual(static_cast<const byte*>(siv), temp_iv, AES_SIV::IV_SIZE);
+}
+
+void generate_random(void* buffer, size_t size)
+{
+#if HAS_THREAD_LOCAL
+    thread_local CryptoPP::AutoSeededRandomPool rng;
+    rng.GenerateBlock(static_cast<byte*>(buffer), size);
+#else
+    throw_runtime_error("Not implemented");
+#endif
 }
 
 void hmac_sha256_calculate(

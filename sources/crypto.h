@@ -76,4 +76,6 @@ unsigned int pbkdf_hmac_sha256(const void* password,
                                double min_seconds,
                                void* derived,
                                size_t derive_len);
+
+void generate_random(void* buffer, size_t size);
 }

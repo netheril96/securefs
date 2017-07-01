@@ -43,7 +43,6 @@ private:
     std::shared_ptr<FileStream> m_data_stream, m_meta_stream;
     CryptoPP::GCM<CryptoPP::AES>::Encryption m_xattr_enc;
     CryptoPP::GCM<CryptoPP::AES>::Decryption m_xattr_dec;
-    CryptoPP::AutoSeededRandomPool m_csrng;
     bool m_dirty, m_check, m_store_time;
 
 private:
