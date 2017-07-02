@@ -263,7 +263,7 @@ Json::Value generate_config(unsigned int version,
     }
     else if (pbkdf_algorithm == PBKDF_ALGO_SCRYPT)
     {
-        uint32_t N = rounds > 0 ? rounds : 16384, r = 8, p = 1;
+        uint32_t N = rounds > 0 ? rounds : 65536, r = 8, p = 1;
         config["iterations"] = N;
         config["scrypt_r"] = r;
         config["scrypt_p"] = p;
@@ -514,7 +514,7 @@ private:
     TCLAP::ValueArg<unsigned> rounds{
         "r",
         "rounds",
-        "Specify how many rounds of PBKDF2 are applied (0 for automatic)",
+        "Specify how many rounds of key derivation are applied (0 for automatic)",
         false,
         0,
         "integer"};
@@ -635,7 +635,7 @@ private:
     TCLAP::ValueArg<unsigned> rounds{
         "r",
         "rounds",
-        "Specify how many rounds of PBKDF2 are applied (0 for automatic)",
+        "Specify how many rounds of key derivation are applied (0 for automatic)",
         false,
         0,
         "integer"};
