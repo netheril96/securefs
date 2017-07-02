@@ -362,10 +362,10 @@ bool parse_config(const Json::Value& config,
     parse_hex(ekey_hex, encrypted_key.data(), encrypted_key.size());
     master_key.resize(encrypted_key.size());
 
-    std::string pbkdf_algorithm = config.get("pbkdf", "").asString();
+    std::string pbkdf_algorithm = config.get("pbkdf", PBKDF_ALGO_PKCS5).asString();
     VERBOSE_LOG("Setting the password key derivation function to %s", pbkdf_algorithm.c_str());
 
-    if (pbkdf_algorithm.empty() || pbkdf_algorithm == PBKDF_ALGO_PKCS5)
+    if (pbkdf_algorithm == PBKDF_ALGO_PKCS5)
     {
         pbkdf_hmac_sha256(password,
                           pass_len,
@@ -630,7 +630,8 @@ private:
         false,
         0,
         "integer"};
-    TCLAP::ValueArg<std::string> pbkdf{"", "pbkdf", message_for_setting_pbkdf, false, "", "string"};
+    TCLAP::ValueArg<std::string> pbkdf{
+        "", "pbkdf", message_for_setting_pbkdf, false, PBKDF_ALGO_SCRYPT, "string"};
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
