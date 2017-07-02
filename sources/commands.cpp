@@ -583,6 +583,15 @@ public:
 
         auto config_stream
             = open_config_stream(get_real_config_path(), O_WRONLY | O_CREAT | O_EXCL);
+        DEFER(if (std::uncaught_exception()) {
+            try
+            {
+                OSService::get_default().remove_file(get_real_config_path());
+            }
+            catch (...)
+            {
+            }
+        });
         write_config(config_stream.get(),
                      pbkdf.getValue(),
                      config,
@@ -655,6 +664,15 @@ public:
         auto config = read_config(stream.get(), old_password.data(), old_password.size());
         stream = OSService::get_default().open_file_stream(
             tmp_path, O_WRONLY | O_CREAT | O_EXCL, 0644);
+        DEFER(if (std::uncaught_exception()) {
+            try
+            {
+                OSService::get_default().remove_file(tmp_path);
+            }
+            catch (...)
+            {
+            }
+        });
         write_config(stream.get(),
                      pbkdf.getValue(),
                      config,
