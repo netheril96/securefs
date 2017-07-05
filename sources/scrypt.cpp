@@ -61,7 +61,7 @@ static void blockmix_salsa8(uint32_t*, uint32_t*, uint32_t*, size_t);
 static uint64_t integerify(void*, size_t);
 static void smix(uint8_t*, size_t, uint64_t, uint32_t*, uint32_t*);
 
-static void blkcpy(void* dest, void* src, size_t len)
+static void blkcpy(void* dest, const void* src, size_t len)
 {
     auto D = static_cast<size_t*>(dest);
     auto S = static_cast<size_t*>(src);
@@ -72,7 +72,7 @@ static void blkcpy(void* dest, void* src, size_t len)
         D[i] = S[i];
 }
 
-static void blkxor(void* dest, void* src, size_t len)
+static void blkxor(void* dest, const void* src, size_t len)
 {
     auto D = static_cast<size_t*>(dest);
     auto S = static_cast<size_t*>(src);
@@ -149,7 +149,7 @@ static void salsa20_8(uint32_t B[16])
  * bytes in length; the output Bout must also be the same size.  The
  * temporary space X must be 64 bytes.
  */
-static void blockmix_salsa8(uint32_t* Bin, uint32_t* Bout, uint32_t* X, size_t r)
+static void blockmix_salsa8(const uint32_t* Bin, uint32_t* Bout, uint32_t* X, size_t r)
 {
     size_t i;
 
@@ -181,7 +181,7 @@ static void blockmix_salsa8(uint32_t* Bin, uint32_t* Bout, uint32_t* X, size_t r
  * integerify(B, r):
  * Return the result of parsing B_{2r-1} as a little-endian integer.
  */
-static uint64_t integerify(void* B, size_t r)
+static uint64_t integerify(const void* B, size_t r)
 {
     auto X = reinterpret_cast<uint32_t*>((uintptr_t)(B) + (2 * r - 1) * 64);
 
@@ -214,7 +214,7 @@ static inline void le32enc(void* pp, uint32_t x)
  * power of 2 greater than 1.  The arrays B, V, and XY must be aligned to a
  * multiple of 64 bytes.
  */
-static void smix(uint8_t* B, size_t r, uint64_t N, uint32_t* V, uint32_t* XY)
+static void smix(const uint8_t* B, size_t r, uint64_t N, uint32_t* V, uint32_t* XY)
 {
     uint32_t* X = XY;
     uint32_t* Y = &XY[32 * r];

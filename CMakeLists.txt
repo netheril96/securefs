@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
+cmake_minimum_required(VERSION 2.8.12 FATAL_ERROR)
 
 option(PORTABLE_BUILD "Build for the general architecture instead of this cpu" OFF)
 
