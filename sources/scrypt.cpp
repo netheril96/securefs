@@ -53,18 +53,10 @@ static void posix_memalign_free(void* p) { free(p); }
 
 namespace securefs
 {
-
-static void blkcpy(void*, void*, size_t);
-static void blkxor(void*, void*, size_t);
-static void salsa20_8(uint32_t[16]);
-static void blockmix_salsa8(uint32_t*, uint32_t*, uint32_t*, size_t);
-static uint64_t integerify(void*, size_t);
-static void smix(uint8_t*, size_t, uint64_t, uint32_t*, uint32_t*);
-
 static void blkcpy(void* dest, const void* src, size_t len)
 {
     auto D = static_cast<size_t*>(dest);
-    auto S = static_cast<size_t*>(src);
+    auto S = static_cast<const size_t*>(src);
     size_t L = len / sizeof(size_t);
     size_t i;
 
@@ -75,7 +67,7 @@ static void blkcpy(void* dest, const void* src, size_t len)
 static void blkxor(void* dest, const void* src, size_t len)
 {
     auto D = static_cast<size_t*>(dest);
-    auto S = static_cast<size_t*>(src);
+    auto S = static_cast<const size_t*>(src);
     size_t L = len / sizeof(size_t);
     size_t i;
 
@@ -214,7 +206,7 @@ static inline void le32enc(void* pp, uint32_t x)
  * power of 2 greater than 1.  The arrays B, V, and XY must be aligned to a
  * multiple of 64 bytes.
  */
-static void smix(const uint8_t* B, size_t r, uint64_t N, uint32_t* V, uint32_t* XY)
+static void smix(uint8_t* B, size_t r, uint64_t N, uint32_t* V, uint32_t* XY)
 {
     uint32_t* X = XY;
     uint32_t* Y = &XY[32 * r];
