@@ -1,7 +1,6 @@
+#include "crypto.h"
 #include "myutils.h"
 #include "platform.h"
-
-#include <cryptopp/osrng.h>
 
 namespace securefs
 {
@@ -14,7 +13,7 @@ const OSService& OSService::get_default()
 std::string OSService::temp_name(StringRef prefix, StringRef suffix)
 {
     byte random[16];
-    CryptoPP::OS_GenerateRandomBlock(false, random, array_length(random));
+    generate_random(random, array_length(random));
     std::string result;
     result.reserve(prefix.size() + 32 + suffix.size());
     result.append(prefix.data(), prefix.size());

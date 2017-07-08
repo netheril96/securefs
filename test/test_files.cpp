@@ -1,4 +1,5 @@
 #include "catch.hpp"
+#include "crypto.h"
 #include "exceptions.h"
 #include "file_table.h"
 #include "files.h"
@@ -17,7 +18,7 @@ TEST_CASE("File table")
 
     key_type master_key(0x48);
     id_type null_id, file_id;
-    CryptoPP::OS_GenerateRandomBlock(false, file_id.data(), file_id.size());
+    generate_random(file_id.data(), file_id.size());
     const char* xattr_name = "com.apple.FinderInfo...";
     const securefs::PODArray<char, 32> xattr_value(0x11);
 

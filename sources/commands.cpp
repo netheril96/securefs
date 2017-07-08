@@ -287,7 +287,7 @@ Json::Value generate_config(unsigned int version,
 
     byte iv[CONFIG_IV_LENGTH];
     byte mac[CONFIG_MAC_LENGTH];
-    CryptoPP::OS_GenerateRandomBlock(false, iv, array_length(iv));
+    generate_random(iv, array_length(iv));
 
     CryptoPP::GCM<CryptoPP::AES>::Encryption encryptor;
     encryptor.SetKeyWithIV(key_to_encrypt.data(), key_to_encrypt.size(), iv, array_length(iv));
@@ -458,7 +458,7 @@ void CommandBase::write_config(StreamBase* stream,
                                unsigned rounds)
 {
     key_type salt;
-    CryptoPP::OS_GenerateRandomBlock(false, salt.data(), salt.size());
+    generate_random(salt.data(), salt.size());
     auto str = generate_config(config.version,
                                pbdkf_algorithm,
                                config.master_key,
@@ -584,13 +584,7 @@ public:
         auto config_stream
             = open_config_stream(get_real_config_path(), O_WRONLY | O_CREAT | O_EXCL);
         DEFER(if (std::uncaught_exception()) {
-            try
-            {
-                OSService::get_default().remove_file(get_real_config_path());
-            }
-            catch (...)
-            {
-            }
+            OSService::get_default().remove_file(get_real_config_path());
         });
         write_config(config_stream.get(),
                      pbkdf.getValue(),
@@ -658,21 +652,13 @@ public:
     {
         auto original_path = get_real_config_path();
         byte buffer[16];
-        CryptoPP::OS_GenerateRandomBlock(false, buffer, array_length(buffer));
+        generate_random(buffer, array_length(buffer));
         auto tmp_path = original_path + hexify(buffer, array_length(buffer));
         auto stream = OSService::get_default().open_file_stream(original_path, O_RDONLY, 0644);
         auto config = read_config(stream.get(), old_password.data(), old_password.size());
         stream = OSService::get_default().open_file_stream(
             tmp_path, O_WRONLY | O_CREAT | O_EXCL, 0644);
-        DEFER(if (std::uncaught_exception()) {
-            try
-            {
-                OSService::get_default().remove_file(tmp_path);
-            }
-            catch (...)
-            {
-            }
-        });
+        DEFER(if (std::uncaught_exception()) { OSService::get_default().remove_file(tmp_path); });
         write_config(stream.get(),
                      pbkdf.getValue(),
                      config,
@@ -747,8 +733,7 @@ public:
         {
             password.resize(pass.getValue().size());
             memcpy(password.data(), pass.getValue().data(), password.size());
-            CryptoPP::OS_GenerateRandomBlock(
-                false, reinterpret_cast<byte*>(&pass.getValue()[0]), pass.getValue().size());
+            generate_random(reinterpret_cast<byte*>(&pass.getValue()[0]), pass.getValue().size());
         }
         else
         {
@@ -1008,8 +993,7 @@ public:
                     config.version);
             return 3;
         }
-        CryptoPP::OS_GenerateRandomBlock(
-            false, password.data(), password.size());    // Erase user input
+        generate_random(password.data(), password.size());    // Erase user input
 
         operations::MountOptions fsopt;
         fsopt.root = std::make_shared<OSService>(data_dir.getValue());

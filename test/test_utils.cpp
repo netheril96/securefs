@@ -1,10 +1,10 @@
 #include "case_fold.h"
 #include "catch.hpp"
+#include "crypto.h"
 #include "myutils.h"
 #include "platform.h"
 
 #include <cryptopp/base32.h>
-#include <cryptopp/osrng.h>
 
 TEST_CASE("Test endian")
 {
@@ -36,7 +36,7 @@ TEST_CASE("Test string")
 TEST_CASE("Test conversion of hex")
 {
     securefs::id_type id;
-    CryptoPP::OS_GenerateRandomBlock(false, id.data(), id.size());
+    securefs::generate_random(id.data(), id.size());
     auto hex = securefs::hexify(id);
     securefs::id_type id_copy;
     securefs::parse_hex(hex, id_copy.data(), id_copy.size());
@@ -70,7 +70,7 @@ TEST_CASE("our base32")
         if (i > 0)
         {
             input.resize(i, 0);
-            CryptoPP::OS_GenerateRandomBlock(false, (byte*)input.data(), i);
+            securefs::generate_random((byte*)input.data(), i);
         }
         securefs::base32_encode((const byte*)input.data(), i, output);
         CAPTURE(output);
@@ -89,7 +89,7 @@ TEST_CASE("our base32 against CryptoPP")
         if (i > 0)
         {
             input.resize(i, 0);
-            CryptoPP::OS_GenerateRandomBlock(false, (byte*)input.data(), i);
+            securefs::generate_random((byte*)input.data(), i);
         }
         securefs::base32_encode((const byte*)input.data(), i, output);
 
