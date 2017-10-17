@@ -198,9 +198,16 @@ namespace lite
         {
         case S_IFLNK:
         {
+            // 'buf->st_size' is the expected link size, but on NTFS-formatted drives the extracted
+            // link size is smaller
             std::string buffer(buf->st_size, '\0');
-            if (m_root->readlink(enc_path, &buffer[0], buffer.size()) != buf->st_size)
+            ssize_t link_size = m_root->readlink(enc_path, &buffer[0], buffer.size());
+            if (link_size <= static_cast<ssize_t>((AES_SIV::IV_SIZE * 8 + 4) / 5))
                 throwVFSException(EIO);
+
+            // Resize to actual size
+            buffer.resize(static_cast<size_t>(link_size));
+
             auto resolved = decrypt_path(m_name_encryptor, buffer);
             buf->st_size = resolved.size();
             break;
