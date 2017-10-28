@@ -290,12 +290,17 @@ namespace lite
     private:
         std::unique_ptr<DirectoryTraverser> m_underlying_traverser;
         AES_SIV m_name_encryptor;
+        unsigned m_block_size, m_iv_size;
 
     public:
         explicit LiteDirectoryTraverser(std::unique_ptr<DirectoryTraverser> underlying_traverser,
-                                        const AES_SIV& name_encryptor)
+                                        const AES_SIV& name_encryptor,
+                                        unsigned block_size,
+                                        unsigned iv_size)
             : m_underlying_traverser(std::move(underlying_traverser))
             , m_name_encryptor(name_encryptor)
+            , m_block_size(block_size)
+            , m_iv_size(iv_size)
         {
         }
         ~LiteDirectoryTraverser() {}
@@ -347,6 +352,9 @@ namespace lite
                                  name->c_str());
                         continue;
                     }
+                    if (stbuf)
+                        stbuf->st_size = AESGCMCryptStream::calculate_real_size(
+                            stbuf->st_size, m_block_size, m_iv_size);
                 }
                 catch (const std::exception& e)
                 {
@@ -365,7 +373,10 @@ namespace lite
         if (path.empty())
             throwVFSException(EINVAL);
         return securefs::make_unique<LiteDirectoryTraverser>(
-            m_root->create_traverser(translate_path(path, false)), this->m_name_encryptor);
+            m_root->create_traverser(translate_path(path, false)),
+            this->m_name_encryptor,
+            m_block_size,
+            m_iv_size);
     }
 
 #ifdef __APPLE__
