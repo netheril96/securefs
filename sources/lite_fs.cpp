@@ -198,11 +198,11 @@ namespace lite
         {
         case S_IFLNK:
         {
-            // 'buf->st_size' is the expected link size, but on NTFS-formatted drives the extracted
-            // link size is smaller
+            // 'buf->st_size' is the expected link size, but on NTFS-formatted drives the link
+            // starts with 'IntxLNK\1' followed by the target.
             std::string buffer(buf->st_size, '\0');
             ssize_t link_size = m_root->readlink(enc_path, &buffer[0], buffer.size());
-            if (link_size <= static_cast<ssize_t>((AES_SIV::IV_SIZE * 8 + 4) / 5))
+            if (link_size != buf->st_size && link_size != (buf->st_size - 8) / 2)
                 throwVFSException(EIO);
 
             // Resize to actual size
