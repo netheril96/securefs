@@ -198,8 +198,11 @@ namespace lite
         {
         case S_IFLNK:
         {
-            // 'buf->st_size' is the expected link size, but on NTFS-formatted drives the link
-            // starts with 'IntxLNK\1' followed by the target.
+            // This is a workaround for Interix symbolic links on NTFS volumes
+            // (https://github.com/netheril96/securefs/issues/43).
+
+            // 'buf->st_size' is the expected link size, but on NTFS volumes the link starts with
+            // 'IntxLNK\1' followed by the UTF-16 encoded target.
             std::string buffer(buf->st_size, '\0');
             ssize_t link_size = m_root->readlink(enc_path, &buffer[0], buffer.size());
             if (link_size != buf->st_size && link_size != (buf->st_size - 8) / 2)
