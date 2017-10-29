@@ -198,9 +198,19 @@ namespace lite
         {
         case S_IFLNK:
         {
+            // This is a workaround for Interix symbolic links on NTFS volumes
+            // (https://github.com/netheril96/securefs/issues/43).
+
+            // 'buf->st_size' is the expected link size, but on NTFS volumes the link starts with
+            // 'IntxLNK\1' followed by the UTF-16 encoded target.
             std::string buffer(buf->st_size, '\0');
-            if (m_root->readlink(enc_path, &buffer[0], buffer.size()) != buf->st_size)
+            ssize_t link_size = m_root->readlink(enc_path, &buffer[0], buffer.size());
+            if (link_size != buf->st_size && link_size != (buf->st_size - 8) / 2)
                 throwVFSException(EIO);
+
+            // Resize to actual size
+            buffer.resize(static_cast<size_t>(link_size));
+
             auto resolved = decrypt_path(m_name_encryptor, buffer);
             buf->st_size = resolved.size();
             break;
