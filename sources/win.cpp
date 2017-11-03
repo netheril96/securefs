@@ -844,8 +844,8 @@ bool OSService::stat(StringRef path, struct fuse_stat* stat) const
 }
 
 void OSService::link(StringRef source, StringRef dest) const { throwVFSException(ENOSYS); }
-void OSService::chmod(StringRef path, fuse_mode_t mode) const { throwVFSException(ENOSYS); }
-void OSService::chown(StringRef, fuse_uid_t, fuse_gid_t) const { throwVFSException(ENOSYS); }
+void OSService::chmod(StringRef path, fuse_mode_t mode) const { (void)0; }
+void OSService::chown(StringRef, fuse_uid_t, fuse_gid_t) const { (void)0; }
 
 ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
 {
