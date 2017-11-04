@@ -279,7 +279,7 @@ OSService::open_file_stream(StringRef path, int flags, unsigned mode) const
 
 void OSService::remove_file(StringRef path) const
 {
-    int rc = ::unlinkat(m_dir_fd, path.c_str(), 0) == 0;
+    int rc = ::unlinkat(m_dir_fd, path.c_str(), 0);
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno, "unlinking " + norm_path(path));
 }
