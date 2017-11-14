@@ -262,8 +262,9 @@ bool BtreeDirectory::validate_node(const BtreeNode* n, int depth)
         return false;
     if (!std::is_sorted(n->entries().begin(), n->entries().end()))
         return false;
-    if (n->parent_page_number() != INVALID_PAGE && (n->entries().size() < BTREE_MAX_NUM_ENTRIES / 2
-                                                    || n->entries().size() > BTREE_MAX_NUM_ENTRIES))
+    if (n->parent_page_number() != INVALID_PAGE
+        && (n->entries().size() < BTREE_MAX_NUM_ENTRIES / 2
+            || n->entries().size() > BTREE_MAX_NUM_ENTRIES))
         return false;
     if (!n->is_leaf())
     {

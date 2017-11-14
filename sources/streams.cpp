@@ -305,8 +305,6 @@ void BlockBasedStream::unchecked_resize(length_type current_size, length_type ne
         else
         {
             zero_fill(current_size, old_block_num * m_block_size + m_block_size);
-            // No need to encrypt zeros in the middle
-            zero_fill(new_block_num * m_block_size, new_size);
         }
     }
     adjust_logical_size(new_size);
@@ -445,17 +443,17 @@ namespace internal
                 throw MessageVerificationException(id(), block_number * m_block_size);
         }
 
+        void adjust_logical_size(length_type length) override
+        {
+            CryptStream::adjust_logical_size(length);
+            auto block_num = (length + this->m_block_size - 1) / this->m_block_size;
+            m_metastream.resize(meta_position_for_iv(block_num));
+        }
+
     public:
         bool is_sparse() const noexcept override
         {
             return m_stream->is_sparse() && m_metastream.is_sparse();
-        }
-
-        void resize(length_type new_size) override
-        {
-            CryptStream::resize(new_size);
-            auto num_blocks = (new_size + m_block_size - 1) / m_block_size;
-            m_metastream.resize(meta_position_for_iv(num_blocks));
         }
 
         void flush() override

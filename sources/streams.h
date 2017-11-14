@@ -139,10 +139,11 @@ protected:
     decrypt(offset_type block_number, const void* input, void* output, length_type length)
         = 0;
 
+    void adjust_logical_size(length_type length) override { m_stream->resize(length); }
+
 private:
     length_type read_block(offset_type block_number, void* output) override;
     void write_block(offset_type block_number, const void* input, length_type length) override;
-    void adjust_logical_size(length_type length) override { m_stream->resize(length); }
 
 public:
     explicit CryptStream(std::shared_ptr<StreamBase> stream, length_type block_size)
