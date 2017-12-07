@@ -636,8 +636,9 @@ public:
             auto old_size = this->size();
             if (old_size < len)
             {
-                std::vector<byte> zeros(len - old_size);
-                write(zeros.data(), old_size, len - old_size);
+                const char buffer[4096] = {0};
+                for (size_t sz = old_size; sz < len; sz += sizeof(buffer))
+                    write32(buffer, sz, std::min<size_t>(sizeof(buffer), len - sz));
                 return;
             }
         }
