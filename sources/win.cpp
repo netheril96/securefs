@@ -1027,7 +1027,12 @@ std::string OSService::stringify_system_error(int errcode)
 void windows_init(void)
 {
     ::SetConsoleOutputCP(CP_UTF8);
-    ::FspLoad(nullptr);
+	if (::FspLoad(nullptr) != STATUS_SUCCESS) {
+		MessageBoxW(0, L"SecureFS cannot load WinFsp. "
+			"Please make sure you have WinFsp properly installed", 
+		L"Error", MB_OK | MB_ICONERROR);
+		abort();
+	}
 
     HMODULE hd = GetModuleHandleW(L"kernel32.dll");
     best_get_time_func = reinterpret_cast<decltype(best_get_time_func)>(
