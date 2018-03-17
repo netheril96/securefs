@@ -1117,7 +1117,7 @@ public:
         struct fuse_stat st;
         if (!OSService::get_default().stat(path.getValue(), &st))
         {
-            ERROR_LOG("The path %s does not exist.", path);
+            ERROR_LOG("The path %s does not exist.", path.getValue().c_str());
         }
 
         std::string real_config_path = path.getValue();
