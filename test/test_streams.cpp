@@ -156,8 +156,8 @@ namespace dummy
     };
 
     const size_t DummyBlockStream::BLOCK_SIZE = 1000;
-}
-}
+}    // namespace dummy
+}    // namespace securefs
 
 // Used for debugging
 void dump_contents(const std::vector<byte>& bytes, const char* filename, size_t max_size)

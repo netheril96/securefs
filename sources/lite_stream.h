@@ -68,5 +68,5 @@ namespace lite
                                                length_type block_size,
                                                length_type iv_size) noexcept;
     };
-}
-}
+}    // namespace lite
+}    // namespace securefs

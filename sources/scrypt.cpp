@@ -368,4 +368,4 @@ void libscrypt_scrypt(const uint8_t* passwd,
     /* 5: DK <-- PBKDF2(P, B, 1, dkLen) */
     libscrypt_PBKDF2_SHA256(passwd, passwdlen, B, p * 128 * r, 1, buf, buflen);
 }
-}
+}    // namespace securefs

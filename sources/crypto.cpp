@@ -276,4 +276,4 @@ void hkdf(const void* key,
         hkdf_expand(key, key_len, info, info_len, output, out_len);
     }
 }
-}
+}    // namespace securefs

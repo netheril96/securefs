@@ -109,4 +109,4 @@ Logger* Logger::create_file_logger(const std::string& path)
 }
 
 Logger* global_logger = Logger::create_stderr_logger();
-}
+}    // namespace securefs

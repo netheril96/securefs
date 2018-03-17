@@ -408,7 +408,7 @@ bool parse_config(const Json::Value& config,
                                       encrypted_key.data(),
                                       encrypted_key.size());
 }
-}
+}    // namespace
 
 namespace securefs
 {
@@ -1239,4 +1239,4 @@ int commands_main(int argc, const char* const* argv)
         return 2;
     }
 }
-}
+}    // namespace securefs

@@ -199,4 +199,4 @@ inline std::unique_ptr<FileBase> btree_make_file_from_type(int type, Args&&... a
     }
     throwInvalidArgumentException("Unrecognized file type");
 }
-}
+}    // namespace securefs

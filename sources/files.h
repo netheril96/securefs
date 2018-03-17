@@ -454,4 +454,4 @@ public:
 
     ~SimpleDirectory();
 };
-}
+}    // namespace securefs

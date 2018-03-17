@@ -43,4 +43,4 @@ public:
     virtual void parse_cmdline(int argc, const char* const* argv) = 0;
     virtual int execute() = 0;
 };
-}
+}    // namespace securefs

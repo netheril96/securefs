@@ -133,4 +133,4 @@ inline AutoClosedFileBase create_as(FileTable& table, const id_type& id, int typ
 {
     return AutoClosedFileBase(&table, table.create_as(id, type));
 }
-}
+}    // namespace securefs

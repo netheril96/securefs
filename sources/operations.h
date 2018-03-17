@@ -177,5 +177,5 @@ namespace operations
                  uint32_t position);
     int removexattr(const char* path, const char* name);
 #endif
-}
-}
+}    // namespace operations
+}    // namespace securefs

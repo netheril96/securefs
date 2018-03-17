@@ -149,5 +149,5 @@ namespace lite
         }
 #endif
     };
-}
-}
+}    // namespace lite
+}    // namespace securefs

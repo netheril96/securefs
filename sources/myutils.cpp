@@ -137,4 +137,4 @@ void warn_if_key_not_random(const byte* key, size_t size, const char* file, int 
                  line);
     }
 }
-}
+}    // namespace securefs

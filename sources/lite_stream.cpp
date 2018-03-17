@@ -175,5 +175,5 @@ namespace lite
         return num_blocks * block_size
             + (residue > (iv_size + get_mac_size()) ? residue - iv_size - get_mac_size() : 0);
     }
-}
-}
+}    // namespace lite
+}    // namespace securefs

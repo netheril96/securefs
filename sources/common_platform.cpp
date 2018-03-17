@@ -91,4 +91,4 @@ void FileStream::setxattr(const char*, void*, size_t, int) { throw VFSException(
 ssize_t FileStream::listxattr(char*, size_t) { throw VFSException(ENOTSUP); }
 
 void FileStream::removexattr(const char*) { throw VFSException(ENOTSUP); }
-}
+}    // namespace securefs

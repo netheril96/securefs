@@ -294,4 +294,4 @@ void FileTable::gc()
     if (m_closed_ids.size() >= MAX_NUM_CLOSED)
         eject();
 }
-}
+}    // namespace securefs

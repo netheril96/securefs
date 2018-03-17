@@ -457,4 +457,4 @@ SimpleDirectory::~SimpleDirectory()
         // Ignore exceptions in destructor
     }
 }
-}
+}    // namespace securefs

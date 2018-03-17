@@ -75,5 +75,5 @@ namespace lite
                  uint32_t position);
     int removexattr(const char* path, const char* name);
 #endif
-}
-}
+}    // namespace lite
+}    // namespace securefs

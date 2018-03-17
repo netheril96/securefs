@@ -43,8 +43,8 @@ namespace operations
     }
 
     FileSystemContext::~FileSystemContext() {}
-}
-}
+}    // namespace operations
+}    // namespace securefs
 
 using securefs::operations::FileSystemContext;
 
@@ -195,7 +195,7 @@ namespace internal
     }
 
     inline bool is_readonly(struct fuse_context* ctx) { return get_fs(ctx)->table.is_readonly(); }
-}
+}    // namespace internal
 
 namespace operations
 {
@@ -797,5 +797,5 @@ namespace operations
         opt->removexattr = &securefs::operations::removexattr;
 #endif
     }
-}
-}
+}    // namespace operations
+}    // namespace securefs

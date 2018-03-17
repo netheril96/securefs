@@ -567,5 +567,5 @@ namespace lite
         opt->removexattr = &::securefs::lite::removexattr;
 #endif
     }
-}
-}
+}    // namespace lite
+}    // namespace securefs

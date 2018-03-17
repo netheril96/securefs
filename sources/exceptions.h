@@ -244,4 +244,4 @@ public:
 [[noreturn]] void throw_runtime_error(const std::string&);
 
 std::unique_ptr<const char, void (*)(const char*)> get_type_name(const std::exception& e) noexcept;
-}
+}    // namespace securefs

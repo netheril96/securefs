@@ -142,4 +142,4 @@ inline std::string hexify(const ByteContainer& c)
 
 void base32_encode(const byte* input, size_t size, std::string& output);
 void base32_decode(const char* input, size_t size, std::string& output);
-}
+}    // namespace securefs

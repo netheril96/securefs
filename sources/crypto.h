@@ -89,4 +89,4 @@ void libscrypt_scrypt(const uint8_t* passwd,
                       uint32_t p,
                       uint8_t* buf,
                       size_t buflen);
-}
+}    // namespace securefs

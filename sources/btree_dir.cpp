@@ -735,4 +735,4 @@ bool BtreeDirectory::empty()
     auto root = get_root_node();
     return root == nullptr || root->entries().empty();
 }
-}
+}    // namespace securefs

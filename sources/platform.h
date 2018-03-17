@@ -260,4 +260,4 @@ public:
     // Returns null if fp is not connected to console/tty
     static std::unique_ptr<ConsoleColourSetter> create_setter(FILE* fp);
 };
-}
+}    // namespace securefs

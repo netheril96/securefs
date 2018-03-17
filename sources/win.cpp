@@ -406,8 +406,7 @@ public:
     }
 };
 
-[[noreturn]] void throw_windows_exception(const wchar_t* funcname)
-{
+[[noreturn]] void throw_windows_exception(const wchar_t* funcname) {
     DWORD err = GetLastError();
     throw WindowsException(err, funcname);
 }
@@ -1027,12 +1026,12 @@ std::string OSService::stringify_system_error(int errcode)
 void windows_init(void)
 {
     ::SetConsoleOutputCP(CP_UTF8);
-	if (::FspLoad(nullptr) != STATUS_SUCCESS) {
-		MessageBoxW(0, L"SecureFS cannot load WinFsp. "
-			"Please make sure you have WinFsp properly installed.", 
-		L"Error", MB_OK | MB_ICONERROR);
-		abort();
-	}
+    if (::FspLoad(nullptr) != STATUS_SUCCESS)
+    {
+        fputs("SecureFS cannot load WinFsp. Please make sure you have WinFsp properly installed.\n",
+              stderr);
+        abort();
+    }
 
     HMODULE hd = GetModuleHandleW(L"kernel32.dll");
     best_get_time_func = reinterpret_cast<decltype(best_get_time_func)>(
@@ -1143,6 +1142,6 @@ std::unique_ptr<const char, void (*)(const char*)> get_type_name(const std::exce
 {
     return {typeid(e).name(), [](const char*) { /* no op */ }};
 }
-}
+}    // namespace securefs
 
 #endif

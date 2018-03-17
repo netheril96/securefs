@@ -311,4 +311,4 @@ void base32_decode(const char* input, size_t size, std::string& output)
             out[byte_index + 1] |= p.second;
     }
 }
-}
+}    // namespace securefs

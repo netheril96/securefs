@@ -95,7 +95,7 @@ scope_guard<Func> make_guard(Func&& f)
 {
     return scope_guard<Func>(std::forward<Func>(f));
 }
-}
+}    // namespace stdex
 
 #endif
 
@@ -266,4 +266,4 @@ void warn_if_key_not_random(const Container& c, const char* file, int line) noex
 {
     warn_if_key_not_random(c.data(), c.size(), file, line);
 }
-}
+}    // namespace securefs

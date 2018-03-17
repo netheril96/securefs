@@ -148,7 +148,7 @@ namespace internal
 
         bool is_sparse() const noexcept override { return m_stream->is_sparse(); }
     };
-}
+}    // namespace internal
 
 std::shared_ptr<StreamBase> make_stream_hmac(const key_type& key_,
                                              const id_type& id_,
@@ -539,7 +539,7 @@ namespace internal
 
         void flush_header() override { m_metastream.flush(); }
     };
-}
+}    // namespace internal
 
 std::pair<std::shared_ptr<CryptStream>, std::shared_ptr<HeaderBase>>
 make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
@@ -563,4 +563,4 @@ make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
                                                                 header_size);
     return {stream, stream};
 }
-}
+}    // namespace securefs

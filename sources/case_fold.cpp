@@ -299,4 +299,4 @@ std::string case_fold(StringRef str)
     }
     return result;
 }
-}
+}    // namespace securefs
