@@ -1114,30 +1114,17 @@ public:
     int execute() override
     {
         std::shared_ptr<FileStream> fs;
-        std::string real_config_path = path.getValue() + "/.securefs.json";
-        try
+        struct fuse_stat st;
+        if (!OSService::get_default().stat(path.getValue(), &st))
         {
-            fs = OSService::get_default().open_file_stream(real_config_path, O_RDONLY, 0);
+            ERROR_LOG("The path %s does not exist.", path);
         }
-        catch (const ExceptionBase& e)
-        {
-            if (e.error_number() == ENOENT)
-            {
-                ERROR_LOG("The path %s does not exist. Perhaps you are pointing to the wrong "
-                          "data directory?",
-                          real_config_path.c_str());
-                return 33;
-            }
-            else if (e.error_number() == ENOTDIR)
-            {
-                real_config_path = path.getValue();
-                fs = OSService::get_default().open_file_stream(real_config_path, O_RDONLY, 0);
-            }
-            else
-            {
-                throw;
-            }
-        }
+
+        std::string real_config_path = path.getValue();
+        if ((st.st_mode & S_IFMT) == S_IFDIR)
+            real_config_path.append("/.securefs.json");
+        fs = OSService::get_default().open_file_stream(real_config_path, O_RDONLY, 0);
+
         Json::Value config_json;
 
         {
