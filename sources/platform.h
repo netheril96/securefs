@@ -112,6 +112,8 @@ public:
     virtual void removexattr(const char*);
     virtual void lock(bool exclusive) = 0;
     virtual void unlock() noexcept = 0;
+	virtual length_type sequential_read(void*, length_type) = 0;
+	virtual void sequential_write(const void*, length_type) = 0;
 };
 
 class DirectoryTraverser
