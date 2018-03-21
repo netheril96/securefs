@@ -93,11 +93,11 @@ public:
             THROW_POSIX_EXCEPTION(errno, "pread");
         return static_cast<length_type>(rc);
     }
-    
+
     length_type sequential_read(void* output, length_type length) override
     {
-        auto rc=::read(m_fd, output, length);
-        if (rc<0)
+        auto rc = ::read(m_fd, output, length);
+        if (rc < 0)
             THROW_POSIX_EXCEPTION(errno, "read");
         return static_cast<length_type>(rc);
     }
@@ -110,10 +110,10 @@ public:
         if (static_cast<length_type>(rc) != length)
             throwVFSException(EIO);
     }
-    
+
     void sequential_write(const void* input, length_type length) override
     {
-        auto rc=::write(m_fd, input, length);
+        auto rc = ::write(m_fd, input, length);
         if (rc < 0)
             THROW_POSIX_EXCEPTION(errno, "write");
         if (static_cast<length_type>(rc) != length)
