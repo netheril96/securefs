@@ -1507,7 +1507,7 @@ private:
   enum TokenType {
     tokenEndOfStream = 0,
     tokenObjectBegin,
-    tokenObjectEnd,
+    tokenObjectEnd, 
     tokenArrayBegin,
     tokenArrayEnd,
     tokenString,
