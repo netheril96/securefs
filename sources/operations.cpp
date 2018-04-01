@@ -297,8 +297,8 @@ namespace operations
                 return -ENOTDIR;
             struct fuse_stat st;
             memset(&st, 0, sizeof(st));
-            auto actions = [&st, filler, fs, buffer](
-                               const std::string& name, const id_type&, int type) -> bool {
+            auto actions
+                = [&st, filler, buffer](const std::string& name, const id_type&, int type) -> bool {
                 st.st_mode = FileBase::mode_for_type(type);
                 bool success = filler(buffer, name.c_str(), &st, 0) == 0;
                 if (!success)

@@ -1068,14 +1068,16 @@ public:
         fputs("\nBuilt without hardware acceleration\n", stdout);
 #else
 #if CRYPTOPP_BOOL_X86 || CRYPTOPP_BOOL_X32 || CRYPTOPP_BOOL_X64
-        fprintf(
-            stdout,
-            "\nHardware features available:\nSSE2: %s\nSSE3: %s\nSSE4: %s\nAES-NI: %s\nCLMUL: %s\n",
-            HasSSE2() ? "true" : "false",
-            HasSSSE3() ? "true" : "false",
-            HasSSE4() ? "true" : "false",
-            HasAESNI() ? "true" : "false",
-            HasCLMUL() ? "true" : "false");
+        fprintf(stdout,
+                "\nHardware features available:\nSSE2: %s\nSSE3: %s\nSSE4.1: %s\nSSE4.2: "
+                "%s\nAES-NI: %s\nCLMUL: %s\nSHA: %s\n",
+                HasSSE2() ? "true" : "false",
+                HasSSSE3() ? "true" : "false",
+                HasSSE41() ? "true" : "false",
+                HasSSE42() ? "true" : "false",
+                HasAESNI() ? "true" : "false",
+                HasCLMUL() ? "true" : "false",
+                HasSHA() ? "true" : "false");
 #endif
 #endif
         return 0;
