@@ -41,11 +41,11 @@ const int SOCKET_ERROR = -1;
 typedef TYPE_OF_SOCKLEN_T socklen_t;	// see config.h
 #endif
 
-//! wrapper for Windows or Berkeley Sockets
+/// wrapper for Windows or Berkeley Sockets
 class Socket
 {
 public:
-	//! exception thrown by Socket class
+	/// exception thrown by Socket class
 	class Err : public OS_Error
 	{
 	public:
@@ -70,14 +70,14 @@ public:
 	void CloseSocket();
 
 	void Create(int nType = SOCK_STREAM);
-	void Bind(unsigned int port, const char *addr=NULL);
+	void Bind(unsigned int port, const char *addr=NULLPTR);
 	void Bind(const sockaddr* psa, socklen_t saLen);
-	void Listen(int backlog=5);
+	void Listen(int backlog = SOMAXCONN);
 	// the next three functions return false if the socket is in nonblocking mode
 	// and the operation cannot be completed immediately
 	bool Connect(const char *addr, unsigned int port);
 	bool Connect(const sockaddr* psa, socklen_t saLen);
-	bool Accept(Socket& s, sockaddr *psa=NULL, socklen_t *psaLen=NULL);
+	bool Accept(Socket& s, sockaddr *psa=NULLPTR, socklen_t *psaLen=NULLPTR);
 	void GetSockName(sockaddr *psa, socklen_t *psaLen);
 	void GetPeerName(sockaddr *psa, socklen_t *psaLen);
 	unsigned int Send(const byte* buf, size_t bufLen, int flags=0);
@@ -100,15 +100,15 @@ public:
 		{if (!result) HandleError(operation);}
 #endif
 
-	//! look up the port number given its name, returns 0 if not found
+	/// look up the port number given its name, returns 0 if not found
 	static unsigned int PortNameToNumber(const char *name, const char *protocol="tcp");
-	//! start Windows Sockets 2
+	/// start Windows Sockets 2
 	static void StartSockets();
-	//! calls WSACleanup for Windows Sockets
+	/// calls WSACleanup for Windows Sockets
 	static void ShutdownSockets();
-	//! returns errno or WSAGetLastError
+	/// returns errno or WSAGetLastError
 	static int GetLastError();
-	//! sets errno or calls WSASetLastError
+	/// sets errno or calls WSASetLastError
 	static void SetLastError(int errorCode);
 
 protected:
@@ -190,11 +190,11 @@ private:
 #endif
 };
 
-//! socket-based implementation of NetworkSource
+/// socket-based implementation of NetworkSource
 class SocketSource : public NetworkSource, public Socket
 {
 public:
-	SocketSource(socket_t s = INVALID_SOCKET, bool pumpAll = false, BufferedTransformation *attachment = NULL)
+	SocketSource(socket_t s = INVALID_SOCKET, bool pumpAll = false, BufferedTransformation *attachment = NULLPTR)
 		: NetworkSource(attachment), Socket(s), m_receiver(*this)
 	{
 		if (pumpAll)
@@ -206,7 +206,7 @@ private:
 	SocketReceiver m_receiver;
 };
 
-//! socket-based implementation of NetworkSink
+/// socket-based implementation of NetworkSink
 class SocketSink : public NetworkSink, public Socket
 {
 public:

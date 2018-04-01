@@ -1,4 +1,4 @@
-// iterhash.cpp - written and placed in the public domain by Wei Dai
+// iterhash.cpp - originally written and placed in the public domain by Wei Dai
 
 #ifndef __GNUC__
 #define CRYPTOPP_MANUALLY_INSTANTIATE_TEMPLATES
@@ -6,6 +6,7 @@
 
 #include "iterhash.h"
 #include "misc.h"
+#include "cpu.h"
 
 NAMESPACE_BEGIN(CryptoPP)
 
@@ -151,7 +152,7 @@ template <class T, class BASE> void IteratedHashBase<T, BASE>::TruncatedFinal(by
 	this->Restart();		// reinit for next use
 }
 
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__clang__)
 	template class IteratedHashBase<word64, HashTransformation>;
 	template class IteratedHashBase<word64, MessageAuthenticationCode>;
 

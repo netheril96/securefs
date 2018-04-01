@@ -1,5 +1,28 @@
-// integer.cpp - written and placed in the public domain by Wei Dai
+// integer.cpp - originally written and placed in the public domain by Wei Dai
 // contains public domain code contributed by Alister Lee and Leonard Janke
+
+// Notes by JW: The Integer class needs to do two things. First, it needs to set function
+//  pointers on some platforms, like X86 and X64. The function pointers select a fast multiply
+//  and addition based on the cpu. Second, it wants to create Integer::Zero(), Integer::One()
+//  and Integer::Two().
+// The function pointers are initialized in the InitializeInteger class by calling
+//  SetFunctionPointers(). The call to SetFunctionPointers() is guarded to run once. If C++11
+//  dynamic initialization is available, then a standard run_once is used. Otherwise, and simple
+//  flag is used. The flag suffers a race, but the worse case is the same function pointers
+//  get written twice without leaking memory.
+// For Integer::Zero(), Integer::One() and Integer::Two(), we use one of two strategies. First,
+//  if C++11 dynamic initialization is available, then we use a static variable. Second, if
+//  C++11 dynamic initialization is not available, then we fall back to Wei's original code of
+//  a Singleton.
+// Wei's original code was much simpler. It simply used the Singleton pattern, but it always
+//  produced memory findings on some platforms. The Singleton generates memory findings because
+//  it uses a Create On First Use pattern (a dumb Nifty Counter) and the compiler had to be smart
+//  enough to fold them to return the same object. Unix and Linux compilers do a good job of folding
+//  objects, but Microsoft compilers do a rather poor job for some versions of the compilers.
+// Another problem with the Singleton is resource destruction requires running resource acquisition
+//  in reverse. For resources provided through the Singletons, there is no way to express the
+//  dependency order to safely destroy resources. (That's one of the problems C++11 dynamic
+//  intitialization with concurrent execution is supposed to solve).
 
 #include "pch.h"
 #include "config.h"
@@ -10,8 +33,22 @@
 
 #if CRYPTOPP_GCC_DIAGNOSTIC_AVAILABLE
 # pragma GCC diagnostic ignored "-Wunused"
+#if !defined(__clang__)
 # pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 #endif
+#endif
+
+// Issue 340
+#if CRYPTOPP_GCC_DIAGNOSTIC_AVAILABLE
+# pragma GCC diagnostic ignored "-Wconversion"
+# pragma GCC diagnostic ignored "-Wsign-conversion"
+#endif
+
+// Define this to statically initialize Integer Zero(), One()
+//   and Two() using Microsoft init_seg(). This is useful for
+//   testing Integer code for leaks when the MSC compiler
+//   does not fold use of the Singletons.
+// #define USE_MSC_INIT_PRIORITY 1
 
 #ifndef CRYPTOPP_IMPORTS
 
@@ -22,6 +59,7 @@
 #include "smartptr.h"
 #include "algparam.h"
 #include "filters.h"
+#include "stdcpp.h"
 #include "asn.h"
 #include "oids.h"
 #include "words.h"
@@ -40,17 +78,13 @@
 	#include <c_asm.h>
 #endif
 
-#ifdef CRYPTOPP_MSVC6_NO_PP
-	#pragma message("You do not seem to have the Visual C++ Processor Pack installed, so use of SSE2 instructions will be disabled.")
-#endif
-
 // "Error: The operand ___LKDB cannot be assigned to", http://github.com/weidai11/cryptopp/issues/188
 #if (__SUNPRO_CC >= 0x5130)
 # define MAYBE_CONST
-# define MAYBE_UNCONST_CAST const_cast<word*>
+# define MAYBE_UNCONST_CAST(x) const_cast<word*>(x)
 #else
 # define MAYBE_CONST const
-# define MAYBE_UNCONST_CAST
+# define MAYBE_UNCONST_CAST(x) x
 #endif
 
 // "Inline assembly operands don't work with .intel_syntax",
@@ -59,23 +93,47 @@
 # undef CRYPTOPP_X86_ASM_AVAILABLE
 # undef CRYPTOPP_X32_ASM_AVAILABLE
 # undef CRYPTOPP_X64_ASM_AVAILABLE
-# undef CRYPTOPP_BOOL_SSE2_ASM_AVAILABLE
-# undef CRYPTOPP_BOOL_SSSE3_ASM_AVAILABLE
-# define CRYPTOPP_BOOL_SSE2_ASM_AVAILABLE 0
-# define CRYPTOPP_BOOL_SSSE3_ASM_AVAILABLE 0
+# undef CRYPTOPP_SSE2_ASM_AVAILABLE
+# undef CRYPTOPP_SSSE3_ASM_AVAILABLE
 #else
-# define CRYPTOPP_INTEGER_SSE2 (CRYPTOPP_BOOL_SSE2_ASM_AVAILABLE && CRYPTOPP_BOOL_X86)
+# define CRYPTOPP_INTEGER_SSE2 (CRYPTOPP_SSE2_ASM_AVAILABLE && (CRYPTOPP_BOOL_X86))
 #endif
 
-NAMESPACE_BEGIN(CryptoPP)
+// ***************** C++ Static Initialization ********************
 
-bool AssignIntToInteger(const std::type_info &valueType, void *pInteger, const void *pInt)
+NAMESPACE_BEGIN(CryptoPP)
+static void SetFunctionPointers();
+InitializeInteger::InitializeInteger()
 {
-	if (valueType != typeid(Integer))
-		return false;
-	*reinterpret_cast<Integer *>(pInteger) = *reinterpret_cast<const int *>(pInt);
-	return true;
+#if !(HAVE_GCC_INIT_PRIORITY || HAVE_MSC_INIT_PRIORITY)
+#if defined(CRYPTOPP_CXX11_SYNCHRONIZATION) && defined(CRYPTOPP_CXX11_DYNAMIC_INIT)
+	static std::once_flag s_flag;
+	std::call_once(s_flag, []() {
+		SetFunctionPointers();
+	});
+#else
+	static bool s_flag;
+	MEMORY_BARRIER();
+	if (s_flag == false)
+	{
+		SetFunctionPointers();
+		s_flag = true;
+		MEMORY_BARRIER();
+	}
+#endif  // C++11 or C++03 flag
+#endif  // not GCC and MSC init priorities
 }
+
+template <long i>
+struct NewInteger
+{
+	Integer * operator()() const
+	{
+		return new Integer(i);
+	}
+};
+
+// ***************** Library code ********************
 
 inline static int Compare(const word *A, const word *B, size_t N)
 {
@@ -205,16 +263,17 @@ class DWord
 {
 public:
 #if defined(CRYPTOPP_NATIVE_DWORD_AVAILABLE)
-	DWord() : m_whole() { }
+	DWord() {std::memset(&m_whole, 0x00, sizeof(m_whole));}
 #else
-	DWord() : m_halfs() { }
+	DWord() {std::memset(&m_halfs, 0x00, sizeof(m_halfs));}
 #endif
 
 #ifdef CRYPTOPP_NATIVE_DWORD_AVAILABLE
 	explicit DWord(word low) : m_whole(low) { }
 #else
-	explicit DWord(word low) : m_halfs()
+	explicit DWord(word low)
 	{
+		m_halfs.high = 0;
 		m_halfs.low = low;
 	}
 #endif
@@ -226,12 +285,12 @@ public:
 #endif
 	{
 #if defined(CRYPTOPP_NATIVE_DWORD_AVAILABLE)
-#  if defined(IS_LITTLE_ENDIAN)
+#  if defined(CRYPTOPP_LITTLE_ENDIAN)
 		const word t[2] = {low,high};
-		memcpy(&m_whole, &t, sizeof(m_whole));
+		memcpy(&m_whole, t, sizeof(m_whole));
 #  else
 		const word t[2] = {high,low};
-		memcpy(&m_whole, &t, sizeof(m_whole));
+		memcpy(&m_whole, t, sizeof(m_whole));
 #  endif
 #else
 		m_halfs.low = low;
@@ -331,7 +390,7 @@ private:
 	//   Thanks to Martin Bonner at http://stackoverflow.com/a/39507183
     struct half_words
     {
-    #ifdef IS_LITTLE_ENDIAN
+    #ifdef CRYPTOPP_LITTLE_ENDIAN
         word low;
         word high;
     #else
@@ -351,17 +410,7 @@ private:
 class Word
 {
 public:
-	// Converity finding on default ctor. We've isntrumented the code,
-	//   and cannot uncover a case where it affects a result.
-#if defined(__COVERITY__)
 	Word() : m_whole(0) {}
-#elif CRYPTOPP_DEBUG
-	// Repeating pattern of 1010 for debug builds to break things...
-	Word() : m_whole(0) {memset(&m_whole, 0xaa, sizeof(m_whole));}
-#else
-	Word() {}
-#endif
-
 	Word(word value) : m_whole(value) {}
 	Word(hword low, hword high) : m_whole(low | (word(high) << (WORD_BITS/2))) {}
 
@@ -408,11 +457,11 @@ private:
 
 // do a 3 word by 2 word divide, returns quotient and leaves remainder in A
 template <class S, class D>
-S DivideThreeWordsByTwo(S *A, S B0, S B1, D *dummy=NULL)
+S DivideThreeWordsByTwo(S *A, S B0, S B1, D *dummy=NULLPTR)
 {
 	CRYPTOPP_UNUSED(dummy);
 
-	// CRYPTOPP_ASSERT {A[2],A[1]} < {B1,B0}, so quotient can fit in a S
+	// Assert {A[2],A[1]} < {B1,B0}, so quotient can fit in a S
 	CRYPTOPP_ASSERT(A[2] < B1 || (A[2]==B1 && A[1] < B0));
 
 	// estimate the quotient: do a 2 S by 1 S divide.
@@ -561,13 +610,8 @@ inline word DWord::operator%(word a)
 		__asm	pop esi \
 		__asm	pop edi \
 		__asm	ret 8
-#if _MSC_VER < 1300
-	#define SaveEBX		__asm push ebx
-	#define RestoreEBX	__asm pop ebx
-#else
 	#define SaveEBX
 	#define RestoreEBX
-#endif
 	#define SquPrologue					\
 		AS2(	mov		eax, A)			\
 		AS2(	mov		ecx, C)			\
@@ -856,8 +900,8 @@ CRYPTOPP_NAKED int CRYPTOPP_FASTCALL SSE2_Sub(size_t N, word *C, const word *A, 
 
 	AddEpilogue
 }
-#endif	// #if CRYPTOPP_BOOL_SSE2_ASM_AVAILABLE
-#else
+#endif	// CRYPTOPP_INTEGER_SSE2
+#else   // CRYPTOPP_SSE2_ASM_AVAILABLE
 int CRYPTOPP_FASTCALL Baseline_Add(size_t N, word *C, const word *A, const word *B)
 {
 	CRYPTOPP_ASSERT (N%2 == 0);
@@ -1393,7 +1437,11 @@ void Baseline_MultiplyTop16(word *R, const word *AA, const word *BB, word L)
 
 #if CRYPTOPP_INTEGER_SSE2
 
-CRYPTOPP_ALIGN_DATA(16) static const word32 s_maskLow16[4] CRYPTOPP_SECTION_ALIGN16 = {0xffff,0xffff,0xffff,0xffff};
+CRYPTOPP_ALIGN_DATA(16)
+CRYPTOPP_TABLE
+const word32 s_maskLow16[4] = {
+	0xffff,0xffff,0xffff,0xffff
+};
 
 #undef Mul_Begin
 #undef Mul_Acc
@@ -2076,13 +2124,13 @@ static PAdd s_pAdd = &Baseline_Add, s_pSub = &Baseline_Sub;
 static size_t s_recursionLimit = 8;
 #else
 static const size_t s_recursionLimit = 16;
-#endif
+#endif  // CRYPTOPP_INTEGER_SSE2
 
 static PMul s_pMul[9], s_pBot[9];
 static PSqu s_pSqu[9];
 static PMulTop s_pTop[9];
 
-static void SetFunctionPointers()
+void SetFunctionPointers()
 {
 	s_pMul[0] = &Baseline_Multiply2;
 	s_pBot[0] = &Baseline_MultiplyBottom2;
@@ -2093,13 +2141,11 @@ static void SetFunctionPointers()
 #if CRYPTOPP_INTEGER_SSE2
 	if (HasSSE2())
 	{
-#if _MSC_VER != 1200 || !(CRYPTOPP_DEBUG)
 		if (IsP4())
 		{
 			s_pAdd = &SSE2_Add;
 			s_pSub = &SSE2_Sub;
 		}
-#endif
 
 		s_recursionLimit = 32;
 
@@ -2123,7 +2169,7 @@ static void SetFunctionPointers()
 		s_pTop[8] = &SSE2_MultiplyTop32;
 	}
 	else
-#endif
+#endif  // CRYPTOPP_INTEGER_SSE2
 	{
 		s_pMul[1] = &Baseline_Multiply4;
 		s_pMul[2] = &Baseline_Multiply8;
@@ -2141,7 +2187,7 @@ static void SetFunctionPointers()
 		s_pBot[4] = &Baseline_MultiplyBottom16;
 		s_pSqu[4] = &Baseline_Square16;
 		s_pTop[4] = &Baseline_MultiplyTop16;
-#endif
+#endif  // !CRYPTOPP_INTEGER_SSE2
 	}
 }
 
@@ -2151,7 +2197,7 @@ inline int Add(word *C, const word *A, const word *B, size_t N)
 	return s_pAdd(N, C, A, B);
 #else
 	return Baseline_Add(N, C, A, B);
-#endif
+#endif  // CRYPTOPP_INTEGER_SSE2
 }
 
 inline int Subtract(word *C, const word *A, const word *B, size_t N)
@@ -2160,7 +2206,7 @@ inline int Subtract(word *C, const word *A, const word *B, size_t N)
 	return s_pSub(N, C, A, B);
 #else
 	return Baseline_Sub(N, C, A, B);
-#endif
+#endif  // CRYPTOPP_INTEGER_SSE2
 }
 
 // ********************************************************
@@ -2589,7 +2635,7 @@ void HalfMontgomeryReduce(word *R, word *T, const word *X, const word *M, const 
 // do a 3 word by 2 word divide, returns quotient and leaves remainder in A
 static word SubatomicDivide(word *A, word B0, word B1)
 {
-	// CRYPTOPP_ASSERT {A[2],A[1]} < {B1,B0}, so quotient can fit in a word
+	// Assert {A[2],A[1]} < {B1,B0}, so quotient can fit in a word
 	CRYPTOPP_ASSERT(A[2] < B1 || (A[2]==B1 && A[1] < B0));
 
 	// estimate the quotient: do a 2 word by 1 word divide
@@ -2637,7 +2683,7 @@ static inline void AtomicDivide(word *Q, const word *A, const word *B)
 		Q[1] = SubatomicDivide(T+1, B[0], B[1]);
 		Q[0] = SubatomicDivide(T, B[0], B[1]);
 
-#if CRYPTOPP_DEBUG
+#if defined(CRYPTOPP_DEBUG)
 		// multiply quotient and divisor and add remainder, make sure it equals dividend
 		CRYPTOPP_ASSERT(!T[2] && !T[3] && (T[1] < B[1] || (T[1]==B[1] && T[0]<B[0])));
 		word P[4];
@@ -2656,7 +2702,7 @@ static inline void AtomicDivide(word *Q, const word *A, const word *B)
 	Q[0] = q.GetLowHalf();
 	Q[1] = q.GetHighHalf();
 
-#if CRYPTOPP_DEBUG
+#if defined(CRYPTOPP_DEBUG)
 	if (B[0] || B[1])
 	{
 		// multiply quotient and divisor and add remainder, make sure it equals dividend
@@ -2869,15 +2915,6 @@ void MultiplyByPower2Mod(word *R, const word *A, size_t k, const word *M, size_t
 
 // ******************************************************************
 
-InitializeInteger::InitializeInteger()
-{
-	if (!g_pAssignIntToInteger)
-	{
-		SetFunctionPointers();
-		g_pAssignIntToInteger = (CryptoPP::PAssignIntToInteger)AssignIntToInteger;
-	}
-}
-
 static const unsigned int RoundupSizeTable[] = {2, 2, 2, 4, 4, 8, 8, 8, 8};
 
 static inline size_t RoundupSize(size_t n)
@@ -2961,27 +2998,33 @@ Integer::Integer(BufferedTransformation &encodedInteger, size_t byteCount, Signe
 {
 	CRYPTOPP_ASSERT(o == BIG_ENDIAN_ORDER || o == LITTLE_ENDIAN_ORDER);
 
-	if (o == LITTLE_ENDIAN_ORDER)
+	if (o != LITTLE_ENDIAN_ORDER)
+	{
+		Decode(encodedInteger, byteCount, s);
+	}
+	else
 	{
 		SecByteBlock block(byteCount);
 		encodedInteger.Get(block, block.size());
 		std::reverse(block.begin(), block.begin()+block.size());
 
 		Decode(block.begin(), block.size(), s);
-		return;
 	}
-
-	Decode(encodedInteger, byteCount, s);
 }
 
 Integer::Integer(const byte *encodedInteger, size_t byteCount, Signedness s, ByteOrder o)
 {
+	CRYPTOPP_ASSERT(encodedInteger && byteCount); // NULL buffer
 	CRYPTOPP_ASSERT(o == BIG_ENDIAN_ORDER || o == LITTLE_ENDIAN_ORDER);
 
-	if (o == LITTLE_ENDIAN_ORDER)
+	if (o != LITTLE_ENDIAN_ORDER)
+	{
+		Decode(encodedInteger, byteCount, s);
+	}
+	else
 	{
 		SecByteBlock block(byteCount);
-#if (CRYPTOPP_MSC_VERSION >= 1400)
+#if (_MSC_FULL_VER >= 140050727)
 		std::reverse_copy(encodedInteger, encodedInteger+byteCount,
 			stdext::make_checked_array_iterator(block.begin(), block.size()));
 #else
@@ -2990,13 +3033,12 @@ Integer::Integer(const byte *encodedInteger, size_t byteCount, Signedness s, Byt
 		Decode(block.begin(), block.size(), s);
 		return;
 	}
-
-	Decode(encodedInteger, byteCount, s);
 }
 
 Integer::Integer(BufferedTransformation &bt)
 {
-	BERDecode(bt);
+	// Make explicit call to avoid virtual-dispatch findings in ctor
+	Integer::BERDecode(bt);
 }
 
 Integer::Integer(RandomNumberGenerator &rng, size_t bitcount)
@@ -3015,39 +3057,6 @@ Integer Integer::Power2(size_t e)
 	Integer r((word)0, BitsToWords(e+1));
 	r.SetBit(e);
 	return r;
-}
-
-template <long i>
-struct NewInteger
-{
-	Integer * operator()() const
-	{
-		return new Integer(i);
-	}
-};
-
-// File scope static due to subtle initialization problems in a threaded
-//   Windows environment. See the comments for Singleton. Thanks DB.
-namespace { const Integer& s_zero = Singleton<Integer>().Ref(); }
-const Integer &Integer::Zero()
-{
-	return s_zero;
-}
-
-// File scope static due to subtle initialization problems in a threaded
-//   Windows environment. See the comments for Singleton. Thanks DB.
-namespace { const Integer& s_one = Singleton<Integer, NewInteger<1> >().Ref(); }
-const Integer &Integer::One()
-{
-	return s_one;
-}
-
-// File scope static due to subtle initialization problems in a threaded
-//   Windows environment. See the comments for Singleton. Thanks DB.
-namespace { const Integer& s_two = Singleton<Integer, NewInteger<2> >().Ref(); }
-const Integer &Integer::Two()
-{
-	return s_two;
 }
 
 bool Integer::operator!() const
@@ -3318,6 +3327,7 @@ unsigned int Integer::BitCount() const
 
 void Integer::Decode(const byte *input, size_t inputLen, Signedness s)
 {
+	CRYPTOPP_ASSERT(input && inputLen); // NULL buffer
 	StringStore store(input, inputLen);
 	Decode(store, inputLen, s);
 }
@@ -3325,6 +3335,8 @@ void Integer::Decode(const byte *input, size_t inputLen, Signedness s)
 void Integer::Decode(BufferedTransformation &bt, size_t inputLen, Signedness s)
 {
 	CRYPTOPP_ASSERT(bt.MaxRetrievable() >= inputLen);
+	if (bt.MaxRetrievable() < inputLen)
+		throw InvalidArgument("Integer: input length is too small");
 
 	byte b;
 	bt.Peek(b);
@@ -3337,14 +3349,10 @@ void Integer::Decode(BufferedTransformation &bt, size_t inputLen, Signedness s)
 		bt.Peek(b);
 	}
 
-	// The call to CleanNew is optimized away above -O0/-Og.
-	const size_t size = RoundupSize(BytesToWords(inputLen));
-	reg.CleanNew(size);
-
-	CRYPTOPP_ASSERT(reg.SizeInBytes() >= inputLen);
+	reg.CleanNew(RoundupSize(BytesToWords(inputLen)));
 	for (size_t i=inputLen; i > 0; i--)
 	{
-		bt.Get(b);
+		(void)bt.Get(b);
 		reg[(i-1)/WORD_SIZE] |= word(b) << ((i-1)%WORD_SIZE)*8;
 	}
 
@@ -3371,9 +3379,10 @@ size_t Integer::MinEncodedSize(Signedness signedness) const
 	return outputLen;
 }
 
+// PKCS12_PBKDF and other classes use undersized buffers
 void Integer::Encode(byte *output, size_t outputLen, Signedness signedness) const
 {
-	CRYPTOPP_ASSERT(output && outputLen);
+	CRYPTOPP_ASSERT(output && outputLen);            // NULL buffer
 	ArraySink sink(output, outputLen);
 	Encode(sink, outputLen, signedness);
 }
@@ -3402,6 +3411,7 @@ void Integer::DEREncode(BufferedTransformation &bt) const
 
 void Integer::BERDecode(const byte *input, size_t len)
 {
+	CRYPTOPP_ASSERT(input && len); // NULL buffer
 	StringStore store(input, len);
 	BERDecode(store);
 }
@@ -3431,9 +3441,11 @@ void Integer::BERDecodeAsOctetString(BufferedTransformation &bt, size_t length)
 	dec.MessageEnd();
 }
 
-size_t Integer::OpenPGPEncode(byte *output, size_t len) const
+size_t Integer::OpenPGPEncode(byte *output, size_t bufferSize) const
 {
-	ArraySink sink(output, len);
+	CRYPTOPP_ASSERT(output && bufferSize);            // NULL buffer
+	CRYPTOPP_ASSERT(bufferSize >= MinEncodedSize());  // Undersized buffer
+	ArraySink sink(output, bufferSize);
 	return OpenPGPEncode(sink);
 }
 
@@ -3448,6 +3460,7 @@ size_t Integer::OpenPGPEncode(BufferedTransformation &bt) const
 
 void Integer::OpenPGPDecode(const byte *input, size_t len)
 {
+	CRYPTOPP_ASSERT(input && len);  // NULL buffer
 	StringStore store(input, len);
 	OpenPGPDecode(store);
 }
@@ -3503,9 +3516,10 @@ public:
 
 	void GenerateBlock(byte *output, size_t size)
 	{
+		CRYPTOPP_ASSERT(output && size); // NULL buffer
 		PutWord(false, BIG_ENDIAN_ORDER, m_counterAndSeed, m_counter);
 		++m_counter;
-		P1363_KDF2<SHA1>::DeriveKey(output, size, m_counterAndSeed, m_counterAndSeed.size(), NULL, 0);
+		P1363_KDF2<SHA1>::DeriveKey(output, size, m_counterAndSeed, m_counterAndSeed.size(), NULLPTR, 0);
 	}
 
 private:
@@ -3574,7 +3588,7 @@ bool Integer::GenerateRandomNoThrow(RandomNumberGenerator &i_rng, const NameValu
 
 		case PRIME:
 		{
-			const PrimeSelector *pSelector = params.GetValueWithDefault(Name::PointerToPrimeSelector(), (const PrimeSelector *)NULL);
+			const PrimeSelector *pSelector = params.GetValueWithDefault(Name::PointerToPrimeSelector(), (const PrimeSelector *)NULLPTR);
 
 			int i;
 			i = 0;
@@ -3631,32 +3645,24 @@ std::istream& operator>>(std::istream& in, Integer &a)
 	return in;
 }
 
+// Ensure base 10 is default
+inline int FlagToBase(long f) {
+	return f == std::ios::hex ? 16 : (f == std::ios::oct ? 8 : 10);
+}
+
+inline char FlagToSuffix(long f) {
+	return f == std::ios::hex ? 'h' : (f == std::ios::oct ? 'o' : '.');
+}
+
+// Ensure base 10 is default
 std::ostream& operator<<(std::ostream& out, const Integer &a)
 {
 	// Get relevant conversion specifications from ostream.
-	const long f = out.flags() & std::ios::basefield; // Get base digits.
-	int base, block;
-	char suffix;
-	switch(f)
-	{
-	case std::ios::oct :
-		base = 8;
-		block = 8;
-		suffix = 'o';
-		break;
-	case std::ios::hex :
-		base = 16;
-		block = 4;
-		suffix = 'h';
-		break;
-	default :
-		base = 10;
-		block = 3;
-		suffix = '.';
-	}
+	const long f = out.flags() & std::ios::basefield;
+	const int base = FlagToBase(f);
+	const char suffix = FlagToSuffix(f);
 
 	Integer temp1=a, temp2;
-
 	if (a.IsNegative())
 	{
 		out << '-';
@@ -3684,8 +3690,6 @@ std::ostream& operator<<(std::ostream& out, const Integer &a)
 	while (i--)
 	{
 		out << s[i];
-//		if (i && !(i%block))
-//			out << ",";
 	}
 
 #ifdef CRYPTOPP_USE_STD_SHOWBASE
@@ -3711,8 +3715,7 @@ Integer& Integer::operator++()
 	else
 	{
 		word borrow = Decrement(reg, reg.size());
-		CRYPTOPP_ASSERT(!borrow);
-		CRYPTOPP_UNUSED(borrow);
+		CRYPTOPP_ASSERT(!borrow); CRYPTOPP_UNUSED(borrow);
 
 		if (WordCount()==0)
 			*this = Zero();
@@ -3736,6 +3739,84 @@ Integer& Integer::operator--()
 			*this = -One();
 	}
 	return *this;
+}
+
+// This is a bit operation. We set sign to POSITIVE, so there's no need to
+//  worry about negative zero. Also see http://stackoverflow.com/q/11644362.
+Integer Integer::And(const Integer& t) const
+{
+	if (this == &t)
+	{
+		return AbsoluteValue();
+	}
+	else if (reg.size() >= t.reg.size())
+	{
+		Integer result(t);
+		AndWords(result.reg, reg, t.reg.size());
+
+		result.sign = POSITIVE;
+		return result;
+	}
+	else // reg.size() < t.reg.size()
+	{
+		Integer result(*this);
+		AndWords(result.reg, t.reg, reg.size());
+
+		result.sign = POSITIVE;
+		return result;
+	}
+}
+
+// This is a bit operation. We set sign to POSITIVE, so there's no need to
+//  worry about negative zero. Also see http://stackoverflow.com/q/11644362.
+Integer Integer::Or(const Integer& t) const
+{
+	if (this == &t)
+	{
+		return AbsoluteValue();
+	}
+	else if (reg.size() >= t.reg.size())
+	{
+		Integer result(*this);
+		OrWords(result.reg, t.reg, t.reg.size());
+
+		result.sign = POSITIVE;
+		return result;
+	}
+	else // reg.size() < t.reg.size()
+	{
+		Integer result(t);
+		OrWords(result.reg, reg, reg.size());
+
+		result.sign = POSITIVE;
+		return result;
+	}
+}
+
+// This is a bit operation. We set sign to POSITIVE, so there's no need to
+//  worry about negative zero. Also see http://stackoverflow.com/q/11644362.
+Integer Integer::Xor(const Integer& t) const
+{
+	if (this == &t)
+	{
+		return Integer::Zero();
+	}
+	else if (reg.size() >= t.reg.size())
+	{
+		Integer result(*this);
+		XorWords(result.reg, t.reg, t.reg.size());
+
+		result.sign = POSITIVE;
+		return result;
+	}
+	else // reg.size() < t.reg.size()
+	{
+		Integer result(t);
+		XorWords(result.reg, reg, reg.size());
+
+		result.sign = POSITIVE;
+		return result;
+	}
 }
 
 void PositiveAdd(Integer &sum, const Integer &a, const Integer& b)
@@ -3782,7 +3863,7 @@ void PositiveSubtract(Integer &diff, const Integer &a, const Integer& b)
 		word borrow = Subtract(diff.reg, a.reg, b.reg, bSize);
 		CopyWords(diff.reg+bSize, a.reg+bSize, aSize-bSize);
 		borrow = Decrement(diff.reg+bSize, aSize-bSize, borrow);
-		CRYPTOPP_ASSERT(!borrow);
+		CRYPTOPP_ASSERT(!borrow); CRYPTOPP_UNUSED(borrow);
 		diff.sign = Integer::POSITIVE;
 	}
 	else if (aSize == bSize)
@@ -3803,7 +3884,7 @@ void PositiveSubtract(Integer &diff, const Integer &a, const Integer& b)
 		word borrow = Subtract(diff.reg, b.reg, a.reg, aSize);
 		CopyWords(diff.reg+aSize, b.reg+aSize, bSize-aSize);
 		borrow = Decrement(diff.reg+aSize, bSize-aSize, borrow);
-		CRYPTOPP_ASSERT(!borrow);
+		CRYPTOPP_ASSERT(!borrow); CRYPTOPP_UNUSED(borrow);
 		diff.sign = Integer::NEGATIVE;
 	}
 }
@@ -3929,6 +4010,64 @@ Integer& Integer::operator>>=(size_t n)
 		ShiftWordsRightByBits(reg, wordCount-shiftWords, shiftBits);
 	if (IsNegative() && WordCount()==0)   // avoid -0
 		*this = Zero();
+	return *this;
+}
+
+Integer& Integer::operator&=(const Integer& t)
+{
+	if (this != &t)
+	{
+		const size_t size = STDMIN(reg.size(), t.reg.size());
+		reg.resize(size);
+		AndWords(reg, t.reg, size);
+	}
+	sign = POSITIVE;
+	return *this;
+}
+
+Integer& Integer::operator|=(const Integer& t)
+{
+	if (this != &t)
+	{
+		if (reg.size() >= t.reg.size())
+		{
+			OrWords(reg, t.reg, t.reg.size());
+		}
+		else  // reg.size() < t.reg.size()
+		{
+			const size_t head = reg.size();
+			const size_t tail = t.reg.size() - reg.size();
+			reg.resize(head+tail);
+			OrWords(reg, t.reg, head);
+			CopyWords(reg+head,t.reg+head,tail);
+		}
+	}
+	sign = POSITIVE;
+	return *this;
+}
+
+Integer& Integer::operator^=(const Integer& t)
+{
+	if (this == &t)
+	{
+		*this = Zero();
+	}
+	else
+	{
+		if (reg.size() >= t.reg.size())
+		{
+			XorWords(reg, t.reg, t.reg.size());
+		}
+		else  // reg.size() < t.reg.size()
+		{
+			const size_t head = reg.size();
+			const size_t tail = t.reg.size() - reg.size();
+			reg.resize(head+tail);
+			XorWords(reg, t.reg, head);
+			CopyWords(reg+head,t.reg+head,tail);
+		}
+	}
+	sign = POSITIVE;
 	return *this;
 }
 
@@ -4601,6 +4740,87 @@ std::string IntToString<word64>(word64 value, unsigned int base)
 	return result;
 }
 
+#ifndef CRYPTOPP_NO_ASSIGN_TO_INTEGER
+// Allow the linker to discard Integer code if not needed.
+// Also see http://github.com/weidai11/cryptopp/issues/389.
+bool AssignIntToInteger(const std::type_info &valueType, void *pInteger, const void *pInt)
+{
+	if (valueType != typeid(Integer))
+		return false;
+	*reinterpret_cast<Integer *>(pInteger) = *reinterpret_cast<const int *>(pInt);
+	return true;
+}
+#endif  // CRYPTOPP_NO_ASSIGN_TO_INTEGER
+
+// *************************** C++ Static Initialization ***************************
+
+class InitInteger
+{
+public:
+	InitInteger()
+	{
+		SetFunctionPointers();
+	}
+};
+
+// This is not really needed because each Integer can dynamically initialize itself,
+// but we take a peephole optimization and initialize the class once if init priorities are
+// available. Dynamic initialization will be used if init priorities are not available.
+
+#if HAVE_GCC_INIT_PRIORITY
+	const InitInteger s_init __attribute__ ((init_priority (CRYPTOPP_INIT_PRIORITY + 10))) = InitInteger();
+#elif defined(HAVE_MSC_INIT_PRIORITY)
+	#pragma warning(disable: 4075)
+	#pragma init_seg(".CRT$XCU")
+	const InitInteger s_init;
+#   if defined(USE_MSC_INIT_PRIORITY)
+	const Integer g_zero(0L);
+	const Integer g_one(1L);
+	const Integer g_two(2L);
+#   endif
+	#pragma warning(default: 4075)
+#else
+	const InitInteger s_init;
+#endif
+
+// ***************** Library code ********************
+
+const Integer &Integer::Zero()
+{
+#if defined(CRYPTOPP_CXX11_DYNAMIC_INIT)
+	static Integer s_zero(0L);
+	return s_zero;
+#elif defined(HAVE_MSC_INIT_PRIORITY) && defined(USE_MSC_INIT_PRIORITY)
+	return g_zero;
+#else
+	return Singleton<Integer, NewInteger<0L> >().Ref();
+#endif
+}
+
+const Integer &Integer::One()
+{
+#if defined(CRYPTOPP_CXX11_DYNAMIC_INIT)
+	static Integer s_one(1L);
+	return s_one;
+#elif defined(HAVE_MSC_INIT_PRIORITY) && defined(USE_MSC_INIT_PRIORITY)
+	return g_one;
+#else
+	return Singleton<Integer, NewInteger<1L> >().Ref();
+#endif
+}
+
+const Integer &Integer::Two()
+{
+#if defined(CRYPTOPP_CXX11_DYNAMIC_INIT)
+	static Integer s_two(2L);
+	return s_two;
+#elif defined(HAVE_MSC_INIT_PRIORITY) && defined(USE_MSC_INIT_PRIORITY)
+	return g_two;
+#else
+	return Singleton<Integer, NewInteger<2L> >().Ref();
+#endif
+}
+
 NAMESPACE_END
 
-#endif
+#endif  // CRYPTOPP_IMPORTS

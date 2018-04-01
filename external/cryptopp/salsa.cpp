@@ -1,4 +1,4 @@
-// salsa.cpp - written and placed in the public domain by Wei Dai
+// salsa.cpp - originally written and placed in the public domain by Wei Dai
 
 // use "cl /EP /P /DCRYPTOPP_GENERATE_X64_MASM salsa.cpp" to generate MASM code
 
@@ -16,23 +16,19 @@
 # pragma warning(disable: 4702 4740)
 #endif
 
-// TODO: work around GCC 4.8+ issue with SSE2 ASM until the exact details are known
-//   and fix is released. Duplicate with "valgrind ./cryptest.exe tv salsa"
 // Clang due to "Inline assembly operands don't work with .intel_syntax"
 //   https://llvm.org/bugs/show_bug.cgi?id=24232
 #if defined(CRYPTOPP_DISABLE_SALSA_ASM)
 # undef CRYPTOPP_X86_ASM_AVAILABLE
 # undef CRYPTOPP_X32_ASM_AVAILABLE
 # undef CRYPTOPP_X64_ASM_AVAILABLE
-# undef CRYPTOPP_BOOL_SSE2_ASM_AVAILABLE
-# undef CRYPTOPP_BOOL_SSSE3_ASM_AVAILABLE
-# define CRYPTOPP_BOOL_SSE2_ASM_AVAILABLE 0
-# define CRYPTOPP_BOOL_SSSE3_ASM_AVAILABLE 0
+# undef CRYPTOPP_SSE2_ASM_AVAILABLE
+# undef CRYPTOPP_SSSE3_ASM_AVAILABLE
 #endif
 
 NAMESPACE_BEGIN(CryptoPP)
 
-#if CRYPTOPP_DEBUG && !defined(CRYPTOPP_DOXYGEN_PROCESSING)
+#if defined(CRYPTOPP_DEBUG) && !defined(CRYPTOPP_DOXYGEN_PROCESSING)
 void Salsa20_TestInstantiations()
 {
 	Salsa20::Encryption x1;
@@ -76,10 +72,10 @@ void Salsa20_Policy::SeekToIteration(lword iterationCount)
 	m_state[5] = (word32)SafeRightShift<32>(iterationCount);
 }
 
-#if (CRYPTOPP_BOOL_X86 || CRYPTOPP_BOOL_X32 || CRYPTOPP_BOOL_X64) && !defined(CRYPTOPP_DISABLE_SALSA_ASM)
+#if (CRYPTOPP_BOOL_X86 || CRYPTOPP_BOOL_X32 || CRYPTOPP_BOOL_X64)
 unsigned int Salsa20_Policy::GetAlignment() const
 {
-#if CRYPTOPP_BOOL_SSE2_ASM_AVAILABLE
+#if CRYPTOPP_SSE2_ASM_AVAILABLE
 	if (HasSSE2())
 		return 16;
 	else
@@ -89,7 +85,7 @@ unsigned int Salsa20_Policy::GetAlignment() const
 
 unsigned int Salsa20_Policy::GetOptimalBlockSize() const
 {
-#if CRYPTOPP_BOOL_SSE2_ASM_AVAILABLE
+#if CRYPTOPP_SSE2_ASM_AVAILABLE
 	if (HasSSE2())
 		return 4*BYTES_PER_ITERATION;
 	else
@@ -117,7 +113,7 @@ void Salsa20_Policy::OperateKeystream(KeystreamOperation operation, byte *output
 	return;
 #endif
 
-#if CRYPTOPP_BOOL_SSE2_ASM_AVAILABLE
+#if CRYPTOPP_SSE2_ASM_AVAILABLE
 #ifdef CRYPTOPP_GENERATE_X64_MASM
 		ALIGN   8
 	Salsa20_OperateKeystream	PROC FRAME
@@ -485,11 +481,11 @@ void Salsa20_Policy::OperateKeystream(KeystreamOperation operation, byte *output
 		ATT_PREFIX
 	#if CRYPTOPP_BOOL_X64
 			: "+r" (input), "+r" (output), "+r" (iterationCount)
-			: "r" (m_rounds), "r" (m_state.m_ptr), "r" (workspace)
+			: "r" (m_rounds), "r" (m_state.begin()), "r" (workspace)
 			: "%eax", "%rdx", "memory", "cc", "%xmm0", "%xmm1", "%xmm2", "%xmm3", "%xmm4", "%xmm5", "%xmm6", "%xmm7", "%xmm8", "%xmm9", "%xmm10", "%xmm11", "%xmm12", "%xmm13", "%xmm14", "%xmm15"
 	#else
 			: "+a" (input), "+D" (output), "+c" (iterationCount)
-			: "d" (m_rounds), "S" (m_state.m_ptr)
+			: "d" (m_rounds), "S" (m_state.begin())
 			: "memory", "cc"
 	#endif
 		);
@@ -527,10 +523,10 @@ Salsa20_OperateKeystream ENDP
 			for (int i=m_rounds; i>0; i-=2)
 			{
 				#define QUARTER_ROUND(a, b, c, d)	\
-					b = b ^ rotlFixed(a + d, 7);	\
-					c = c ^ rotlFixed(b + a, 9);	\
-					d = d ^ rotlFixed(c + b, 13);	\
-					a = a ^ rotlFixed(d + c, 18);
+					b = b ^ rotlConstant<7>(a + d);	\
+					c = c ^ rotlConstant<9>(b + a);	\
+					d = d ^ rotlConstant<13>(c + b);	\
+					a = a ^ rotlConstant<18>(d + c);
 
 				QUARTER_ROUND(x0, x4, x8, x12)
 				QUARTER_ROUND(x1, x5, x9, x13)

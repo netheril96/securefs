@@ -1,4 +1,4 @@
-// wake.cpp - written and placed in the public domain by Wei Dai
+// wake.cpp - originally written and placed in the public domain by Wei Dai
 
 #include "pch.h"
 
@@ -7,7 +7,7 @@
 
 NAMESPACE_BEGIN(CryptoPP)
 
-#if CRYPTOPP_DEBUG && !defined(CRYPTOPP_DOXYGEN_PROCESSING)
+#if defined(CRYPTOPP_DEBUG) && !defined(CRYPTOPP_DOXYGEN_PROCESSING)
 void WAKE_TestInstantiations()
 {
 	WAKE_OFB<>::Encryption x2;

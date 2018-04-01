@@ -1,10 +1,10 @@
-// filters.cpp - written and placed in the public domain by Wei Dai
+// filters.cpp - originally written and placed in the public domain by Wei Dai
 
 #include "pch.h"
 #include "config.h"
 
 #if CRYPTOPP_MSC_VERSION
-# pragma warning(disable: 4100 4189)
+# pragma warning(disable: 4100 4189 4355)
 #endif
 
 #if CRYPTOPP_GCC_DIAGNOSTIC_AVAILABLE
@@ -35,14 +35,14 @@ BufferedTransformation * Filter::NewDefaultAttachment() const
 
 BufferedTransformation * Filter::AttachedTransformation()
 {
-	if (m_attachment.get() == NULL)
+	if (m_attachment.get() == NULLPTR)
 		m_attachment.reset(NewDefaultAttachment());
 	return m_attachment.get();
 }
 
 const BufferedTransformation *Filter::AttachedTransformation() const
 {
-	if (m_attachment.get() == NULL)
+	if (m_attachment.get() == NULLPTR)
 		const_cast<Filter *>(this)->m_attachment.reset(NewDefaultAttachment());
 	return m_attachment.get();
 }
@@ -270,7 +270,7 @@ byte *FilterWithBufferedInput::BlockQueue::GetBlock()
 		return ptr;
 	}
 	else
-		return NULL;
+		return NULLPTR;
 }
 
 byte *FilterWithBufferedInput::BlockQueue::GetContigousBlocks(size_t &numberOfBytes)
@@ -311,13 +311,6 @@ void FilterWithBufferedInput::BlockQueue::Put(const byte *inString, size_t lengt
 		memcpy(m_buffer, inString+len, length-len);
 	m_size += length;
 }
-
-#if !defined(CRYPTOPP_MAINTAIN_BACKWARDS_COMPATIBILITY_562)
-FilterWithBufferedInput::FilterWithBufferedInput()
-	: Filter(), m_firstSize(SIZE_MAX), m_blockSize(0), m_lastSize(SIZE_MAX), m_firstInputDone(false)
-{
-}
-#endif
 
 FilterWithBufferedInput::FilterWithBufferedInput(BufferedTransformation *attachment)
 	: Filter(attachment), m_firstSize(SIZE_MAX), m_blockSize(0), m_lastSize(SIZE_MAX), m_firstInputDone(false)
@@ -430,7 +423,7 @@ size_t FilterWithBufferedInput::PutMaybeModifiable(byte *inString, size_t length
 	if (messageEnd)
 	{
 		if (!m_firstInputDone && m_firstSize==0)
-			FirstPut(NULL);
+			FirstPut(NULLPTR);
 
 		SecByteBlock temp(m_queue.CurrentSize());
 		m_queue.GetAll(temp);
@@ -439,8 +432,8 @@ size_t FilterWithBufferedInput::PutMaybeModifiable(byte *inString, size_t length
 		m_firstInputDone = false;
 		m_queue.ResetQueue(1, m_firstSize);
 
-		// Cast to void to supress Coverity finding
-		(void)Output(1, NULL, 0, messageEnd, blocking);
+		// Cast to void to suppress Coverity finding
+		(void)Output(1, NULLPTR, 0, messageEnd, blocking);
 	}
 	return 0;
 }
@@ -479,7 +472,7 @@ void FilterWithBufferedInput::NextPutMultiple(const byte *inString, size_t lengt
 
 void Redirector::Initialize(const NameValuePairs &parameters, int propagation)
 {
-	m_target = parameters.GetValueWithDefault("RedirectionTargetPointer", (BufferedTransformation*)NULL);
+	m_target = parameters.GetValueWithDefault("RedirectionTargetPointer", (BufferedTransformation*)NULLPTR);
 	m_behavior = parameters.GetIntValueWithDefault("RedirectionBehavior", PASS_EVERYTHING);
 
 	if (m_target && GetPassSignals())
@@ -586,14 +579,41 @@ size_t ArrayXorSink::Put2(const byte *begin, size_t length, int messageEnd, bool
 
 // *************************************************************
 
-StreamTransformationFilter::StreamTransformationFilter(StreamTransformation &c, BufferedTransformation *attachment, BlockPaddingScheme padding, bool allowAuthenticatedSymmetricCipher)
-	: FilterWithBufferedInput(attachment)
-	, m_cipher(c), m_padding(DEFAULT_PADDING), m_optimalBufferSize(0)
+StreamTransformationFilter::StreamTransformationFilter(StreamTransformation &c, BufferedTransformation *attachment, BlockPaddingScheme padding)
+	: FilterWithBufferedInput(attachment), m_cipher(c), m_padding(DEFAULT_PADDING)
 {
 	CRYPTOPP_ASSERT(c.MinLastBlockSize() == 0 || c.MinLastBlockSize() > c.MandatoryBlockSize());
 
-	if (!allowAuthenticatedSymmetricCipher && dynamic_cast<AuthenticatedSymmetricCipher *>(&c) != 0)
+	const bool authenticatedFilter = dynamic_cast<AuthenticatedSymmetricCipher *>(&c) != NULLPTR;
+	if (authenticatedFilter)
 		throw InvalidArgument("StreamTransformationFilter: please use AuthenticatedEncryptionFilter and AuthenticatedDecryptionFilter for AuthenticatedSymmetricCipher");
+
+	// InitializeDerivedAndReturnNewSizes may override some of these
+	m_mandatoryBlockSize = m_cipher.MandatoryBlockSize();
+	m_optimalBufferSize = m_cipher.OptimalBlockSize();
+	m_isSpecial = m_cipher.IsLastBlockSpecial() && m_mandatoryBlockSize > 1;
+	m_reservedBufferSize = STDMAX(2*m_mandatoryBlockSize, m_optimalBufferSize);
+
+	IsolatedInitialize(MakeParameters(Name::BlockPaddingScheme(), padding));
+}
+
+StreamTransformationFilter::StreamTransformationFilter(StreamTransformation &c, BufferedTransformation *attachment, BlockPaddingScheme padding, bool authenticated)
+	: FilterWithBufferedInput(attachment), m_cipher(c), m_padding(DEFAULT_PADDING)
+{
+	const bool authenticatedFilter = dynamic_cast<AuthenticatedSymmetricCipher *>(&c) != NULLPTR;
+	if (!authenticatedFilter)
+	{
+		CRYPTOPP_ASSERT(c.MinLastBlockSize() == 0 || c.MinLastBlockSize() > c.MandatoryBlockSize());
+	}
+
+	if (authenticatedFilter && !authenticated)
+		throw InvalidArgument("StreamTransformationFilter: please use AuthenticatedEncryptionFilter and AuthenticatedDecryptionFilter for AuthenticatedSymmetricCipher");
+
+	// InitializeDerivedAndReturnNewSizes may override some of these
+	m_mandatoryBlockSize = m_cipher.MandatoryBlockSize();
+	m_optimalBufferSize = m_cipher.OptimalBlockSize();
+	m_isSpecial = m_cipher.IsLastBlockSpecial() && m_mandatoryBlockSize > 1;
+	m_reservedBufferSize = STDMAX(2*m_mandatoryBlockSize, m_optimalBufferSize);
 
 	IsolatedInitialize(MakeParameters(Name::BlockPaddingScheme(), padding));
 }
@@ -604,42 +624,47 @@ size_t StreamTransformationFilter::LastBlockSize(StreamTransformation &c, BlockP
 		return c.MinLastBlockSize();
 	else if (c.MandatoryBlockSize() > 1 && !c.IsForwardTransformation() && padding != NO_PADDING && padding != ZEROS_PADDING)
 		return c.MandatoryBlockSize();
-	else
-		return 0;
+
+	return 0;
 }
 
 void StreamTransformationFilter::InitializeDerivedAndReturnNewSizes(const NameValuePairs &parameters, size_t &firstSize, size_t &blockSize, size_t &lastSize)
 {
 	BlockPaddingScheme padding = parameters.GetValueWithDefault(Name::BlockPaddingScheme(), DEFAULT_PADDING);
-	bool isBlockCipher = (m_cipher.MandatoryBlockSize() > 1 && m_cipher.MinLastBlockSize() == 0);
+	bool isBlockCipher = (m_mandatoryBlockSize > 1 && m_cipher.MinLastBlockSize() == 0);
 
 	if (padding == DEFAULT_PADDING)
 		m_padding = isBlockCipher ? PKCS_PADDING : NO_PADDING;
 	else
 		m_padding = padding;
 
-	if (!isBlockCipher && (m_padding == PKCS_PADDING || m_padding == ONE_AND_ZEROS_PADDING))
-		throw InvalidArgument("StreamTransformationFilter: PKCS_PADDING and ONE_AND_ZEROS_PADDING cannot be used with " + m_cipher.AlgorithmName());
+	if (!isBlockCipher)
+	{
+		if (m_padding == PKCS_PADDING)
+			throw InvalidArgument("StreamTransformationFilter: PKCS_PADDING cannot be used with " + m_cipher.AlgorithmName());
+		else if (m_padding == W3C_PADDING)
+			throw InvalidArgument("StreamTransformationFilter: W3C_PADDING cannot be used with " + m_cipher.AlgorithmName());
+		else if (m_padding == ONE_AND_ZEROS_PADDING)
+			throw InvalidArgument("StreamTransformationFilter: ONE_AND_ZEROS_PADDING cannot be used with " + m_cipher.AlgorithmName());
+	}
 
 	firstSize = 0;
-	blockSize = m_cipher.MandatoryBlockSize();
+	blockSize = m_mandatoryBlockSize;
 	lastSize = LastBlockSize(m_cipher, m_padding);
 }
 
 void StreamTransformationFilter::FirstPut(const byte* inString)
 {
 	CRYPTOPP_UNUSED(inString);
-	m_optimalBufferSize = m_cipher.OptimalBlockSize();
-	m_optimalBufferSize = (unsigned int)STDMAX(m_optimalBufferSize, RoundDownToMultipleOf(4096U, m_optimalBufferSize));
+	m_optimalBufferSize = STDMAX<unsigned int>(m_optimalBufferSize, RoundDownToMultipleOf(4096U, m_optimalBufferSize));
 }
 
 void StreamTransformationFilter::NextPutMultiple(const byte *inString, size_t length)
 {
 	if (!length)
-		return;
+		{return;}
 
-	size_t s = m_cipher.MandatoryBlockSize();
-
+	const size_t s = m_cipher.MandatoryBlockSize();
 	do
 	{
 		size_t len = m_optimalBufferSize;
@@ -668,7 +693,58 @@ void StreamTransformationFilter::NextPutModifiable(byte *inString, size_t length
 
 void StreamTransformationFilter::LastPut(const byte *inString, size_t length)
 {
-	byte *space = NULL;
+	byte *space = NULLPTR;
+
+#if 1
+	// This block is new to StreamTransformationFilter. It somewhat of a hack and was added
+	//  for OCB mode; see GitHub Issue 515. The rub with OCB is, its a block cipher and the
+	//  last block size can be 0. However, "last block = 0" is not the 0 predacted in the
+	//  original code. In the orginal code 0 means "nothing special" so DEFAULT_PADDING is
+	//  applied. OCB's 0 literally means a final block size can be 0 or non-0; and no padding
+	//  is needed in either case because OCB has its own scheme (see handling of P_* and A_*).
+	// Stream ciphers have policy objects to convey how to operate the cipher. The Crypto++
+	//  framework operates well when MinLastBlockSize() is 1. However, it did not appear to
+	//  cover the OCB case either because we can't stream OCB. It needs full block sizes. In
+	//  response we hacked a IsLastBlockSpecial(). When true StreamTransformationFilter
+	//  defers to the mode for processing of the last block.
+	// The behavior supplied when IsLastBlockSpecial() will likely have to evolve to capture
+	//  more complex cases from different authenc modes. I suspect it will have to change
+	//  from a simple bool to something that conveys more information, like "last block
+	//  no padding" or "custom padding applied by cipher".
+	// In some respect we have already hit the need for more information. For example, OCB
+	//  calculates the checksum on the cipher text at the same time, so we don't need the
+	//  disjoint behavior of calling "EncryptBlock" followed by a separate "AuthenticateBlock".
+	//  Additional information may allow us to avoid the two spearate calls.
+	if (m_isSpecial)
+	{
+		const size_t leftOver = length % m_mandatoryBlockSize;
+		space = HelpCreatePutSpace(*AttachedTransformation(), DEFAULT_CHANNEL, m_reservedBufferSize);
+
+		length -= leftOver;
+		if (length)
+		{
+			// Process full blocks
+			m_cipher.ProcessData(space, inString, length);
+			AttachedTransformation()->Put(space, length);
+			inString += length;
+		}
+
+		if (leftOver)
+		{
+			// Process final partial block
+			length = m_cipher.ProcessLastBlock(space, m_reservedBufferSize, inString, leftOver);
+			AttachedTransformation()->Put(space, length);
+		}
+		else
+		{
+			// Process final empty block
+			length = m_cipher.ProcessLastBlock(space, m_reservedBufferSize, NULLPTR, 0);
+			AttachedTransformation()->Put(space, length);
+		}
+
+		return;
+	}
+#endif
 
 	switch (m_padding)
 	{
@@ -676,18 +752,18 @@ void StreamTransformationFilter::LastPut(const byte *inString, size_t length)
 	case ZEROS_PADDING:
 		if (length > 0)
 		{
-			size_t minLastBlockSize = m_cipher.MinLastBlockSize();
-			bool isForwardTransformation = m_cipher.IsForwardTransformation();
+			const size_t minLastBlockSize = m_cipher.MinLastBlockSize();
+			const bool isForwardTransformation = m_cipher.IsForwardTransformation();
 
 			if (isForwardTransformation && m_padding == ZEROS_PADDING && (minLastBlockSize == 0 || length < minLastBlockSize))
 			{
 				// do padding
-				size_t blockSize = STDMAX(minLastBlockSize, (size_t)m_cipher.MandatoryBlockSize());
+				size_t blockSize = STDMAX(minLastBlockSize, (size_t)m_mandatoryBlockSize);
 				space = HelpCreatePutSpace(*AttachedTransformation(), DEFAULT_CHANNEL, blockSize);
 				if (inString) {memcpy(space, inString, length);}
 				memset(space + length, 0, blockSize - length);
-				m_cipher.ProcessLastBlock(space, space, blockSize);
-				AttachedTransformation()->Put(space, blockSize);
+				size_t used = m_cipher.ProcessLastBlock(space, blockSize, space, blockSize);
+				AttachedTransformation()->Put(space, used);
 			}
 			else
 			{
@@ -700,16 +776,17 @@ void StreamTransformationFilter::LastPut(const byte *inString, size_t length)
 				}
 
 				space = HelpCreatePutSpace(*AttachedTransformation(), DEFAULT_CHANNEL, length, m_optimalBufferSize);
-				m_cipher.ProcessLastBlock(space, inString, length);
-				AttachedTransformation()->Put(space, length);
+				size_t used = m_cipher.ProcessLastBlock(space, length, inString, length);
+				AttachedTransformation()->Put(space, used);
 			}
 		}
 		break;
 
 	case PKCS_PADDING:
+	case W3C_PADDING:
 	case ONE_AND_ZEROS_PADDING:
 		unsigned int s;
-		s = m_cipher.MandatoryBlockSize();
+		s = m_mandatoryBlockSize;
 		CRYPTOPP_ASSERT(s > 1);
 		space = HelpCreatePutSpace(*AttachedTransformation(), DEFAULT_CHANNEL, s, m_optimalBufferSize);
 		if (m_cipher.IsForwardTransformation())
@@ -719,8 +796,14 @@ void StreamTransformationFilter::LastPut(const byte *inString, size_t length)
 			if (m_padding == PKCS_PADDING)
 			{
 				CRYPTOPP_ASSERT(s < 256);
-				byte pad = byte(s-length);
+				byte pad = static_cast<byte>(s-length);
 				memset(space+length, pad, s-length);
+			}
+			else if (m_padding == W3C_PADDING)
+			{
+				CRYPTOPP_ASSERT(s < 256);
+				memset(space+length, 0, s-length-1);
+				space[s-1] = static_cast<byte>(s-length);
 			}
 			else
 			{
@@ -738,9 +821,16 @@ void StreamTransformationFilter::LastPut(const byte *inString, size_t length)
 			if (m_padding == PKCS_PADDING)
 			{
 				byte pad = space[s-1];
-				if (pad < 1 || pad > s || std::find_if(space+s-pad, space+s, std::bind2nd(std::not_equal_to<byte>(), pad)) != space+s)
-					throw InvalidCiphertext("StreamTransformationFilter: invalid PKCS #7 block padding found");
+                                if (pad < 1 || pad > s || FindIfNot(space+s-pad, space+s, pad) != space+s)
+                                    throw InvalidCiphertext("StreamTransformationFilter: invalid PKCS #7 block padding found");
 				length = s-pad;
+			}
+			else if (m_padding == W3C_PADDING)
+			{
+				byte pad = space[s - 1];
+				if (pad < 1 || pad > s)
+					throw InvalidCiphertext("StreamTransformationFilter: invalid W3C block padding found");
+				length = s - pad;
 			}
 			else
 			{
@@ -761,7 +851,7 @@ void StreamTransformationFilter::LastPut(const byte *inString, size_t length)
 // *************************************************************
 
 HashFilter::HashFilter(HashTransformation &hm, BufferedTransformation *attachment, bool putMessage, int truncatedDigestSize, const std::string &messagePutChannel, const std::string &hashPutChannel)
-	: m_hashModule(hm), m_putMessage(putMessage), m_digestSize(0), m_space(NULL)
+	: m_hashModule(hm), m_putMessage(putMessage), m_digestSize(0), m_space(NULLPTR)
 	, m_messagePutChannel(messagePutChannel), m_hashPutChannel(hashPutChannel)
 {
 	m_digestSize = truncatedDigestSize < 0 ? m_hashModule.DigestSize() : truncatedDigestSize;

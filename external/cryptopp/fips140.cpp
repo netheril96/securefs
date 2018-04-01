@@ -1,4 +1,4 @@
-// fips140.cpp - written and placed in the public domain by Wei Dai
+// fips140.cpp - originally written and placed in the public domain by Wei Dai
 
 #include "pch.h"
 
@@ -52,7 +52,7 @@ ThreadLocalStorage & AccessPowerUpSelfTestInProgress()
 bool PowerUpSelfTestInProgressOnThisThread()
 {
 #if CRYPTOPP_ENABLE_COMPLIANCE_WITH_FIPS_140_2
-	return AccessPowerUpSelfTestInProgress().GetValue() != NULL;
+	return AccessPowerUpSelfTestInProgress().GetValue() != NULLPTR;
 #else
 	CRYPTOPP_ASSERT(false);	// should not be called
 	return false;

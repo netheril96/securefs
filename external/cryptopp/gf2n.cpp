@@ -1,4 +1,4 @@
-// gf2n.cpp - written and placed in the public domain by Wei Dai
+// gf2n.cpp - originally written and placed in the public domain by Wei Dai
 
 #include "pch.h"
 #include "config.h"
@@ -17,6 +17,12 @@
 #include "oids.h"
 
 #include <iostream>
+
+// Issue 340
+#if CRYPTOPP_GCC_DIAGNOSTIC_AVAILABLE
+# pragma GCC diagnostic ignored "-Wconversion"
+# pragma GCC diagnostic ignored "-Wsign-conversion"
+#endif
 
 NAMESPACE_BEGIN(CryptoPP)
 
@@ -149,12 +155,16 @@ void PolynomialMod2::Encode(byte *output, size_t outputLen) const
 
 void PolynomialMod2::Decode(BufferedTransformation &bt, size_t inputLen)
 {
+	CRYPTOPP_ASSERT(bt.MaxRetrievable() >= inputLen);
+	if (bt.MaxRetrievable() < inputLen)
+		throw InvalidArgument("PolynomialMod2: input length is too small");
+
 	reg.CleanNew(BytesToWords(inputLen));
 
 	for (size_t i=inputLen; i > 0; i--)
 	{
 		byte b;
-		bt.Get(b);
+		(void)bt.Get(b);
 		reg[(i-1)/WORD_SIZE] |= word(b) << ((i-1)%WORD_SIZE)*8;
 	}
 }
@@ -325,7 +335,7 @@ PolynomialMod2 PolynomialMod2::Modulo(const PolynomialMod2 &b) const
 
 PolynomialMod2& PolynomialMod2::operator<<=(unsigned int n)
 {
-#if CRYPTOPP_DEBUG
+#if defined(CRYPTOPP_DEBUG)
 	int x; CRYPTOPP_UNUSED(x);
 	CRYPTOPP_ASSERT(SafeConvert(n,x));
 #endif
@@ -497,7 +507,7 @@ std::ostream& operator<<(std::ostream& out, const PolynomialMod2 &a)
 
 	static const char upper[]="0123456789ABCDEF";
 	static const char lower[]="0123456789abcdef";
-	const char* vec = (out.flags() & std::ios::uppercase) ? upper : lower;
+	const char* const vec = (out.flags() & std::ios::uppercase) ? upper : lower;
 
 	for (i=0; i*bits < a.BitCount(); i++)
 	{
@@ -896,7 +906,7 @@ GF2NP * BERDecodeGF2NP(BufferedTransformation &bt)
 			else
 			{
 				BERDecodeError();
-				return NULL;
+				return NULLPTR;
 			}
 		parameters.MessageEnd();
 	seq.MessageEnd();

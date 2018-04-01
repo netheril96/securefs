@@ -1,10 +1,13 @@
-// wait.cpp - written and placed in the public domain by Wei Dai
+// wait.cpp - originally written and placed in the public domain by Wei Dai
 
 #include "pch.h"
 #include "config.h"
 
+// http://connect.microsoft.com/VisualStudio/feedback/details/1581706
+//   and http://github.com/weidai11/cryptopp/issues/214
 #if CRYPTOPP_MSC_VERSION
 # pragma warning(disable: 4189)
+# pragma warning(disable: 4589)
 #endif
 
 #if !defined(NO_OS_DEPENDENCE) && (defined(SOCKETS_AVAILABLE) || defined(WINDOWS_PIPES_AVAILABLE))
@@ -164,6 +167,7 @@ WaitObjectContainer::~WaitObjectContainer()
 			CRYPTOPP_ASSERT(dwResult < (DWORD)m_threads.size());
 #else
 			DWORD dwResult = ::WaitForMultipleObjects((DWORD)m_threads.size(), threadHandles, TRUE, INFINITE);
+			CRYPTOPP_UNUSED(dwResult);
 			CRYPTOPP_ASSERT(dwResult < (DWORD)m_threads.size());
 #endif
 
@@ -247,8 +251,8 @@ void WaitObjectContainer::CreateThreads(unsigned int count)
 	size_t currentCount = m_threads.size();
 	if (currentCount == 0)
 	{
-		m_startWaiting = ::CreateEvent(NULL, TRUE, FALSE, NULL);
-		m_stopWaiting = ::CreateEvent(NULL, TRUE, FALSE, NULL);
+		m_startWaiting = ::CreateEvent(NULLPTR, TRUE, FALSE, NULLPTR);
+		m_stopWaiting = ::CreateEvent(NULLPTR, TRUE, FALSE, NULLPTR);
 	}
 
 	if (currentCount < count)
@@ -265,7 +269,7 @@ void WaitObjectContainer::CreateThreads(unsigned int count)
 			thread.startWaiting = m_startWaiting;
 			thread.stopWaiting = m_stopWaiting;
 			thread.waitingToWait = false;
-			thread.threadHandle = CreateThread(NULL, 0, &WaitingThread, &thread, 0, &thread.threadId);
+			thread.threadHandle = CreateThread(NULLPTR, 0, &WaitingThread, &thread, 0, &thread.threadId);
 		}
 	}
 }
@@ -372,7 +376,7 @@ bool WaitObjectContainer::Wait(unsigned long milliseconds)
 		if (milliseconds > 0)
 		{
 			unsigned long timeAfterWait = t.ElapsedTime();
-			OutputDebugString(("Handles " + IntToString(m_handles.size()) + ", Woke up by " + IntToString(result-WAIT_OBJECT_0) + ", Busied for " + IntToString(timeBeforeWait-lastTime) + " us, Waited for " + IntToString(timeAfterWait-timeBeforeWait) + " us, max " + IntToString(milliseconds) + "ms\n").c_str());
+			OutputDebugStringA(("Handles " + IntToString(m_handles.size()) + ", Woke up by " + IntToString(result-WAIT_OBJECT_0) + ", Busied for " + IntToString(timeBeforeWait-lastTime) + " us, Waited for " + IntToString(timeAfterWait-timeBeforeWait) + " us, max " + IntToString(milliseconds) + "ms\n").c_str());
 			lastTime = timeAfterWait;
 		}
 #endif
@@ -433,7 +437,7 @@ bool WaitObjectContainer::Wait(unsigned long milliseconds)
 	timeval tv, *timeout;
 
 	if (milliseconds == INFINITE_TIME)
-		timeout = NULL;
+		timeout = NULLPTR;
 	else
 	{
 		tv.tv_sec = milliseconds / 1000;
@@ -441,7 +445,7 @@ bool WaitObjectContainer::Wait(unsigned long milliseconds)
 		timeout = &tv;
 	}
 
-	int result = select(m_maxFd+1, &m_readfds, &m_writefds, NULL, timeout);
+	int result = select(m_maxFd+1, &m_readfds, &m_writefds, NULLPTR, timeout);
 
 	if (result > 0)
 		return true;

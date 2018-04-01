@@ -1,4 +1,4 @@
-// modes.cpp - written and placed in the public domain by Wei Dai
+// modes.cpp - originally written and placed in the public domain by Wei Dai
 
 #include "pch.h"
 
@@ -7,13 +7,13 @@
 #include "modes.h"
 #include "misc.h"
 
-//#if CRYPTOPP_DEBUG
+#if defined(CRYPTOPP_DEBUG)
 #include "des.h"
-//#endif
+#endif
 
 NAMESPACE_BEGIN(CryptoPP)
 
-#if CRYPTOPP_DEBUG && !defined(CRYPTOPP_DOXYGEN_PROCESSING)
+#if defined(CRYPTOPP_DEBUG) && !defined(CRYPTOPP_DOXYGEN_PROCESSING)
 void Modes_TestInstantiations()
 {
 	CFB_Mode<DES>::Encryption m0;
@@ -25,13 +25,10 @@ void Modes_TestInstantiations()
 }
 #endif
 
-// Thanks to Zireael, http://github.com/weidai11/cryptopp/pull/46
-#ifndef CRYPTOPP_MAINTAIN_BACKWARDS_COMPATIBILITY_562
 void CipherModeBase::ResizeBuffers()
 {
 	m_register.New(m_cipher->BlockSize());
 }
-#endif
 
 void CFB_ModePolicy::Iterate(byte *output, const byte *input, CipherDir dir, size_t iterationCount)
 {
@@ -70,7 +67,7 @@ void CFB_ModePolicy::TransformRegister()
 void CFB_ModePolicy::CipherResynchronize(const byte *iv, size_t length)
 {
 	CRYPTOPP_ASSERT(length == BlockSize());
-	CopyOrZero(m_register, iv, length);
+	CopyOrZero(m_register, m_register.size(), iv, length);
 	TransformRegister();
 }
 
@@ -93,7 +90,7 @@ void OFB_ModePolicy::WriteKeystream(byte *keystreamBuffer, size_t iterationCount
 	unsigned int s = BlockSize();
 	m_cipher->ProcessBlock(m_register, keystreamBuffer);
 	if (iterationCount > 1)
-		m_cipher->AdvancedProcessBlocks(keystreamBuffer, NULL, keystreamBuffer+s, s*(iterationCount-1), 0);
+		m_cipher->AdvancedProcessBlocks(keystreamBuffer, NULLPTR, keystreamBuffer+s, s*(iterationCount-1), 0);
 	memcpy(m_register, keystreamBuffer+s*(iterationCount-1), s);
 }
 
@@ -102,7 +99,7 @@ void OFB_ModePolicy::CipherResynchronize(byte *keystreamBuffer, const byte *iv, 
 	CRYPTOPP_UNUSED(keystreamBuffer), CRYPTOPP_UNUSED(length);
 	CRYPTOPP_ASSERT(length == BlockSize());
 
-	CopyOrZero(m_register, iv, length);
+	CopyOrZero(m_register, m_register.size(), iv, length);
 }
 
 void CTR_ModePolicy::SeekToIteration(lword iterationCount)
@@ -147,7 +144,7 @@ void CTR_ModePolicy::CipherResynchronize(byte *keystreamBuffer, const byte *iv, 
 	CRYPTOPP_UNUSED(keystreamBuffer), CRYPTOPP_UNUSED(length);
 	CRYPTOPP_ASSERT(length == BlockSize());
 
-	CopyOrZero(m_register, iv, length);
+	CopyOrZero(m_register, m_register.size(), iv, length);
 	m_counterArray = m_register;
 }
 
@@ -163,43 +160,41 @@ void BlockOrientedCipherModeBase::UncheckedSetKey(const byte *key, unsigned int 
 	}
 }
 
-// Thanks to Zireael, http://github.com/weidai11/cryptopp/pull/46
-#ifndef CRYPTOPP_MAINTAIN_BACKWARDS_COMPATIBILITY_562
 void BlockOrientedCipherModeBase::ResizeBuffers()
 {
 	CipherModeBase::ResizeBuffers();
 	m_buffer.New(BlockSize());
 }
-#endif
 
 void ECB_OneWay::ProcessData(byte *outString, const byte *inString, size_t length)
 {
 	CRYPTOPP_ASSERT(length%BlockSize()==0);
-	m_cipher->AdvancedProcessBlocks(inString, NULL, outString, length, BlockTransformation::BT_AllowParallel);
+	m_cipher->AdvancedProcessBlocks(inString, NULLPTR, outString, length, BlockTransformation::BT_AllowParallel);
 }
 
 void CBC_Encryption::ProcessData(byte *outString, const byte *inString, size_t length)
 {
-	if (!length)
-		return;
+	if (!length) return;
 	CRYPTOPP_ASSERT(length%BlockSize()==0);
 
-	unsigned int blockSize = BlockSize();
+	const unsigned int blockSize = BlockSize();
 	m_cipher->AdvancedProcessBlocks(inString, m_register, outString, blockSize, BlockTransformation::BT_XorInput);
 	if (length > blockSize)
 		m_cipher->AdvancedProcessBlocks(inString+blockSize, outString, outString+blockSize, length-blockSize, BlockTransformation::BT_XorInput);
 	memcpy(m_register, outString + length - blockSize, blockSize);
 }
 
-void CBC_CTS_Encryption::ProcessLastBlock(byte *outString, const byte *inString, size_t length)
+size_t CBC_CTS_Encryption::ProcessLastBlock(byte *outString, size_t outLength, const byte *inString, size_t inLength)
 {
-	if (length <= BlockSize())
+	CRYPTOPP_UNUSED(outLength);
+	size_t used = inLength;
+	if (inLength <= BlockSize())
 	{
 		if (!m_stolenIV)
 			throw InvalidArgument("CBC_Encryption: message is too short for ciphertext stealing");
 
 		// steal from IV
-		memcpy(outString, m_register, length);
+		memcpy(outString, m_register, inLength);
 		outString = m_stolenIV;
 	}
 	else
@@ -208,24 +203,23 @@ void CBC_CTS_Encryption::ProcessLastBlock(byte *outString, const byte *inString,
 		xorbuf(m_register, inString, BlockSize());
 		m_cipher->ProcessBlock(m_register);
 		inString += BlockSize();
-		length -= BlockSize();
-		memcpy(outString+BlockSize(), m_register, length);
+		inLength -= BlockSize();
+		memcpy(outString+BlockSize(), m_register, inLength);
 	}
 
 	// output last full ciphertext block
-	xorbuf(m_register, inString, length);
+	xorbuf(m_register, inString, inLength);
 	m_cipher->ProcessBlock(m_register);
 	memcpy(outString, m_register, BlockSize());
+
+	return used;
 }
 
-// Thanks to Zireael, http://github.com/weidai11/cryptopp/pull/46
-#ifndef CRYPTOPP_MAINTAIN_BACKWARDS_COMPATIBILITY_562
 void CBC_Decryption::ResizeBuffers()
 {
 	BlockOrientedCipherModeBase::ResizeBuffers();
 	m_temp.New(BlockSize());
 }
-#endif
 
 void CBC_Decryption::ProcessData(byte *outString, const byte *inString, size_t length)
 {
@@ -233,7 +227,7 @@ void CBC_Decryption::ProcessData(byte *outString, const byte *inString, size_t l
 		return;
 	CRYPTOPP_ASSERT(length%BlockSize()==0);
 
-	unsigned int blockSize = BlockSize();
+	const unsigned int blockSize = BlockSize();
 	memcpy(m_temp, inString+length-blockSize, blockSize);	// save copy now in case of in-place decryption
 	if (length > blockSize)
 		m_cipher->AdvancedProcessBlocks(inString+blockSize, inString, outString+blockSize, length-blockSize, BlockTransformation::BT_ReverseDirection|BlockTransformation::BT_AllowParallel);
@@ -241,38 +235,44 @@ void CBC_Decryption::ProcessData(byte *outString, const byte *inString, size_t l
 	m_register.swap(m_temp);
 }
 
-void CBC_CTS_Decryption::ProcessLastBlock(byte *outString, const byte *inString, size_t length)
+size_t CBC_CTS_Decryption::ProcessLastBlock(byte *outString, size_t outLength, const byte *inString, size_t inLength)
 {
-	const byte *pn, *pn1;
-	bool stealIV = length <= BlockSize();
+	CRYPTOPP_UNUSED(outLength);
+	const byte *pn1, *pn2;
+	bool stealIV = inLength <= BlockSize();
+	size_t used = inLength;
 
 	if (stealIV)
 	{
-		pn = inString;
-		pn1 = m_register;
+		pn1 = inString;
+		pn2 = m_register;
 	}
 	else
 	{
-		pn = inString + BlockSize();
-		pn1 = inString;
-		length -= BlockSize();
+		pn1 = inString + BlockSize();
+		pn2 = inString;
+		inLength -= BlockSize();
 	}
 
 	// decrypt last partial plaintext block
-	memcpy(m_temp, pn1, BlockSize());
+	memcpy(m_temp, pn2, BlockSize());
 	m_cipher->ProcessBlock(m_temp);
-	xorbuf(m_temp, pn, length);
+	xorbuf(m_temp, pn1, inLength);
 
 	if (stealIV)
-		memcpy(outString, m_temp, length);
+	{
+		memcpy(outString, m_temp, inLength);
+	}
 	else
 	{
-		memcpy(outString+BlockSize(), m_temp, length);
+		memcpy(outString+BlockSize(), m_temp, inLength);
 		// decrypt next to last plaintext block
-		memcpy(m_temp, pn, length);
+		memcpy(m_temp, pn1, inLength);
 		m_cipher->ProcessBlock(m_temp);
 		xorbuf(outString, m_temp, m_register, BlockSize());
 	}
+
+	return used;
 }
 
 NAMESPACE_END
