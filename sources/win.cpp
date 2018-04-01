@@ -479,6 +479,14 @@ private:
             throwVFSException(EIO);
     }
 
+    void write32(const void* input, DWORD length)
+    {
+        DWORD writelen;
+        CHECK_CALL(WriteFile(m_handle, input, length, &writelen, nullptr));
+        if (writelen != length)
+            throwVFSException(EIO);
+    }
+
     length_type read32(void* output, offset_type offset, DWORD length)
     {
         OVERLAPPED ol;
@@ -488,6 +496,19 @@ private:
 
         DWORD readlen;
         if (!ReadFile(m_handle, output, length, &readlen, &ol))
+        {
+            DWORD err = GetLastError();
+            if (err == ERROR_HANDLE_EOF)
+                return 0;
+            THROW_WINDOWS_EXCEPTION(err, L"ReadFile");
+        }
+        return readlen;
+    }
+
+    length_type read32(void* output, DWORD length)
+    {
+        DWORD readlen;
+        if (!ReadFile(m_handle, output, length, &readlen, nullptr))
         {
             DWORD err = GetLastError();
             if (err == ERROR_HANDLE_EOF)
@@ -602,6 +623,22 @@ public:
         return total;
     }
 
+    length_type sequential_read(void* output, length_type length) override
+    {
+        length_type total = 0;
+        while (length > MAX_SINGLE_BLOCK)
+        {
+            length_type readlen = read32(output, MAX_SINGLE_BLOCK);
+            if (readlen == 0)
+                return total;
+            length -= readlen;
+            output = static_cast<char*>(output) + readlen;
+            total += readlen;
+        }
+        total += read32(output, static_cast<DWORD>(length));
+        return total;
+    }
+
     void write(const void* input, offset_type offset, length_type length) override
     {
         if (offset > size())
@@ -614,6 +651,17 @@ public:
             input = static_cast<const char*>(input) + MAX_SINGLE_BLOCK;
         }
         write32(input, offset, static_cast<DWORD>(length));
+    }
+
+    void sequential_write(const void* input, length_type length) override
+    {
+        while (length > MAX_SINGLE_BLOCK)
+        {
+            write32(input, MAX_SINGLE_BLOCK);
+            length -= MAX_SINGLE_BLOCK;
+            input = static_cast<const char*>(input) + MAX_SINGLE_BLOCK;
+        }
+        write32(input, static_cast<DWORD>(length));
     }
 
     length_type size() const override

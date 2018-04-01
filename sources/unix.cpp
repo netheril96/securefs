@@ -94,11 +94,28 @@ public:
         return static_cast<length_type>(rc);
     }
 
+    length_type sequential_read(void* output, length_type length) override
+    {
+        auto rc = ::read(m_fd, output, length);
+        if (rc < 0)
+            THROW_POSIX_EXCEPTION(errno, "read");
+        return static_cast<length_type>(rc);
+    }
+
     void write(const void* input, offset_type offset, length_type length) override
     {
         auto rc = ::pwrite(m_fd, input, length, offset);
         if (rc < 0)
             THROW_POSIX_EXCEPTION(errno, "pwrite");
+        if (static_cast<length_type>(rc) != length)
+            throwVFSException(EIO);
+    }
+
+    void sequential_write(const void* input, length_type length) override
+    {
+        auto rc = ::write(m_fd, input, length);
+        if (rc < 0)
+            THROW_POSIX_EXCEPTION(errno, "write");
         if (static_cast<length_type>(rc) != length)
             throwVFSException(EIO);
     }

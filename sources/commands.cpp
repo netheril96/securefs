@@ -418,15 +418,24 @@ std::shared_ptr<FileStream> CommandBase::open_config_stream(const std::string& p
     return OSService::get_default().open_file_stream(path, flags, 0644);
 }
 
-FSConfig CommandBase::read_config(StreamBase* stream, const void* password, size_t pass_len)
+FSConfig CommandBase::read_config(FileStream* stream, const void* password, size_t pass_len)
 {
     FSConfig result;
 
-    std::string str(stream->size(), 0);
-    stream->read(&str[0], 0, str.size());
+    std::vector<char> str;
+    str.reserve(4000);
+    while (true)
+    {
+        char buffer[4000];
+        auto sz = stream->sequential_read(buffer, sizeof(buffer));
+        if (sz <= 0)
+            break;
+        str.insert(str.end(), buffer, buffer + sz);
+    }
+
     Json::Reader reader;
     Json::Value value;
-    if (!reader.parse(str, value))
+    if (!reader.parse(str.data(), str.data() + str.size(), value))
         throw_runtime_error(strprintf("Failure to parse the config file: %s",
                                       reader.getFormattedErrorMessages().c_str()));
 
@@ -450,7 +459,7 @@ static void copy_key(const CryptoPP::AlignedSecByteBlock& in_key, optional<key_t
     copy_key(in_key, &(out_key->value()));
 }
 
-void CommandBase::write_config(StreamBase* stream,
+void CommandBase::write_config(FileStream* stream,
                                const std::string& pbdkf_algorithm,
                                const FSConfig& config,
                                const void* password,
@@ -469,7 +478,7 @@ void CommandBase::write_config(StreamBase* stream,
                                config.iv_size,
                                rounds)
                    .toStyledString();
-    stream->write(str.data(), 0, str.size());
+    stream->sequential_write(str.data(), str.size());
 }
 
 class CommonCommandBase : public CommandBase
