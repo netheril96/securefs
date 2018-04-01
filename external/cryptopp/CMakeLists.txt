@@ -753,50 +753,6 @@ if (BUILD_DOCUMENTATION)
 	endif ()
 endif ()
 
-#============================================================================
-# Install
-#============================================================================
-
-set(export_name "cryptopp-targets")
-
-# Runtime package
-if (BUILD_SHARED)
-	install(
-			TARGETS cryptopp-shared
-			EXPORT ${export_name}
-			DESTINATION ${CMAKE_INSTALL_LIBDIR}
-			RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-			LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-			ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-	)
-endif ()
-
-# Development package
-if (BUILD_STATIC)
-	install(TARGETS cryptopp-static EXPORT ${export_name} DESTINATION ${CMAKE_INSTALL_LIBDIR})
-endif ()
-install(FILES ${cryptopp_HEADERS} DESTINATION include/cryptopp)
-
-# CMake Package
-if (NOT CMAKE_VERSION VERSION_LESS 2.8.8)	# CMakePackageConfigHelpers is supported from 2.8.8
-	include(CMakePackageConfigHelpers)
-	write_basic_package_version_file("${PROJECT_BINARY_DIR}/cryptopp-config-version.cmake" VERSION ${cryptopp_VERSION_MAJOR}.${cryptopp_VERSION_MINOR}.${cryptopp_VERSION_PATCH} COMPATIBILITY SameMajorVersion)
-	install(FILES cryptopp-config.cmake ${PROJECT_BINARY_DIR}/cryptopp-config-version.cmake DESTINATION "lib/cmake/cryptopp")
-	install(EXPORT ${export_name} DESTINATION "lib/cmake/cryptopp")
-endif ()
-
-# Tests
-if (BUILD_TESTING)
-	install(TARGETS cryptest DESTINATION ${CMAKE_INSTALL_BINDIR})
-	install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/TestData DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/cryptopp)
-	install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/TestVectors DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/cryptopp)
-endif ()
-
-# Documentation
-if (BUILD_DOCUMENTATION)
-	install(DIRECTORY "${out_source_DOCS_DIR}" DESTINATION ${CMAKE_INSTALL_DOCDIR})
-endif ()
-
 # Print a configuration summary. We want CXX and CXXFLAGS, but they are not includd in ALL.
 if (NOT CMAKE_VERSION VERSION_LESS 3.0.2)
 	if (CRYPTOPP_I386)
