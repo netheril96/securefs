@@ -694,7 +694,8 @@ class MountCommand : public CommonCommandBase
 private:
     CryptoPP::AlignedSecByteBlock password;
     TCLAP::SwitchArg single_threaded{"s", "single", "Single threaded mode"};
-    TCLAP::SwitchArg background{"b", "background", "Run securefs in the background"};
+    TCLAP::SwitchArg background{
+        "b", "background", "Run securefs in the background (currently no effect on Windows)"};
     TCLAP::SwitchArg insecure{
         "i", "insecure", "Disable all integrity verification (insecure mode)"};
     TCLAP::SwitchArg noxattr{"x", "noxattr", "Disable built-in xattr support"};
