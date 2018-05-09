@@ -30,6 +30,12 @@
 #if CRYPTOPP_GETAUXV_AVAILABLE
 # include <sys/auxv.h>
 #else
+#ifndef AT_HWCAP
+# define AT_HWCAP 16
+#endif
+#ifndef AT_HWCAP2
+# define AT_HWCAP2 26
+#endif
 unsigned long int getauxval(unsigned long int) { return 0; }
 #endif
 
@@ -53,7 +59,7 @@ NAMESPACE_BEGIN(CryptoPP)
 #ifndef CRYPTOPP_MS_STYLE_INLINE_ASSEMBLY
 extern "C" {
     typedef void (*SigHandler)(int);
-};
+}
 
 extern "C"
 {
@@ -72,7 +78,7 @@ extern "C"
 
 extern bool CPU_ProbeSSE2();
 
-#if _MSC_VER >= 1500
+#if _MSC_VER >= 1600
 
 inline bool CpuId(word32 func, word32 subfunc, word32 output[4])
 {
@@ -177,13 +183,22 @@ bool CpuId(word32 func, word32 subfunc, word32 output[4])
 #endif
 
 bool CRYPTOPP_SECTION_INIT g_x86DetectionDone = false;
-bool CRYPTOPP_SECTION_INIT CRYPTOPP_SECTION_INIT g_hasSSE2 = false, CRYPTOPP_SECTION_INIT g_hasSSSE3 = false;
-bool CRYPTOPP_SECTION_INIT g_hasSSE41 = false, CRYPTOPP_SECTION_INIT g_hasSSE42 = false;
-bool CRYPTOPP_SECTION_INIT g_hasAESNI = false, CRYPTOPP_SECTION_INIT g_hasCLMUL = false;
-bool CRYPTOPP_SECTION_INIT g_hasADX = false, CRYPTOPP_SECTION_INIT g_hasSHA = false;
-bool CRYPTOPP_SECTION_INIT g_hasRDRAND = false, CRYPTOPP_SECTION_INIT g_hasRDSEED = false, CRYPTOPP_SECTION_INIT g_isP4 = false;
-bool CRYPTOPP_SECTION_INIT g_hasPadlockRNG = false, CRYPTOPP_SECTION_INIT g_hasPadlockACE = false, CRYPTOPP_SECTION_INIT g_hasPadlockACE2 = false;
-bool CRYPTOPP_SECTION_INIT g_hasPadlockPHE = false, CRYPTOPP_SECTION_INIT g_hasPadlockPMM = false;
+bool CRYPTOPP_SECTION_INIT g_hasSSE2 = false;
+bool CRYPTOPP_SECTION_INIT g_hasSSSE3 = false;
+bool CRYPTOPP_SECTION_INIT g_hasSSE41 = false;
+bool CRYPTOPP_SECTION_INIT g_hasSSE42 = false;
+bool CRYPTOPP_SECTION_INIT g_hasAESNI = false;
+bool CRYPTOPP_SECTION_INIT g_hasCLMUL = false;
+bool CRYPTOPP_SECTION_INIT g_hasADX = false;
+bool CRYPTOPP_SECTION_INIT g_hasSHA = false;
+bool CRYPTOPP_SECTION_INIT g_hasRDRAND = false;
+bool CRYPTOPP_SECTION_INIT g_hasRDSEED = false;
+bool CRYPTOPP_SECTION_INIT g_isP4 = false;
+bool CRYPTOPP_SECTION_INIT g_hasPadlockRNG = false;
+bool CRYPTOPP_SECTION_INIT g_hasPadlockACE = false;
+bool CRYPTOPP_SECTION_INIT g_hasPadlockACE2 = false;
+bool CRYPTOPP_SECTION_INIT g_hasPadlockPHE = false;
+bool CRYPTOPP_SECTION_INIT g_hasPadlockPMM = false;
 word32 CRYPTOPP_SECTION_INIT g_cacheLineSize = CRYPTOPP_L1_CACHE_LINE_SIZE;
 
 static inline bool IsIntel(const word32 output[4])
@@ -293,7 +308,7 @@ void DetectX86Features()
 		}
 	}
 
-	if (!g_cacheLineSize)
+	if (g_cacheLineSize == 0)
 		g_cacheLineSize = CRYPTOPP_L1_CACHE_LINE_SIZE;
 
 	*const_cast<volatile bool*>(&g_x86DetectionDone) = true;
@@ -304,8 +319,12 @@ void DetectX86Features()
 #elif (CRYPTOPP_BOOL_ARM32 || CRYPTOPP_BOOL_ARM64)
 
 bool CRYPTOPP_SECTION_INIT g_ArmDetectionDone = false;
-bool CRYPTOPP_SECTION_INIT g_hasNEON = false, CRYPTOPP_SECTION_INIT g_hasPMULL = false, CRYPTOPP_SECTION_INIT g_hasCRC32 = false;
-bool CRYPTOPP_SECTION_INIT g_hasAES = false, CRYPTOPP_SECTION_INIT g_hasSHA1 = false, CRYPTOPP_SECTION_INIT g_hasSHA2 = false;
+bool CRYPTOPP_SECTION_INIT g_hasNEON = false;
+bool CRYPTOPP_SECTION_INIT g_hasPMULL = false;
+bool CRYPTOPP_SECTION_INIT g_hasCRC32 = false;
+bool CRYPTOPP_SECTION_INIT g_hasAES = false;
+bool CRYPTOPP_SECTION_INIT g_hasSHA1 = false;
+bool CRYPTOPP_SECTION_INIT g_hasSHA2 = false;
 word32 CRYPTOPP_SECTION_INIT g_cacheLineSize = CRYPTOPP_L1_CACHE_LINE_SIZE;
 
 // ARM does not have an unprivliged equivalent to CPUID on IA-32. We have to jump through some
@@ -368,21 +387,21 @@ extern bool CPU_ProbePMULL();
 inline bool CPU_QueryNEON()
 {
 #if defined(__ANDROID__) && defined(__aarch64__)
-	if ((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM64) &&
-		(android_getCpuFeatures() & ANDROID_CPU_ARM64_FEATURE_ASIMD))
+	if (((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM64) != 0) &&
+		((android_getCpuFeatures() & ANDROID_CPU_ARM64_FEATURE_ASIMD) != 0))
 		return true;
 #elif defined(__ANDROID__) && defined(__arm__)
-	if ((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM) &&
-		(android_getCpuFeatures() & ANDROID_CPU_ARM_FEATURE_NEON))
+	if (((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM)  != 0) &&
+		((android_getCpuFeatures() & ANDROID_CPU_ARM_FEATURE_NEON) != 0))
 		return true;
 #elif defined(__linux__) && defined(__aarch64__)
-	if (getauxval(AT_HWCAP) & HWCAP_ASIMD)
+	if ((getauxval(AT_HWCAP) & HWCAP_ASIMD) != 0)
 		return true;
 #elif defined(__linux__) && defined(__aarch32__)
-	if (getauxval(AT_HWCAP2) & HWCAP2_ASIMD)
+	if ((getauxval(AT_HWCAP2) & HWCAP2_ASIMD) != 0)
 		return true;
 #elif defined(__linux__) && defined(__arm__)
-	if (getauxval(AT_HWCAP) & HWCAP_ARM_NEON)
+	if ((getauxval(AT_HWCAP) & HWCAP_ARM_NEON) != 0)
 		return true;
 #elif defined(__APPLE__) && defined(__aarch64__)
 	// Core feature set for Aarch32 and Aarch64.
@@ -394,18 +413,18 @@ inline bool CPU_QueryNEON()
 inline bool CPU_QueryCRC32()
 {
 #if defined(__ANDROID__) && defined(__aarch64__)
-	if ((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM64) &&
-		(android_getCpuFeatures() & ANDROID_CPU_ARM64_FEATURE_CRC32))
+	if (((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM64) != 0) &&
+		((android_getCpuFeatures() & ANDROID_CPU_ARM64_FEATURE_CRC32) != 0))
 		return true;
 #elif defined(__ANDROID__) && defined(__aarch32__)
-	if ((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM) &&
-		(android_getCpuFeatures() & ANDROID_CPU_ARM_FEATURE_CRC32))
+	if (((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM)  != 0) &&
+		((android_getCpuFeatures() & ANDROID_CPU_ARM_FEATURE_CRC32) != 0))
 		return true;
 #elif defined(__linux__) && defined(__aarch64__)
-	if (getauxval(AT_HWCAP) & HWCAP_CRC32)
+	if ((getauxval(AT_HWCAP) & HWCAP_CRC32) != 0)
 		return true;
 #elif defined(__linux__) && defined(__aarch32__)
-	if (getauxval(AT_HWCAP2) & HWCAP2_CRC32)
+	if ((getauxval(AT_HWCAP2) & HWCAP2_CRC32) != 0)
 		return true;
 #elif defined(__APPLE__) && defined(__aarch64__)
 	// No compiler support. CRC intrinsics result in a failed compiled.
@@ -417,18 +436,18 @@ inline bool CPU_QueryCRC32()
 inline bool CPU_QueryPMULL()
 {
 #if defined(__ANDROID__) && defined(__aarch64__)
-	if ((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM64) &&
-		(android_getCpuFeatures() & ANDROID_CPU_ARM64_FEATURE_PMULL))
+	if (((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM64)  != 0) &&
+		((android_getCpuFeatures() & ANDROID_CPU_ARM64_FEATURE_PMULL) != 0))
 		return true;
 #elif defined(__ANDROID__) && defined(__aarch32__)
-	if ((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM) &&
-		(android_getCpuFeatures() & ANDROID_CPU_ARM_FEATURE_PMULL))
+	if (((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM) != 0) &&
+		((android_getCpuFeatures() & ANDROID_CPU_ARM_FEATURE_PMULL) != 0))
 		return true;
 #elif defined(__linux__) && defined(__aarch64__)
-	if (getauxval(AT_HWCAP) & HWCAP_PMULL)
+	if ((getauxval(AT_HWCAP) & HWCAP_PMULL) != 0)
 		return true;
 #elif defined(__linux__) && defined(__aarch32__)
-	if (getauxval(AT_HWCAP2) & HWCAP2_PMULL)
+	if ((getauxval(AT_HWCAP2) & HWCAP2_PMULL) != 0)
 		return true;
 #elif defined(__APPLE__) && defined(__aarch64__)
 	// No compiler support. PMULL intrinsics result in a failed compiled.
@@ -440,18 +459,18 @@ inline bool CPU_QueryPMULL()
 inline bool CPU_QueryAES()
 {
 #if defined(__ANDROID__) && defined(__aarch64__)
-	if ((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM64) &&
-		(android_getCpuFeatures() & ANDROID_CPU_ARM64_FEATURE_AES))
+	if (((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM64)  != 0) &&
+		((android_getCpuFeatures() & ANDROID_CPU_ARM64_FEATURE_AES) != 0))
 		return true;
 #elif defined(__ANDROID__) && defined(__aarch32__)
-	if ((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM) &&
-		(android_getCpuFeatures() & ANDROID_CPU_ARM_FEATURE_AES))
+	if (((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM)  != 0) &&
+		((android_getCpuFeatures() & ANDROID_CPU_ARM_FEATURE_AES) != 0))
 		return true;
 #elif defined(__linux__) && defined(__aarch64__)
-	if (getauxval(AT_HWCAP) & HWCAP_AES)
+	if ((getauxval(AT_HWCAP) & HWCAP_AES) != 0)
 		return true;
 #elif defined(__linux__) && defined(__aarch32__)
-	if (getauxval(AT_HWCAP2) & HWCAP2_AES)
+	if ((getauxval(AT_HWCAP2) & HWCAP2_AES) != 0)
 		return true;
 #elif defined(__APPLE__) && defined(__aarch64__)
 	// http://stackoverflow.com/questions/45637888/how-to-determine-armv8-features-at-runtime-on-ios
@@ -475,18 +494,18 @@ inline bool CPU_QueryAES()
 inline bool CPU_QuerySHA1()
 {
 #if defined(__ANDROID__) && defined(__aarch64__)
-	if ((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM64) &&
-		(android_getCpuFeatures() & ANDROID_CPU_ARM64_FEATURE_SHA1))
+	if (((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM64) != 0) &&
+		((android_getCpuFeatures() & ANDROID_CPU_ARM64_FEATURE_SHA1) != 0))
 		return true;
 #elif defined(__ANDROID__) && defined(__aarch32__)
-	if ((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM) &&
-		(android_getCpuFeatures() & ANDROID_CPU_ARM_FEATURE_SHA1))
+	if (((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM) != 0) &&
+		((android_getCpuFeatures() & ANDROID_CPU_ARM_FEATURE_SHA1) != 0))
 		return true;
 #elif defined(__linux__) && defined(__aarch64__)
-	if (getauxval(AT_HWCAP) & HWCAP_SHA1)
+	if ((getauxval(AT_HWCAP) & HWCAP_SHA1) != 0)
 		return true;
 #elif defined(__linux__) && defined(__aarch32__)
-	if (getauxval(AT_HWCAP2) & HWCAP2_SHA1)
+	if ((getauxval(AT_HWCAP2) & HWCAP2_SHA1) != 0)
 		return true;
 #elif defined(__APPLE__) && defined(__aarch64__)
 	// http://stackoverflow.com/questions/45637888/how-to-determine-armv8-features-at-runtime-on-ios
@@ -510,18 +529,18 @@ inline bool CPU_QuerySHA1()
 inline bool CPU_QuerySHA2()
 {
 #if defined(__ANDROID__) && defined(__aarch64__)
-	if ((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM64) &&
-		(android_getCpuFeatures() & ANDROID_CPU_ARM64_FEATURE_SHA2))
+	if (((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM64)  != 0) &&
+		((android_getCpuFeatures() & ANDROID_CPU_ARM64_FEATURE_SHA2) != 0))
 		return true;
 #elif defined(__ANDROID__) && defined(__aarch32__)
-	if ((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM) &&
-		(android_getCpuFeatures() & ANDROID_CPU_ARM_FEATURE_SHA2))
+	if (((android_getCpuFamily() & ANDROID_CPU_FAMILY_ARM) != 0) &&
+		((android_getCpuFeatures() & ANDROID_CPU_ARM_FEATURE_SHA2) != 0))
 		return true;
 #elif defined(__linux__) && defined(__aarch64__)
-	if (getauxval(AT_HWCAP) & HWCAP_SHA2)
+	if ((getauxval(AT_HWCAP) & HWCAP_SHA2) != 0)
 		return true;
 #elif defined(__linux__) && defined(__aarch32__)
-	if (getauxval(AT_HWCAP2) & HWCAP2_SHA2)
+	if ((getauxval(AT_HWCAP2) & HWCAP2_SHA2) != 0)
 		return true;
 #elif defined(__APPLE__) && defined(__aarch64__)
 	// http://stackoverflow.com/questions/45637888/how-to-determine-armv8-features-at-runtime-on-ios
@@ -554,11 +573,12 @@ void DetectArmFeatures()
 	g_hasSHA2 = CPU_QuerySHA2() || CPU_ProbeSHA2();
 
 #if defined(__linux__) && defined(_SC_LEVEL1_DCACHE_LINESIZE)
-	g_cacheLineSize = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
+	// Glibc does not implement on some platforms. The runtime returns 0 instead of error.
+	// https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/posix/sysconf.c
+	int cacheLineSize = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
+	if (cacheLineSize > 0)
+		g_cacheLineSize = cacheLineSize;
 #endif
-
-	if (!g_cacheLineSize)
-		g_cacheLineSize = CRYPTOPP_L1_CACHE_LINE_SIZE;
 
 	*const_cast<volatile bool*>(&g_ArmDetectionDone) = true;
 }
@@ -568,8 +588,12 @@ void DetectArmFeatures()
 #elif (CRYPTOPP_BOOL_PPC32 || CRYPTOPP_BOOL_PPC64)
 
 bool CRYPTOPP_SECTION_INIT g_PowerpcDetectionDone = false;
-bool CRYPTOPP_SECTION_INIT g_hasAltivec = false, CRYPTOPP_SECTION_INIT g_hasPower7 = false, CRYPTOPP_SECTION_INIT g_hasPower8 = false;
-bool CRYPTOPP_SECTION_INIT g_hasAES = false, CRYPTOPP_SECTION_INIT g_hasSHA256 = false, CRYPTOPP_SECTION_INIT g_hasSHA512 = false;
+bool CRYPTOPP_SECTION_INIT g_hasAltivec = false;
+bool CRYPTOPP_SECTION_INIT g_hasPower7 = false;
+bool CRYPTOPP_SECTION_INIT g_hasPower8 = false;
+bool CRYPTOPP_SECTION_INIT g_hasAES = false;
+bool CRYPTOPP_SECTION_INIT g_hasSHA256 = false;
+bool CRYPTOPP_SECTION_INIT g_hasSHA512 = false;
 word32 CRYPTOPP_SECTION_INIT g_cacheLineSize = CRYPTOPP_L1_CACHE_LINE_SIZE;
 
 extern bool CPU_ProbeAltivec();
@@ -595,7 +619,10 @@ extern bool CPU_ProbeSHA512();
 inline bool CPU_QueryAltivec()
 {
 #if defined(__linux__)
-	if (getauxval(AT_HWCAP) & PPC_FEATURE_HAS_ALTIVEC)
+	if ((getauxval(AT_HWCAP) & PPC_FEATURE_HAS_ALTIVEC) != 0)
+		return true;
+#elif defined(_AIX)
+	if (__power_vmx() != 0)
 		return true;
 #elif defined(__APPLE__) && defined(__POWERPC__)
 	// http://stackoverflow.com/questions/45637888/how-to-determine-armv8-features-at-runtime-on-ios
@@ -617,7 +644,10 @@ inline bool CPU_QueryPower7()
 {
 	// Power7 and ISA 2.06
 #if defined(__linux__)
-	if (getauxval(AT_HWCAP2) & PPC_FEATURE_ARCH_2_06)
+	if ((getauxval(AT_HWCAP) & PPC_FEATURE_ARCH_2_06) != 0)
+		return true;
+#elif defined(_AIX)
+	if (__power_7_andup() != 0)
 		return true;
 #endif
 	return false;
@@ -627,7 +657,10 @@ inline bool CPU_QueryPower8()
 {
 	// Power8 and ISA 2.07 provide in-core crypto.
 #if defined(__linux__)
-	if (getauxval(AT_HWCAP2) & PPC_FEATURE2_ARCH_2_07)
+	if ((getauxval(AT_HWCAP2) & PPC_FEATURE2_ARCH_2_07) != 0)
+		return true;
+#elif defined(_AIX)
+	if (__power_8_andup() != 0)
 		return true;
 #endif
 	return false;
@@ -638,10 +671,11 @@ inline bool CPU_QueryAES()
 	// Power8 and ISA 2.07 provide in-core crypto. Glibc
 	// 2.24 or higher is required for PPC_FEATURE2_VEC_CRYPTO.
 #if defined(__linux__)
-	if (getauxval(AT_HWCAP2) & PPC_FEATURE2_VEC_CRYPTO)
+	if ((getauxval(AT_HWCAP2) & PPC_FEATURE2_VEC_CRYPTO) != 0)
 		return true;
-	//if (getauxval(AT_HWCAP2) & PPC_FEATURE2_ARCH_2_07)
-	//	return true;
+#elif defined(_AIX)
+	if (__power_8_andup() != 0)
+		return true;
 #endif
 	return false;
 }
@@ -651,10 +685,11 @@ inline bool CPU_QuerySHA256()
 	// Power8 and ISA 2.07 provide in-core crypto. Glibc
 	// 2.24 or higher is required for PPC_FEATURE2_VEC_CRYPTO.
 #if defined(__linux__)
-	if (getauxval(AT_HWCAP2) & PPC_FEATURE2_VEC_CRYPTO)
+	if ((getauxval(AT_HWCAP2) & PPC_FEATURE2_VEC_CRYPTO) != 0)
 		return true;
-	//if (getauxval(AT_HWCAP2) & PPC_FEATURE2_ARCH_2_07)
-	//	return true;
+#elif defined(_AIX)
+	if (__power_8_andup() != 0)
+		return true;
 #endif
 	return false;
 }
@@ -663,10 +698,11 @@ inline bool CPU_QuerySHA512()
 	// Power8 and ISA 2.07 provide in-core crypto. Glibc
 	// 2.24 or higher is required for PPC_FEATURE2_VEC_CRYPTO.
 #if defined(__linux__)
-	if (getauxval(AT_HWCAP2) & PPC_FEATURE2_VEC_CRYPTO)
+	if ((getauxval(AT_HWCAP2) & PPC_FEATURE2_VEC_CRYPTO) != 0)
 		return true;
-	//if (getauxval(AT_HWCAP2) & PPC_FEATURE2_ARCH_2_07)
-	//	return true;
+#elif defined(_AIX)
+	if (__power_8_andup() != 0)
+		return true;
 #endif
 	return false;
 }
@@ -683,16 +719,18 @@ void DetectPowerpcFeatures()
 	g_hasSHA256 = CPU_QuerySHA256() || CPU_ProbeSHA256();
 	g_hasSHA512 = CPU_QuerySHA512() || CPU_ProbeSHA512();
 
-#if defined(_AIX)
+#if defined(_AIX) && defined(SC_L1C_DLS)
 	// /usr/include/sys/systemcfg.h
-	g_cacheLineSize = getsystemcfg(SC_L1C_DLS);
+	int cacheLineSize = getsystemcfg(SC_L1C_DLS);
+	if (cacheLineSize > 0)
+		g_cacheLineSize = cacheLineSize;
 #elif defined(__linux__) && defined(_SC_LEVEL1_DCACHE_LINESIZE)
-	// GCC112 CentOS 7 returns 0?
-	g_cacheLineSize = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
+	// Glibc does not implement on some platforms. The runtime returns 0 instead of error.
+	// https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/posix/sysconf.c
+	int cacheLineSize = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
+	if (cacheLineSize > 0)
+		g_cacheLineSize = cacheLineSize;
 #endif
-
-	if (g_cacheLineSize <= 0)
-		g_cacheLineSize = CRYPTOPP_L1_CACHE_LINE_SIZE;
 
 	*const_cast<volatile bool*>(&g_PowerpcDetectionDone) = true;
 }

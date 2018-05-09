@@ -48,7 +48,7 @@ extern "C" {
     {
         longjmp(s_jmpSIGILL, 1);
     }
-};
+}
 #endif  // Not CRYPTOPP_MS_STYLE_INLINE_ASSEMBLY
 
 #if (CRYPTOPP_BOOL_PPC32 || CRYPTOPP_BOOL_PPC64)
@@ -255,7 +255,7 @@ bool CPU_ProbeSHA256()
         x = VectorSHA256<1,1>(x);
         VectorStore(x, r);
 
-        result = (0 != std::memcmp(r, z, 16));
+        result = (0 == std::memcmp(r, z, 16));
     }
 
     sigprocmask(SIG_SETMASK, (sigset_t*)&oldMask, NULLPTR);
@@ -299,7 +299,7 @@ bool CPU_ProbeSHA512()
         x = VectorSHA512<1,1>(x);
         VectorStore(x, r);
 
-        result = (0 != std::memcmp(r, z, 16));
+        result = (0 == std::memcmp(r, z, 16));
     }
 
     sigprocmask(SIG_SETMASK, (sigset_t*)&oldMask, NULLPTR);

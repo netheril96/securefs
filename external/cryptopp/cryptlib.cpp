@@ -268,6 +268,12 @@ bool AuthenticatedSymmetricCipher::DecryptAndVerify(byte *message, const byte *m
 	return TruncatedVerify(mac, macLength);
 }
 
+std::string AuthenticatedSymmetricCipher::AlgorithmName() const
+{
+	// Squash C4505 on Visual Studio 2008 and friends
+	return "Unknown";
+}
+
 unsigned int RandomNumberGenerator::GenerateBit()
 {
 	return GenerateByte() & 1;
@@ -331,6 +337,26 @@ void RandomNumberGenerator::GenerateIntoBufferedTransformation(BufferedTransform
 		(void)target.ChannelPut(channel, buffer, len);
 		length -= len;
 	}
+}
+
+size_t KeyDerivationFunction::MinDerivedLength() const
+{
+	return 0;
+}
+
+size_t KeyDerivationFunction::MaxDerivedLength() const
+{
+	return static_cast<size_t>(-1);
+}
+
+void KeyDerivationFunction::ThrowIfInvalidDerivedLength(size_t length) const
+{
+	if (!IsValidDerivedLength(length))
+		throw InvalidDerivedLength(GetAlgorithm().AlgorithmName(), length);
+}
+
+void KeyDerivationFunction::SetParameters(const NameValuePairs& params) {
+	CRYPTOPP_UNUSED(params);
 }
 
 /// \brief Random Number Generator that does not produce random numbers

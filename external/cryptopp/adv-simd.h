@@ -67,7 +67,7 @@ ANONYMOUS_NAMESPACE_END
 
 // *************************** ARM NEON ************************** //
 
-#if defined(CRYPTOPP_ARM_NEON_AVAILABLE)
+#if (CRYPTOPP_ARM_NEON_AVAILABLE)
 
 NAMESPACE_BEGIN(CryptoPP)
 
@@ -83,12 +83,10 @@ inline size_t AdvancedProcessBlocks64_6x2_NEON(F2 func2, F6 func6,
 
 #if defined(CRYPTOPP_LITTLE_ENDIAN)
     const word32 s_zero32x4[]   = {0, 0, 0, 0};
-    const word32 s_one32x4[]    = {0, 0, 0, 1<<24};
     const word32 s_one32x4_1b[] = {0, 0, 0, 1<<24};
     const word32 s_one32x4_2b[] = {0, 2<<24, 0, 2<<24};
 #else
     const word32 s_zero32x4[]   = {0, 0, 0, 0};
-    const word32 s_one32x4[]    = {0, 0, 0, 1};
     const word32 s_one32x4_1b[] = {0, 0, 0, 1};
     const word32 s_one32x4_2b[] = {0, 2, 0, 2};
 #endif
@@ -328,13 +326,9 @@ inline size_t AdvancedProcessBlocks128_NEON1x6(F1 func1, F6 func6,
 #if defined(CRYPTOPP_LITTLE_ENDIAN)
     const word32 s_zero32x4[]   = {0, 0, 0, 0};
     const word32 s_one32x4[]    = {0, 0, 0, 1<<24};
-    const word32 s_one32x4_1b[] = {0, 0, 0, 1<<24};
-    const word32 s_one32x4_2b[] = {0, 2<<24, 0, 2<<24};
 #else
     const word32 s_zero32x4[]   = {0, 0, 0, 0};
     const word32 s_one32x4[]    = {0, 0, 0, 1};
-    const word32 s_one32x4_1b[] = {0, 0, 0, 1};
-    const word32 s_one32x4_2b[] = {0, 2, 0, 2};
 #endif
 
     const ptrdiff_t blockSize = 16;
@@ -481,15 +475,9 @@ inline size_t AdvancedProcessBlocks128_6x2_NEON(F2 func2, F6 func6,
     CRYPTOPP_ASSERT(length >= 16);
 
 #if defined(CRYPTOPP_LITTLE_ENDIAN)
-    const word32 s_zero32x4[]   = {0, 0, 0, 0};
     const word32 s_one32x4[]    = {0, 0, 0, 1<<24};
-    const word32 s_one32x4_1b[] = {0, 0, 0, 1<<24};
-    const word32 s_one32x4_2b[] = {0, 2<<24, 0, 2<<24};
 #else
-    const word32 s_zero32x4[]   = {0, 0, 0, 0};
     const word32 s_one32x4[]    = {0, 0, 0, 1};
-    const word32 s_one32x4_1b[] = {0, 0, 0, 1};
-    const word32 s_one32x4_2b[] = {0, 2, 0, 2};
 #endif
 
     const ptrdiff_t blockSize = 16;

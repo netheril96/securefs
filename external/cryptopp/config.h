@@ -54,9 +54,11 @@
 # endif
 #endif
 
-// Define this to disable ASM, intrinsics and built-ins. The code will be
+// Define this to disable ASM, intrinsics and built-ins. The library will be
 // compiled using C++ only. The library code will not include SSE2 (and
-// above), NEON, Aarch32, Aarch64, Power4, Power7 or Power8.
+// above), NEON, Aarch32, Aarch64, Power4, Power7 or Power8. Note the compiler
+// may use higher ISAs depending on compiler options, but the library will not
+// explictly use the ISAs.
 // #define CRYPTOPP_DISABLE_ASM 1
 
 // Define CRYPTOPP_NO_CXX11 to avoid C++11 related features shown at the
@@ -69,6 +71,10 @@
 // Also see https://github.com/weidai11/cryptopp/issues/529
 // #define CRYPTOPP_NO_CXX11 1
 
+// Define CRYPTOPP_NO_CXX17 to avoid C++17 related features shown at the end of
+// this file. At the moment it should only affect std::uncaught_exceptions.
+// #define CRYPTOPP_NO_CXX17 1
+
 // Define this to allow unaligned data access. If you experience a break with
 // GCC at -O3, you should immediately suspect unaligned data accesses.
 // #define CRYPTOPP_ALLOW_UNALIGNED_DATA_ACCESS 1
@@ -79,7 +85,7 @@
 //   the version of the library the headers came from. It is not
 //   necessarily the version of the library built as a shared object if
 //   versions are inadvertently mixed and matched.
-#define CRYPTOPP_VERSION 610
+#define CRYPTOPP_VERSION 700
 
 // Define this if you want to set a prefix for TestData/ and TestVectors/
 //   Be mindful of the trailing slash since its simple concatenation.
@@ -225,18 +231,31 @@ namespace CryptoPP { }
 
 NAMESPACE_BEGIN(CryptoPP)
 
+// Signed words added at Issue 609 for early versions of and Visual Studio and
+//   the NaCl gear.  Also see https://github.com/weidai11/cryptopp/issues/609.
+
 typedef unsigned char byte;
 typedef unsigned short word16;
 typedef unsigned int word32;
 
+typedef signed char sbyte;
+typedef signed short sword16;
+typedef signed int sword32;
+
 #if defined(_MSC_VER) || defined(__BORLANDC__)
+	typedef signed __int64 sword64;
 	typedef unsigned __int64 word64;
+	#define SW64LIT(x) x##i64
 	#define W64LIT(x) x##ui64
 #elif (_LP64 || __LP64__)
+	typedef signed long sword64;
 	typedef unsigned long word64;
+	#define SW64LIT(x) x##L
 	#define W64LIT(x) x##UL
 #else
+	typedef signed long long sword64;
 	typedef unsigned long long word64;
+	#define SW64LIT(x) x##LL
 	#define W64LIT(x) x##ULL
 #endif
 
@@ -679,7 +698,7 @@ NAMESPACE_END
 #if !defined(CRYPTOPP_POWER8_AES_AVAILABLE) && !defined(CRYPTOPP_DISABLE_POWER8_AES) && defined(CRYPTOPP_POWER8_AVAILABLE)
 # if defined(__CRYPTO__) || defined(_ARCH_PWR8) || (CRYPTOPP_XLC_VERSION >= 130000) || (CRYPTOPP_GCC_VERSION >= 40800)
 #  define CRYPTOPP_POWER8_AES_AVAILABLE 1
-//#  define CRYPTOPP_POWER8_SHA_AVAILABLE 1
+#  define CRYPTOPP_POWER8_SHA_AVAILABLE 1
 //#  define CRYPTOPP_POWER8_CRC_AVAILABLE 1
 # endif
 #endif
@@ -1074,7 +1093,7 @@ NAMESPACE_END
 // ***************** C++17 related ********************
 
 // C++17 macro version, https://stackoverflow.com/q/38456127/608639
-#if !defined(CRYPTOPP_NO_CXX17)
+#if defined(CRYPTOPP_CXX11) && !defined(CRYPTOPP_NO_CXX17)
 #  if ((_MSC_VER >= 1900) || (__cplusplus >= 201703L)) && !defined(_STLPORT_VERSION)
 #    define CRYPTOPP_CXX17 1
 #  endif

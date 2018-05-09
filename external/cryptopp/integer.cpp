@@ -4361,11 +4361,19 @@ Integer Integer::MultiplicativeInverse() const
 
 Integer a_times_b_mod_c(const Integer &x, const Integer& y, const Integer& m)
 {
+	CRYPTOPP_ASSERT(m != 0);
+	if (m == 0)
+		throw Integer::DivideByZero();
+
 	return x*y%m;
 }
 
 Integer a_exp_b_mod_c(const Integer &x, const Integer& e, const Integer& m)
 {
+	CRYPTOPP_ASSERT(m != 0);
+	if (m == 0)
+		throw Integer::DivideByZero();
+
 	ModularArithmetic mr(m);
 	return mr.Exponentiate(x, e);
 }
@@ -4378,9 +4386,22 @@ Integer Integer::Gcd(const Integer &a, const Integer &b)
 Integer Integer::InverseMod(const Integer &m) const
 {
 	CRYPTOPP_ASSERT(m.NotNegative());
+	CRYPTOPP_ASSERT(m.NotZero());
 
 	if (IsNegative())
-		return Modulo(m).InverseMod(m);
+		return Modulo(m).InverseModNext(m);
+
+	// http://github.com/weidai11/cryptopp/issues/602
+	if (*this >= m)
+		return Modulo(m).InverseModNext(m);
+
+	return InverseModNext(m);
+}
+
+Integer Integer::InverseModNext(const Integer &m) const
+{
+	CRYPTOPP_ASSERT(m.NotNegative());
+	CRYPTOPP_ASSERT(m.NotZero());
 
 	if (m.IsEven())
 	{
@@ -4389,11 +4410,12 @@ Integer Integer::InverseMod(const Integer &m) const
 		if (*this == One())
 			return One();
 
-		Integer u = m.Modulo(*this).InverseMod(*this);
+		Integer u = m.Modulo(*this).InverseModNext(*this);
 		return !u ? Zero() : (m*(*this-u)+1)/(*this);
 	}
 
-	SecBlock<word> T(m.reg.size() * 4);
+	// AlmostInverse requires a 4x workspace
+	IntegerSecBlock T(m.reg.size() * 4);
 	Integer r((word)0, m.reg.size());
 	unsigned k = AlmostInverse(r.reg, T, reg, reg.size(), m.reg, m.reg.size());
 	DivideByPower2Mod(r.reg, r.reg, k, m.reg, m.reg.size());
@@ -4402,6 +4424,8 @@ Integer Integer::InverseMod(const Integer &m) const
 
 word Integer::InverseMod(word mod) const
 {
+	CRYPTOPP_ASSERT(mod != 0);
+
 	word g0 = mod, g1 = *this % mod;
 	word v0 = 0, v1 = 1;
 	word y;

@@ -447,7 +447,40 @@ public:
 		///   is declared in nbtheory.h.
 		bool Randomize(RandomNumberGenerator &rng, const Integer &min, const Integer &max, RandomNumberType rnType, const Integer &equiv=Zero(), const Integer &mod=One());
 
+		/// \brief Generate a random number
+		/// \param rng RandomNumberGenerator used to generate material
+		/// \param params additional parameters that cannot be passed directly to the function
+		/// \returns true if a random number was generated, false otherwise
+		/// \details GenerateRandomNoThrow attempts to generate a random number according to the
+		///   parameters specified in params. The function does not throw RandomNumberNotFound.
+		/// \details The example below generates a prime number using NameValuePairs that Integer
+		///   class recognizes. The names are not provided in argnames.h.
+		/// <pre>
+		///     AutoSeededRandomPool prng;
+		///     AlgorithmParameters params = MakeParameters("BitLength", 2048)
+		///                                                ("RandomNumberType", Integer::PRIME);
+		///     Integer x;
+		///     if (x.GenerateRandomNoThrow(prng, params) == false)
+		///         throw std::runtime_error("Failed to generate prime number");
+		/// </pre>
 		bool GenerateRandomNoThrow(RandomNumberGenerator &rng, const NameValuePairs &params = g_nullNameValuePairs);
+
+		/// \brief Generate a random number
+		/// \param rng RandomNumberGenerator used to generate material
+		/// \param params additional parameters that cannot be passed directly to the function
+		/// \throw RandomNumberNotFound if a random number is not found
+		/// \details GenerateRandom attempts to generate a random number according to the
+		///   parameters specified in params.
+		/// \details The example below generates a prime number using NameValuePairs that Integer
+		///   class recognizes. The names are not provided in argnames.h.
+		/// <pre>
+		///     AutoSeededRandomPool prng;
+		///     AlgorithmParameters params = MakeParameters("BitLength", 2048)
+		///                                                ("RandomNumberType", Integer::PRIME);
+		///     Integer x;
+		///     try { x.GenerateRandom(prng, params); }
+		///     catch (RandomNumberNotFound&) { x = -1; }
+		/// </pre>
 		void GenerateRandom(RandomNumberGenerator &rng, const NameValuePairs &params = g_nullNameValuePairs)
 		{
 			if (!GenerateRandomNoThrow(rng, params))
@@ -580,24 +613,59 @@ public:
 		/// \brief Determine whether this integer is a perfect square
 		bool IsSquare() const;
 
-		/// is 1 or -1
+		/// \brief Determine if 1 or -1
+		/// \returns true if this integer is 1 or -1, false otherwise
 		bool IsUnit() const;
-		/// return inverse if 1 or -1, otherwise return 0
+		/// \brief Calculate multiplicative inverse
+		/// \returns MultiplicativeInverse inverse if 1 or -1, otherwise return 0.
 		Integer MultiplicativeInverse() const;
 
-		/// \brief calculate r and q such that (a == d*q + r) && (0 <= r < abs(d))
+		/// \brief Extended Division
+		/// \param r a reference for the remainder
+		/// \param q a reference for the quotient
+		/// \param a a reference to the dividend
+		/// \param d a reference to the divisor
+		/// \details Divide calculates r and q such that (a == d*q + r) && (0 <= r < abs(d)).
 		static void CRYPTOPP_API Divide(Integer &r, Integer &q, const Integer &a, const Integer &d);
-		/// \brief use a faster division algorithm when divisor is short
+
+		/// \brief Extended Division
+		/// \param r a reference for the remainder
+		/// \param q a reference for the quotient
+		/// \param a a reference to the dividend
+		/// \param d a reference to the divisor
+		/// \details Divide calculates r and q such that (a == d*q + r) && (0 <= r < abs(d)).
+		///   This overload uses a faster division algorithm because the divisor is short.
 		static void CRYPTOPP_API Divide(word &r, Integer &q, const Integer &a, word d);
 
-		/// \brief returns same result as Divide(r, q, a, Power2(n)), but faster
+		/// \brief Extended Division
+		/// \param r a reference for the remainder
+		/// \param q a reference for the quotient
+		/// \param a a reference to the dividend
+		/// \param n a reference to the divisor
+		/// \details DivideByPowerOf2 calculates r and q such that (a == d*q + r) && (0 <= r < abs(d)).
+		///   It returns same result as Divide(r, q, a, Power2(n)), but faster.
+		///   This overload uses a faster division algorithm because the divisor is a power of 2.
 		static void CRYPTOPP_API DivideByPowerOf2(Integer &r, Integer &q, const Integer &a, unsigned int n);
 
-		/// greatest common divisor
+		/// \brief Calculate greatest common divisor
+		/// \param a a reference to the first number
+		/// \param n a reference to the secind number
+		/// \returns the greatest common divisor <tt>a</tt> and <tt>n</tt>.
 		static Integer CRYPTOPP_API Gcd(const Integer &a, const Integer &n);
-		/// \brief calculate multiplicative inverse of *this mod n
+
+		/// \brief Calculate multiplicative inverse
+		/// \param n a reference to the modulus
+		/// \returns an Integer <tt>*this % n</tt>.
+		/// \details InverseMod returns the multiplicative inverse of the Integer <tt>*this</tt>
+		///  modulo the Integer <tt>n</tt>. If no Integer exists then Integer 0 is returned.
+		/// \sa a_times_b_mod_c() and a_exp_b_mod_c()
 		Integer InverseMod(const Integer &n) const;
-		///
+
+		/// \brief Calculate multiplicative inverse
+		/// \param n the modulus
+		/// \returns a word <tt>*this % n</tt>.
+		/// \details InverseMod returns the multiplicative inverse of the Integer <tt>*this</tt>
+		///  modulo the word <tt>n</tt>. If no Integer exists then word 0 is returned.
 		/// \sa a_times_b_mod_c() and a_exp_b_mod_c()
 		word InverseMod(word n) const;
 	//@}
@@ -609,7 +677,7 @@ public:
 		/// \param a a reference to an Integer
 		/// \returns a reference to a std::istream reference
 		friend CRYPTOPP_DLL std::istream& CRYPTOPP_API operator>>(std::istream& in, Integer &a);
-		///
+
 		/// \brief Insertion operator
 		/// \param out a reference to a std::ostream
 		/// \param a a constant reference to an Integer
@@ -623,12 +691,23 @@ public:
 		friend CRYPTOPP_DLL std::ostream& CRYPTOPP_API operator<<(std::ostream& out, const Integer &a);
 	//@}
 
-#ifndef CRYPTOPP_DOXYGEN_PROCESSING
-	/// modular multiplication
+	/// \brief Modular multiplication
+	/// \param x a reference to the first term
+	/// \param y a reference to the second term
+	/// \param m a reference to the modulus
+	/// \returns an Integer <tt>(a * b) % m</tt>.
 	CRYPTOPP_DLL friend Integer CRYPTOPP_API a_times_b_mod_c(const Integer &x, const Integer& y, const Integer& m);
-	/// modular exponentiation
+	/// \brief Modular exponentiation
+	/// \param x a reference to the base
+	/// \param e a reference to the exponent
+	/// \param m a reference to the modulus
+	/// \returns an Integer <tt>(a ^ b) % m</tt>.
 	CRYPTOPP_DLL friend Integer CRYPTOPP_API a_exp_b_mod_c(const Integer &x, const Integer& e, const Integer& m);
-#endif
+
+protected:
+
+	// http://github.com/weidai11/cryptopp/issues/602
+	Integer InverseModNext(const Integer &n) const;
 
 private:
 
