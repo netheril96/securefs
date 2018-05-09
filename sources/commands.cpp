@@ -1034,7 +1034,7 @@ static inline const char* true_or_false(bool v) { return v ? "true" : "false"; }
 class VersionCommand : public CommandBase
 {
 private:
-    const char* version_string = "0.8.1";
+    const char* version_string = "0.8.2";
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
