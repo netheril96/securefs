@@ -270,7 +270,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 		execute_process(COMMAND ${GAS_CMD}
 			OUTPUT_VARIABLE GAS_STRING
 			OUTPUT_STRIP_TRAILING_WHITESPACE)
-		string(FIND ${GAS_STRING} "GNU assumbler" GAS_OUTPUT)
+		string(FIND ${GAS_STRING} "GNU assembler" GAS_OUTPUT)
 
 		if (GAS_OUTPUT)
 			#.intel_syntax wasn't supported until GNU assembler 2.10
