@@ -29,8 +29,8 @@ if (NOT CMAKE_CONFIGURATION_TYPES AND
 	set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif ()
 
-set(cryptopp_VERSION_MAJOR 6)
-set(cryptopp_VERSION_MINOR 1)
+set(cryptopp_VERSION_MAJOR 7)
+set(cryptopp_VERSION_MINOR 0)
 set(cryptopp_VERSION_PATCH 0)
 
 include(GNUInstallDirs)
@@ -270,14 +270,14 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 		execute_process(COMMAND ${GAS_CMD}
 			OUTPUT_VARIABLE GAS_STRING
 			OUTPUT_STRIP_TRAILING_WHITESPACE)
-		string(FIND ${GAS_STRING} "GNU assumbler" GAS_OUTPUT)
+		string(FIND ${GAS_STRING} "GNU assembler" GAS_OUTPUT)
 
-		if (GAS_OUTPUT)
+		if (NOT GAS_OUTPUT EQUAL -1)
 			#.intel_syntax wasn't supported until GNU assembler 2.10
 
 			# TODO(unassigned): string() REGEX was not cooperating at time of writing. Re-implement as needed.
 			execute_process(COMMAND echo ${GAS_STRING}
-				COMMAND ${GREP_CMD} -i -c -E "GNU assembler version (2\\.[1-9][0-9]|[3-9])"
+				COMMAND ${GREP_CMD} -i -c -E "GNU.[Aa]ssembler.*(2\\.[1-9][0-9]|[3-9])"
 				OUTPUT_VARIABLE GAS210_OR_LATER)
 			if (GAS210_OR_LATER EQUAL 0)
 				add_definitions(-DCRYPTOPP_DISABLE_ASM)
@@ -285,7 +285,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 			endif ()
 
 			execute_process(COMMAND echo ${GAS_STRING}
-				COMMAND ${GREP_CMD} -i -c -E "GNU assembler version (2\\.1[7-9]|2\\.[2-9]|[3-9])"
+				COMMAND ${GREP_CMD} -i -c -E "GNU.[Aa]ssembler.*(2\\.1[7-9]|2\\.[2-9]|[3-9])"
 				OUTPUT_VARIABLE GAS217_OR_LATER)
 			if (GAS217_OR_LATER EQUAL 0)
 				add_definitions(-DCRYPTOPP_DISABLE_SSSE3)
@@ -294,7 +294,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 
 			# OpenBSD and CentOS 5 needed this one due to ARIA and BLAKE2
 			execute_process(COMMAND echo ${GAS_STRING}
-				COMMAND ${GREP_CMD} -i -c -E "GNU assembler version (2\\.1[8-9]|2\\.[2-9]|[3-9])"
+				COMMAND ${GREP_CMD} -i -c -E "GNU.[Aa]ssembler.*(2\\.1[8-9]|2\\.[2-9]|[3-9])"
 				OUTPUT_VARIABLE GAS218_OR_LATER)
 			if (GAS218_OR_LATER EQUAL 0)
 				add_definitions(-DCRYPTOPP_DISABLE_SSE4)
@@ -302,7 +302,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 			endif ()
 
 			execute_process(COMMAND echo ${GAS_STRING}
-				COMMAND ${GREP_CMD} -i -c -E "GNU assembler version (2\\.19|2\\.[2-9]|[3-9])"
+				COMMAND ${GREP_CMD} -i -c -E "GNU.[Aa]ssembler.*(2\\.19|2\\.[2-9]|[3-9])"
 				OUTPUT_VARIABLE GAS219_OR_LATER)
 			if (GAS219_OR_LATER EQUAL 0)
 				add_definitions(-DCRYPTOPP_DISABLE_AESNI)
@@ -311,7 +311,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 
 			# Ubuntu 10 and Ubuntu 12 needed this one
 			execute_process(COMMAND echo ${GAS_STRING}
-				COMMAND ${GREP_CMD} -i -c -E "GNU assembler version (2\\.2[3-9]|2\\.[3-9]|[3-9])"
+				COMMAND ${GREP_CMD} -i -c -E "GNU.[Aa]ssembler.*(2\\.2[3-9]|2\\.[3-9]|[3-9])"
 				OUTPUT_VARIABLE GAS223_OR_LATER)
 			if (GAS223_OR_LATER EQUAL 0)
 				add_definitions(-DCRYPTOPP_DISABLE_SHA)
@@ -458,9 +458,13 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU
 			set_source_files_properties(speck-simd.cpp PROPERTIES COMPILE_FLAGS "-mssse3")
 			if (CRYPTOPP_IA32_SSE41 AND NOT DISABLE_SSE4)
 				set_source_files_properties(blake2-simd.cpp PROPERTIES COMPILE_FLAGS "-msse4.1")
+				set_source_files_properties(simon-simd.cpp PROPERTIES COMPILE_FLAGS "-msse4.1")
+				set_source_files_properties(speck-simd.cpp PROPERTIES COMPILE_FLAGS "-msse4.1")
 			endif ()
 			if (CRYPTOPP_IA32_SSE42 AND NOT DISABLE_SSE4)
 				set_source_files_properties(crc-simd.cpp PROPERTIES COMPILE_FLAGS "-msse4.2")
+				set_source_files_properties(simon-simd.cpp PROPERTIES COMPILE_FLAGS "-msse4.2")
+				set_source_files_properties(speck-simd.cpp PROPERTIES COMPILE_FLAGS "-msse4.2")
 				if (CRYPTOPP_IA32_CLMUL AND NOT DISABLE_AES)
 					set_source_files_properties(gcm-simd.cpp PROPERTIES COMPILE_FLAGS "-mssse3 -mpclmul")
 				endif ()
@@ -700,57 +704,6 @@ if (BUILD_STATIC)
 endif ()
 if (BUILD_SHARED)
 	target_link_libraries(cryptopp-shared ${CMAKE_THREAD_LIBS_INIT})
-endif ()
-
-#============================================================================
-# Tests
-#============================================================================
-
-enable_testing()
-if (BUILD_TESTING)
-	add_executable(cryptest ${cryptopp_SOURCES_TEST})
-	target_link_libraries(cryptest cryptopp-static)
-
-	# Setting "cryptest" binary name to "cryptest.exe"
-	if (NOT (WIN32 OR CYGWIN))
-		set_target_properties(cryptest PROPERTIES OUTPUT_NAME cryptest.exe)
-	endif ()
-	if (NOT TARGET cryptest.exe)
-		add_custom_target(cryptest.exe)
-		add_dependencies(cryptest.exe cryptest)
-	endif ()
-
-	file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/TestData DESTINATION ${PROJECT_BINARY_DIR})
-	file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/TestVectors DESTINATION ${PROJECT_BINARY_DIR})
-
-	add_test(NAME build_cryptest COMMAND "${CMAKE_COMMAND}" --build ${CMAKE_BINARY_DIR} --target cryptest)
-	add_test(NAME cryptest COMMAND $<TARGET_FILE:cryptest> v)
-	set_tests_properties(cryptest PROPERTIES DEPENDS build_cryptest)
-endif ()
-
-#============================================================================
-# Doxygen documentation
-#============================================================================
-
-if (BUILD_DOCUMENTATION)
-	find_package(Doxygen REQUIRED)
-
-	set(in_source_DOCS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/html-docs")
-	set(out_source_DOCS_DIR "${PROJECT_BINARY_DIR}/html-docs")
-
-	add_custom_target(docs ALL
-			COMMAND ${DOXYGEN_EXECUTABLE} Doxyfile -d CRYPTOPP_DOXYGEN_PROCESSING
-			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-			SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile
-			)
-
-	if (NOT ${in_source_DOCS_DIR} STREQUAL ${out_source_DOCS_DIR})
-		add_custom_command(
-				TARGET docs POST_BUILD
-				COMMAND ${CMAKE_COMMAND} -E copy_directory "${in_source_DOCS_DIR}" "${out_source_DOCS_DIR}"
-				COMMAND ${CMAKE_COMMAND} -E remove_directory "${in_source_DOCS_DIR}"
-		)
-	endif ()
 endif ()
 
 # Print a configuration summary. We want CXX and CXXFLAGS, but they are not includd in ALL.
