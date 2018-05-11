@@ -3,3 +3,4 @@
 #cmakedefine01 HAS_CLOCK_GETTIME
 #cmakedefine01 HAS_FUTIMENS
 #cmakedefine01 HAS_UTIMENSAT
+#cmakedefine SECUREFS_VERSION "@SECUREFS_VERSION@"
