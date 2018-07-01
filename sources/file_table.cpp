@@ -12,6 +12,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <mutex>
 
 namespace securefs
 {
@@ -149,7 +150,8 @@ FileTable::FileTable(int version,
                      uint32_t flags,
                      unsigned block_size,
                      unsigned iv_size)
-    : m_flags(flags), m_block_size(block_size), m_iv_size(iv_size), m_root(root)
+    : m_flags(flags), m_block_size(block_size),
+    free_pool(5000), m_iv_size(iv_size), m_root(root)
 {
     memcpy(m_master_key.data(), master_key.data(), master_key.size());
     switch (version)
@@ -175,6 +177,15 @@ FileTable::~FileTable()
 FileBase* FileTable::open_as(const id_type& id, int type)
 {
     auto it = m_files.find(id);
+    if(it == m_files.end()) {
+        std::lock_guard<std::mutex> l(m_closing_lock);
+        auto close_it = m_files_to_close.find(id);
+        if(close_it != m_files_to_close.end()) {
+            m_files.emplace(id,std::move(close_it->second));
+            m_files_to_close.erase(close_it);
+            it = m_files.find(id);
+        }
+    }
     if (it != m_files.end())
     {
         // Remove the marking that this id is closed
@@ -189,6 +200,20 @@ FileBase* FileTable::open_as(const id_type& id, int type)
             it->second->incref();
             return it->second.get();
         }
+    }
+
+    if(!free_pool.done()) {
+        bool being_closed = false;
+        do {
+            being_closed = false;
+            {
+                std::lock_guard<std::mutex> l(m_closing_lock);
+                being_closed = (m_closing_ids.count(id) != 0);
+            }
+            if(being_closed) {
+                free_pool.wait();
+            }
+        } while(being_closed);
     }
 
     std::shared_ptr<FileStream> data_fd, meta_fd;
@@ -264,11 +289,49 @@ void FileTable::close(FileBase* fb)
 void FileTable::eject()
 {
     auto num_eject = std::min<size_t>(NUM_EJECT, m_closed_ids.size());
-    for (size_t i = 0; i < num_eject; ++i)
+    /* for (size_t i = 0; i < num_eject; ++i) { */
+    /*         TRACE_LOG("Evicting file with ID=%s from cache", hexify(m_closed_ids[i]).c_str()); */
+    /*         m_files.erase(m_closed_ids[i]); */
+    /* } */
+
     {
-        m_files.erase(m_closed_ids[i]);
-        TRACE_LOG("Evicting file with ID=%s from cache", hexify(m_closed_ids[i]).c_str());
+        std::lock_guard<std::mutex> l(m_closing_lock);
+        for (size_t i = 0; i < num_eject; ++i)
+        {
+            auto id = m_closed_ids[i];
+
+            m_files_to_close.emplace(id,std::move(m_files.at(id)));
+            m_files.erase(id);
+
+            std::function<void()> free_ptr = [id,this]() {
+                FileBase* ptr = nullptr;
+                {
+                    std::lock_guard<std::mutex> l(m_closing_lock);
+                    auto it = m_files_to_close.find(id);
+                    if(it == m_files_to_close.end()) {
+                        // The file was reopened
+                        return;
+                    }
+                    ptr = it->second.release();
+                    m_files_to_close.erase(it);
+                    m_closing_ids.insert(id);
+                }
+
+                delete ptr;
+
+                {
+                    std::lock_guard<std::mutex> l(m_closing_lock);
+                    TRACE_LOG("Clearing one id of %lu",m_closing_ids.size());
+                    m_closing_ids.erase(id);
+                    TRACE_LOG("%lu files remaining",m_files_to_close.size());
+                }
+            };
+
+            TRACE_LOG("Evicting file with ID=%s from cache", hexify(m_closed_ids[i]).c_str());
+            free_pool.add_job(free_ptr);
+        }
     }
+
     m_closed_ids.erase(m_closed_ids.begin(), m_closed_ids.begin() + num_eject);
 }
 

@@ -97,6 +97,13 @@ namespace operations
 
     public:
         FileTable table;
+
+        std::map<std::string,id_type> id_cache;
+        std::map<id_type,std::string> id_reverse;
+
+        void clear_cache(std::string path);
+        void clear_cache(id_type id);
+
         std::shared_ptr<const OSService> root;
         id_type root_id;
         unsigned block_size;

@@ -5,10 +5,12 @@
 #include "myutils.h"
 #include "platform.h"
 #include "streams.h"
+#include "thread_pool.hpp"
 
 #include <memory>
 #include <string.h>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace securefs
@@ -25,12 +27,18 @@ private:
     typedef std::unordered_map<id_type, std::unique_ptr<FileBase>, id_hash> table_type;
 
 private:
-    static const int MAX_NUM_CLOSED = 101, NUM_EJECT = 8;
+    static const int MAX_NUM_CLOSED = 201, NUM_EJECT = 150;
 
 private:
     key_type m_master_key;
     table_type m_files;
     std::vector<id_type> m_closed_ids;
+
+    thread_pool free_pool;
+    table_type m_files_to_close;
+    std::unordered_set<id_type,id_hash> m_closing_ids;
+    std::mutex m_closing_lock;
+
     std::unique_ptr<FileTableIO> m_fio;
     uint32_t m_flags;
     unsigned m_block_size, m_iv_size;

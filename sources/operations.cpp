@@ -43,6 +43,35 @@ namespace operations
     }
 
     FileSystemContext::~FileSystemContext() {}
+
+    bool is_prefix(const std::string& a,const std::string& b) {
+        auto a_it = a.begin();
+        auto b_it = b.begin();
+        while(a_it != a.end() && b_it != b.end() && *a_it == *b_it) {
+            ++a_it;
+            ++b_it;
+        }
+        return a_it == a.end();
+    }
+
+    void FileSystemContext::clear_cache(id_type id) {
+        auto it = id_reverse.find(id);
+        if(it != id_reverse.end()) {
+            clear_cache(it->second);
+        }
+    }
+
+    void FileSystemContext::clear_cache(std::string path) {
+        auto it = id_cache.find(path);
+        // since `map` traverses in sorted order, this will catch all
+        // subdirectories in the cache.
+        while(it != id_cache.end() && is_prefix(path,it->first)) {
+            id_reverse.erase(it->second);
+            auto prev_it = it;
+            ++it;
+            id_cache.erase(prev_it);
+        }
+    }
 }    // namespace operations
 }    // namespace securefs
 
@@ -63,17 +92,38 @@ namespace internal
     {
         std::vector<std::string> components
             = split((fs->flags & kOptionCaseFoldFileName) ? case_fold(path) : path, '/');
+        std::vector<std::string> prefixes;
+        {
+            std::string prefix = "";
+            for(auto s: components) {
+                prefix += "/" + s;
+                prefixes.push_back(prefix);
+            }
+        }
 
-        FileGuard result(&fs->table, fs->table.open_as(fs->root_id, FileBase::DIRECTORY));
         if (components.empty())
         {
+            FileGuard result(&fs->table, fs->table.open_as(fs->root_id, FileBase::DIRECTORY));
             last_component = std::string();
             return result;
         }
-        id_type id;
+        id_type id = fs->root_id;
         int type;
 
-        for (size_t i = 0; i + 1 < components.size(); ++i)
+        size_t first_component = 0;
+
+        auto cache_it = fs->id_cache.end();
+
+        while(first_component + 1 < components.size() &&
+              (cache_it =
+               fs->id_cache.find(prefixes[first_component])) != fs->id_cache.end()) {
+            id = cache_it->second;
+            ++first_component;
+        }
+
+        FileGuard result(&fs->table, fs->table.open_as(id, FileBase::DIRECTORY));
+
+        for (size_t i = first_component; i + 1 < components.size(); ++i)
         {
             bool exists = result.get_as<Directory>()->get_entry(components[i], id, type);
             if (!exists)
@@ -81,6 +131,8 @@ namespace internal
             if (type != FileBase::DIRECTORY)
                 throwVFSException(ENOTDIR);
             result.reset(fs->table.open_as(id, type));
+            fs->id_cache[prefixes[i]] = id;
+            fs->id_reverse[id] = prefixes[i];
         }
         last_component = components.back();
         return result;
@@ -154,6 +206,7 @@ namespace internal
         {
             FileGuard to_be_removed(&fs->table, fs->table.open_as(id, type));
             to_be_removed->unlink();
+            fs->clear_cache(id);
         }
         catch (...)
         {
@@ -589,6 +642,9 @@ namespace operations
 
             if (dst_exists)
                 internal::remove(fs, dst_id, dst_type);
+
+            fs->clear_cache(src_filename);
+
             return 0;
         }
         OPT_CATCH_WITH_TWO_PATHS(src, dst)

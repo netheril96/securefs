@@ -185,6 +185,10 @@ public:
     const T* data() const noexcept { return m_data; }
     T* data() noexcept { return m_data; }
     static constexpr size_t size() noexcept { return Size; };
+    bool operator<(const PODArray& other) const noexcept
+    {
+        return memcmp(m_data, other.m_data, size()) < 0;
+    }
     bool operator==(const PODArray& other) const noexcept
     {
         return memcmp(m_data, other.m_data, size()) == 0;
