@@ -151,7 +151,7 @@ FileTable::FileTable(int version,
                      unsigned block_size,
                      unsigned iv_size)
     : m_flags(flags), m_block_size(block_size),
-    free_pool(5000), m_iv_size(iv_size), m_root(root)
+    free_pool(50), m_iv_size(iv_size), m_root(root)
 {
     memcpy(m_master_key.data(), master_key.data(), master_key.size());
     switch (version)
@@ -181,9 +181,12 @@ FileBase* FileTable::open_as(const id_type& id, int type)
         std::lock_guard<std::mutex> l(m_closing_lock);
         auto close_it = m_files_to_close.find(id);
         if(close_it != m_files_to_close.end()) {
-            m_files.emplace(id,std::move(close_it->second));
+            bool success;
+            std::tie(it,success) = m_files.emplace(id,std::move(close_it->second));
+            if(!success) {
+                throwVFSException(EFAULT);
+            }
             m_files_to_close.erase(close_it);
-            it = m_files.find(id);
         }
     }
     if (it != m_files.end())
@@ -304,7 +307,7 @@ void FileTable::eject()
             m_files.erase(id);
 
             std::function<void()> free_ptr = [id,this]() {
-                FileBase* ptr = nullptr;
+                std::unique_ptr<FileBase> ptr = nullptr;
                 {
                     std::lock_guard<std::mutex> l(m_closing_lock);
                     auto it = m_files_to_close.find(id);
@@ -312,12 +315,12 @@ void FileTable::eject()
                         // The file was reopened
                         return;
                     }
-                    ptr = it->second.release();
+                    ptr = std::move(it->second);
                     m_files_to_close.erase(it);
                     m_closing_ids.insert(id);
                 }
 
-                delete ptr;
+                ptr.reset();
 
                 {
                     std::lock_guard<std::mutex> l(m_closing_lock);
