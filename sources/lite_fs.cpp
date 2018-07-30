@@ -164,7 +164,11 @@ namespace lite
     AutoClosedFile FileSystem::open(StringRef path, int flags, fuse_mode_t mode)
     {
         if (flags & O_APPEND)
-            throwVFSException(ENOTSUP);
+        {
+            flags &= ~((unsigned)O_APPEND);
+            // Clear append flags. Workaround for FUSE bug.
+            // See https://github.com/netheril96/securefs/issues/58.
+        }
 
         // Files cannot be opened write-only because the header must be read in order to derive the
         // session key
