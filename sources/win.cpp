@@ -731,14 +731,14 @@ std::wstring OSService::norm_path(StringRef path) const
     {
         std::string prepath = m_dir_name;
         prepath.reserve(prepath.size() + 1 + path.size());
-        prepath.push_back('/');
+        prepath.push_back('\\');
         prepath.append(path.data(), path.size());
         for (char& c : prepath)
         {
-            if (c == '\\')
-                c = '/';
+            if (c == '/')
+                c = '\\';
         }
-        std::vector<std::string> components = split(prepath, '/');
+        std::vector<std::string> components = split(prepath, '\\');
         std::vector<const std::string*> norm_components;
         norm_components.reserve(components.size());
         for (const std::string& name : components)
@@ -755,7 +755,15 @@ std::wstring OSService::norm_path(StringRef path) const
         }
         std::string str;
         str.reserve(prepath.size() + 8);
-        str.assign(("\\\\?"));
+        bool is_already_universal = prepath.size() >= 2 && prepath[0] == '\\' && prepath[1] == '\\';
+        if (is_already_universal)
+        {
+            str.push_back('\\');
+        }
+        else
+        {
+            str.assign(("\\\\?"));
+        }
         for (const std::string* name : norm_components)
         {
             str.push_back('\\');
