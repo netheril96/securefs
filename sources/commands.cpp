@@ -505,7 +505,7 @@ protected:
     std::string get_real_config_path()
     {
         return config_path.isSet() ? config_path.getValue()
-                                   : data_dir.getValue() + '/' + CONFIG_FILE_NAME;
+                                   : data_dir.getValue() + PATH_SEPARATOR_CHAR + CONFIG_FILE_NAME;
     }
 };
 
@@ -812,6 +812,7 @@ public:
         {
             if (e.error_number() == ENOENT)
             {
+                ERROR_LOG("Encounter exception %s", e.what());
                 ERROR_LOG(
                     "Config file %s does not exist. Perhaps you forget to run `create` command "
                     "first?",

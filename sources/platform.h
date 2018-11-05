@@ -98,6 +98,8 @@ typedef ptrdiff_t ssize_t;
 
 namespace securefs
 {
+extern const char* PATH_SEPARATOR_STRING;
+extern const char PATH_SEPARATOR_CHAR;
 
 class FileStream : public StreamBase
 {

@@ -1190,6 +1190,9 @@ std::unique_ptr<const char, void (*)(const char*)> get_type_name(const std::exce
 {
     return {typeid(e).name(), [](const char*) { /* no op */ }};
 }
+
+const char* PATH_SEPARATOR_STRING = "\\";
+const char PATH_SEPARATOR_CHAR = '\\';
 }    // namespace securefs
 
 #endif
