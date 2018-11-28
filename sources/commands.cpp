@@ -860,14 +860,7 @@ public:
         }
         if (!background.getValue())
             fuse_args.push_back("-f");
-        if (fuse_options.isSet())
-        {
-            for (const std::string& opt : fuse_options.getValue())
-            {
-                fuse_args.push_back("-o");
-                fuse_args.push_back(opt.c_str());
-            }
-        }
+            
 #ifdef __APPLE__
         const char* copyfile_disable = ::getenv("COPYFILE_DISABLE");
         if (copyfile_disable)
@@ -882,6 +875,16 @@ public:
 #elif _WIN32
         fuse_args.push_back("-ouid=-1,gid=-1");
 #endif
+
+        if (fuse_options.isSet())
+        {
+            for (const std::string& opt : fuse_options.getValue())
+            {
+                fuse_args.push_back("-o");
+                fuse_args.push_back(opt.c_str());
+            }
+        }
+
         fuse_args.push_back(mount_point.getValue().c_str());
 
         VERBOSE_LOG("Filesystem parameters: format version %d, block size %u (bytes), iv size %u "
