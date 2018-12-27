@@ -6,6 +6,11 @@ project(securefs)
 
 set (CMAKE_FIND_FRAMEWORK NEVER)
 
+execute_process (
+    COMMAND bash -c "uname -m"
+    OUTPUT_VARIABLE architecture
+)
+
 if (UNIX)
     find_path(FUSE_INCLUDE_DIR fuse.h PATHS /usr/local/include PATH_SUFFIXES osxfuse)
     if (APPLE)
@@ -18,7 +23,11 @@ if (UNIX)
     add_compile_options(-Wall -Wextra -Wno-unknown-pragmas -std=gnu++11)
 
     if (NOT PORTABLE_BUILD)
-        add_compile_options(-march=native -mtune=native)
+        if (NOT "${architecture}" STREQUAL "ppc64le\n")
+            add_compile_options(-march=native -mtune=native)
+        else ()
+            add_compile_options(-mcpu=native -mtune=native)
+        endif()
     endif ()
 
     if (APPLE)
