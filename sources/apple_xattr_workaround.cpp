@@ -36,12 +36,12 @@ void transform_listxattr_result(char* buffer, size_t size)
 
 static int precheck_common(const char** name)
 {
-    if (strcmp(*name, APPLE_FINDER_INFO))
+    if (strcmp(*name, APPLE_FINDER_INFO) == 0)
     {
         *name = REPLACEMENT_FOR_FINDER_INFO;
         return 1;    // No early return.
     }
-    if (strcmp(*name, REPLACEMENT_FOR_FINDER_INFO))
+    if (strcmp(*name, REPLACEMENT_FOR_FINDER_INFO) == 0)
     {
         return -EPERM;
     }
@@ -50,7 +50,7 @@ static int precheck_common(const char** name)
 
 int precheck_getxattr(const char** name)
 {
-    if (strcmp(*name, APPLE_QUARANTINE))
+    if (strcmp(*name, APPLE_QUARANTINE) == 0)
     {
         return -ENOATTR;
     }
@@ -59,7 +59,7 @@ int precheck_getxattr(const char** name)
 
 int precheck_setxattr(const char** name)
 {
-    if (strcmp(*name, APPLE_QUARANTINE))
+    if (strcmp(*name, APPLE_QUARANTINE) == 0)
     {
         return 0;    // Fakes success of quarantine to work around "XXX is damaged" bug on macOS.
     }
