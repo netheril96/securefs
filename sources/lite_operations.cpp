@@ -484,6 +484,7 @@ namespace lite
 #ifdef __APPLE__
     int listxattr(const char* path, char* list, size_t size)
     {
+        TRACE_LOG("%s %s", __func__, path);
         auto filesystem = get_local_filesystem();
         int rc = static_cast<int>(filesystem->listxattr(path, list, size));
         transform_listxattr_result(list, size);
@@ -492,6 +493,7 @@ namespace lite
 
     int getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position)
     {
+        TRACE_LOG("%s %s with position=%u, name=%s", __func__, path, position, name);
         if (position != 0)
             return -EINVAL;
         int rc = precheck_getxattr(&name);
@@ -509,6 +511,8 @@ namespace lite
                  int flags,
                  uint32_t position)
     {
+        TRACE_LOG(
+            "%s %s with position=%u, name=%s, value=%s", __func__, path, position, name, value);
         if (position != 0)
             return -EINVAL;
         int rc = precheck_setxattr(&name);
@@ -522,6 +526,7 @@ namespace lite
     }
     int removexattr(const char* path, const char* name)
     {
+        TRACE_LOG("%s %s with name=%s", __func__, path, name);
         int rc = precheck_removexattr(&name);
         if (rc <= 0)
             return rc;
