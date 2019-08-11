@@ -2,6 +2,7 @@
 #include "exceptions.h"
 #include "logger.h"
 #include "myutils.h"
+#include <ctype.h>
 #include <stdint.h>
 #include <system_error>
 
@@ -310,5 +311,26 @@ void base32_decode(const char* input, size_t size, std::string& output)
         if (byte_index + 1 < output.size())
             out[byte_index + 1] |= p.second;
     }
+}
+
+std::string escape_nonprintable(const char* str, size_t size)
+{
+    std::string result;
+    result.reserve(size + size / 16);
+    for (size_t i = 0; i < size; ++i)
+    {
+        char c = str[i];
+        if (isprint(static_cast<unsigned char>(c)))
+        {
+            result.push_back(c);
+        }
+        else
+        {
+            char tmp[10];
+            snprintf(tmp, sizeof(tmp), "\\x%02x", static_cast<unsigned char>(c));
+            result.append(tmp);
+        }
+    }
+    return result;
 }
 }    // namespace securefs

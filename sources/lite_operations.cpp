@@ -529,8 +529,12 @@ namespace lite
                  int flags,
                  uint32_t position)
     {
-        TRACE_LOG(
-            "%s %s with position=%u, name=%s, value=%s", __func__, path, position, name, value);
+        TRACE_LOG("%s %s with position=%u, name=%s, value=%s",
+                  __func__,
+                  path,
+                  position,
+                  name,
+                  escape_nonprintable(value, size).c_str());
         if (position != 0)
             return -EINVAL;
         int rc = precheck_setxattr(&name);
