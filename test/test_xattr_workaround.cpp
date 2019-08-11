@@ -1,3 +1,4 @@
+#ifdef __APPLE__
 #include "apple_xattr_workaround.h"
 #include "catch.hpp"
 
@@ -78,3 +79,4 @@ TEST_CASE("transform listxattr result")
         REQUIRE(to_string(buffer) == to_string(canonical_result));
     }
 }
+#endif

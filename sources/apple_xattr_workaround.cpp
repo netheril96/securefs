@@ -4,6 +4,7 @@
 
 #include <errno.h>
 #include <string.h>
+#include <sys/xattr.h>
 
 namespace securefs
 {
@@ -57,13 +58,23 @@ int precheck_getxattr(const char** name)
     return precheck_common(name);
 }
 
-int precheck_setxattr(const char** name)
+int precheck_setxattr(const char** name, int* flags)
 {
     if (strcmp(*name, APPLE_QUARANTINE) == 0)
     {
         return 0;    // Fakes success of quarantine to work around "XXX is damaged" bug on macOS.
     }
-    return precheck_common(name);
+    if (strcmp(*name, APPLE_FINDER_INFO) == 0)
+    {
+        *name = REPLACEMENT_FOR_FINDER_INFO;
+        *flags &= ~(unsigned)XATTR_NOSECURITY;
+        return 1;    // No early return.
+    }
+    if (strcmp(*name, REPLACEMENT_FOR_FINDER_INFO) == 0)
+    {
+        return -EPERM;
+    }
+    return 1;
 }
     
 int precheck_removexattr(const char** name) { return precheck_common(name); }

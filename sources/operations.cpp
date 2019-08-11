@@ -732,7 +732,7 @@ namespace operations
 
         if (position != 0)
             return -EINVAL;
-        int rc = precheck_setxattr(&name);
+        int rc = precheck_setxattr(&name, &flags);
         if (rc <= 0)
             return rc;
 

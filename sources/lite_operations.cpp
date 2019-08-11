@@ -537,7 +537,7 @@ namespace lite
                   escape_nonprintable(value, size).c_str());
         if (position != 0)
             return -EINVAL;
-        int rc = precheck_setxattr(&name);
+        int rc = precheck_setxattr(&name, &flags);
         if (rc <= 0)
             return rc;
         if (!value || size == 0)
