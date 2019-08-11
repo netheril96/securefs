@@ -1,4 +1,5 @@
 #include "lite_operations.h"
+#include "apple_xattr_workaround.h"
 #include "lite_fs.h"
 #include "lite_stream.h"
 #include "logger.h"
@@ -484,17 +485,18 @@ namespace lite
     int listxattr(const char* path, char* list, size_t size)
     {
         auto filesystem = get_local_filesystem();
-        return static_cast<int>(filesystem->listxattr(path, list, size));
+        int rc = static_cast<int>(filesystem->listxattr(path, list, size));
+        transform_listxattr_result(list, size);
+        return rc;
     }
 
     int getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position)
     {
         if (position != 0)
             return -EINVAL;
-        if (strcmp(name, "com.apple.quarantine") == 0)
-            return -ENOATTR;    // workaround for the "XXX is damaged" bug on OS X
-        if (strcmp(name, "com.apple.FinderInfo") == 0)
-            return -ENOATTR;    // stupid Apple hardcodes the size of xattr values
+        int rc = precheck_getxattr(&name);
+        if (rc <= 0)
+            return rc;
 
         auto filesystem = get_local_filesystem();
         return static_cast<int>(filesystem->getxattr(path, name, value, size));
@@ -509,10 +511,9 @@ namespace lite
     {
         if (position != 0)
             return -EINVAL;
-        if (strcmp(name, "com.apple.quarantine") == 0)
-            return 0;    // workaround for the "XXX is damaged" bug on OS X
-        if (strcmp(name, "com.apple.FinderInfo") == 0)
-            return -EACCES;    // stupid Apple hardcodes the size of xattr values
+        int rc = precheck_setxattr(&name);
+        if (rc <= 0)
+            return rc;
         if (!value || size == 0)
             return 0;
 
@@ -521,6 +522,9 @@ namespace lite
     }
     int removexattr(const char* path, const char* name)
     {
+        int rc = precheck_removexattr(&name);
+        if (rc <= 0)
+            return rc;
         auto filesystem = get_local_filesystem();
         return filesystem->removexattr(path, name);
     }

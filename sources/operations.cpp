@@ -1,4 +1,5 @@
 #include "operations.h"
+#include "apple_xattr_workaround.h"
 #include "case_fold.h"
 #include "constants.h"
 #include "crypto.h"
@@ -674,12 +675,12 @@ namespace operations
         try
         {
             auto fg = internal::open_all(fs, path);
-            return static_cast<int>(fg->listxattr(list, size));
+            int rc = static_cast<int>(fg->listxattr(list, size));
+            transform_listxattr_result(list, size);
+            return rc;
         }
         COMMON_CATCH_BLOCK
     }
-
-    static const char* APPLE_FINDER_INFO = "com.apple.FinderInfo";
 
 #define XATTR_COMMON_PROLOGUE                                                                      \
     auto ctx = fuse_get_context();                                                                 \
@@ -708,6 +709,9 @@ namespace operations
 
         if (position != 0)
             return -EINVAL;
+        int rc = precheck_getxattr(&name);
+        if (rc <= 0)
+            return rc;
 
         try
         {
@@ -728,10 +732,9 @@ namespace operations
 
         if (position != 0)
             return -EINVAL;
-        if (strcmp(name, "com.apple.quarantine") == 0)
-            return 0;    // workaround for the "XXX is damaged" bug on OS X
-        if (strcmp(name, APPLE_FINDER_INFO) == 0)
-            return -EACCES;
+        int rc = precheck_setxattr(&name);
+        if (rc <= 0)
+            return rc;
 
         flags &= XATTR_CREATE | XATTR_REPLACE;
         try
@@ -746,6 +749,9 @@ namespace operations
     int removexattr(const char* path, const char* name)
     {
         XATTR_COMMON_PROLOGUE
+        int rc = precheck_removexattr(&name);
+        if (rc <= 0)
+            return rc;
 
         try
         {
