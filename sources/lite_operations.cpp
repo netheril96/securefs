@@ -488,6 +488,14 @@ namespace lite
         auto filesystem = get_local_filesystem();
         int rc = static_cast<int>(filesystem->listxattr(path, list, size));
         transform_listxattr_result(list, size);
+        if (rc < 0)
+        {
+            TRACE_LOG("%s %s encountered error: %d (%s)",
+                      __func__,
+                      path,
+                      -rc,
+                      OSService::stringify_system_error(-rc).c_str());
+        }
         return rc;
     }
 
@@ -501,7 +509,17 @@ namespace lite
             return rc;
 
         auto filesystem = get_local_filesystem();
-        return static_cast<int>(filesystem->getxattr(path, name, value, size));
+        rc = static_cast<int>(filesystem->getxattr(path, name, value, size));
+        if (rc < 0)
+        {
+            TRACE_LOG("%s %s with name=%s encountered error: %d (%s)",
+                      __func__,
+                      path,
+                      name,
+                      -rc,
+                      OSService::stringify_system_error(-rc).c_str());
+        }
+        return rc;
     }
 
     int setxattr(const char* path,
@@ -522,7 +540,17 @@ namespace lite
             return 0;
 
         auto filesystem = get_local_filesystem();
-        return filesystem->setxattr(path, name, const_cast<char*>(value), size, flags);
+        rc = filesystem->setxattr(path, name, const_cast<char*>(value), size, flags);
+        if (rc < 0)
+        {
+            TRACE_LOG("%s %s with name=%s encountered error: %d (%s)",
+                      __func__,
+                      path,
+                      name,
+                      -rc,
+                      OSService::stringify_system_error(-rc).c_str());
+        }
+        return rc;
     }
     int removexattr(const char* path, const char* name)
     {
@@ -531,7 +559,17 @@ namespace lite
         if (rc <= 0)
             return rc;
         auto filesystem = get_local_filesystem();
-        return filesystem->removexattr(path, name);
+        rc = filesystem->removexattr(path, name);
+        if (rc < 0)
+        {
+            TRACE_LOG("%s %s with name=%s encountered error: %d (%s)",
+                      __func__,
+                      path,
+                      name,
+                      -rc,
+                      OSService::stringify_system_error(-rc).c_str());
+        }
+        return rc;
     }
 #endif
 
