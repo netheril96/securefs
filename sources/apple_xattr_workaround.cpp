@@ -2,6 +2,7 @@
 
 #ifdef __APPLE__
 
+#include <errno.h>
 #include <string.h>
 
 namespace securefs
@@ -32,6 +33,40 @@ void transform_listxattr_result(char* buffer, size_t size)
         }
     }
 }
+
+static int precheck_common(const char** name)
+{
+    if (strcmp(*name, APPLE_FINDER_INFO))
+    {
+        *name = REPLACEMENT_FOR_FINDER_INFO;
+        return 1;    // No early return.
+    }
+    if (strcmp(*name, REPLACEMENT_FOR_FINDER_INFO))
+    {
+        return -EPERM;
+    }
+    return 1;
+}
+
+int precheck_getxattr(const char** name)
+{
+    if (strcmp(*name, APPLE_QUARANTINE))
+    {
+        return -ENOATTR;
+    }
+    return precheck_common(name);
+}
+
+int precheck_setxattr(const char** name)
+{
+    if (strcmp(*name, APPLE_QUARANTINE))
+    {
+        return 0;    // Fakes success of quarantine to work around "XXX is damaged" bug on macOS.
+    }
+    return precheck_common(name);
+}
+    
+int precheck_removexattr(const char** name) { return precheck_common(name); }
 }
 
 #endif
