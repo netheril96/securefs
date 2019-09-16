@@ -599,11 +599,13 @@ namespace lite
         opt->unlink = &::securefs::lite::unlink;
         opt->mkdir = &::securefs::lite::mkdir;
         opt->rmdir = &::securefs::lite::rmdir;
+#ifndef _WIN32
         opt->chmod = &::securefs::lite::chmod;
         opt->chown = &::securefs::lite::chown;
         opt->symlink = &::securefs::lite::symlink;
         opt->link = &::securefs::lite::link;
         opt->readlink = &::securefs::lite::readlink;
+#endif
         opt->rename = &::securefs::lite::rename;
         opt->fsync = &::securefs::lite::fsync;
         opt->utimens = &::securefs::lite::utimens;

@@ -783,12 +783,14 @@ namespace operations
         opt->release = &securefs::operations::release;
         opt->ftruncate = &securefs::operations::ftruncate;
         opt->flush = &securefs::operations::flush;
+#ifndef _WIN32
         opt->chmod = &securefs::operations::chmod;
         opt->chown = &securefs::operations::chown;
         opt->symlink = &securefs::operations::symlink;
-        opt->readlink = &securefs::operations::readlink;
-        opt->rename = &securefs::operations::rename;
         opt->link = &securefs::operations::link;
+        opt->readlink = &securefs::operations::readlink;
+#endif
+        opt->rename = &securefs::operations::rename;
         opt->fsync = &securefs::operations::fsync;
         opt->fsyncdir = &securefs::operations::fsyncdir;
         opt->utimens = &securefs::operations::utimens;
