@@ -52,10 +52,14 @@ public:
     static Logger* create_stderr_logger();
     static Logger* create_file_logger(const std::string& path);
 
-    void vlog(LoggingLevel level, const char* format, va_list args) noexcept;
-    void log(LoggingLevel level, const char* format, ...) noexcept
+    void vlog(LoggingLevel level,
+              const char* funcsig,
+              int lineno,
+              const char* format,
+              va_list args) noexcept;
+    void log(LoggingLevel level, const char* funcsig, int lineno, const char* format, ...) noexcept
 #ifndef _MSC_VER
-        __attribute__((format(printf, 3, 4)))
+        __attribute__((format(printf, 5, 6)))
 #endif
         ;
 
@@ -67,13 +71,19 @@ public:
 
 extern Logger* global_logger;
 
+#ifdef _MSC_VER
+#define FULL_FUNCTION_NAME __FUNCSIG__
+#else
+#define FULL_FUNCTION_NAME __PRETTY_FUNCTION__
+#endif
+
 #define GENERIC_LOG(log_level, ...)                                                                \
     do                                                                                             \
     {                                                                                              \
         using securefs::global_logger;                                                             \
         if (global_logger && global_logger->get_level() <= log_level)                              \
         {                                                                                          \
-            global_logger->log(log_level, __VA_ARGS__);                                            \
+            global_logger->log(log_level, FULL_FUNCTION_NAME, __LINE__, __VA_ARGS__);              \
         }                                                                                          \
     } while (0)
 #define TRACE_LOG(...) GENERIC_LOG(securefs::kLogTrace, __VA_ARGS__)

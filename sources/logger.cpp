@@ -23,7 +23,8 @@ static const void* current_thread_id(void) { return (void*)(pthread_self()); }
 
 namespace securefs
 {
-void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
+void Logger::vlog(
+    LoggingLevel level, const char* funcsig, int lineno, const char* format, va_list args) noexcept
 {
     if (!m_fp || level < this->get_level())
         return;
@@ -51,7 +52,7 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
     }
 
     fprintf(m_fp,
-            "[%s] [%p] [%d-%02d-%02d %02d:%02d:%02d.%09d UTC]    ",
+            "[%s] [%p] [%d-%02d-%02d %02d:%02d:%02d.%09d UTC] [%s:%d]    ",
             stringify(level),
             current_thread_id(),
             now.tm_year + 1900,
@@ -60,7 +61,9 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
             now.tm_hour,
             now.tm_min,
             now.tm_sec,
-            now_ns);
+            now_ns,
+            funcsig,
+            lineno);
     vfprintf(m_fp, format, args);
 
     if (m_console_color && (level == kLogWarning || level == kLogError))
@@ -72,13 +75,14 @@ void Logger::vlog(LoggingLevel level, const char* format, va_list args) noexcept
     fflush(m_fp);
 }
 
-void Logger::log(LoggingLevel level, const char* format, ...) noexcept
+void Logger::log(
+    LoggingLevel level, const char* funcsig, int lineno, const char* format, ...) noexcept
 {
     if (!m_fp || level < this->get_level())
         return;
     va_list args;
     va_start(args, format);
-    vlog(level, format, args);
+    vlog(level, funcsig, lineno, format, args);
     va_end(args);
 }
 
