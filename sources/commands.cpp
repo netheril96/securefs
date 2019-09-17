@@ -1,5 +1,6 @@
 #include "commands.h"
 #include "exceptions.h"
+#include "git-version.h"
 #include "lite_operations.h"
 #include "myutils.h"
 #include "operations.h"
@@ -1037,9 +1038,6 @@ static inline const char* true_or_false(bool v) { return v ? "true" : "false"; }
 
 class VersionCommand : public CommandBase
 {
-private:
-    const char* version_string = "0.8.3";
-
 public:
     void parse_cmdline(int argc, const char* const* argv) override
     {
@@ -1050,7 +1048,7 @@ public:
     int execute() override
     {
         using namespace CryptoPP;
-        printf("securefs %s\n", version_string);
+        printf("securefs %s\n", GIT_VERSION);
         printf("Crypto++ %g\n", CRYPTOPP_VERSION / 100.0);
 #ifdef WIN32
         HMODULE hd = GetModuleHandleW((sizeof(void*) == 8) ? L"winfsp-x64.dll" : L"winfsp-x86.dll");
