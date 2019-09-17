@@ -1082,6 +1082,9 @@ std::string OSService::stringify_system_error(int errcode)
 void windows_init(void)
 {
     ::SetConsoleOutputCP(CP_UTF8);
+	// Use a large buffer to prevent Windows from chopping valid UTF-8 sequences.
+    setvbuf(stdout, nullptr, _IOFBF, 65535);
+    setvbuf(stderr, nullptr, _IOFBF, 65535);
     if (::FspLoad(nullptr) != STATUS_SUCCESS)
     {
         fputs("SecureFS cannot load WinFsp. Please make sure you have WinFsp properly installed.\n",
