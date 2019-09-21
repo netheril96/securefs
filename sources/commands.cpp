@@ -13,6 +13,7 @@
 #include <fuse.h>
 #include <json/json.h>
 #include <tclap/CmdLine.h>
+#include <utf8proc/utf8proc.h>
 
 #include <algorithm>
 #include <memory>
@@ -712,10 +713,14 @@ private:
         "options"};
     TCLAP::UnlabeledValueArg<std::string> mount_point{
         "mount_point", "Mount point", true, "", "mount_point"};
-    TCLAP::SwitchArg case_insensitive{"i",
+    TCLAP::SwitchArg case_insensitive{"",
                                       "insensitive",
                                       "Converts the case of all filenames so "
                                       "that it works case insensitively"};
+    TCLAP::SwitchArg enable_nfc{"",
+                                "nfc",
+                                "Normalizes all filenames to normal form composed (NFC). Many "
+                                "macOS applications may not work properly if this is not enabled."};
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
@@ -738,6 +743,7 @@ public:
         cmdline.add(&fuse_options);
         cmdline.add(&single_threaded);
         cmdline.add(&case_insensitive);
+        cmdline.add(&enable_nfc);
         cmdline.parse(argc, argv);
 
         if (pass.isSet() && !pass.getValue().empty())
@@ -861,7 +867,7 @@ public:
         }
         if (!background.getValue())
             fuse_args.push_back("-f");
-            
+
 #ifdef __APPLE__
         const char* copyfile_disable = ::getenv("COPYFILE_DISABLE");
         if (copyfile_disable)
@@ -909,8 +915,15 @@ public:
         if (insecure.getValue())
             fsopt.flags.value() |= kOptionNoAuthentication;
         if (case_insensitive.getValue())
+        {
+            INFO_LOG("Mounting as a case insensitive filesystem");
             fsopt.flags.value() |= kOptionCaseFoldFileName;
-
+        }
+        if (enable_nfc.getValue())
+        {
+            INFO_LOG("Mounting as a Unicode normalized filesystem");
+            fsopt.flags.value() |= kOptionNFCFileName;
+        }
         std::shared_ptr<FileStream> lock_stream;
         DEFER(if (lock_stream) {
             lock_stream->close();
@@ -1076,11 +1089,13 @@ public:
         printf("libfuse %d\n", fuse_version_func());
 #endif
 
+		printf("utf8proc %s\n", utf8proc_version());
+
 #ifdef CRYPTOPP_DISABLE_ASM
         fputs("\nBuilt without hardware acceleration\n", stdout);
 #else
 #if CRYPTOPP_BOOL_X86 || CRYPTOPP_BOOL_X32 || CRYPTOPP_BOOL_X64
-        fprintf(stdout,
+        printf(
                 "\nHardware features available:\nSSE2: %s\nSSE3: %s\nSSE4.1: %s\nSSE4.2: "
                 "%s\nAES-NI: %s\nCLMUL: %s\nSHA: %s\n",
                 HasSSE2() ? "true" : "false",

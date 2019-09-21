@@ -1,0 +1,4 @@
+[submodule "external/utf8proc"]
+	path = external/utf8proc
+	url = https://github.com/JuliaStrings/utf8proc.git
+	branch = release-1.2

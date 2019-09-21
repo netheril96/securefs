@@ -1,6 +1,5 @@
 #include "operations.h"
 #include "apple_xattr_workaround.h"
-#include "case_fold.h"
 #include "constants.h"
 #include "crypto.h"
 #include "platform.h"
@@ -62,8 +61,10 @@ namespace internal
 
     FileGuard open_base_dir(FileSystemContext* fs, const char* path, std::string& last_component)
     {
-        std::vector<std::string> components
-            = split((fs->flags & kOptionCaseFoldFileName) ? case_fold(path) : path, '/');
+        std::vector<std::string> components = split(
+            transform(path, fs->flags & kOptionCaseFoldFileName, fs->flags & kOptionNFCFileName)
+                .get(),
+            '/');
 
         FileGuard result(&fs->table, fs->table.open_as(fs->root_id, FileBase::DIRECTORY));
         if (components.empty())

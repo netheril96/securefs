@@ -13,7 +13,7 @@ typedef unsigned char byte;
 namespace securefs
 {
 template <class CharT>
-class BasicStringRef
+    class BasicStringRef
 {
 private:
     const CharT* m_buffer;
@@ -144,4 +144,8 @@ void base32_encode(const byte* input, size_t size, std::string& output);
 void base32_decode(const char* input, size_t size, std::string& output);
 
 std::string escape_nonprintable(const char* str, size_t size);
+std::string case_fold(StringRef str);
+
+using ManagedCharPointer = std::unique_ptr<const char, void (*)(const char*)>;
+ManagedCharPointer transform(StringRef str, bool case_fold, bool nfc);
 }    // namespace securefs

@@ -25,7 +25,8 @@ if (UNIX)
     endif()
     include_directories(${FUSE_INCLUDE_DIR})
     link_libraries(${FUSE_LIBRARIES})
-    add_compile_options(-Wall -Wextra -Wno-unknown-pragmas -std=gnu++11)
+    add_compile_options(-Wall -Wextra -Wno-unknown-pragmas)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=gnu++11")
 
     if (NOT PORTABLE_BUILD)
         if (NOT "${architecture}" STREQUAL "ppc64le\n")
@@ -64,7 +65,7 @@ else ()
     add_compile_options(/MP)
 endif ()
 
-add_definitions(-D_REENTRANT -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=28)
+add_definitions(-D_REENTRANT -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=28 -DUTF8PROC_EXPORTS=1)
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -78,17 +79,13 @@ set(CRYPTOPP_DIR ${EXTERNAL_DIR}/cryptopp)
 add_subdirectory(${CRYPTOPP_DIR})
 link_libraries(cryptopp-static)
 
-file(GLOB SOURCES sources/*.cpp sources/*.h ${EXTERNAL_DIR}/*.h ${EXTERNAL_DIR}/*.hpp ${EXTERNAL_DIR}/*.cpp ${CMAKE_BINARY_DIR}/git-version.cpp)
+file(GLOB SOURCES sources/*.cpp sources/*.h ${EXTERNAL_DIR}/*.h ${EXTERNAL_DIR}/*.hpp ${EXTERNAL_DIR}/*.cpp ${CMAKE_BINARY_DIR}/git-version.cpp ${EXTERNAL_DIR}/utf8proc/utf8proc.h ${EXTERNAL_DIR}/utf8proc/utf8proc.c)
 file(GLOB TEST_SOURCES test/*.cpp)
 add_library(securefs-static STATIC ${SOURCES})
 link_libraries(securefs-static)
 
 add_executable(securefs main.cpp)
 add_executable(securefs_test ${TEST_SOURCES})
-
-if (UNIX)
-    set (CMAKE_REQUIRED_FLAGS "-std=gnu++11")
-endif()
 
 include(CheckCXXSourceRuns)
 CHECK_CXX_SOURCE_RUNS("int main() { thread_local int i = 0; return i; }" HAS_THREAD_LOCAL)
