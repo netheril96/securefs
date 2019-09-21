@@ -64,7 +64,7 @@ else ()
     add_compile_options(/MP)
 endif ()
 
-add_definitions(-D_REENTRANT -D_FILE_OFFSET_BITS=65 -DFUSE_USE_VERSION=28 -DUTF8PROC_EXPORTS=1)
+add_definitions(-D_REENTRANT -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=28 -DUTF8PROC_EXPORTS=1)
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
