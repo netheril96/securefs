@@ -62,7 +62,7 @@ namespace internal
     FileGuard open_base_dir(FileSystemContext* fs, const char* path, std::string& last_component)
     {
         std::vector<std::string> components = split(
-            transform(path, fs->flags & kOptionCaseFoldFileName, fs->flags & kOptionNFCFilename)
+            transform(path, fs->flags & kOptionCaseFoldFileName, fs->flags & kOptionNFCFileName)
                 .get(),
             '/');
 

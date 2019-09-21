@@ -712,10 +712,14 @@ private:
         "options"};
     TCLAP::UnlabeledValueArg<std::string> mount_point{
         "mount_point", "Mount point", true, "", "mount_point"};
-    TCLAP::SwitchArg case_insensitive{"i",
+    TCLAP::SwitchArg case_insensitive{"",
                                       "insensitive",
                                       "Converts the case of all filenames so "
                                       "that it works case insensitively"};
+    TCLAP::SwitchArg enable_nfc{"",
+                                "nfc",
+                                "Normalizes all filenames to normal form composed (NFC). Many "
+                                "macOS applications may not work properly if this is not enabled."};
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
@@ -861,7 +865,7 @@ public:
         }
         if (!background.getValue())
             fuse_args.push_back("-f");
-            
+
 #ifdef __APPLE__
         const char* copyfile_disable = ::getenv("COPYFILE_DISABLE");
         if (copyfile_disable)
@@ -910,6 +914,8 @@ public:
             fsopt.flags.value() |= kOptionNoAuthentication;
         if (case_insensitive.getValue())
             fsopt.flags.value() |= kOptionCaseFoldFileName;
+        if (enable_nfc.getValue())
+            fsopt.flags.value() |= kOptionNFCFileName;
 
         std::shared_ptr<FileStream> lock_stream;
         DEFER(if (lock_stream) {
