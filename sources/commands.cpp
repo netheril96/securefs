@@ -13,6 +13,7 @@
 #include <fuse.h>
 #include <json/json.h>
 #include <tclap/CmdLine.h>
+#include <utf8proc/utf8proc.h>
 
 #include <algorithm>
 #include <memory>
@@ -1087,11 +1088,13 @@ public:
         printf("libfuse %d\n", fuse_version_func());
 #endif
 
+		printf("utf8proc %s\n", utf8proc_version());
+
 #ifdef CRYPTOPP_DISABLE_ASM
         fputs("\nBuilt without hardware acceleration\n", stdout);
 #else
 #if CRYPTOPP_BOOL_X86 || CRYPTOPP_BOOL_X32 || CRYPTOPP_BOOL_X64
-        fprintf(stdout,
+        printf(
                 "\nHardware features available:\nSSE2: %s\nSSE3: %s\nSSE4.1: %s\nSSE4.2: "
                 "%s\nAES-NI: %s\nCLMUL: %s\nSHA: %s\n",
                 HasSSE2() ? "true" : "false",
