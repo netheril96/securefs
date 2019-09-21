@@ -5,7 +5,7 @@ matrix:
       compiler: clang
       install: "brew update && brew cask install osxfuse"
       sudo: required
-      script: "cmake . && make -j4 && ./securefs v && ctest -V"
+      script: "cmake . && make -j4 && ./securefs v && ./securefs_test"
     - os: linux
       dist: trusty
       sudo: required
