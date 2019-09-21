@@ -78,7 +78,7 @@ set(CRYPTOPP_DIR ${EXTERNAL_DIR}/cryptopp)
 add_subdirectory(${CRYPTOPP_DIR})
 link_libraries(cryptopp-static)
 
-file(GLOB SOURCES sources/*.cpp sources/*.h ${EXTERNAL_DIR}/*.h ${EXTERNAL_DIR}/*.hpp ${EXTERNAL_DIR}/*.cpp ${CMAKE_BINARY_DIR}/git-version.cpp)
+file(GLOB SOURCES sources/*.cpp sources/*.h ${EXTERNAL_DIR}/*.h ${EXTERNAL_DIR}/*.hpp ${EXTERNAL_DIR}/*.cpp ${CMAKE_BINARY_DIR}/git-version.cpp ${EXTERNAL_DIR}/utf8proc/utf8proc.h ${EXTERNAL_DIR}/utf8proc/utf8proc.h)
 file(GLOB TEST_SOURCES test/*.cpp)
 add_library(securefs-static STATIC ${SOURCES})
 link_libraries(securefs-static)
