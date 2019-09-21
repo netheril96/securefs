@@ -114,3 +114,12 @@ TEST_CASE("case fold")
             == "\x61\x61\x62\x63\xcf\x83\xce\xaf\xcf\x83\xcf\x85\xcf\x86\xce\xbf\xcf\x83\x66\x69"
                "\xc3\xa6");
 }
+
+TEST_CASE("NFC")
+{
+    auto nfc
+        = [](const char* str) { return std::string(securefs::transform(str, false, true).get()); };
+
+	REQUIRE(nfc("\x41\xcc\x88\x66\x66\x69\x6e") == "\xc3\x84\x66\x66\x69\x6e");
+    REQUIRE(nfc("Henry IV") == "Henry IV");
+}
