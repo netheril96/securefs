@@ -913,10 +913,15 @@ public:
         if (insecure.getValue())
             fsopt.flags.value() |= kOptionNoAuthentication;
         if (case_insensitive.getValue())
+        {
+            INFO_LOG("Mounting as a case insensitive filesystem");
             fsopt.flags.value() |= kOptionCaseFoldFileName;
+        }
         if (enable_nfc.getValue())
+        {
+            INFO_LOG("Mounting as a Unicode normalized filesystem");
             fsopt.flags.value() |= kOptionNFCFileName;
-
+        }
         std::shared_ptr<FileStream> lock_stream;
         DEFER(if (lock_stream) {
             lock_stream->close();
