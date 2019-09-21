@@ -340,10 +340,10 @@ ManagedCharPointer transform(StringRef str, bool case_fold, bool nfc)
 {
     if (!case_fold && !nfc)
     {
-        return ManagedCharPointer(str.c_str(), [](const char*){});
+        return ManagedCharPointer(str.c_str(), [](const char*) {});
     }
     utf8proc_uint8_t* result = nullptr;
-    int options = UTF8PROC_NULLTERM | UTF8PROC_STABLE;
+    int options = UTF8PROC_STABLE;
     if (case_fold)
     {
         options |= UTF8PROC_CASEFOLD;
@@ -353,7 +353,7 @@ ManagedCharPointer transform(StringRef str, bool case_fold, bool nfc)
         options |= UTF8PROC_COMPOSE;
     }
     auto rc = utf8proc_map(reinterpret_cast<const utf8proc_uint8_t*>(str.c_str()),
-                           -1,
+                           static_cast<utf8proc_ssize_t>(str.size()),
                            &result,
                            static_cast<utf8proc_option_t>(options));
     return ManagedCharPointer(reinterpret_cast<char*>(result),
