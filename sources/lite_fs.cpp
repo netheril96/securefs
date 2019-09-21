@@ -1,5 +1,4 @@
 #include "lite_fs.h"
-#include "case_fold.h"
 #include "constants.h"
 #include "logger.h"
 
@@ -151,7 +150,7 @@ namespace lite
         else
         {
             std::string str = lite::encrypt_path(
-                m_name_encryptor, (m_flags & kOptionCaseFoldFileName) ? case_fold(path) : path);
+                m_name_encryptor, transform(path,  m_flags & kOptionCaseFoldFileName, m_flags & kOptionNFCFilename).get());
             if (!preserve_leading_slash && !str.empty() && str[0] == '/')
             {
                 str.erase(str.begin());

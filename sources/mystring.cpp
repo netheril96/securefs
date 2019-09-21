@@ -2,6 +2,8 @@
 #include "exceptions.h"
 #include "logger.h"
 #include "myutils.h"
+#include "utf8proc/utf8proc.h"
+
 #include <ctype.h>
 #include <stdint.h>
 #include <system_error>
@@ -332,5 +334,29 @@ std::string escape_nonprintable(const char* str, size_t size)
         }
     }
     return result;
+}
+
+ManagedCharPointer transform(StringRef str, bool case_fold, bool nfc)
+{
+    if (!case_fold && !nfc)
+    {
+        return ManagedCharPointer(str.c_str(), [](const char*){});
+    }
+    utf8proc_uint8_t* result = nullptr;
+    int options = UTF8PROC_NULLTERM | UTF8PROC_STABLE;
+    if (case_fold)
+    {
+        options |= UTF8PROC_CASEFOLD;
+    }
+    if (nfc)
+    {
+        options |= UTF8PROC_COMPOSE;
+    }
+    auto rc = utf8proc_map(reinterpret_cast<const utf8proc_uint8_t*>(str.c_str()),
+                           -1,
+                           &result,
+                           static_cast<utf8proc_option_t>(options));
+    return ManagedCharPointer(reinterpret_cast<char*>(result),
+                              [](const char* str) { free(const_cast<char*>(str)); });
 }
 }    // namespace securefs

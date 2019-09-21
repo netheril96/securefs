@@ -64,7 +64,7 @@ else ()
     add_compile_options(/MP)
 endif ()
 
-add_definitions(-D_REENTRANT -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=28)
+add_definitions(-D_REENTRANT -D_FILE_OFFSET_BITS=65 -DFUSE_USE_VERSION=28 -DUTF8PROC_EXPORTS=1)
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -78,7 +78,7 @@ set(CRYPTOPP_DIR ${EXTERNAL_DIR}/cryptopp)
 add_subdirectory(${CRYPTOPP_DIR})
 link_libraries(cryptopp-static)
 
-file(GLOB SOURCES sources/*.cpp sources/*.h ${EXTERNAL_DIR}/*.h ${EXTERNAL_DIR}/*.hpp ${EXTERNAL_DIR}/*.cpp ${CMAKE_BINARY_DIR}/git-version.cpp ${EXTERNAL_DIR}/utf8proc/utf8proc.h ${EXTERNAL_DIR}/utf8proc/utf8proc.h)
+file(GLOB SOURCES sources/*.cpp sources/*.h ${EXTERNAL_DIR}/*.h ${EXTERNAL_DIR}/*.hpp ${EXTERNAL_DIR}/*.cpp ${CMAKE_BINARY_DIR}/git-version.cpp ${EXTERNAL_DIR}/utf8proc/utf8proc.h ${EXTERNAL_DIR}/utf8proc/utf8proc.c)
 file(GLOB TEST_SOURCES test/*.cpp)
 add_library(securefs-static STATIC ${SOURCES})
 link_libraries(securefs-static)
