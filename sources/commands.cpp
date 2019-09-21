@@ -743,6 +743,7 @@ public:
         cmdline.add(&fuse_options);
         cmdline.add(&single_threaded);
         cmdline.add(&case_insensitive);
+        cmdline.add(&enable_nfc);
         cmdline.parse(argc, argv);
 
         if (pass.isSet() && !pass.getValue().empty())

@@ -25,7 +25,8 @@ if (UNIX)
     endif()
     include_directories(${FUSE_INCLUDE_DIR})
     link_libraries(${FUSE_LIBRARIES})
-    add_compile_options(-Wall -Wextra -Wno-unknown-pragmas -std=gnu++11)
+    add_compile_options(-Wall -Wextra -Wno-unknown-pragmas)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=gnu++11")
 
     if (NOT PORTABLE_BUILD)
         if (NOT "${architecture}" STREQUAL "ppc64le\n")
@@ -85,10 +86,6 @@ link_libraries(securefs-static)
 
 add_executable(securefs main.cpp)
 add_executable(securefs_test ${TEST_SOURCES})
-
-if (UNIX)
-    set (CMAKE_REQUIRED_FLAGS "-std=gnu++11")
-endif()
 
 include(CheckCXXSourceRuns)
 CHECK_CXX_SOURCE_RUNS("int main() { thread_local int i = 0; return i; }" HAS_THREAD_LOCAL)
