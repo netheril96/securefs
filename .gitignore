@@ -48,7 +48,6 @@ cryptopp.mac.done
 GNUmakefile.deps
 TestData/
 TestScripts/
-TestPrograms/
 TestVectors/
 *.zip
 
