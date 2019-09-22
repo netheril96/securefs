@@ -108,6 +108,7 @@ TEST_CASE("case fold")
     auto case_fold
         = [](const char* str) { return std::string(securefs::transform(str, true, false).get()); };
 
+    REQUIRE(case_fold("abCdEfG") == "abcdefg");
     REQUIRE(case_fold("\xc8\xba") == "\xe2\xb1\xa5");
     REQUIRE(case_fold(
                 "AabC\xce\xa3\xce\xaf\xcf\x83\xcf\x85\xcf\x86\xce\xbf\xcf\x82\xef\xac\x81\xc3\x86")
@@ -122,4 +123,20 @@ TEST_CASE("NFC")
 
 	REQUIRE(nfc("\x41\xcc\x88\x66\x66\x69\x6e") == "\xc3\x84\x66\x66\x69\x6e");
     REQUIRE(nfc("Henry IV") == "Henry IV");
+    REQUIRE(nfc("") == "");
+    REQUIRE(nfc("abc") == "abc");
+    REQUIRE(nfc("\xe8\xb0\xb7\xe6\xad\x8c") == "\xe8\xb0\xb7\xe6\xad\x8c");
+}
+
+TEST_CASE("is_ascii")
+{
+    REQUIRE(securefs::is_ascii(""));
+    REQUIRE(securefs::is_ascii("a"));
+    REQUIRE(securefs::is_ascii("abd;df-135j~"));
+    REQUIRE(securefs::is_ascii("\x7f"));
+    REQUIRE(securefs::is_ascii("abc\x11"));
+
+    REQUIRE(!securefs::is_ascii("\xe8\xb0\xb7\xe6\xad\x8c"));
+    REQUIRE(!securefs::is_ascii("\x41\xcc\x88\x66\x66\x69\x6e"));
+    REQUIRE(!securefs::is_ascii("\x80"));
 }

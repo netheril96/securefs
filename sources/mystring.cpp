@@ -366,9 +366,21 @@ public:
     }
 };
 
+bool is_ascii(StringRef str)
+{
+    for (char c : str)
+    {
+        if (static_cast<signed char>(c) < 0)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 ManagedCharPointer transform(StringRef str, bool case_fold, bool nfc)
 {
-    if (!case_fold && !nfc)
+    if (!case_fold && (!nfc || is_ascii(str)))
     {
         return ManagedCharPointer(str.c_str(), [](const char*) {});
     }

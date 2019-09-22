@@ -149,4 +149,6 @@ std::string case_fold(StringRef str);
 
 using ManagedCharPointer = std::unique_ptr<const char, void (*)(const char*)>;
 ManagedCharPointer transform(StringRef str, bool case_fold, bool nfc);
+
+bool is_ascii(StringRef str);
 }    // namespace securefs
