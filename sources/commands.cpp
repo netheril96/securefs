@@ -717,10 +717,17 @@ private:
                                       "insensitive",
                                       "Converts the case of all filenames so "
                                       "that it works case insensitively"};
-    TCLAP::SwitchArg enable_nfc{"",
-                                "nfc",
-                                "Normalizes all filenames to normal form composed (NFC). Many "
-                                "macOS applications may not work properly if this is not enabled."};
+    TCLAP::SwitchArg enable_nfc{
+        "",
+        "nfc",
+        "Normalizes all filenames to normal form composed (NFC). By default, enabled on macOS and "
+        "disabled on other platforms for compatibility of native applications.",
+#ifdef __APPLE__
+        true
+#else
+        false
+#endif
+    };
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
