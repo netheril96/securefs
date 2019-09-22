@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <string>
 #include <vector>
+#include <memory>
 
 typedef unsigned char byte;
 
