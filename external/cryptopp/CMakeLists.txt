@@ -221,14 +221,53 @@ endfunction(CheckCompileOption)
 
 function(CheckCompileLinkOption opt var prog)
 
+  if (MSVC)
+
+    # TODO: improve this...
+    CHECK_CXX_COMPILER_FLAG(${opt} ${var})
+
+  elseif (APPLE)
+
     message(STATUS "Performing Test ${var}")
     try_compile(COMMAND_SUCCESS ${CMAKE_BINARY_DIR} ${prog} COMPILE_DEFINITIONS ${opt})
-    if (${COMMAND_SUCCESS})
-        message(STATUS "Test ${var} succeeds")
+    if (COMMAND_SUCCESS)
+      set(${var} 1 PARENT_SCOPE)
+      message(STATUS "Performing Test ${var} - Success")
     else ()
-        message(STATUS "Test ${var} fails")
+      set(${var} 0 PARENT_SCOPE)
+      message(STATUS "Performing Test ${var} - Failed")
     endif ()
-    set(${var} ${COMMAND_SUCCESS} PARENT_SCOPE)
+
+  else ()
+
+    message(STATUS "Performing Test ${var}")
+    execute_process(
+      COMMAND sh -c "${CMAKE_CXX_COMPILER} ${CMAKE_CXX_FLAGS} ${opt} ${prog} 2>&1"
+      RESULT_VARIABLE COMMAND_RESULT
+      OUTPUT_VARIABLE COMMAND_OUTPUT
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+    # message(STATUS "RESULT_VARIABLE ${RESULT_VARIABLE}")
+    # message(STATUS "COMMAND_RESULT ${COMMAND_RESULT}")
+    # message(STATUS "OUTPUT_VARIABLE ${OUTPUT_VARIABLE}")
+    # message(STATUS "COMMAND_OUTPUT ${COMMAND_OUTPUT}")
+
+    # This test is strict. We require two things. First, the invocation
+    # of the compile command must return 0. Second, there must be no
+    # messages on the console. We are interested in diagnostics like
+    # warnings to decide when to reject an option. But we will probably
+    # capture chatty compiler that want to say, "Hooray, success". For
+    # chatty compilers we will need to find a quiet option and use it
+    # for the test. Microsoft compilers come to mind.
+    if ("${COMMAND_RESULT}" EQUAL 0 AND "${COMMAND_OUTPUT}" STREQUAL "")
+      set(${var} 1 PARENT_SCOPE)
+      message(STATUS "Performing Test ${var} - Success")
+    else ()
+      set(${var} 0 PARENT_SCOPE)
+      message(STATUS "Performing Test ${var} - Failed")
+    endif ()
+
+  endif ()
 
 endfunction(CheckCompileLinkOption)
 
