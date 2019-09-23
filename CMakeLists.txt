@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 2.8.12 FATAL_ERROR)
 
-option(PORTABLE_BUILD "Build for the general architecture instead of this cpu" OFF)
-
 project(securefs)
 
 set (CMAKE_FIND_FRAMEWORK NEVER)
@@ -27,14 +25,6 @@ if (UNIX)
     link_libraries(${FUSE_LIBRARIES})
     add_compile_options(-Wall -Wextra -Wno-unknown-pragmas)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=gnu++11")
-
-    if (NOT PORTABLE_BUILD)
-        if (NOT "${architecture}" STREQUAL "ppc64le\n")
-            add_compile_options(-march=native -mtune=native)
-        else ()
-            add_compile_options(-mcpu=native -mtune=native)
-        endif()
-    endif ()
 
     if (APPLE)
         link_libraries(-Wl,-dead_strip)
