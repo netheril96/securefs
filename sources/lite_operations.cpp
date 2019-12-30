@@ -93,10 +93,6 @@ namespace lite
 
     void* init(struct fuse_conn_info* fsinfo)
     {
-#ifdef FUSE_CAP_BIG_WRITES
-        fsinfo->want |= FUSE_CAP_BIG_WRITES;
-        fsinfo->max_write = static_cast<unsigned>(-1);
-#endif
 #ifdef FSP_FUSE_CAP_READDIR_PLUS
         fsinfo->want |= (fsinfo->capable & FSP_FUSE_CAP_READDIR_PLUS);
 #endif

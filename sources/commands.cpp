@@ -888,8 +888,10 @@ public:
         }
 #elif _WIN32
         fuse_args.push_back("-ouid=-1,gid=-1");
+#else
+        fuse_args.push_back("-o");
+        fuse_args.push_back("big_writes");
 #endif
-
         if (fuse_options.isSet())
         {
             for (const std::string& opt : fuse_options.getValue())
