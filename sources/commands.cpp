@@ -594,6 +594,15 @@ protected:
         }
         return OSService::read_password_no_confirmation("Enter password:", &password);
     }
+
+    void add_all_args_from_base(TCLAP::CmdLine& cmd_line)
+    {
+        cmd_line.add(&data_dir);
+        cmd_line.add(&config_path);
+        cmd_line.add(&pass);
+        cmd_line.add(&keyfile);
+        cmd_line.add(&askpass);
+    }
 };
 
 static const std::string message_for_setting_pbkdf
@@ -631,12 +640,10 @@ public:
     void parse_cmdline(int argc, const char* const* argv) override
     {
         TCLAP::CmdLine cmdline(help_message());
+        add_all_args_from_base(cmdline);
         cmdline.add(&iv_size);
         cmdline.add(&rounds);
-        cmdline.add(&data_dir);
-        cmdline.add(&config_path);
         cmdline.add(&format);
-        cmdline.add(&pass);
         cmdline.add(&store_time);
         cmdline.add(&block_size);
         cmdline.parse(argc, argv);
@@ -730,8 +737,7 @@ public:
     {
         TCLAP::CmdLine cmdline(help_message());
         cmdline.add(&rounds);
-        cmdline.add(&data_dir);
-        cmdline.add(&config_path);
+        add_all_args_from_base(cmdline);
         cmdline.parse(argc, argv);
         OSService::read_password_no_confirmation("Old password: ", &old_password);
         OSService::read_password_with_confirmation("New password: ", &new_password);
@@ -831,16 +837,13 @@ public:
 #ifdef __APPLE__
         cmdline.add(&noxattr);
 #endif
-
+        add_all_args_from_base(cmdline);
         cmdline.add(&background);
         // cmdline.add(&insecure);
         cmdline.add(&verbose);
         cmdline.add(&trace);
         cmdline.add(&log);
-        cmdline.add(&data_dir);
-        cmdline.add(&config_path);
         cmdline.add(&mount_point);
-        cmdline.add(&pass);
         cmdline.add(&fuse_options);
         cmdline.add(&single_threaded);
         cmdline.add(&case_insensitive);
