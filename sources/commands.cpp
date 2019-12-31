@@ -532,7 +532,8 @@ void CommandBase::write_config(FileStream* stream,
     stream->sequential_write(str.data(), str.size());
 }
 
-class CommonCommandBase : public CommandBase
+/// A base class for all commands that require a data dir to be present.
+class _DataDirCommandBase : public CommandBase
 {
 protected:
     TCLAP::UnlabeledValueArg<std::string> data_dir{
@@ -544,6 +545,18 @@ protected:
         false,
         "",
         "config_path"};
+
+protected:
+    std::string get_real_config_path()
+    {
+        return config_path.isSet() ? config_path.getValue()
+                                   : data_dir.getValue() + PATH_SEPARATOR_CHAR + CONFIG_FILE_NAME;
+    }
+};
+
+class _SinglePasswordCommandBase : public _DataDirCommandBase
+{
+protected:
     TCLAP::ValueArg<std::string> pass{
         "",
         "pass",
@@ -564,15 +577,9 @@ protected:
         "When set to true, ask for password even if a key file is used. "
         "password+keyfile provides even stronger security than one of them alone.",
         false};
+    CryptoPP::AlignedSecByteBlock password;
 
-protected:
-    std::string get_real_config_path()
-    {
-        return config_path.isSet() ? config_path.getValue()
-                                   : data_dir.getValue() + PATH_SEPARATOR_CHAR + CONFIG_FILE_NAME;
-    }
-
-    void get_password(bool require_confirmation, CryptoPP::AlignedSecByteBlock& password)
+    void get_password(bool require_confirmation)
     {
         if (pass.isSet() && !pass.getValue().empty())
         {
@@ -611,11 +618,9 @@ static const std::string message_for_setting_pbkdf
                 PBKDF_ALGO_SCRYPT,
                 PBKDF_ALGO_PKCS5);
 
-class CreateCommand : public CommonCommandBase
+class CreateCommand : public _SinglePasswordCommandBase
 {
 private:
-    CryptoPP::AlignedSecByteBlock password;
-
     TCLAP::ValueArg<unsigned> rounds{
         "r",
         "rounds",
@@ -647,7 +652,7 @@ public:
         cmdline.add(&store_time);
         cmdline.add(&block_size);
         cmdline.parse(argc, argv);
-        get_password(true, password);
+        get_password(true);
     }
 
     int execute() override
@@ -718,7 +723,7 @@ public:
     const char* help_message() const noexcept override { return "Create a new filesystem"; }
 };
 
-class ChangePasswordCommand : public CommonCommandBase
+class ChangePasswordCommand : public _DataDirCommandBase
 {
 private:
     CryptoPP::AlignedSecByteBlock old_password, new_password;
@@ -814,10 +819,9 @@ public:
     }
 };
 
-class MountCommand : public CommonCommandBase
+class MountCommand : public _SinglePasswordCommandBase
 {
 private:
-    CryptoPP::AlignedSecByteBlock password;
     TCLAP::SwitchArg single_threaded{"s", "single", "Single threaded mode"};
     TCLAP::SwitchArg background{
         "b", "background", "Run securefs in the background (currently no effect on Windows)"};
@@ -889,7 +893,7 @@ public:
         cmdline.add(&fssubtype);
         cmdline.parse(argc, argv);
 
-        get_password(false, password);
+        get_password(false);
 
         if (global_logger && verbose.getValue())
             global_logger->set_level(kLogVerbose);
@@ -1133,20 +1137,16 @@ public:
     const char* help_message() const noexcept override { return "Mount an existing filesystem"; }
 };
 
-class FixCommand : public CommonCommandBase
+class FixCommand : public _SinglePasswordCommandBase
 {
-private:
-    CryptoPP::AlignedSecByteBlock password;
-
 public:
     void parse_cmdline(int argc, const char* const* argv) override
     {
         TCLAP::CmdLine cmdline(help_message());
-        cmdline.add(&data_dir);
-        cmdline.add(&config_path);
+        add_all_args_from_base(cmdline);
         cmdline.parse(argc, argv);
 
-        OSService::read_password_no_confirmation("Password: ", &password);
+        get_password(false);
     }
 
     int execute() override
