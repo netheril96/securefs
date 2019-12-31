@@ -731,16 +731,53 @@ private:
         "integer"};
     TCLAP::ValueArg<std::string> pbkdf{
         "", "pbkdf", message_for_setting_pbkdf, false, PBKDF_ALGO_SCRYPT, "string"};
+    TCLAP::ValueArg<std::string> old_key_file{
+        "", "oldkeyfile", "Path to original key file", false, "", "path"};
+    TCLAP::ValueArg<std::string> new_key_file{
+        "", "newkeyfile", "Path to new key file", false, "", "path"};
+    TCLAP::SwitchArg askoldpass{
+        "",
+        "askoldpass",
+        "When set to true, ask for password even if a key file is used. "
+        "password+keyfile provides even stronger security than one of them alone.",
+        false};
+    TCLAP::SwitchArg asknewpass{
+        "",
+        "asknewpass",
+        "When set to true, ask for password even if a key file is used. "
+        "password+keyfile provides even stronger security than one of them alone.",
+        false};
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
     {
         TCLAP::CmdLine cmdline(help_message());
+        cmdline.add(&data_dir);
         cmdline.add(&rounds);
-        add_all_args_from_base(cmdline);
+        cmdline.add(&config_path);
+        cmdline.add(&old_key_file);
+        cmdline.add(&new_key_file);
+        cmdline.add(&askoldpass);
+        cmdline.add(&asknewpass);
         cmdline.parse(argc, argv);
-        OSService::read_password_no_confirmation("Old password: ", &old_password);
-        OSService::read_password_with_confirmation("New password: ", &new_password);
+        if (old_key_file.getValue().empty() || askoldpass.getValue())
+        {
+            OSService::read_password_no_confirmation("Old password: ", &old_password);
+        }
+        else
+        {
+            old_password.Assign(reinterpret_cast<const byte*>(EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED),
+                                strlen(EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED));
+        }
+        if (new_key_file.getValue().empty() || asknewpass.getValue())
+        {
+            OSService::read_password_with_confirmation("New password: ", &new_password);
+        }
+        else
+        {
+            new_password.Assign(reinterpret_cast<const byte*>(EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED),
+                                strlen(EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED));
+        }
     }
 
     int execute() override
@@ -751,12 +788,12 @@ public:
         auto tmp_path = original_path + hexify(buffer, array_length(buffer));
         auto stream = OSService::get_default().open_file_stream(original_path, O_RDONLY, 0644);
         auto config = read_config(
-            stream.get(), old_password.data(), old_password.size(), keyfile.getValue());
+            stream.get(), old_password.data(), old_password.size(), old_key_file.getValue());
         stream = OSService::get_default().open_file_stream(
             tmp_path, O_WRONLY | O_CREAT | O_EXCL, 0644);
         DEFER(if (std::uncaught_exception()) { OSService::get_default().remove_file(tmp_path); });
         write_config(stream.get(),
-                     keyfile.getValue(),
+                     new_key_file.getValue(),
                      pbkdf.getValue(),
                      config,
                      new_password.data(),
@@ -773,7 +810,7 @@ public:
 
     const char* help_message() const noexcept override
     {
-        return "Change password of existing filesystem";
+        return "Change password/keyfile of existing filesystem";
     }
 };
 
