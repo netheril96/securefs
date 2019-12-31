@@ -60,6 +60,7 @@ public:
         , m_num(other.m_num)
         , m_child_indices(std::move(other.m_child_indices))
         , m_entries(std::move(other.m_entries))
+        , m_dirty(false)
     {
         std::swap(m_dirty, other.m_dirty);
         other.m_num = INVALID_PAGE;
@@ -68,7 +69,7 @@ public:
     BtreeNode& operator=(BtreeNode&& other) noexcept
     {
         if (this == &other)
-            return other;
+            return *this;
         std::swap(m_child_indices, other.m_child_indices);
         std::swap(m_entries, other.m_entries);
         std::swap(m_dirty, other.m_dirty);
@@ -132,7 +133,6 @@ private:
 
     Node* retrieve_node(uint32_t parent_num, uint32_t num);
     Node* retrieve_existing_node(uint32_t num);
-    void eject_node(uint32_t);
     void del_node(Node*);
     Node* get_root_node();
     void flush_cache();
@@ -165,13 +165,13 @@ public:
     explicit BtreeDirectory(Args&&... args) : Directory(std::forward<Args>(args)...)
     {
     }
-    ~BtreeDirectory();
+    ~BtreeDirectory() override;
 
 protected:
-    virtual bool get_entry_impl(const std::string& name, id_type& id, int& type) override;
-    virtual bool add_entry_impl(const std::string& name, const id_type& id, int type) override;
-    virtual bool remove_entry_impl(const std::string& name, id_type& id, int& type) override;
-    virtual void iterate_over_entries_impl(const callback&) override;
+    bool get_entry_impl(const std::string& name, id_type& id, int& type) override;
+    bool add_entry_impl(const std::string& name, const id_type& id, int type) override;
+    bool remove_entry_impl(const std::string& name, id_type& id, int& type) override;
+    void iterate_over_entries_impl(const callback&) override;
 
 public:
     virtual bool empty() override;
@@ -196,6 +196,8 @@ inline std::unique_ptr<FileBase> btree_make_file_from_type(int type, Args&&... a
         return securefs::make_unique<BtreeDirectory>(std::forward<Args>(args)...);
     case FileBase::BASE:
         return securefs::make_unique<FileBase>(std::forward<Args>(args)...);
+    default:
+        break;
     }
     throwInvalidArgumentException("Unrecognized file type");
 }

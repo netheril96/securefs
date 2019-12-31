@@ -124,8 +124,8 @@ static void insert(Container& c, ptrdiff_t index, T&& value)
 class BtreeDirectory::FreePage
 {
 public:
-    uint32_t next;
-    uint32_t prev;
+    uint32_t next = 0;
+    uint32_t prev = 0;
 };
 
 void BtreeDirectory::read_free_page(uint32_t num, FreePage& fp)
@@ -207,9 +207,9 @@ bool BtreeNode::from_buffer(const byte* buffer, size_t size)
     {
         m_child_indices.push_back(read_little_endian_and_forward<uint32_t>(&buffer, end_of_buffer));
     }
-    DirEntry e;
     for (uint16_t i = 0; i < entry_num; ++i)
     {
+        DirEntry e;
         std::array<char, Directory::MAX_FILENAME_LENGTH + 1> filename;
         buffer = read_and_forward(buffer, end_of_buffer, filename);
         buffer = read_and_forward(buffer, end_of_buffer, e.id);
@@ -667,9 +667,9 @@ void BtreeDirectory::to_dot_graph(const char* filename)
     fputs("\n}\n", fp);
     if (feof(fp))
     {
-        VFSException err(errno);
-        fclose(fp);
-        throw err;
+        int saved_errno = errno;
+        fclose(fp);    // Calling this will modify `errno`.
+        throw VFSException(saved_errno);
     }
     fclose(fp);
 }
@@ -738,7 +738,8 @@ void BtreeDirectory::rebuild()
 
     std::vector<DirEntry> entries;
     entries.reserve(this->m_stream->size() / BLOCK_SIZE * BTREE_MAX_NUM_ENTRIES);
-    mutable_recursive_iterate(root, [&](DirEntry&& e) { entries.push_back(std::move(e)); }, 0);
+    mutable_recursive_iterate(
+        root, [&](DirEntry&& e) { entries.push_back(std::move(e)); }, 0);
     clear_cache();    // root is invalid after this line
     m_stream->resize(0);
     set_num_free_page(0);

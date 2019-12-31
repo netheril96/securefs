@@ -37,14 +37,14 @@ using namespace securefs;
 namespace
 {
 
-static const char* CONFIG_FILE_NAME = ".securefs.json";
-static const unsigned MIN_ITERATIONS = 20000;
-static const unsigned MIN_DERIVE_SECONDS = 1;
-static const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
-static const char* PBKDF_ALGO_PKCS5 = "pkcs5-pbkdf2-hmac-sha256";
-static const char* PBKDF_ALGO_SCRYPT = "scrypt";
+const char* CONFIG_FILE_NAME = ".securefs.json";
+const unsigned MIN_ITERATIONS = 20000;
+const unsigned MIN_DERIVE_SECONDS = 1;
+const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
+const char* PBKDF_ALGO_PKCS5 = "pkcs5-pbkdf2-hmac-sha256";
+const char* PBKDF_ALGO_SCRYPT = "scrypt";
 
-static const char* get_version_header(unsigned version)
+const char* get_version_header(unsigned version)
 {
     switch (version)
     {
@@ -1243,7 +1243,7 @@ int commands_main(int argc, const char* const* argv)
         for (std::unique_ptr<CommandBase>& command : cmds)
         {
             if (strcmp(argv[0], command->long_name()) == 0
-                || (argv[0] != 0 && argv[0][0] == command->short_name() && argv[0][1] == 0))
+                || (argv[0] != nullptr && argv[0][0] == command->short_name() && argv[0][1] == 0))
             {
                 command->parse_cmdline(argc, argv);
                 return command->execute();

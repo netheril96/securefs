@@ -33,8 +33,8 @@ protected:
                              unsigned rounds);
 
 public:
-    CommandBase() {}
-    virtual ~CommandBase() {}
+    CommandBase() = default;
+    virtual ~CommandBase() = default;
 
     virtual const char* long_name() const noexcept = 0;
     virtual char short_name() const noexcept = 0;
