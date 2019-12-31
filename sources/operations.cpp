@@ -211,6 +211,7 @@ namespace operations
 
     void* init(struct fuse_conn_info* fsinfo)
     {
+        (void)fsinfo;
         auto args = static_cast<MountOptions*>(fuse_get_context()->private_data);
         auto fs = new FileSystemContext(*args);
         TRACE_LOG("%s", __FUNCTION__);

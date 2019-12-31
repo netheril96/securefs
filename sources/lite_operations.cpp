@@ -93,6 +93,7 @@ namespace lite
 
     void* init(struct fuse_conn_info* fsinfo)
     {
+        (void)fsinfo;
 #ifdef FSP_FUSE_CAP_READDIR_PLUS
         fsinfo->want |= (fsinfo->capable & FSP_FUSE_CAP_READDIR_PLUS);
 #endif
