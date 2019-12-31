@@ -29,6 +29,7 @@
 #ifdef _MSC_VER
 #include <Windows.h>
 #else
+#include <cryptopp/hmac.h>
 #include <dlfcn.h>
 #endif
 
@@ -242,6 +243,30 @@ void fix(const std::string& basedir, operations::FileSystemContext* fs)
         fs, root_dir.get_as<Directory>(), &nlink_map, NLinkFixPhase::CollectingNLink);
     fix_hardlink_count(fs, root_dir.get_as<Directory>(), &nlink_map, NLinkFixPhase::FixingNLink);
     puts("Fix complete");
+}
+
+void maybe_derive_with_keyfile(const securefs::key_type& password_dervied_key,
+                               StringRef maybe_key_file_path,
+                               securefs::key_type& out_key)
+{
+    if (maybe_key_file_path.empty())
+    {
+        out_key = password_dervied_key;
+        return;
+    }
+    auto file_stream = OSService::get_default().open_file_stream(maybe_key_file_path, O_RDONLY, 0);
+    byte buffer[4096];
+    CryptoPP::HMAC<CryptoPP::SHA256> hmac(password_dervied_key.data(), password_dervied_key.size());
+    while (true)
+    {
+        auto sz = file_stream->sequential_read(buffer, sizeof(buffer));
+        if (sz < 0)
+        {
+            break;
+        }
+        hmac.Update(buffer, sz);
+    }
+    hmac.TruncatedFinal(out_key.data(), out_key.size());
 }
 
 Json::Value generate_config(unsigned int version,
