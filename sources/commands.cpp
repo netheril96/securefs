@@ -1192,7 +1192,8 @@ public:
                format_version == 1 ? 4096 : config_json["block_size"].asUInt());
         printf("Content IV size: %u bits\n",
                format_version == 1 ? 256 : config_json["iv_size"].asUInt() * 8);
-        printf("Password derivation algorithm: PBKDF2-HMAC-SHA256\n");
+        printf("Password derivation algorithm: %s\n",
+               config_json.get("pbkdf", PBKDF_ALGO_PKCS5).asCString());
         printf("Password derivation iterations: %u\n", config_json["iterations"].asUInt());
         printf("Per file key generation algorithm: %s\n",
                format_version < 4 ? "HMAC-SHA256" : "AES");
