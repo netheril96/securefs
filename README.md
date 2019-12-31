@@ -38,20 +38,18 @@ On Windows, you need [WinFsp](https://github.com/billziss-gh/winfsp/releases).
 ### Install with Homebrew
 
 ```
-brew install -s securefs
+brew install securefs
 ```
-
-Building from source is recommended as it directly targets your CPU capabilities and may speed up huge amounts.
 
 ### Windows
 
-Windows users can download prebuilt package from the releases section. It depends on VC++ 2017 redistribution package.
+Windows users can download prebuilt package from the releases section. It depends on [VC++ 2017 redistribution package](https://support.microsoft.com/en-us/help/2977003/the-latest-supported-visual-c-downloads).
 
 ### Manual Build
 
-First clone the sources by `git clone --recursive`.
+First clone the sources by `git clone --recursive --depth 1`.
 
-Use `cmake` the generate build files then build it. It requires a sufficiently new compiler that supports enough of C++11 (such as g++ 4.8, clang 3.4 or VC++ 2015).
+Use `cmake` the generate build files then build it. It requires a sufficiently new compiler that supports enough of C++11 (such as g++ 5.0, clang 3.4 or VC++ 2017).
 
 ## Basic usage
 
