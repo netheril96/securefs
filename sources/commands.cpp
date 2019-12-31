@@ -261,7 +261,7 @@ void maybe_derive_with_keyfile(const securefs::key_type& password_dervied_key,
     while (true)
     {
         auto sz = file_stream->sequential_read(buffer, sizeof(buffer));
-        if (sz < 0)
+        if (sz <= 0)
         {
             break;
         }
@@ -273,6 +273,7 @@ void maybe_derive_with_keyfile(const securefs::key_type& password_dervied_key,
 Json::Value generate_config(unsigned int version,
                             const std::string& pbkdf_algorithm,
                             const CryptoPP::AlignedSecByteBlock& master_key,
+                            StringRef maybe_key_file_path,
                             const securefs::key_type& salt,
                             const void* password,
                             size_t pass_len,
@@ -282,7 +283,7 @@ Json::Value generate_config(unsigned int version,
 {
     Json::Value config;
     config["version"] = version;
-    securefs::key_type key_to_encrypt;
+    securefs::key_type password_derived_key;
     CryptoPP::AlignedSecByteBlock encrypted_master_key(nullptr, master_key.size());
 
     if (pbkdf_algorithm == PBKDF_ALGO_PKCS5)
@@ -293,8 +294,8 @@ Json::Value generate_config(unsigned int version,
                                                            salt.size(),
                                                            rounds ? rounds : MIN_ITERATIONS,
                                                            rounds ? 0 : MIN_DERIVE_SECONDS,
-                                                           key_to_encrypt.data(),
-                                                           key_to_encrypt.size());
+                                                           password_derived_key.data(),
+                                                           password_derived_key.size());
     }
     else if (pbkdf_algorithm == PBKDF_ALGO_SCRYPT)
     {
@@ -309,8 +310,8 @@ Json::Value generate_config(unsigned int version,
                                    N,
                                    r,
                                    p,
-                                   key_to_encrypt.data(),
-                                   key_to_encrypt.size());
+                                   password_derived_key.data(),
+                                   password_derived_key.size());
     }
     else
     {
@@ -324,8 +325,11 @@ Json::Value generate_config(unsigned int version,
     byte mac[CONFIG_MAC_LENGTH];
     generate_random(iv, array_length(iv));
 
+    securefs::key_type wrapping_key;
+    maybe_derive_with_keyfile(password_derived_key, maybe_key_file_path, wrapping_key);
+
     CryptoPP::GCM<CryptoPP::AES>::Encryption encryptor;
-    encryptor.SetKeyWithIV(key_to_encrypt.data(), key_to_encrypt.size(), iv, array_length(iv));
+    encryptor.SetKeyWithIV(wrapping_key.data(), wrapping_key.size(), iv, array_length(iv));
     encryptor.EncryptAndAuthenticate(encrypted_master_key.data(),
                                      mac,
                                      array_length(mac),
@@ -352,6 +356,7 @@ Json::Value generate_config(unsigned int version,
 }
 
 bool parse_config(const Json::Value& config,
+                  StringRef maybe_key_file_path,
                   const void* password,
                   size_t pass_len,
                   CryptoPP::AlignedSecByteBlock& master_key,
@@ -380,7 +385,7 @@ bool parse_config(const Json::Value& config,
 
     byte iv[CONFIG_IV_LENGTH];
     byte mac[CONFIG_MAC_LENGTH];
-    key_type salt, key_to_encrypt_master_key;
+    key_type salt, password_derived_key;
     CryptoPP::AlignedSecByteBlock encrypted_key;
 
     std::string salt_hex = config["salt"].asString();
@@ -408,8 +413,8 @@ bool parse_config(const Json::Value& config,
                           salt.size(),
                           iterations,
                           0,
-                          key_to_encrypt_master_key.data(),
-                          key_to_encrypt_master_key.size());
+                          password_derived_key.data(),
+                          password_derived_key.size());
     }
     else if (pbkdf_algorithm == PBKDF_ALGO_SCRYPT)
     {
@@ -422,17 +427,18 @@ bool parse_config(const Json::Value& config,
                          iterations,
                          r,
                          p,
-                         key_to_encrypt_master_key.data(),
-                         key_to_encrypt_master_key.size());
+                         password_derived_key.data(),
+                         password_derived_key.size());
     }
     else
     {
         throw_runtime_error("Unknown pbkdf algorithm " + pbkdf_algorithm);
     }
 
+    securefs::key_type wrapping_key;
+    maybe_derive_with_keyfile(password_derived_key, maybe_key_file_path, wrapping_key);
     CryptoPP::GCM<CryptoPP::AES>::Decryption decryptor;
-    decryptor.SetKeyWithIV(
-        key_to_encrypt_master_key.data(), key_to_encrypt_master_key.size(), iv, array_length(iv));
+    decryptor.SetKeyWithIV(wrapping_key.data(), wrapping_key.size(), iv, array_length(iv));
     return decryptor.DecryptAndVerify(master_key.data(),
                                       mac,
                                       array_length(mac),
@@ -453,7 +459,10 @@ std::shared_ptr<FileStream> CommandBase::open_config_stream(const std::string& p
     return OSService::get_default().open_file_stream(path, flags, 0644);
 }
 
-FSConfig CommandBase::read_config(FileStream* stream, const void* password, size_t pass_len)
+FSConfig CommandBase::read_config(FileStream* stream,
+                                  const void* password,
+                                  size_t pass_len,
+                                  StringRef maybe_key_file_path)
 {
     FSConfig result;
 
@@ -474,8 +483,13 @@ FSConfig CommandBase::read_config(FileStream* stream, const void* password, size
         throw_runtime_error(
             strprintf("Failure to parse the config file: %s", error_message.c_str()));
 
-    if (!parse_config(
-            value, password, pass_len, result.master_key, result.block_size, result.iv_size))
+    if (!parse_config(value,
+                      maybe_key_file_path,
+                      password,
+                      pass_len,
+                      result.master_key,
+                      result.block_size,
+                      result.iv_size))
         throw_runtime_error("Invalid password");
     result.version = value["version"].asUInt();
     return result;
@@ -495,6 +509,7 @@ static void copy_key(const CryptoPP::AlignedSecByteBlock& in_key, optional<key_t
 }
 
 void CommandBase::write_config(FileStream* stream,
+                               StringRef maybe_key_file_path,
                                const std::string& pbdkf_algorithm,
                                const FSConfig& config,
                                const void* password,
@@ -506,6 +521,7 @@ void CommandBase::write_config(FileStream* stream,
     auto str = generate_config(config.version,
                                pbdkf_algorithm,
                                config.master_key,
+                               maybe_key_file_path,
                                salt,
                                password,
                                pass_len,
@@ -659,6 +675,7 @@ public:
             OSService::get_default().remove_file(get_real_config_path());
         });
         write_config(config_stream.get(),
+                     keyfile.getValue(),
                      pbkdf.getValue(),
                      config,
                      password.data(),
@@ -727,11 +744,13 @@ public:
         generate_random(buffer, array_length(buffer));
         auto tmp_path = original_path + hexify(buffer, array_length(buffer));
         auto stream = OSService::get_default().open_file_stream(original_path, O_RDONLY, 0644);
-        auto config = read_config(stream.get(), old_password.data(), old_password.size());
+        auto config = read_config(
+            stream.get(), old_password.data(), old_password.size(), keyfile.getValue());
         stream = OSService::get_default().open_file_stream(
             tmp_path, O_WRONLY | O_CREAT | O_EXCL, 0644);
         DEFER(if (std::uncaught_exception()) { OSService::get_default().remove_file(tmp_path); });
         write_config(stream.get(),
+                     keyfile.getValue(),
                      pbkdf.getValue(),
                      config,
                      new_password.data(),
@@ -903,7 +922,8 @@ public:
             }
             throw;
         }
-        auto config = read_config(config_stream.get(), password.data(), password.size());
+        auto config = read_config(
+            config_stream.get(), password.data(), password.size(), keyfile.getValue());
         config_stream.reset();
         CryptoPP::SecureWipeBuffer(password.data(), password.size());
 
@@ -1092,7 +1112,8 @@ public:
     int execute() override
     {
         auto config_stream = open_config_stream(get_real_config_path(), O_RDONLY);
-        auto config = read_config(config_stream.get(), password.data(), password.size());
+        auto config = read_config(
+            config_stream.get(), password.data(), password.size(), keyfile.getValue());
         config_stream.reset();
 
         if (config.version >= 4)
