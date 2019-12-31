@@ -26,17 +26,35 @@ public:
 template <class T>
 static const byte* read_and_forward(const byte* buffer, const byte* end, T& value)
 {
+    static_assert(std::is_trivially_copyable<T>::value, "value must be trivially copyable");
     dir_check(buffer + sizeof(value) <= end);
     memcpy(&value, buffer, sizeof(value));
     return buffer + sizeof(value);
 }
 
+template <class T, size_t size>
+static const byte* read_and_forward(const byte* buffer, const byte* end, PODArray<T, size>& value)
+{
+    dir_check(buffer + size <= end);
+    memcpy(value.data(), buffer, size);
+    return buffer + size;
+}
+
 template <class T>
 static byte* write_and_forward(const T& value, byte* buffer, const byte* end)
 {
+    static_assert(std::is_trivially_copyable<T>::value, "value must be trivially copyable");
     dir_check(buffer + sizeof(value) <= end);
     memcpy(buffer, &value, sizeof(value));
     return buffer + sizeof(value);
+}
+
+template <class T, size_t size>
+static byte* write_and_forward(const PODArray<T, size>& value, byte* buffer, const byte* end)
+{
+    dir_check(buffer + size <= end);
+    memcpy(buffer, value.data(), sizeof(value));
+    return buffer + size;
 }
 
 template <class T>
