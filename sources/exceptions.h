@@ -22,7 +22,7 @@ protected:
     ExceptionBase();
 
 public:
-    virtual ~ExceptionBase();
+    ~ExceptionBase() override;
     virtual std::string message() const = 0;
     virtual int error_number() const noexcept { return EPERM; }
     const char* what() const noexcept override;
@@ -57,7 +57,7 @@ private:
 
 public:
     explicit VFSException(int errc) : m_errno(errc) {}
-    ~VFSException();
+    ~VFSException() override;
 
     int error_number() const noexcept override { return m_errno; }
 
@@ -78,7 +78,7 @@ private:
 
 public:
     explicit POSIXException(int errc, std::string msg) : m_errno(errc), m_msg(std::move(msg)) {}
-    ~POSIXException();
+    ~POSIXException() override;
 
     int error_number() const noexcept override { return m_errno; }
 
@@ -112,7 +112,7 @@ private:
 
 public:
     explicit InvalidArgumentException(std::string why) { m_msg.swap(why); }
-    ~InvalidArgumentException();
+    ~InvalidArgumentException() override;
 
     std::string message() const override { return m_msg; }
 

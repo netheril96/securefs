@@ -82,7 +82,7 @@ void OSService::recursive_traverse(StringRef dir, const recursive_traverse_callb
     }
 }
 
-DirectoryTraverser::~DirectoryTraverser() {}
+DirectoryTraverser::~DirectoryTraverser() = default;
 
 ssize_t FileStream::getxattr(const char*, void*, size_t) { throw VFSException(ENOTSUP); }
 

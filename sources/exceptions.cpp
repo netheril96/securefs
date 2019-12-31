@@ -2,9 +2,9 @@
 #include "logger.h"
 #include "platform.h"
 
-securefs::ExceptionBase::ExceptionBase() {}
+securefs::ExceptionBase::ExceptionBase() = default;
 
-securefs::ExceptionBase::~ExceptionBase() {}
+securefs::ExceptionBase::~ExceptionBase() = default;
 
 void ::securefs::throwVFSException(int errc) { throw VFSException(errc); }
 
@@ -18,11 +18,11 @@ void ::securefs::throwInvalidArgumentException(std::string why)
     throw InvalidArgumentException(std::move(why));
 }
 
-securefs::VFSException::~VFSException() {}
+securefs::VFSException::~VFSException() = default;
 
-securefs::POSIXException::~POSIXException() {}
+securefs::POSIXException::~POSIXException() = default;
 
-securefs::InvalidArgumentException::~InvalidArgumentException(){}
+securefs::InvalidArgumentException::~InvalidArgumentException()= default;
 
     [[noreturn]] void securefs::throwFileTypeInconsistencyException()
 {

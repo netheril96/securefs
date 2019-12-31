@@ -22,8 +22,8 @@ class FileTableIO
     DISABLE_COPY_MOVE(FileTableIO)
 
 public:
-    explicit FileTableIO() {}
-    virtual ~FileTableIO() {}
+    explicit FileTableIO() = default;
+    virtual ~FileTableIO() = default;
 
     virtual FileStreamPtrPair open(const id_type& id) = 0;
     virtual FileStreamPtrPair create(const id_type& id) = 0;
@@ -55,7 +55,7 @@ private:
 
 public:
     explicit FileTableIOVersion1(std::shared_ptr<const OSService> root, bool readonly)
-        : m_root(root), m_readonly(readonly)
+        : m_root(std::move(root)), m_readonly(readonly)
     {
     }
 
@@ -109,7 +109,7 @@ private:
 
 public:
     explicit FileTableIOVersion2(std::shared_ptr<const OSService> root, bool readonly)
-        : m_root(root), m_readonly(readonly)
+        : m_root(std::move(root)), m_readonly(readonly)
     {
     }
 
