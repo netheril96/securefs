@@ -60,6 +60,13 @@ const char* get_version_header(unsigned version)
     }
 }
 
+std::unique_ptr<Json::CharReader> create_json_reader()
+{
+    Json::CharReaderBuilder builder;
+    builder["rejectDupKeys"] = true;
+    return std::unique_ptr<Json::CharReader>(builder.newCharReader());
+}
+
 enum class NLinkFixPhase
 {
     CollectingNLink,
@@ -435,11 +442,11 @@ FSConfig CommandBase::read_config(FileStream* stream, const void* password, size
         str.insert(str.end(), buffer, buffer + sz);
     }
 
-    Json::Reader reader;
     Json::Value value;
-    if (!reader.parse(str.data(), str.data() + str.size(), value))
-        throw_runtime_error(strprintf("Failure to parse the config file: %s",
-                                      reader.getFormattedErrorMessages().c_str()));
+    std::string error_message;
+    if (!create_json_reader()->parse(str.data(), str.data() + str.size(), &value, &error_message))
+        throw_runtime_error(
+            strprintf("Failure to parse the config file: %s", error_message.c_str()));
 
     if (!parse_config(
             value, password, pass_len, result.master_key, result.block_size, result.iv_size))
@@ -1168,11 +1175,17 @@ public:
 
         Json::Value config_json;
 
+        // Open a new scope to limit the lifetime of `buffer`.
         {
-            Json::Reader reader;
-            std::string buffer(fs->size(), 0);
-            fs->read(&buffer[0], 0, buffer.size());
-            reader.parse(buffer, config_json);
+            std::vector<char> buffer(fs->size(), 0);
+            fs->read(buffer.data(), 0, buffer.size());
+            std::string error_message;
+            if (!create_json_reader()->parse(
+                    buffer.data(), buffer.data() + buffer.size(), &config_json, &error_message))
+            {
+                throw_runtime_error(
+                    strprintf("Failure to parse the config file: %s", error_message.c_str()));
+            }
         }
 
         unsigned format_version = config_json["version"].asUInt();
