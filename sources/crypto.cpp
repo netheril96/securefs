@@ -50,14 +50,15 @@ static void aes256_bitshift_left(byte* buf, const size_t len)
         return;
     for (size_t i = 0; i < len - 1; ++i)
     {
-        buf[i] = static_cast<byte>((buf[i] << 1) | ((buf[i + 1] >> 7) & 1));
+        buf[i] = static_cast<byte>((static_cast<unsigned>(buf[i]) << 1u)
+                                   | ((static_cast<unsigned>(buf[i + 1]) >> 7u) & 1u));
     }
-    buf[len - 1] = buf[len - 1] << 1;
+    buf[len - 1] = buf[len - 1] << 1u;
 }
 
 static void aes256_siv_dbl(byte* block)
 {
-    bool need_xor = (block[0] >> 7) == 1;
+    bool need_xor = (block[0] >> 7u) == 1u;
     aes256_bitshift_left(block, 16);
     if (need_xor)
         CryptoPP::xorbuf(block, aes256_cmac_Rb, 16);
@@ -69,7 +70,7 @@ AES_SIV::AES_SIV(const void* key, size_t size)
 {
 }
 
-AES_SIV::~AES_SIV() {}
+AES_SIV::~AES_SIV() = default;
 
 void AES_SIV::s2v(const void* plaintext,
                   size_t text_len,
@@ -121,8 +122,8 @@ void AES_SIV::encrypt_and_authenticate(const void* plaintext,
     memcpy(modded_iv, siv, AES_SIV::IV_SIZE);
 
     // Clear the 31st and 63rd bits in the IV.
-    modded_iv[8] &= 0x7f;
-    modded_iv[12] &= 0x7f;
+    modded_iv[8] &= 0x7fu;
+    modded_iv[12] &= 0x7fu;
 
     m_ctr.Resynchronize(modded_iv, array_length(modded_iv));
     m_ctr.ProcessData(
@@ -139,8 +140,8 @@ bool AES_SIV::decrypt_and_verify(const void* ciphertext,
     byte temp_iv[AES_SIV::IV_SIZE];
     memcpy(temp_iv, siv, AES_SIV::IV_SIZE);
     // Clear the 31st and 63rd bits in the IV.
-    temp_iv[8] &= 0x7f;
-    temp_iv[12] &= 0x7f;
+    temp_iv[8] &= 0x7fu;
+    temp_iv[12] &= 0x7fu;
 
     m_ctr.Resynchronize(temp_iv, array_length(temp_iv));
     m_ctr.ProcessData(

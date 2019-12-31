@@ -118,7 +118,7 @@ template <class Container, class T>
 static void insert(Container& c, ptrdiff_t index, T&& value)
 {
     dir_check(index >= 0 && static_cast<size_t>(index) <= c.size());
-    c.insert(get_iter(c, index), std::move(value));
+    c.insert(get_iter(c, index), std::forward<T>(value));
 }
 
 class BtreeDirectory::FreePage
