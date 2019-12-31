@@ -7,7 +7,7 @@ matrix:
       sudo: required
       script: "cmake . && make -j4 && ./securefs v && ./securefs_test"
     - os: linux
-      dist: trusty
+      dist: xenial
       sudo: required
       install: "sudo apt-get update && sudo apt-get install -y cmake fuse libfuse-dev"
       script: "cmake . && make -j4 && ./securefs v && ctest -V"
