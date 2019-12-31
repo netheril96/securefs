@@ -38,12 +38,13 @@ using namespace securefs;
 namespace
 {
 
-const char* CONFIG_FILE_NAME = ".securefs.json";
+const char* const CONFIG_FILE_NAME = ".securefs.json";
 const unsigned MIN_ITERATIONS = 20000;
 const unsigned MIN_DERIVE_SECONDS = 1;
 const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
-const char* PBKDF_ALGO_PKCS5 = "pkcs5-pbkdf2-hmac-sha256";
-const char* PBKDF_ALGO_SCRYPT = "scrypt";
+const char* const PBKDF_ALGO_PKCS5 = "pkcs5-pbkdf2-hmac-sha256";
+const char* const PBKDF_ALGO_SCRYPT = "scrypt";
+const char* const EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED = " ";
 
 const char* get_version_header(unsigned version)
 {
@@ -534,12 +535,48 @@ protected:
         false,
         "",
         "password"};
+    TCLAP::ValueArg<std::string> keyfile{
+        "",
+        "keyfile",
+        "An optional path to a key file to use in addition to or in place of password",
+        false,
+        "",
+        "path"};
+    TCLAP::SwitchArg askpass{
+        "",
+        "askpass",
+        "When set to true, ask for password even if a key file is used. "
+        "password+keyfile provides even stronger security than one of them alone.",
+        false};
 
 protected:
     std::string get_real_config_path()
     {
         return config_path.isSet() ? config_path.getValue()
                                    : data_dir.getValue() + PATH_SEPARATOR_CHAR + CONFIG_FILE_NAME;
+    }
+
+    void get_password(bool require_confirmation, CryptoPP::AlignedSecByteBlock& password)
+    {
+        if (pass.isSet() && !pass.getValue().empty())
+        {
+            password.Assign(reinterpret_cast<const byte*>(pass.getValue().data()),
+                            pass.getValue().size());
+            CryptoPP::SecureWipeBuffer(reinterpret_cast<byte*>(&pass.getValue()[0]),
+                                       pass.getValue().size());
+            return;
+        }
+        if (keyfile.isSet() && !keyfile.getValue().empty() && !askpass.getValue())
+        {
+            password.Assign(reinterpret_cast<const byte*>(EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED),
+                            strlen(EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED));
+            return;
+        }
+        if (require_confirmation)
+        {
+            return OSService::read_password_with_confirmation("Enter password:", &password);
+        }
+        return OSService::read_password_no_confirmation("Enter password:", &password);
     }
 };
 
@@ -587,15 +624,7 @@ public:
         cmdline.add(&store_time);
         cmdline.add(&block_size);
         cmdline.parse(argc, argv);
-
-        if (pass.isSet())
-        {
-            password.resize(pass.getValue().size());
-            memcpy(password.data(), pass.getValue().data(), password.size());
-            return;
-        }
-
-        OSService::read_password_with_confirmation("Password: ", &password);
+        get_password(true, password);
     }
 
     int execute() override
@@ -801,16 +830,7 @@ public:
         cmdline.add(&fssubtype);
         cmdline.parse(argc, argv);
 
-        if (pass.isSet() && !pass.getValue().empty())
-        {
-            password.resize(pass.getValue().size());
-            memcpy(password.data(), pass.getValue().data(), password.size());
-            generate_random(reinterpret_cast<byte*>(&pass.getValue()[0]), pass.getValue().size());
-        }
-        else
-        {
-            OSService::read_password_no_confirmation("Password: ", &password);
-        }
+        get_password(false, password);
 
         if (global_logger && verbose.getValue())
             global_logger->set_level(kLogVerbose);
