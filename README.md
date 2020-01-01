@@ -24,32 +24,29 @@ There are already many encrypting filesystem in widespread use. Some notable one
 ## Install
 
 [![Build Status](https://api.travis-ci.org/netheril96/securefs.svg?branch=master)](https://travis-ci.org/netheril96/securefs)
+[![Build status](https://ci.appveyor.com/api/projects/status/lhmcl9v7420ncs4s/branch/master?svg=true)](https://ci.appveyor.com/project/netheril96/securefs/branch/master)
 
-### Dependency: FUSE
+### macOS
 
-On macOS, you need [osxfuse](https://osxfuse.github.io).
-
-On Debian based Linux distro, `sudo apt-get install fuse libfuse-dev`.
-
-On RPM based Linux, `sudo yum install fuse fuse-devel`.
-
-On Windows, you need [WinFsp](https://github.com/billziss-gh/winfsp/releases).
-
-### Install with Homebrew
-
+Install with [Homebrew](https://brew.sh). [osxfuse](https://osxfuse.github.io) has to be installed beforehand.
 ```
 brew install securefs
 ```
 
 ### Windows
 
-Windows users can download prebuilt package from the releases section. It depends on [VC++ 2017 redistribution package](https://support.microsoft.com/en-us/help/2977003/the-latest-supported-visual-c-downloads).
+Windows users can download prebuilt package from the releases section. It depends on [WinFsp](https://github.com/billziss-gh/winfsp/releases) and [VC++ 2017 redistribution package](https://support.microsoft.com/en-us/help/2977003/the-latest-supported-visual-c-downloads).
 
-### Manual Build
+### Linux
 
-First clone the sources by `git clone --recursive --depth 1`.
+Linux users have to build it from source.
 
-Use `cmake` the generate build files then build it. It requires a sufficiently new compiler that supports enough of C++11 (such as g++ 5.0, clang 3.4 or VC++ 2017).
+First `fuse` must be installed.
+
+* On Debian based Linux distro, `sudo apt-get install fuse libfuse-dev`.
+* On RPM based Linux, `sudo yum install fuse fuse-devel`.
+
+Then clone the sources by `git clone --recursive`, and execute `linux-build.sh`.
 
 ## Basic usage
 
