@@ -5,9 +5,9 @@
 #include "myutils.h"
 #include "operations.h"
 #include "platform.h"
-#include "streams.h"
 
 #include <cryptopp/cpu.h>
+#include <cryptopp/hmac.h>
 #include <cryptopp/osrng.h>
 #include <cryptopp/secblock.h>
 #include <fuse.h>
@@ -24,12 +24,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include <fuse.h>
-
 #ifdef _MSC_VER
 #include <Windows.h>
 #else
-#include <cryptopp/hmac.h>
 #include <dlfcn.h>
 #endif
 
