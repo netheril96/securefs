@@ -13,6 +13,8 @@ jobs:
     
     steps:
     - uses: actions/checkout@v1
+      with:
+        submodules: true
     - name: install
       run: sudo apt-get install fuse libfuse-dev
     - name: configure
