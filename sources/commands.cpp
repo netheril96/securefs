@@ -735,6 +735,20 @@ private:
         false
 #endif
     };
+    TCLAP::ValueArg<std::string> fsname{
+        "", "fsname", "Filesystem name shown when mounted", false, "securefs", "fsname"};
+    TCLAP::ValueArg<std::string> fssubtype{
+        "", "fsname", "Filesystem subtype shown when mounted", false, "securefs", "fssubtype"};
+
+private:
+    std::vector<const char*> to_c_style_args(const std::vector<std::string>& args)
+    {
+        std::vector<const char*> result(args.size());
+        std::transform(args.begin(), args.end(), result.begin(), [](const std::string& s) {
+            return s.c_str();
+        });
+        return result;
+    }
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
@@ -758,6 +772,8 @@ public:
         cmdline.add(&single_threaded);
         cmdline.add(&case_insensitive);
         cmdline.add(&enable_nfc);
+        cmdline.add(&fsname);
+        cmdline.add(&fssubtype);
         cmdline.parse(argc, argv);
 
         if (pass.isSet() && !pass.getValue().empty())
@@ -873,7 +889,7 @@ public:
                      e.what());
         }
 
-        std::vector<const char*> fuse_args;
+        std::vector<std::string> fuse_args;
         fuse_args.push_back("securefs");
         if (config.version < 4 || single_threaded.getValue())
         {
@@ -900,15 +916,15 @@ public:
         fuse_args.push_back("big_writes");
 #endif
         fuse_args.push_back("-o");
-        fuse_args.push_back("fsname=securefs");
+        fuse_args.push_back("fsname=" + fsname.getValue());
         fuse_args.push_back("-o");
-        fuse_args.push_back("subtype=securefs");
+        fuse_args.push_back("subtype=" + fssubtype.getValue());
         if (fuse_options.isSet())
         {
             for (const std::string& opt : fuse_options.getValue())
             {
                 fuse_args.push_back("-o");
-                fuse_args.push_back(opt.c_str());
+                fuse_args.push_back(opt);
             }
         }
 
@@ -1000,7 +1016,7 @@ public:
         }
         recreate_logger();
         return fuse_main(static_cast<int>(fuse_args.size()),
-                         const_cast<char**>(fuse_args.data()),
+                         const_cast<char**>(to_c_style_args(fuse_args).data()),
                          &operations,
                          &fsopt);
     }
