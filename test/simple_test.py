@@ -98,10 +98,10 @@ def securefs_unmount(p: subprocess.Popen, mount_point: str):
             # processes. Instead, Ctrl-C must be send to the whole group
             # sharing a console. Here we disable Ctrl-C handling first,
             # and reenable it after we have killed our child.
-            ctypes.windll.kernel32.SetConsoleCtrlHandler(None, True)
+            ctypes.windll.kernel32.SetConsoleCtrlHandler(None, 1)
             os.kill(signal.CTRL_C_EVENT, 0)
             p.communicate(timeout=5)
-            ctypes.windll.kernel32.SetConsoleCtrlHandler(None, False)
+            ctypes.windll.kernel32.SetConsoleCtrlHandler(None, 0)
         else:
             p.send_signal(signal.SIGINT)
             p.communicate(timeout=5)
@@ -388,5 +388,5 @@ if __name__ == "__main__":
     if IS_WINDOWS:
         # Reenable Ctrl-C handling before spawning any children,
         # or otherwise our children cannot be killed
-        ctypes.windll.kernel32.SetConsoleCtrlHandler(None, False)
+        ctypes.windll.kernel32.SetConsoleCtrlHandler(None, 0)
     unittest.main()
