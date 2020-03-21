@@ -4,6 +4,8 @@
 import ctypes
 import sys
 import subprocess
+import faulthandler
 
+faulthandler.enable()
 ctypes.windll.kernel32.SetConsoleCtrlHandler(None, 1)
 subprocess.check_call(sys.argv[1:])

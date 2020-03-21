@@ -17,6 +17,9 @@ import signal
 import logging
 import shlex
 import ctypes
+import faulthandler
+
+faulthandler.enable()
 
 
 def find_securefs_binary():
