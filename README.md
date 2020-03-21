@@ -23,8 +23,8 @@ There are already many encrypting filesystem in widespread use. Some notable one
 
 ## Install
 
-[![Build Status](https://api.travis-ci.org/netheril96/securefs.svg?branch=master)](https://travis-ci.org/netheril96/securefs)
-[![Build status](https://ci.appveyor.com/api/projects/status/lhmcl9v7420ncs4s/branch/master?svg=true)](https://ci.appveyor.com/project/netheril96/securefs/branch/master)
+[![Actions Status](https://github.com/netheril96/securefs/workflows/C%2FC%2B%2B%20CI/badge.svg)](https://github.com/netheril96/securefs/actions)
+
 
 ### macOS
 
