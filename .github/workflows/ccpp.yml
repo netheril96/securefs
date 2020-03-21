@@ -18,9 +18,9 @@ jobs:
     - name: install
       run: sudo apt-get install fuse libfuse-dev
     - name: configure
-      run: mkdir build && cd build && cmake ..
+      run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..
     - name: build
-      run: cmake --build build --config Debug
+      run: cmake --build build
     - name: test
       run: cd build && ctest -V
       
@@ -35,8 +35,8 @@ jobs:
     - name: install
       run: choco install winfsp
     - name: configure
-      run: mkdir build && cd build && cmake ..
+      run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..
     - name: build
       run: cmake --build build --config Debug
     - name: test
-      run: cd build && ctest -V
+      run: cd build && ctest -V -C Debug
