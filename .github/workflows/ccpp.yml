@@ -2,41 +2,45 @@ name: C/C++ CI
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
 
 jobs:
   build-ubuntu:
-
     runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v1
-      with:
-        submodules: true
-    - name: install
-      run: sudo apt-get install fuse libfuse-dev
-    - name: configure
-      run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..
-    - name: build
-      run: cmake --build build
-    - name: test
-      run: cd build && ctest -V
-      
-  build-windows:
 
-    runs-on: windows-latest
-    
     steps:
-    - uses: actions/checkout@v1
-      with:
-        submodules: true
-    - name: install
-      run: choco install winfsp
-    - name: configure
-      run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..
-    - name: build
-      run: cmake --build build --config Debug
-    - name: test
-      run: cd build && ctest -V -C Debug
+      - uses: actions/checkout@v1
+        with:
+          submodules: true
+      - uses: actions/setup-python@v1
+        with:
+          python-version: "3.x"
+      - name: install
+        run: sudo apt-get install fuse libfuse-dev
+      - name: configure
+        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..
+      - name: build
+        run: cmake --build build
+      - name: test
+        run: cd build && ctest -V
+
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: true
+      - uses: actions/setup-python@v1
+        with:
+          python-version: "3.x"
+      - name: install
+        run: choco install winfsp
+      - name: configure
+        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..
+      - name: build
+        run: cmake --build build --config Debug
+      - name: test
+        run: cd build && ctest -V -C Debug
