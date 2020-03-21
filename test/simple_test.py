@@ -172,14 +172,11 @@ def make_test_case(format_version):
             cls.securefs_process = None
 
         def test_long_name(self):
-            try:
+            with self.assertRaises(EnvironmentError) as context:
                 os.mkdir(os.path.join(self.mount_point, "k" * 256))
                 self.fail("mkdir should fail")
-            except EnvironmentError as e:
-                if IS_WINDOWS:
-                    self.assertIsInstance(e, FileNotFoundError)
-                else:
-                    self.assertEqual(e.errno, errno.ENAMETOOLONG)
+            if not IS_WINDOWS:
+                self.assertEqual(context.exception.errno, errno.ENAMETOOLONG)
 
         if xattr:
 
