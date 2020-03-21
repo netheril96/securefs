@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # coding: utf-8
 import os
 import subprocess
@@ -13,6 +13,7 @@ import uuid
 import sys
 import stat
 import traceback
+import signal
 
 
 def find_securefs_binary():
@@ -25,8 +26,9 @@ def find_securefs_binary():
 
 SECUREFS_BINARY = find_securefs_binary()
 
+IS_WINDOWS = os.name == "nt"
+
 if platform.system() == "Darwin":
-    UNMOUNT = ["umount"]
     try:
         import xattr
     except ImportError:
@@ -35,7 +37,6 @@ if platform.system() == "Darwin":
         )
         xattr = None
 else:
-    UNMOUNT = ["fusermount", "-u"]
     xattr = None
 
 
@@ -44,7 +45,9 @@ class TimeoutException(BaseException):
         BaseException.__init__(self, "Operation timeout")
 
 
-def securefs_mount(data_dir, mount_point, password):
+def securefs_mount(data_dir: str, mount_point: str, password: str) -> subprocess.Popen:
+    if mount_point.endswith("\\"):
+        mount_point = mount_point.rstrip("\\")
     p = subprocess.Popen(
         [
             SECUREFS_BINARY,
@@ -52,39 +55,38 @@ def securefs_mount(data_dir, mount_point, password):
             "--log",
             "XXXX.log",
             "--trace",
-            "--background",
             data_dir,
             mount_point,
         ],
         stdin=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        encoding="utf-8",
+        universal_newlines=True,
+        creationflags=0 if not IS_WINDOWS else subprocess.CREATE_NEW_PROCESS_GROUP,
     )
-    _, err = p.communicate(input=(password + "\n").encode("utf-8"))
-    if p.returncode:
-        raise RuntimeError(err)
+    p.stdin.write(password)
+    p.stdin.write("\n")
+
     for _ in range(100):
         time.sleep(0.1)
         try:
             if os.path.ismount(mount_point):
-                return
+                return p
         except EnvironmentError:
             traceback.print_exc()
     raise TimeoutException()
 
 
-def securefs_unmount(mount_point):
-    p = subprocess.Popen(UNMOUNT + [mount_point], stderr=subprocess.PIPE)
-    _, err = p.communicate()
-    if p.returncode:
-        raise RuntimeError(err)
-    for _ in range(100):
-        time.sleep(0.1)
-        try:
-            if not os.path.ismount(mount_point):
-                return
-        except EnvironmentError:
-            traceback.print_exc()
-    raise TimeoutException()
+def securefs_unmount(p: subprocess.Popen, mount_point: str):
+    try:
+        p.send_signal(signal.CTRL_C_EVENT)
+        code, err = p.communicate(timeout=5)
+        if code:
+            raise RuntimeError(f"Failed to unmount securefs: {err}")
+    except:
+        if os.path.ismount(mount_point):
+            raise  # Still mounted
+        traceback.print_exc()
 
 
 def securefs_create(data_dir, password, version):
@@ -100,10 +102,12 @@ def securefs_create(data_dir, password, version):
         ],
         stdin=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        encoding="utf-8",
+        universal_newlines=True,
     )
-    out, err = p.communicate(input=(password + "\n" + password + "\n").encode("utf-8"))
+    out, err = p.communicate(input=password + "\n" + password + "\n")
     if p.returncode:
-        raise RuntimeError(err.decode("utf-8"))
+        raise RuntimeError(err)
 
 
 def make_test_case(format_version):
@@ -118,8 +122,8 @@ def make_test_case(format_version):
             cls.data_dir = tempfile.mkdtemp(
                 prefix="securefs.format{}.data_dir".format(format_version), dir="tmp"
             )
-            if os.name == "nt":
-                cls.mount_point = "X:"
+            if IS_WINDOWS:
+                cls.mount_point = "T:\\"
             else:
                 cls.mount_point = tempfile.mkdtemp(
                     prefix="securefs.format{}.mount_point".format(format_version),
@@ -127,21 +131,24 @@ def make_test_case(format_version):
                 )
             cls.password = "pvj8lRgrrsqzlr"
             securefs_create(cls.data_dir, cls.password, format_version)
-            securefs_mount(cls.data_dir, cls.mount_point, cls.password)
+            cls.mount()
 
         @classmethod
         def tearDownClass(cls):
-            try:
-                securefs_unmount(cls.mount_point)
-            except:
-                if os.path.ismount(cls.mount_point):
-                    raise  # Still mounted
+            cls.unmount()
 
-        def mount(self):
-            securefs_mount(self.data_dir, self.mount_point, self.password)
+        @classmethod
+        def mount(cls):
+            cls.securefs_process = securefs_mount(
+                cls.data_dir, cls.mount_point, cls.password
+            )
 
-        def unmount(self):
-            securefs_unmount(self.mount_point)
+        @classmethod
+        def unmount(cls):
+            if cls.securefs_process is None:
+                return
+            securefs_unmount(cls.securefs_process, cls.mount_point)
+            cls.securefs_process = None
 
         def test_long_name(self):
             try:
@@ -155,7 +162,7 @@ def make_test_case(format_version):
             def test_xattr(self):
                 fn = os.path.join(self.mount_point, str(uuid.uuid4()))
                 try:
-                    with open(fn, "wb") as f:
+                    with open(fn, "wt") as f:
                         f.write("hello\n")
                     x = xattr.xattr(fn)
                     x.set("abc", "def")
@@ -172,7 +179,7 @@ def make_test_case(format_version):
                     except EnvironmentError:
                         pass
 
-        if format_version < 4:
+        if format_version < 4 and not IS_WINDOWS:
 
             def test_hardlink(self):
                 data = os.urandom(16)
@@ -203,28 +210,30 @@ def make_test_case(format_version):
                     except EnvironmentError:
                         pass
 
-        def test_symlink(self):
-            data = os.urandom(16)
-            source = os.path.join(self.mount_point, str(uuid.uuid4()))
-            dest = os.path.join(self.mount_point, str(uuid.uuid4()))
-            try:
-                with open(source, "wb") as f:
-                    f.write(data)
-                os.symlink(source, dest)
-                self.assertEqual(os.readlink(dest), source)
-                os.remove(source)
-                with self.assertRaises(EnvironmentError):
-                    with open(dest, "rb") as f:
-                        f.read()
-            finally:
+        if not IS_WINDOWS:
+
+            def test_symlink(self):
+                data = os.urandom(16)
+                source = os.path.join(self.mount_point, str(uuid.uuid4()))
+                dest = os.path.join(self.mount_point, str(uuid.uuid4()))
                 try:
+                    with open(source, "wb") as f:
+                        f.write(data)
+                    os.symlink(source, dest)
+                    self.assertEqual(os.readlink(dest), source)
                     os.remove(source)
-                except EnvironmentError:
-                    pass
-                try:
-                    os.remove(dest)
-                except EnvironmentError:
-                    pass
+                    with self.assertRaises(EnvironmentError):
+                        with open(dest, "rb") as f:
+                            f.read()
+                finally:
+                    try:
+                        os.remove(source)
+                    except EnvironmentError:
+                        pass
+                    try:
+                        os.remove(dest)
+                    except EnvironmentError:
+                        pass
 
         def test_rename(self):
             data = os.urandom(32)
@@ -285,7 +294,7 @@ def make_test_case(format_version):
             self.mount()
             with open(rng_filename, "rb") as f:
                 self.assertEqual(f.read(), random_data)
-            data = "\0" * len(random_data) + "0"
+            data = b"\0" * len(random_data) + b"0"
             with open(rng_filename, "wb") as f:
                 f.write(data)
             with open(rng_filename, "rb") as f:
