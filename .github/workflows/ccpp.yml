@@ -20,6 +20,23 @@ jobs:
     - name: configure
       run: mkdir build && cd build && cmake ..
     - name: build
-      run: cmake --build build
+      run: cmake --build build --config Debug
+    - name: test
+      run: cd build && ctest -V
+      
+  build-windows:
+
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v1
+      with:
+        submodules: true
+    - name: install
+      run: choco install winfsp
+    - name: configure
+      run: mkdir build && cd build && cmake ..
+    - name: build
+      run: cmake --build build --config Debug
     - name: test
       run: cd build && ctest -V
