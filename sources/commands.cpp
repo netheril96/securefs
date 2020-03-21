@@ -738,7 +738,7 @@ private:
     TCLAP::ValueArg<std::string> fsname{
         "", "fsname", "Filesystem name shown when mounted", false, "securefs", "fsname"};
     TCLAP::ValueArg<std::string> fssubtype{
-        "", "fsname", "Filesystem subtype shown when mounted", false, "securefs", "fssubtype"};
+        "", "fssubtype", "Filesystem subtype shown when mounted", false, "securefs", "fssubtype"};
 
 private:
     std::vector<const char*> to_c_style_args(const std::vector<std::string>& args)
