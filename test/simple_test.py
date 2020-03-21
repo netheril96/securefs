@@ -16,6 +16,7 @@ import traceback
 import signal
 import logging
 import shlex
+import ctypes
 
 
 def find_securefs_binary():
@@ -94,16 +95,13 @@ def securefs_unmount(p: subprocess.Popen, mount_point: str):
     try:
         if IS_WINDOWS:
             # On Windows it is not possible to send Ctrl-C to individual
-            # processes. Instead, we send Ctrl-C to this process and all
-            # its subprocesses, and catch Ctrl-C here.
-            try:
-                os.kill(signal.CTRL_C_EVENT, 0)
-            except KeyboardInterrupt:
-                pass
-            try:
-                p.communicate(timeout=5)
-            except KeyboardInterrupt:
-                pass
+            # processes. Instead, Ctrl-C must be send to the whole group
+            # sharing a console. Here we disable Ctrl-C handling first,
+            # and reenable it after we have killed our child.
+            ctypes.windll.kernel32.SetConsoleCtrlHandler(None, True)
+            os.kill(signal.CTRL_C_EVENT, 0)
+            p.communicate(timeout=5)
+            ctypes.windll.kernel32.SetConsoleCtrlHandler(None, False)
         else:
             p.send_signal(signal.SIGINT)
             p.communicate(timeout=5)
@@ -390,4 +388,8 @@ class TestVersion4(make_test_case(4)):
 
 if __name__ == "__main__":
     logging.getLogger().setLevel(logging.INFO)
+    if IS_WINDOWS:
+        # Reenable Ctrl-C handling before spawning any children,
+        # or otherwise our children cannot be killed
+        ctypes.windll.kernel32.SetConsoleCtrlHandler(None, False)
     unittest.main()

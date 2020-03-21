@@ -43,4 +43,4 @@ jobs:
       - name: build
         run: cmake --build build --config Debug
       - name: test
-        run: cd build && ctest -V -C Debug
+        run: cd build && python ../test/ignore_ctrl_c.py ctest -V -C Debug
