@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.12 FATAL_ERROR)
 
 project(securefs)
 if (POLICY CMP0048)
@@ -119,6 +119,11 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 enable_testing()
 add_test(NAME sec_test COMMAND securefs_test)
-add_test(NAME simple_test COMMAND /usr/bin/env build_config_type=${CMAKE_BUILD_TYPE} /usr/bin/python ${PROJECT_SOURCE_DIR}/test/simple_test.py)
+find_package(Python3 COMPONENTS Interpreter)
+if (Python3_FOUND)
+    add_test(NAME simple_test COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/simple_test.py)
+else()
+    message(WARNING "No Python3 found. Cannot run integration test.")
+endif()
 
 install(TARGETS securefs DESTINATION bin)
