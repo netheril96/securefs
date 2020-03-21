@@ -16,24 +16,17 @@ import traceback
 
 
 def find_securefs_binary():
-    for f in (os.path.join(
-            os.environ.get('build_config_type', '.'), 'securefs'),
-              './securefs'):
-        try:
-            st = os.stat(f)
-        except EnvironmentError:
-            continue
-        else:
-            mode = st.st_mode
-            if stat.S_ISREG(mode) and (mode & stat.S_IEXEC):
-                return f
-    raise RuntimeError('securefs binary not found')
+    for dir_path, _, files in os.walk("."):
+        for fn in files:
+            if fn == "securefs" or fn == "securefs.exe":
+                return os.path.join(dir_path, fn)
+    raise RuntimeError("securefs binary not found")
 
 
 SECUREFS_BINARY = find_securefs_binary()
 
-if platform.system() == 'Darwin':
-    UNMOUNT = ['umount']
+if platform.system() == "Darwin":
+    UNMOUNT = ["umount"]
     try:
         import xattr
     except ImportError:
@@ -42,7 +35,7 @@ if platform.system() == 'Darwin':
         )
         xattr = None
 else:
-    UNMOUNT = ['fusermount', '-u']
+    UNMOUNT = ["fusermount", "-u"]
     xattr = None
 
 
@@ -54,15 +47,22 @@ class TimeoutException(BaseException):
 def securefs_mount(data_dir, mount_point, password):
     p = subprocess.Popen(
         [
-            SECUREFS_BINARY, 'mount', '--log', 'XXXX.log', '--trace',
-            '--background', data_dir, mount_point
+            SECUREFS_BINARY,
+            "mount",
+            "--log",
+            "XXXX.log",
+            "--trace",
+            "--background",
+            data_dir,
+            mount_point,
         ],
         stdin=subprocess.PIPE,
-        stderr=subprocess.PIPE)
-    out, err = p.communicate(input=password + '\n')
+        stderr=subprocess.PIPE,
+    )
+    _, err = p.communicate(input=(password + "\n").encode("utf-8"))
     if p.returncode:
         raise RuntimeError(err)
-    for i in xrange(100):
+    for _ in range(100):
         time.sleep(0.1)
         try:
             if os.path.ismount(mount_point):
@@ -74,10 +74,10 @@ def securefs_mount(data_dir, mount_point, password):
 
 def securefs_unmount(mount_point):
     p = subprocess.Popen(UNMOUNT + [mount_point], stderr=subprocess.PIPE)
-    out, err = p.communicate()
+    _, err = p.communicate()
     if p.returncode:
         raise RuntimeError(err)
-    for i in xrange(100):
+    for _ in range(100):
         time.sleep(0.1)
         try:
             if not os.path.ismount(mount_point):
@@ -90,14 +90,20 @@ def securefs_unmount(mount_point):
 def securefs_create(data_dir, password, version):
     p = subprocess.Popen(
         [
-            SECUREFS_BINARY, 'create', '--format',
-            str(version), data_dir, '--rounds', '4'
+            SECUREFS_BINARY,
+            "create",
+            "--format",
+            str(version),
+            data_dir,
+            "--rounds",
+            "4",
         ],
         stdin=subprocess.PIPE,
-        stderr=subprocess.PIPE)
-    out, err = p.communicate(input=password + '\n')
+        stderr=subprocess.PIPE,
+    )
+    out, err = p.communicate(input=(password + "\n" + password + "\n").encode("utf-8"))
     if p.returncode:
-        raise RuntimeError(err)
+        raise RuntimeError(err.decode("utf-8"))
 
 
 def make_test_case(format_version):
@@ -105,17 +111,21 @@ def make_test_case(format_version):
         @classmethod
         def setUpClass(cls):
             try:
-                os.mkdir('tmp')
+                os.mkdir("tmp")
             except EnvironmentError as e:
                 if e.errno != errno.EEXIST:
                     raise
             cls.data_dir = tempfile.mkdtemp(
-                prefix='securefs.format{}.data_dir'.format(format_version),
-                dir='tmp')
-            cls.mount_point = tempfile.mkdtemp(
-                prefix='securefs.format{}.mount_point'.format(format_version),
-                dir='tmp')
-            cls.password = 'madoka'
+                prefix="securefs.format{}.data_dir".format(format_version), dir="tmp"
+            )
+            if os.name == "nt":
+                cls.mount_point = "X:"
+            else:
+                cls.mount_point = tempfile.mkdtemp(
+                    prefix="securefs.format{}.mount_point".format(format_version),
+                    dir="tmp",
+                )
+            cls.password = "pvj8lRgrrsqzlr"
             securefs_create(cls.data_dir, cls.password, format_version)
             securefs_mount(cls.data_dir, cls.mount_point, cls.password)
 
@@ -135,8 +145,8 @@ def make_test_case(format_version):
 
         def test_long_name(self):
             try:
-                os.mkdir(os.path.join(self.mount_point, 'k' * 256))
-                self.fail('mkdir should fail')
+                os.mkdir(os.path.join(self.mount_point, "k" * 256))
+                self.fail("mkdir should fail")
             except EnvironmentError as e:
                 self.assertEqual(e.errno, errno.ENAMETOOLONG)
 
@@ -145,17 +155,17 @@ def make_test_case(format_version):
             def test_xattr(self):
                 fn = os.path.join(self.mount_point, str(uuid.uuid4()))
                 try:
-                    with open(fn, 'wb') as f:
-                        f.write('hello\n')
+                    with open(fn, "wb") as f:
+                        f.write("hello\n")
                     x = xattr.xattr(fn)
-                    x.set('abc', 'def')
-                    x.set('123', '456')
+                    x.set("abc", "def")
+                    x.set("123", "456")
                     self.unmount()
                     self.mount()
-                    self.assertEqual(x.get('abc'), 'def')
-                    self.assertEqual(set(x.list()), {'abc', '123'})
-                    xattr.removexattr(fn, 'abc')
-                    self.assertEqual(set(x.list()), {'123'})
+                    self.assertEqual(x.get("abc"), "def")
+                    self.assertEqual(set(x.list()), {"abc", "123"})
+                    xattr.removexattr(fn, "abc")
+                    self.assertEqual(set(x.list()), {"123"})
                 finally:
                     try:
                         os.remove(fn)
@@ -169,7 +179,7 @@ def make_test_case(format_version):
                 source = os.path.join(self.mount_point, str(uuid.uuid4()))
                 dest = os.path.join(self.mount_point, str(uuid.uuid4()))
                 try:
-                    with open(source, 'wb') as f:
+                    with open(source, "wb") as f:
                         f.write(data)
                     os.link(source, dest)
                     source_stat = os.stat(source)
@@ -178,12 +188,11 @@ def make_test_case(format_version):
                     self.assertEqual(source_stat.st_mtime, dest_stat.st_mtime)
                     self.assertEqual(source_stat.st_size, dest_stat.st_size)
                     self.assertEqual(source_stat.st_nlink, 2)
-                    with open(dest, 'rb') as f:
+                    with open(dest, "rb") as f:
                         self.assertEqual(data, f.read())
                     # Moving hard links onto each other is a no-op
                     os.rename(dest, source)
-                    self.assertTrue(
-                        os.path.isfile(dest) and os.path.isfile(source))
+                    self.assertTrue(os.path.isfile(dest) and os.path.isfile(source))
                 finally:
                     try:
                         os.remove(source)
@@ -199,13 +208,13 @@ def make_test_case(format_version):
             source = os.path.join(self.mount_point, str(uuid.uuid4()))
             dest = os.path.join(self.mount_point, str(uuid.uuid4()))
             try:
-                with open(source, 'wb') as f:
+                with open(source, "wb") as f:
                     f.write(data)
                 os.symlink(source, dest)
                 self.assertEqual(os.readlink(dest), source)
                 os.remove(source)
                 with self.assertRaises(EnvironmentError):
-                    with open(dest, 'rb') as f:
+                    with open(dest, "rb") as f:
                         f.read()
             finally:
                 try:
@@ -222,7 +231,7 @@ def make_test_case(format_version):
             source = os.path.join(self.mount_point, str(uuid.uuid4()))
             dest = os.path.join(self.mount_point, str(uuid.uuid4()))
             try:
-                with open(source, 'wb') as f:
+                with open(source, "wb") as f:
                     f.write(data)
                 source_stat = os.stat(source)
                 self.assertFalse(os.path.isfile(dest))
@@ -266,59 +275,59 @@ def make_test_case(format_version):
                 os.chdir(cwd)
 
         def test_read_write_mkdir_listdir_remove(self):
-            dir_names = set(str(i) for i in xrange(3))
+            dir_names = set(str(i) for i in range(3))
             random_data = os.urandom(11111)
-            rng_filename = os.path.join(self.mount_point, 'rng')
-            with open(rng_filename, 'wb') as f:
+            rng_filename = os.path.join(self.mount_point, "rng")
+            with open(rng_filename, "wb") as f:
                 f.write(random_data)
             self.unmount()
 
             self.mount()
-            with open(rng_filename, 'rb') as f:
+            with open(rng_filename, "rb") as f:
                 self.assertEqual(f.read(), random_data)
-            data = '\0' * len(random_data) + '0'
-            with open(rng_filename, 'wb') as f:
+            data = "\0" * len(random_data) + "0"
+            with open(rng_filename, "wb") as f:
                 f.write(data)
-            with open(rng_filename, 'rb') as f:
+            with open(rng_filename, "rb") as f:
                 self.assertEqual(f.read(), data)
             os.remove(rng_filename)
             for n in dir_names:
                 os.mkdir(os.path.join(self.mount_point, n))
             for n in dir_names:
-                os.mkdir(os.path.join(self.mount_point, '0', n))
+                os.mkdir(os.path.join(self.mount_point, "0", n))
             for n in dir_names:
-                os.mkdir(os.path.join(self.mount_point, '0', '1', n))
+                os.mkdir(os.path.join(self.mount_point, "0", "1", n))
             self.unmount()
 
             self.mount()
             self.assertEqual(set(os.listdir(self.mount_point)), dir_names)
             self.assertEqual(
-                set(os.listdir(os.path.join(self.mount_point, '0'))),
-                dir_names)
+                set(os.listdir(os.path.join(self.mount_point, "0"))), dir_names
+            )
             self.assertEqual(
-                set(os.listdir(os.path.join(self.mount_point, '0', '1'))),
-                dir_names)
+                set(os.listdir(os.path.join(self.mount_point, "0", "1"))), dir_names
+            )
             for dn in dir_names:
                 shutil.rmtree(os.path.join(self.mount_point, dn))
 
         if format_version == 3:
 
             def test_time(self):
-                rand_dirname = os.path.join(self.mount_point,
-                                            str(uuid.uuid4()))
+                rand_dirname = os.path.join(self.mount_point, str(uuid.uuid4()))
                 os.mkdir(rand_dirname)
                 st = os.stat(rand_dirname)
-                self.assertTrue(st.st_atime == st.st_ctime and
-                                st.st_ctime == st.st_mtime)
+                self.assertTrue(
+                    st.st_atime == st.st_ctime and st.st_ctime == st.st_mtime
+                )
                 self.assertAlmostEqual(st.st_atime, time.time(), delta=10)
-                rand_filename = os.path.join(rand_dirname, 'abc')
-                with open(rand_filename, 'w') as f:
-                    f.write('1')
-                os.utime(rand_filename, (1000., 1000.))
+                rand_filename = os.path.join(rand_dirname, "abc")
+                with open(rand_filename, "w") as f:
+                    f.write("1")
+                os.utime(rand_filename, (1000.0, 1000.0))
                 st = os.stat(rand_filename)
                 self.assertEqual(st.st_mtime, 1000)
-                with open(rand_filename, 'w') as f:
-                    f.write('1')
+                with open(rand_filename, "w") as f:
+                    f.write("1")
                 st = os.stat(rand_filename)
                 self.assertAlmostEqual(st.st_ctime, time.time(), delta=10)
 
@@ -341,5 +350,5 @@ class TestVersion4(make_test_case(4)):
     pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
