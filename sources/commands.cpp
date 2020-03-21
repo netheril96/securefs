@@ -827,8 +827,8 @@ public:
         if (mount_point.getValue().size() != 2 || mount_point.getValue()[1] != ':'
             || !is_letter(mount_point.getValue().front()))
         {
-            ERROR_LOG("The mount point must be a drive path, such as Z:");
-            return 33;
+            WARN_LOG("The mount point on Windows should be a drive path, such as Z:, or some "
+                     "programs will get confused due to case sensitivity");
         }
 #else
         try

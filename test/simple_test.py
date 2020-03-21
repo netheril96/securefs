@@ -14,6 +14,8 @@ import sys
 import stat
 import traceback
 import signal
+import logging
+import shlex
 
 
 def find_securefs_binary():
@@ -45,32 +47,43 @@ class TimeoutException(BaseException):
         BaseException.__init__(self, "Operation timeout")
 
 
+if IS_WINDOWS:
+
+    def ismount(path):
+        # Not all reparse points are mounts, but in our test, that is close enough
+        return (
+            subprocess.call(
+                ["fsutil", "reparsepoint", "query", path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            == 0
+        )
+
+
+else:
+    ismount = os.path.ismount
+
+
 def securefs_mount(data_dir: str, mount_point: str, password: str) -> subprocess.Popen:
-    if mount_point.endswith("\\"):
-        mount_point = mount_point.rstrip("\\")
-    p = subprocess.Popen(
-        [
-            SECUREFS_BINARY,
-            "mount",
-            "--log",
-            "XXXX.log",
-            "--trace",
-            data_dir,
-            mount_point,
-        ],
-        stdin=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        encoding="utf-8",
-        universal_newlines=True,
-        creationflags=0 if not IS_WINDOWS else subprocess.CREATE_NEW_PROCESS_GROUP,
-    )
-    p.stdin.write(password)
-    p.stdin.write("\n")
+    command = [
+        SECUREFS_BINARY,
+        "mount",
+        "--pass",
+        password,
+        "--log",
+        "XXXX.log",
+        "--trace",
+        data_dir,
+        mount_point,
+    ]
+    logging.info("Start mounting, command:\n%s", " ".join(command))
+    p = subprocess.Popen(command, encoding="utf-8", universal_newlines=True,)
 
     for _ in range(100):
-        time.sleep(0.1)
+        time.sleep(0.05)
         try:
-            if os.path.ismount(mount_point):
+            if ismount(mount_point):
                 return p
         except EnvironmentError:
             traceback.print_exc()
@@ -79,12 +92,27 @@ def securefs_mount(data_dir: str, mount_point: str, password: str) -> subprocess
 
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
     try:
-        p.send_signal(signal.CTRL_C_EVENT)
-        code, err = p.communicate(timeout=5)
-        if code:
-            raise RuntimeError(f"Failed to unmount securefs: {err}")
+        if IS_WINDOWS:
+            # On Windows it is not possible to send Ctrl-C to individual
+            # processes. Instead, we send Ctrl-C to this process and all
+            # its subprocesses, and catch Ctrl-C here.
+            try:
+                os.kill(signal.CTRL_C_EVENT, 0)
+            except KeyboardInterrupt:
+                pass
+            try:
+                p.communicate(timeout=5)
+            except KeyboardInterrupt:
+                pass
+        else:
+            p.send_signal(signal.SIGINT)
+            p.communicate(timeout=5)
+        if p.returncode:
+            raise RuntimeError(f"securefs failed with code {p.returncode}")
+        if ismount(mount_point):
+            raise RuntimeError(f"{mount_point} still mounted")
     except:
-        if os.path.ismount(mount_point):
+        if ismount(mount_point):
             raise  # Still mounted
         traceback.print_exc()
 
@@ -99,15 +127,11 @@ def securefs_create(data_dir, password, version):
             data_dir,
             "--rounds",
             "4",
+            "--pass",
+            password,
         ],
-        stdin=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        encoding="utf-8",
-        universal_newlines=True,
     )
-    out, err = p.communicate(input=password + "\n" + password + "\n")
-    if p.returncode:
-        raise RuntimeError(err)
+    p.communicate(timeout=5)
 
 
 def make_test_case(format_version):
@@ -122,13 +146,12 @@ def make_test_case(format_version):
             cls.data_dir = tempfile.mkdtemp(
                 prefix="securefs.format{}.data_dir".format(format_version), dir="tmp"
             )
-            if IS_WINDOWS:
-                cls.mount_point = "T:\\"
-            else:
-                cls.mount_point = tempfile.mkdtemp(
-                    prefix="securefs.format{}.mount_point".format(format_version),
-                    dir="tmp",
-                )
+            cls.mount_point = tempfile.mkdtemp(
+                prefix="securefs.format{}.mount_point".format(format_version),
+                dir="tmp",
+            )
+            # On Windows it is not possible to mount to an existing directory
+            os.rmdir(cls.mount_point)
             cls.password = "pvj8lRgrrsqzlr"
             securefs_create(cls.data_dir, cls.password, format_version)
             cls.mount()
@@ -155,7 +178,10 @@ def make_test_case(format_version):
                 os.mkdir(os.path.join(self.mount_point, "k" * 256))
                 self.fail("mkdir should fail")
             except EnvironmentError as e:
-                self.assertEqual(e.errno, errno.ENAMETOOLONG)
+                if IS_WINDOWS:
+                    self.assertIsInstance(e, FileNotFoundError)
+                else:
+                    self.assertEqual(e.errno, errno.ENAMETOOLONG)
 
         if xattr:
 
@@ -279,7 +305,7 @@ def make_test_case(format_version):
                     pass
                 try:
                     shutil.rmtree(c)
-                except:
+                except EnvironmentError:
                     pass
                 os.chdir(cwd)
 
@@ -317,7 +343,10 @@ def make_test_case(format_version):
                 set(os.listdir(os.path.join(self.mount_point, "0", "1"))), dir_names
             )
             for dn in dir_names:
-                shutil.rmtree(os.path.join(self.mount_point, dn))
+                try:
+                    shutil.rmtree(os.path.join(self.mount_point, dn))
+                except EnvironmentError:
+                    pass
 
         if format_version == 3:
 
@@ -360,4 +389,5 @@ class TestVersion4(make_test_case(4)):
 
 
 if __name__ == "__main__":
+    logging.getLogger().setLevel(logging.INFO)
     unittest.main()
