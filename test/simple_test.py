@@ -18,6 +18,7 @@ import logging
 import shlex
 import ctypes
 import faulthandler
+import itertools
 from typing import *
 
 faulthandler.enable()
@@ -128,21 +129,76 @@ def securefs_unmount(p: subprocess.Popen, mount_point: str):
         traceback.print_exc()
 
 
-def securefs_create(data_dir, password, version):
-    p = subprocess.Popen(
-        [
-            SECUREFS_BINARY,
-            "create",
-            "--format",
-            str(version),
-            data_dir,
-            "--rounds",
-            "4",
-            "--pass",
-            password,
-        ],
-    )
+def securefs_create(data_dir, password, version, keyfile=None):
+    command = [
+        SECUREFS_BINARY,
+        "create",
+        "--format",
+        str(version),
+        data_dir,
+        "--rounds",
+        "4",
+    ]
+    if password:
+        command.append("--pass")
+        command.append(password)
+    if keyfile:
+        command.append("--keyfile")
+        command.append(keyfile)
+    p = subprocess.Popen(command)
     p.communicate(timeout=5)
+
+
+def securefs_chpass(
+    data_dir,
+    old_pass: str = None,
+    new_pass: str = None,
+    old_keyfile: str = None,
+    new_keyfile: str = None,
+):
+    if not old_pass and not old_keyfile:
+        raise ValueError("At least one of old_pass and old_keyfile must be specified")
+    if not new_pass and not new_keyfile:
+        raise ValueError("At least one of new_pass and new_keyfile must be specified")
+
+    args = [SECUREFS_BINARY, "chpass", data_dir]
+    if old_pass:
+        args.append("--askoldpass")
+    if new_pass:
+        args.append("--asknewpass")
+    if old_keyfile:
+        args.append("--oldkeyfile")
+        args.append(old_keyfile)
+    if new_keyfile:
+        args.append("--newkeyfile")
+        args.append(new_keyfile)
+    logging.info("Executing command: %s", args)
+    p = subprocess.Popen(
+        args,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+    )
+    if old_pass:
+        p.stdin.write(old_pass + "\n")
+    if new_pass:
+        p.stdin.write(new_pass + "\n")
+        p.stdin.write(new_pass + "\n")
+    out, err = p.communicate(timeout=3)
+    logging.info("chpass output:\n%s\n%s", out, err)
+
+
+def get_data_dir(format_version=4):
+    return tempfile.mkdtemp(
+        prefix=f"securefs.format{format_version}.data_dir", dir="tmp"
+    )
+
+
+def get_mount_point():
+    result = tempfile.mkdtemp(prefix=f"securefs.mount_point", dir="tmp")
+    os.rmdir(result)
+    return result
 
 
 def make_test_case(format_version):
@@ -154,15 +210,8 @@ def make_test_case(format_version):
             except EnvironmentError as e:
                 if e.errno != errno.EEXIST:
                     raise
-            cls.data_dir = tempfile.mkdtemp(
-                prefix="securefs.format{}.data_dir".format(format_version), dir="tmp"
-            )
-            cls.mount_point = tempfile.mkdtemp(
-                prefix="securefs.format{}.mount_point".format(format_version),
-                dir="tmp",
-            )
-            # On Windows it is not possible to mount to an existing directory
-            os.rmdir(cls.mount_point)
+            cls.data_dir = get_data_dir(format_version=format_version)
+            cls.mount_point = get_mount_point()
             cls.password = "pvj8lRgrrsqzlr"
             securefs_create(cls.data_dir, cls.password, format_version)
             cls.mount()
@@ -408,11 +457,7 @@ class RegressionTest(unittest.TestCase):
 
     def _run_test(self, version: int, use_keyfile: bool):
         PLAIN_DATA_DIR = os.path.join(REFERENCE_DATA_DIR, "plain")
-        mount_point = tempfile.mkdtemp(
-            prefix="securefs.format{}.mount_point".format(version), dir="tmp",
-        )
-        # On Windows it is not possible to mount to an existing directory
-        os.rmdir(mount_point)
+        mount_point = get_mount_point()
         if use_keyfile:
             p = securefs_mount(
                 os.path.join(REFERENCE_DATA_DIR, f"{version}-keyfile"),
@@ -471,6 +516,73 @@ def list_dir_recursive(dirname: str, relpath=False) -> Set[str]:
             os.path.relpath(os.path.realpath(f), expanded_dirname) for f in result
         )
     return result
+
+
+class ChpassTest(unittest.TestCase):
+    def _generate_keyfile(self):
+        with tempfile.NamedTemporaryFile(
+            dir="tmp", mode="wb", delete=False, prefix="key"
+        ) as f:
+            f.write(os.urandom(9))
+            return f.name
+
+    def _test_chpass(self, old_pass, new_pass, old_keyfile, new_keyfile):
+        data_dir = get_data_dir()
+        mount_point = get_mount_point()
+        test_dir_path = os.path.join(mount_point, "test")
+
+        logging.info(
+            "Testing chpass on data_dir=%s mount_point=%s old_pass=%s new_pass=%s old_keyfile=%s new_keyfile=%s",
+            data_dir,
+            mount_point,
+            old_pass,
+            new_pass,
+            old_keyfile,
+            new_keyfile,
+        )
+
+        securefs_create(
+            data_dir=data_dir, password=old_pass, version=4, keyfile=old_keyfile
+        )
+
+        self.assertFalse(os.path.exists(test_dir_path))
+
+        p = securefs_mount(data_dir, mount_point, old_pass, old_keyfile)
+        try:
+            os.mkdir(test_dir_path)
+        finally:
+            securefs_unmount(p, mount_point)
+
+        self.assertFalse(os.path.exists(test_dir_path))
+
+        securefs_chpass(
+            data_dir,
+            old_pass=old_pass,
+            new_pass=new_pass,
+            old_keyfile=old_keyfile,
+            new_keyfile=new_keyfile,
+        )
+
+        p = securefs_mount(data_dir, mount_point, new_pass, new_keyfile)
+        try:
+            self.assertTrue(os.path.isdir(test_dir_path))
+        finally:
+            securefs_unmount(p, mount_point)
+
+    def test_chpass(self):
+        old_passes = [None, "abc"]
+        new_passes = [None, "def"]
+        old_keyfiles = [None, self._generate_keyfile()]
+        new_keyfiles = [None, self._generate_keyfile()]
+
+        for old_pass, new_pass, old_keyfile, new_keyfile in itertools.product(
+            old_passes, new_passes, old_keyfiles, new_keyfiles
+        ):
+            if not old_pass and not old_keyfile:
+                continue
+            if not new_pass and not new_keyfile:
+                continue
+            self._test_chpass(old_pass, new_pass, old_keyfile, new_keyfile)
 
 
 if __name__ == "__main__":
