@@ -2,6 +2,7 @@
 #include "exceptions.h"
 #include "git-version.h"
 #include "lite_operations.h"
+#include "lock_enabled.h"
 #include "myutils.h"
 #include "operations.h"
 #include "platform.h"
@@ -856,6 +857,11 @@ private:
         "", "fsname", "Filesystem name shown when mounted", false, "securefs", "fsname"};
     TCLAP::ValueArg<std::string> fssubtype{
         "", "fssubtype", "Filesystem subtype shown when mounted", false, "securefs", "fssubtype"};
+    TCLAP::SwitchArg noflock{"",
+                             "noflock",
+                             "Disables the usage of file locking. Needed on some network "
+                             "filesystems. May cause data loss, so use it at your own risk!",
+                             false};
 
 private:
     std::vector<const char*> to_c_style_args(const std::vector<std::string>& args)
@@ -896,6 +902,12 @@ public:
             global_logger->set_level(kLogVerbose);
         if (global_logger && trace.getValue())
             global_logger->set_level(kLogTrace);
+
+        set_lock_enabled(!noflock.getValue());
+        if (noflock.getValue() && !single_threaded.getValue())
+        {
+            WARN_LOG("Using --noflock without --single is highly dangerous");
+        }
     }
 
     void recreate_logger()

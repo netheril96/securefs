@@ -1,6 +1,7 @@
 #ifndef WIN32
 #define _DARWIN_BETTER_REALPATH 1
 #include "exceptions.h"
+#include "lock_enabled.h"
 #include "logger.h"
 #include "platform.h"
 #include "streams.h"
@@ -57,6 +58,10 @@ public:
 
     void lock(bool exclusive) override
     {
+        if (!securefs::is_lock_enabled())
+        {
+            return;
+        }
         int rc = ::flock(m_fd, exclusive ? LOCK_EX : LOCK_SH);
         if (rc < 0)
         {
@@ -66,6 +71,10 @@ public:
 
     void unlock() noexcept override
     {
+        if (!securefs::is_lock_enabled())
+        {
+            return;
+        }
         int rc = ::flock(m_fd, LOCK_UN);
         (void)rc;
     }
@@ -309,6 +318,10 @@ void OSService::remove_directory(StringRef path) const
 
 void OSService::lock() const
 {
+    if (!securefs::is_lock_enabled())
+    {
+        return;
+    }
     int rc = ::flock(m_dir_fd, LOCK_NB | LOCK_EX);
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno,

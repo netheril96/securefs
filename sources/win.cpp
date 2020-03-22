@@ -1,4 +1,5 @@
 #ifdef _WIN32
+#include "lock_enabled.h"
 #include "logger.h"
 #include "platform.h"
 
@@ -582,6 +583,10 @@ public:
 
     void lock(bool exclusive) override
     {
+        if (!securefs::is_lock_enabled())
+        {
+            return;
+        }
         OVERLAPPED o;
         memset(&o, 0, sizeof(o));
         CHECK_CALL(LockFileEx(m_handle,
@@ -594,6 +599,10 @@ public:
 
     void unlock() noexcept override
     {
+        if (!securefs::is_lock_enabled())
+        {
+            return;
+        }
         OVERLAPPED o;
         memset(&o, 0, sizeof(o));
         (void)(UnlockFileEx(
@@ -807,6 +816,10 @@ void OSService::remove_directory(StringRef path) const
 
 void OSService::lock() const
 {
+    if (!securefs::is_lock_enabled())
+    {
+        return;
+    }
     fprintf(stderr,
             "Warning: Windows does not support directory locking. "
             "Be careful not to mount the same data directory multiple times!\n");
