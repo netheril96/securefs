@@ -25,6 +25,11 @@ jobs:
         run: cmake --build build
       - name: test
         run: cd build && ctest -V
+      - name: upload
+        uses: actions/upload-artifact@v1
+        with:
+          path: build/securefs
+          name: securefs-binary-ubuntu-debug
 
   build-windows:
     runs-on: windows-latest
@@ -44,3 +49,8 @@ jobs:
         run: cmake --build build --config Debug
       - name: test
         run: cd build && ctest -V -C Debug
+      - name: upload
+        uses: actions/upload-artifact@v1
+        with:
+          path: build/Debug/securefs.exe
+          name: securefs-binary-win-debug.exe
