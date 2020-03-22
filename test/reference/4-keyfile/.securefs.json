@@ -1,0 +1,16 @@
+{
+	"block_size" : 4096,
+	"encrypted_key" : 
+	{
+		"IV" : "11ddfce0d647550f2aef3e588af180568b0c05c6a862d7c0ad666e293c6347ad",
+		"MAC" : "b97bae778a5a58eb0fc920f032525e9b",
+		"key" : "b43ea3e7eabd3973c86faef8c10e4616fbe3c0668f90901773cf511d7650f8d11b87344c9cabe50a294bd86316837e470961b10c7bba0e62cb46294b6476f3032ab94712d5ef72789fe2f2f80618dbe80c0937df4db7e34e83734fed46d58c64"
+	},
+	"iterations" : 4,
+	"iv_size" : 12,
+	"pbkdf" : "scrypt",
+	"salt" : "cfe827c3c61052804ddad40b48a2c6311565e12b52dbc54a0a701db557d8aea2",
+	"scrypt_p" : 1,
+	"scrypt_r" : 8,
+	"version" : 4
+}
