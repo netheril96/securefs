@@ -18,6 +18,7 @@ import logging
 import shlex
 import ctypes
 import faulthandler
+from typing import *
 
 faulthandler.enable()
 
@@ -44,6 +45,10 @@ if platform.system() == "Darwin":
         xattr = None
 else:
     xattr = None
+
+REFERENCE_DATA_DIR = os.path.join(
+    os.path.dirname(os.path.realpath(__file__)), "reference"
+)
 
 
 class TimeoutException(BaseException):
@@ -383,6 +388,69 @@ class TestVersion3(make_test_case(3)):
 
 class TestVersion4(make_test_case(4)):
     pass
+
+
+class RegressionTest(unittest.TestCase):
+    """
+    Ensures that future versions of securefs can read old versions just fine.
+    """
+
+    def test_all(self):
+        PLAIN_DATA_DIR = os.path.join(REFERENCE_DATA_DIR, "plain")
+        for i in [1, 2, 3, 4]:
+            mount_point = tempfile.mkdtemp(
+                prefix="securefs.format{}.mount_point".format(i), dir="tmp",
+            )
+            # On Windows it is not possible to mount to an existing directory
+            os.rmdir(mount_point)
+            p = securefs_mount(
+                os.path.join(REFERENCE_DATA_DIR, str(i)), mount_point, password="abc"
+            )
+            try:
+                self.compare_directory(PLAIN_DATA_DIR, mount_point)
+            finally:
+                securefs_unmount(p, mount_point)
+
+    def compare_directory(self, dir1, dir2):
+        listing1 = list_dir_recursive(dir1, relpath=True)
+        listing2 = list_dir_recursive(dir2, relpath=True)
+
+        self.assertEqual(
+            listing1, listing2, f"{dir1} and {dir2} differ in file names",
+        )
+
+        for fn in listing1:
+            fn1 = os.path.join(dir1, fn)
+            fn2 = os.path.join(dir2, fn)
+
+            if os.path.isdir(fn1) and os.path.isdir(fn2):
+                continue
+
+            with open(fn1, "rb") as f:
+                data1 = f.read()
+            with open(fn2, "rb") as f:
+                data2 = f.read()
+            self.assertEqual(data1, data2, f"{fn1} and {fn2} differ in contents")
+
+
+def list_dir_recursive(dirname: str, relpath=False) -> Set[str]:
+    # Note: os.walk does not work on Windows when crossing filesystem boundary.
+    # So we use this crude version instead.
+    try:
+        sub_filenames = os.listdir(dirname)
+    except OSError:
+        return set()
+    result = set()
+    for fn in sub_filenames:
+        fn = os.path.join(dirname, fn)
+        result.add(fn)
+        result.update(list_dir_recursive(fn))
+    if relpath:
+        expanded_dirname = os.path.realpath(dirname)
+        return set(
+            os.path.relpath(os.path.realpath(f), expanded_dirname) for f in result
+        )
+    return result
 
 
 if __name__ == "__main__":
