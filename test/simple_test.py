@@ -82,7 +82,9 @@ def securefs_mount(data_dir: str, mount_point: str, password: str) -> subprocess
         mount_point,
     ]
     logging.info("Start mounting, command:\n%s", " ".join(command))
-    p = subprocess.Popen(command, encoding="utf-8", universal_newlines=True,)
+    p = subprocess.Popen(
+        command, creationflags=subprocess.CREATE_NEW_CONSOLE if IS_WINDOWS else 0
+    )
 
     for _ in range(100):
         time.sleep(0.05)
@@ -97,14 +99,11 @@ def securefs_mount(data_dir: str, mount_point: str, password: str) -> subprocess
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
     try:
         if IS_WINDOWS:
-            # On Windows it is not possible to send Ctrl-C to individual
-            # processes. Instead, Ctrl-C must be send to the whole group
-            # sharing a console. Here we disable Ctrl-C handling first,
-            # and reenable it after we have killed our child.
-            ctypes.windll.kernel32.SetConsoleCtrlHandler(None, 1)
-            os.kill(signal.CTRL_C_EVENT, 0)
+            ctrl_c_py = os.path.join(
+                os.path.dirname(os.path.realpath(__file__)), "ctrl_c.py"
+            )
+            subprocess.check_call([sys.executable, ctrl_c_py, str(p.pid)])
             p.communicate(timeout=5)
-            ctypes.windll.kernel32.SetConsoleCtrlHandler(None, 0)
         else:
             p.send_signal(signal.SIGINT)
             p.communicate(timeout=5)
