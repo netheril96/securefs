@@ -180,12 +180,12 @@ def securefs_chpass(
         stderr=subprocess.PIPE,
         universal_newlines=True,
     )
+    input = ""
     if old_pass:
-        p.stdin.write(old_pass + "\n")
+        input += old_pass + "\n"
     if new_pass:
-        p.stdin.write(new_pass + "\n")
-        p.stdin.write(new_pass + "\n")
-    out, err = p.communicate(timeout=3)
+        input += (new_pass + "\n") * 2
+    out, err = p.communicate(input=input, timeout=3)
     logging.info("chpass output:\n%s\n%s", out, err)
 
 
