@@ -50,7 +50,7 @@ jobs:
       - name: upload
         uses: actions/upload-artifact@v1
         with:
-          path: build/Release/securefs.exe
+          path: build/Debug/securefs.exe
           name: securefs-binary-win.exe
       - name: test
         run: cd build && ctest -V -C Release
