@@ -23,13 +23,13 @@ jobs:
         run: mkdir build && cd build && cmake ..
       - name: build
         run: cmake --build build
-      - name: test
-        run: cd build && ctest -V
       - name: upload
         uses: actions/upload-artifact@v1
         with:
           path: build/securefs
           name: securefs-binary-ubuntu
+      - name: test
+        run: cd build && ctest -V
 
   build-windows:
     runs-on: windows-latest
@@ -47,10 +47,10 @@ jobs:
         run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release ..
       - name: build
         run: cmake --build build --config Release
-      - name: test
-        run: cd build && ctest -V -C Release
       - name: upload
         uses: actions/upload-artifact@v1
         with:
           path: build/Debug/securefs.exe
           name: securefs-binary-win.exe
+      - name: test
+        run: cd build && ctest -V -C Release
