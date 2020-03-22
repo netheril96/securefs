@@ -52,11 +52,6 @@ REFERENCE_DATA_DIR = os.path.join(
 )
 
 
-class TimeoutException(BaseException):
-    def __init__(self):
-        BaseException.__init__(self, "Operation timeout")
-
-
 if IS_WINDOWS:
 
     def ismount(path):
@@ -98,14 +93,14 @@ def securefs_mount(
         command, creationflags=subprocess.CREATE_NEW_CONSOLE if IS_WINDOWS else 0
     )
 
-    for _ in range(100):
+    for _ in range(300):
         time.sleep(0.05)
         try:
             if ismount(mount_point):
                 return p
         except EnvironmentError:
             traceback.print_exc()
-    raise TimeoutException()
+    raise RuntimeError(f"Failed to mount, command {command}")
 
 
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
@@ -137,7 +132,7 @@ def securefs_create(data_dir, password, version, keyfile=None):
         str(version),
         data_dir,
         "--rounds",
-        "4",
+        "2",
     ]
     if password:
         command.append("--pass")
@@ -161,7 +156,7 @@ def securefs_chpass(
     if not new_pass and not new_keyfile:
         raise ValueError("At least one of new_pass and new_keyfile must be specified")
 
-    args = [SECUREFS_BINARY, "chpass", data_dir]
+    args = [SECUREFS_BINARY, "chpass", data_dir, "--rounds", "2"]
     if old_pass:
         args.append("--askoldpass")
     if new_pass:
