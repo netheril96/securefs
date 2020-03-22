@@ -20,7 +20,7 @@ jobs:
       - name: install
         run: sudo apt-get install fuse libfuse-dev
       - name: configure
-        run: mkdir build && cd build && cmake ..
+        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..
       - name: build
         run: cmake --build build
       - name: test
@@ -29,7 +29,7 @@ jobs:
         uses: actions/upload-artifact@v1
         with:
           path: build/securefs
-          name: securefs-binary-ubuntu
+          name: securefs-binary-ubuntu-debug
 
   build-windows:
     runs-on: windows-latest
@@ -44,13 +44,13 @@ jobs:
       - name: install
         run: choco install winfsp
       - name: configure
-        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release ..
+        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..
       - name: build
-        run: cmake --build build --config Release
+        run: cmake --build build --config Debug
       - name: test
-        run: cd build && ctest -V -C Release
+        run: cd build && ctest -V -C Debug
       - name: upload
         uses: actions/upload-artifact@v1
         with:
           path: build/Debug/securefs.exe
-          name: securefs-binary-win.exe
+          name: securefs-binary-win-debug.exe
