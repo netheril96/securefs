@@ -72,9 +72,6 @@ def securefs_mount(
     command = [
         SECUREFS_BINARY,
         "mount",
-        "--log",
-        "XXXX.log",
-        "--trace",
         data_dir,
         mount_point,
     ]
