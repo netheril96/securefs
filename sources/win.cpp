@@ -713,7 +713,7 @@ public:
         }
         CHECK_CALL(SetFileTime(m_handle, nullptr, &access_time, &mod_time));
     }
-    void fstat(struct fuse_stat* st) override { stat_file_handle(m_handle, st); }
+    void fstat(struct fuse_stat* st) const override { stat_file_handle(m_handle, st); }
     bool is_sparse() const noexcept override { return m_is_ntfs; }
 };
 
@@ -1082,7 +1082,7 @@ std::string OSService::stringify_system_error(int errcode)
 void windows_init(void)
 {
     ::SetConsoleOutputCP(CP_UTF8);
-	// Use a large buffer to prevent Windows from chopping valid UTF-8 sequences.
+    // Use a large buffer to prevent Windows from chopping valid UTF-8 sequences.
     setvbuf(stdout, nullptr, _IOFBF, 65535);
     setvbuf(stderr, nullptr, _IOFBF, 65535);
     if (::FspLoad(nullptr) != STATUS_SUCCESS)

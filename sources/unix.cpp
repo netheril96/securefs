@@ -77,7 +77,7 @@ public:
             THROW_POSIX_EXCEPTION(errno, "fsync");
     }
 
-    void fstat(struct stat* out) override
+    void fstat(struct stat* out) const override
     {
         if (!out)
             throwVFSException(EFAULT);
@@ -131,10 +131,9 @@ public:
 
     length_type size() const override
     {
-        off_t rc = ::lseek(m_fd, 0, SEEK_END);
-        if (rc < 0)
-            THROW_POSIX_EXCEPTION(errno, "lseek");
-        return static_cast<length_type>(rc);
+        struct stat st;
+        this->fstat(&st);
+        return static_cast<length_type>(st.st_size);
     }
 
     bool is_sparse() const noexcept override { return true; }

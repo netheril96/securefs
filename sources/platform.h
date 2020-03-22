@@ -106,7 +106,7 @@ class FileStream : public StreamBase
 public:
     virtual void fsync() = 0;
     virtual void utimens(const struct fuse_timespec ts[2]) = 0;
-    virtual void fstat(struct fuse_stat*) = 0;
+    virtual void fstat(struct fuse_stat*) const = 0;
     virtual void close() noexcept = 0;
     virtual ssize_t listxattr(char*, size_t);
     virtual ssize_t getxattr(const char*, void*, size_t);
