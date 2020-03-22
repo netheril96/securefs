@@ -387,8 +387,4 @@ class TestVersion4(make_test_case(4)):
 
 if __name__ == "__main__":
     logging.getLogger().setLevel(logging.INFO)
-    if IS_WINDOWS:
-        # Reenable Ctrl-C handling before spawning any children,
-        # or otherwise our children cannot be killed
-        ctypes.windll.kernel32.SetConsoleCtrlHandler(None, 0)
     unittest.main()
