@@ -100,7 +100,7 @@ def securefs_unmount(p: subprocess.Popen, mount_point: str):
     try:
         if IS_WINDOWS:
             ctrl_c_py = os.path.join(
-                os.path.dirname(os.path.realpath(__file__)), "ctrl_c.py"
+                os.path.dirname(os.path.abspath(__file__)), "ctrl_c.py"
             )
             subprocess.check_call([sys.executable, ctrl_c_py, str(p.pid)])
             p.communicate(timeout=5)
@@ -442,7 +442,7 @@ class RegressionTest(unittest.TestCase):
         # Because securefs cannot handle readonly filesystem for now, we need to copy
         # all the reference data to the working dir.
         reference_data_dir = shutil.copytree(
-            os.path.join(os.path.dirname(os.path.realpath(__file__)), "reference"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "reference"),
             f"tmp/{uuid.uuid4()}",
         )
         for i in [1, 2, 3, 4]:
@@ -510,10 +510,7 @@ def list_dir_recursive(dirname: str, relpath=False) -> Set[str]:
         result.add(fn)
         result.update(list_dir_recursive(fn))
     if relpath:
-        expanded_dirname = os.path.realpath(dirname)
-        return set(
-            os.path.relpath(os.path.realpath(f), expanded_dirname) for f in result
-        )
+        return set(os.path.relpath(f, dirname) for f in result)
     return result
 
 
