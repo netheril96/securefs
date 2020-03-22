@@ -47,10 +47,6 @@ if platform.system() == "Darwin":
 else:
     xattr = None
 
-REFERENCE_DATA_DIR = os.path.join(
-    os.path.dirname(os.path.realpath(__file__)), "reference"
-)
-
 
 if IS_WINDOWS:
 
@@ -446,28 +442,39 @@ class RegressionTest(unittest.TestCase):
     """
 
     def test_all(self):
+        # Because securefs cannot handle readonly filesystem for now, we need to copy
+        # all the reference data to the working dir.
+        reference_data_dir = shutil.copytree(
+            os.path.join(os.path.dirname(os.path.realpath(__file__)), "reference"),
+            f"tmp/{uuid.uuid4()}",
+        )
         for i in [1, 2, 3, 4]:
-            self._run_test(version=i, use_keyfile=False)
-            self._run_test(version=i, use_keyfile=True)
+            self._run_test(
+                version=i, use_keyfile=False, reference_data_dir=reference_data_dir
+            )
+            self._run_test(
+                version=i, use_keyfile=True, reference_data_dir=reference_data_dir
+            )
 
-    def _run_test(self, version: int, use_keyfile: bool):
-        PLAIN_DATA_DIR = os.path.join(REFERENCE_DATA_DIR, "plain")
+    def _run_test(self, version: int, use_keyfile: bool, reference_data_dir: str):
         mount_point = get_mount_point()
         if use_keyfile:
             p = securefs_mount(
-                os.path.join(REFERENCE_DATA_DIR, f"{version}-keyfile"),
+                os.path.join(reference_data_dir, f"{version}-keyfile"),
                 mount_point,
                 password=None,
-                keyfile=os.path.join(REFERENCE_DATA_DIR, "keyfile"),
+                keyfile=os.path.join(reference_data_dir, "keyfile"),
             )
         else:
             p = securefs_mount(
-                os.path.join(REFERENCE_DATA_DIR, str(version)),
+                os.path.join(reference_data_dir, str(version)),
                 mount_point,
                 password="abc",
             )
         try:
-            self.compare_directory(PLAIN_DATA_DIR, mount_point)
+            self.compare_directory(
+                os.path.join(reference_data_dir, "plain"), mount_point
+            )
         finally:
             securefs_unmount(p, mount_point)
 
