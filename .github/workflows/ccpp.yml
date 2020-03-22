@@ -28,6 +28,8 @@ jobs:
         with:
           path: build/securefs
           name: securefs-binary-ubuntu
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v2
       - name: test
         run: cd build && ctest -V
 
