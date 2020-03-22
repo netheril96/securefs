@@ -74,18 +74,24 @@ else:
     ismount = os.path.ismount
 
 
-def securefs_mount(data_dir: str, mount_point: str, password: str) -> subprocess.Popen:
+def securefs_mount(
+    data_dir: str, mount_point: str, password: str, keyfile: str = None
+) -> subprocess.Popen:
     command = [
         SECUREFS_BINARY,
         "mount",
-        "--pass",
-        password,
         "--log",
         "XXXX.log",
         "--trace",
         data_dir,
         mount_point,
     ]
+    if password:
+        command.append("--pass")
+        command.append(password)
+    if keyfile:
+        command.append("--keyfile")
+        command.append(keyfile)
     logging.info("Start mounting, command:\n%s", " ".join(command))
     p = subprocess.Popen(
         command, creationflags=subprocess.CREATE_NEW_CONSOLE if IS_WINDOWS else 0
@@ -396,20 +402,34 @@ class RegressionTest(unittest.TestCase):
     """
 
     def test_all(self):
-        PLAIN_DATA_DIR = os.path.join(REFERENCE_DATA_DIR, "plain")
         for i in [1, 2, 3, 4]:
-            mount_point = tempfile.mkdtemp(
-                prefix="securefs.format{}.mount_point".format(i), dir="tmp",
-            )
-            # On Windows it is not possible to mount to an existing directory
-            os.rmdir(mount_point)
+            self._run_test(version=i, use_keyfile=False)
+            self._run_test(version=i, use_keyfile=True)
+
+    def _run_test(self, version: int, use_keyfile: bool):
+        PLAIN_DATA_DIR = os.path.join(REFERENCE_DATA_DIR, "plain")
+        mount_point = tempfile.mkdtemp(
+            prefix="securefs.format{}.mount_point".format(version), dir="tmp",
+        )
+        # On Windows it is not possible to mount to an existing directory
+        os.rmdir(mount_point)
+        if use_keyfile:
             p = securefs_mount(
-                os.path.join(REFERENCE_DATA_DIR, str(i)), mount_point, password="abc"
+                os.path.join(REFERENCE_DATA_DIR, f"{version}-keyfile"),
+                mount_point,
+                password=None,
+                keyfile=os.path.join(REFERENCE_DATA_DIR, "keyfile"),
             )
-            try:
-                self.compare_directory(PLAIN_DATA_DIR, mount_point)
-            finally:
-                securefs_unmount(p, mount_point)
+        else:
+            p = securefs_mount(
+                os.path.join(REFERENCE_DATA_DIR, str(version)),
+                mount_point,
+                password="abc",
+            )
+        try:
+            self.compare_directory(PLAIN_DATA_DIR, mount_point)
+        finally:
+            securefs_unmount(p, mount_point)
 
     def compare_directory(self, dir1, dir2):
         listing1 = list_dir_recursive(dir1, relpath=True)
