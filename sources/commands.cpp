@@ -537,7 +537,7 @@ private:
         0,
         "integer"};
     TCLAP::ValueArg<unsigned int> format{
-        "", "format", "The filesystem format version (1,2,3)", false, 4, "integer"};
+        "", "format", "The filesystem format version (1,2,3,4)", false, 4, "integer"};
     TCLAP::ValueArg<unsigned int> iv_size{
         "", "iv-size", "The IV size (ignored for fs format 1)", false, 12, "integer"};
     TCLAP::ValueArg<unsigned int> block_size{
