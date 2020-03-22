@@ -894,6 +894,7 @@ public:
         cmdline.add(&enable_nfc);
         cmdline.add(&fsname);
         cmdline.add(&fssubtype);
+        cmdline.add(&noflock);
         cmdline.parse(argc, argv);
 
         get_password(false);
