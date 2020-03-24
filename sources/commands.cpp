@@ -838,21 +838,6 @@ private:
         "options"};
     TCLAP::UnlabeledValueArg<std::string> mount_point{
         "mount_point", "Mount point", true, "", "mount_point"};
-    TCLAP::SwitchArg case_insensitive{"",
-                                      "insensitive",
-                                      "Converts the case of all filenames so "
-                                      "that it works case insensitively"};
-    TCLAP::SwitchArg enable_nfc{
-        "",
-        "nfc",
-        "Normalizes all filenames to normal form composed (NFC). By default, enabled on macOS and "
-        "disabled on other platforms for compatibility of native applications.",
-#ifdef __APPLE__
-        true
-#else
-        false
-#endif
-    };
     TCLAP::ValueArg<std::string> fsname{
         "", "fsname", "Filesystem name shown when mounted", false, "securefs", "fsname"};
     TCLAP::ValueArg<std::string> fssubtype{
@@ -862,6 +847,18 @@ private:
                              "Disables the usage of file locking. Needed on some network "
                              "filesystems. May cause data loss, so use it at your own risk!",
                              false};
+    TCLAP::ValueArg<std::string> normalization{"",
+                                               "normalization",
+                                               "Mode of filename normalization. Valid values: "
+                                               "none, casefold, nfc, casefold+nfc. Defaults to nfc "
+                                               "on macOS and none on other platforms",
+                                               false,
+#ifdef __APPLE__
+                                               "nfc",
+#else
+                                               "none",
+#endif,
+                                               ""};
 
 private:
     std::vector<const char*> to_c_style_args(const std::vector<std::string>& args)
@@ -890,8 +887,7 @@ public:
         cmdline.add(&mount_point);
         cmdline.add(&fuse_options);
         cmdline.add(&single_threaded);
-        cmdline.add(&case_insensitive);
-        cmdline.add(&enable_nfc);
+        cmdline.add(&normalization);
         cmdline.add(&fsname);
         cmdline.add(&fssubtype);
         cmdline.add(&noflock);
@@ -1069,12 +1065,31 @@ public:
         fsopt.flags = config.version < 3 ? 0 : kOptionStoreTime;
         if (insecure.getValue())
             fsopt.flags.value() |= kOptionNoAuthentication;
-        if (case_insensitive.getValue())
+        bool case_insensitive = false;
+        bool enable_nfc = false;
+        if (normalization.getValue() == "nfc")
+        {
+            enable_nfc = true;
+        }
+        else if (normalization.getValue() == "casefold")
+        {
+            case_insensitive = true;
+        }
+        else if (normalization.getValue() == "casefold+nfc")
+        {
+            case_insensitive = true;
+            enable_nfc = true;
+        }
+        else if (normalization.getValue() != "none")
+        {
+            throw_runtime_error("Invalid flag of --normalization: " + normalization.getValue());
+        }
+        if (case_insensitive)
         {
             INFO_LOG("Mounting as a case insensitive filesystem");
             fsopt.flags.value() |= kOptionCaseFoldFileName;
         }
-        if (enable_nfc.getValue())
+        if (enable_nfc)
         {
             INFO_LOG("Mounting as a Unicode normalized filesystem");
             fsopt.flags.value() |= kOptionNFCFileName;
