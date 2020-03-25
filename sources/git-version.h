@@ -1,5 +1,6 @@
 #pragma once
 
-namespace securefs {
+namespace securefs
+{
 extern const char* const GIT_VERSION;
 }

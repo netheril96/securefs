@@ -76,8 +76,8 @@ int precheck_setxattr(const char** name, int* flags)
     }
     return 1;
 }
-    
+
 int precheck_removexattr(const char** name) { return precheck_common(name); }
-}
+}    // namespace securefs
 
 #endif

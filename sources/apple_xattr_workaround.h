@@ -11,5 +11,5 @@ void transform_listxattr_result(char* buffer, size_t size);
 int precheck_getxattr(const char** name);
 int precheck_setxattr(const char** name, int* flags);
 int precheck_removexattr(const char** name);
-}
+}    // namespace securefs
 #endif

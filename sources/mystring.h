@@ -4,17 +4,17 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <stddef.h>
 #include <string>
 #include <vector>
-#include <memory>
 
 typedef unsigned char byte;
 
 namespace securefs
 {
 template <class CharT>
-    class BasicStringRef
+class BasicStringRef
 {
 private:
     const CharT* m_buffer;

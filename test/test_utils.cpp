@@ -121,7 +121,7 @@ TEST_CASE("NFC")
     auto nfc
         = [](const char* str) { return std::string(securefs::transform(str, false, true).get()); };
 
-	REQUIRE(nfc("\x41\xcc\x88\x66\x66\x69\x6e") == "\xc3\x84\x66\x66\x69\x6e");
+    REQUIRE(nfc("\x41\xcc\x88\x66\x66\x69\x6e") == "\xc3\x84\x66\x66\x69\x6e");
     REQUIRE(nfc("Henry IV") == "Henry IV");
     REQUIRE(nfc("") == "");
     REQUIRE(nfc("abc") == "abc");

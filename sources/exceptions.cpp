@@ -22,23 +22,22 @@ securefs::VFSException::~VFSException() = default;
 
 securefs::POSIXException::~POSIXException() = default;
 
-securefs::InvalidArgumentException::~InvalidArgumentException()= default;
+securefs::InvalidArgumentException::~InvalidArgumentException() = default;
 
-    [[noreturn]] void securefs::throwFileTypeInconsistencyException()
+[[noreturn]] void securefs::throwFileTypeInconsistencyException()
 {
     throw ::securefs::FileTypeInconsistencyException();
 }
 
-[[noreturn]] void securefs::throwPOSIXExceptionDoNotUseDirectly(int err, std::string msg) {
+[[noreturn]] void securefs::throwPOSIXExceptionDoNotUseDirectly(int err, std::string msg)
+{
     throw POSIXException(err, std::move(msg));
 }
 
-    [[noreturn]] void securefs::throw_runtime_error(const char* msg)
-{
-    throw std::runtime_error(msg);
-}
+[[noreturn]] void securefs::throw_runtime_error(const char* msg) { throw std::runtime_error(msg); }
 
-[[noreturn]] void securefs::throw_runtime_error(const std::string& msg) {
+[[noreturn]] void securefs::throw_runtime_error(const std::string& msg)
+{
     throw std::runtime_error(msg);
 }
 
