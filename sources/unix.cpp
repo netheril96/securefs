@@ -259,13 +259,21 @@ public:
     void rewind() override { ::rewinddir(m_dir); }
 };
 
-std::string OSService::norm_path(StringRef path) const
+bool OSService::is_absolute(StringRef path) { return path.size() > 0 && path[0] == '/'; }
+
+native_string_type OSService::concat_and_norm(StringRef base_dir, StringRef path)
 {
-    if (m_dir_fd < 0)
+    if (base_dir.empty() || is_absolute(path))
         return path.to_string();
-    if (path.size() > 0 && path[0] == '/')
-        return path.to_string();
-    return m_dir_name + path;
+    if (!is_absolute(base_dir))
+    {
+        throwInvalidArgumentException("base_dir must be absolute, but is " + base_dir);
+    }
+    if (base_dir.ends_with("/"))
+    {
+        return base_dir + path;
+    }
+    return base_dir + "/" + path;
 }
 
 OSService::OSService() { m_dir_fd = AT_FDCWD; }

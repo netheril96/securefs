@@ -153,7 +153,9 @@ private:
     std::string m_dir_name;
 
 public:
-    native_string_type norm_path(StringRef path) const;
+    static bool is_absolute(StringRef path);
+    static native_string_type concat_and_norm(StringRef base_dir, StringRef path);
+    native_string_type norm_path(StringRef path) const { return concat_and_norm(m_dir_name, path); }
 
 public:
     OSService();
