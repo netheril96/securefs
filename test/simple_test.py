@@ -1,25 +1,22 @@
 #!/usr/bin/python3
 # coding: utf-8
-import os
-import subprocess
-import unittest
-import tempfile
-import shutil
 import errno
-import platform
-import time
-import traceback
-import uuid
-import sys
-import stat
-import traceback
-import signal
-import logging
-import shlex
-import ctypes
 import faulthandler
 import itertools
-from typing import *
+import logging
+import os
+import platform
+import shutil
+import signal
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+import traceback
+import unittest
+import uuid
+from typing import Set
 
 faulthandler.enable()
 
