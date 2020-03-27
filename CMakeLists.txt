@@ -29,6 +29,10 @@ if (UNIX)
     add_compile_options(-Wall -Wextra -Wno-unknown-pragmas)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=gnu++11")
 
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        add_compile_options(-Wthread-safety -Wthread-safety-negative)
+    endif()
+
     if (APPLE)
         link_libraries(-Wl,-dead_strip)
     else ()
