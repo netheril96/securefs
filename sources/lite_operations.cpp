@@ -2,6 +2,7 @@
 #include "apple_xattr_workaround.h"
 #include "lite_fs.h"
 #include "lite_stream.h"
+#include "lock_guard.h"
 #include "logger.h"
 #include "myutils.h"
 #include "operations.h"
@@ -252,8 +253,7 @@ namespace lite
 
         try
         {
-            fp->lock(false);
-            DEFER(fp->unlock());
+            LockGuard<File> lock_guard(*fp, false);
             return static_cast<int>(fp->read(buf, offset, size));
         }
         OPT_CATCH_WITH_PATH_OFF_LEN(offset, size)
@@ -272,8 +272,7 @@ namespace lite
 
         try
         {
-            fp->lock();
-            DEFER(fp->unlock());
+            LockGuard<File> lock_guard(*fp, true);
             fp->write(buf, offset, size);
             return static_cast<int>(size);
         }
@@ -289,8 +288,7 @@ namespace lite
 
         try
         {
-            fp->lock();
-            DEFER(fp->unlock());
+            LockGuard<File> lock_guard(*fp, true);
             fp->flush();
             return 0;
         }
@@ -306,8 +304,7 @@ namespace lite
 
         try
         {
-            fp->lock();
-            DEFER(fp->unlock());
+            LockGuard<File> lock_guard(*fp, true);
             fp->resize(len);
             return 0;
         }
@@ -440,8 +437,7 @@ namespace lite
 
         try
         {
-            fp->lock();
-            DEFER(fp->unlock());
+            LockGuard<File> lock_guard(*fp, true);
             fp->fsync();
             return 0;
         }
@@ -459,8 +455,7 @@ namespace lite
         try
         {
             AutoClosedFile fp = filesystem->open(path, O_RDWR, 0644);
-            fp->lock();
-            DEFER(fp->unlock());
+            LockGuard<File> lock_guard(*fp, true);
             fp->resize(static_cast<size_t>(len));
             return 0;
         }

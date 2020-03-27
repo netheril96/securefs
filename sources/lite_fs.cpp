@@ -1,5 +1,6 @@
 #include "lite_fs.h"
 #include "constants.h"
+#include "lock_guard.h"
 #include "logger.h"
 
 #include <cryptopp/base32.h>
@@ -18,8 +19,7 @@ namespace lite
                bool check)
         : m_file_stream(file_stream)
     {
-        m_file_stream->lock(true);
-        DEFER(m_file_stream->unlock());
+        LockGuard<FileStream> lock_guard(*m_file_stream, true);
         m_crypt_stream.emplace(file_stream, master_key, block_size, iv_size, check);
     }
 
@@ -188,7 +188,10 @@ namespace lite
                                    m_iv_size,
                                    (m_flags & kOptionNoAuthentication) == 0));
         if (flags & O_TRUNC)
+        {
+            LockGuard<File> lock_guard(*fp, true);
             fp->resize(0);
+        }
         return fp;
     }
 
