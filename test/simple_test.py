@@ -85,7 +85,7 @@ def securefs_mount(
         command.append(keyfile)
     logging.info("Start mounting, command:\n%s", " ".join(command))
     p = subprocess.Popen(
-        command, creationflags=subprocess.CREATE_NEW_CONSOLE if IS_WINDOWS else 0
+        command, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if IS_WINDOWS else 0
     )
 
     for _ in range(300):
@@ -101,14 +101,10 @@ def securefs_mount(
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
     try:
         if IS_WINDOWS:
-            ctrl_c_py = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "ctrl_c.py"
-            )
-            subprocess.check_call([sys.executable, ctrl_c_py, str(p.pid)])
-            p.communicate(timeout=5)
+            p.send_signal(signal.CTRL_BREAK_EVENT)
         else:
             p.send_signal(signal.SIGINT)
-            p.communicate(timeout=5)
+        p.communicate(timeout=5)
         if p.returncode:
             raise RuntimeError(f"securefs failed with code {p.returncode}")
         if ismount(mount_point):
