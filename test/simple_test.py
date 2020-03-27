@@ -74,6 +74,8 @@ def securefs_mount(
         "mount",
         data_dir,
         mount_point,
+        "--normalization",
+        "none",
     ]
     if password:
         command.append("--pass")
