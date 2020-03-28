@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 # coding: utf-8
+import ctypes
 import errno
 import faulthandler
 import itertools
@@ -49,14 +50,8 @@ if IS_WINDOWS:
 
     def ismount(path):
         # Not all reparse points are mounts, but in our test, that is close enough
-        return (
-            subprocess.call(
-                ["fsutil", "reparsepoint", "query", path],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            == 0
-        )
+        attribute = ctypes.windll.kernel32.GetFileAttributesW(path.rstrip("/\\"))
+        return attribute != -1 and (attribute & 0x400) == 0x400
 
 
 else:
