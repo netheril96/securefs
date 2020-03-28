@@ -297,7 +297,7 @@ Json::Value generate_config(unsigned int version,
     }
     else if (pbkdf_algorithm == PBKDF_ALGO_SCRYPT)
     {
-        uint32_t N = rounds > 0 ? rounds : 65536, r = 8, p = 1;
+        uint32_t N = rounds > 0 ? rounds : (1u << 18u), r = 8, p = 1;
         config["iterations"] = N;
         config["scrypt_r"] = r;
         config["scrypt_p"] = p;
