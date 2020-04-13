@@ -1064,7 +1064,7 @@ public:
         fsopt.iv_size = config.iv_size;
         fsopt.version = config.version;
         fsopt.master_key = config.master_key;
-        fsopt.flags = config.version < 3 ? 0 : kOptionStoreTime;
+        fsopt.flags = config.version != 3 ? 0 : kOptionStoreTime;
         if (insecure.getValue())
             fsopt.flags.value() |= kOptionNoAuthentication;
         bool case_insensitive = false;
@@ -1213,7 +1213,7 @@ public:
         fsopt.iv_size = config.iv_size;
         fsopt.version = config.version;
         fsopt.master_key = config.master_key;
-        fsopt.flags = 0;
+        fsopt.flags = config.version != 3 ? 0 : kOptionStoreTime;
 
         operations::FileSystemContext fs(fsopt);
         fix(data_dir.getValue(), &fs);
