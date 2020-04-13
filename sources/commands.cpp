@@ -17,8 +17,10 @@
 #include <utf8proc/utf8proc.h>
 
 #include <algorithm>
+#include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <typeinfo>
@@ -1171,6 +1173,20 @@ public:
         add_all_args_from_base(cmdline);
         cmdline.parse(argc, argv);
 
+        fflush(stdout);
+        fflush(stderr);
+        puts("You should backup your repository before running this command. Are you sure you want "
+             "to continue? (yes/no)");
+        fflush(stdout);
+        char answer[100] = {};
+        if (fgets(answer, 100, stdin) == nullptr)
+        {
+            THROW_POSIX_EXCEPTION(errno, "fgets");
+        }
+        if (strcmp(answer, "yes\n") != 0)
+        {
+            throw_runtime_error("User aborted operation");
+        }
         get_password(false);
     }
 
@@ -1366,6 +1382,7 @@ int commands_main(int argc, const char* const* argv)
 {
     try
     {
+        std::ios_base::sync_with_stdio(false);
         std::unique_ptr<CommandBase> cmds[] = {make_unique<MountCommand>(),
                                                make_unique<CreateCommand>(),
                                                make_unique<ChangePasswordCommand>(),
