@@ -77,3 +77,9 @@ To request full format, which is no longer the default, run `securefs create --f
 ## Design and algorithms
 
 See [here](docs/design.md).
+
+## Caveat
+
+If you store `securefs` encrypted files on iCloud Drive, it might cause Spotlight Search on iOS to stop working. It is a bug in iOS, not in `securefs`.
+
+To work around that bug, you can disable the indexing of *Files* app in Settings -> Siri & Suggestions.
