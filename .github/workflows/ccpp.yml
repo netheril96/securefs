@@ -30,7 +30,28 @@ jobs:
         with:
           path: build/securefs
           name: securefs-binary-ubuntu-debug
-
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: true
+      - uses: actions/setup-python@v1
+        with:
+          python-version: "3.x"
+      - name: install
+        run: brew cask install osxfuse
+      - name: configure
+        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..
+      - name: build
+        run: cmake --build build
+      - name: test
+        run: cd build && ctest -V
+      - name: upload
+        uses: actions/upload-artifact@v1
+        with:
+          path: build/securefs
+          name: securefs-binary-macos-debug
   build-windows:
     runs-on: windows-latest
 
