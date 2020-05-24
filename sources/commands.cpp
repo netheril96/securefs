@@ -1409,7 +1409,7 @@ int commands_main(int argc, const char* const* argv)
                 }
             }
 
-            fprintf(stderr, "\nType %s ${SUBCOMMAND} --help for details\n", argv[0]);
+            fprintf(stderr, "\nType ${SUBCOMMAND} --help for details\n");
             return 1;
         };
 
