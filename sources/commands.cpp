@@ -1389,6 +1389,7 @@ int commands_main(int argc, const char* const* argv)
                                                make_unique<FixCommand>(),
                                                make_unique<VersionCommand>(),
                                                make_unique<InfoCommand>()};
+        const char* const program_name = argv[0];
 
         auto print_usage = [&]() {
             fputs("Available subcommands:\n\n", stderr);
@@ -1409,7 +1410,7 @@ int commands_main(int argc, const char* const* argv)
                 }
             }
 
-            fprintf(stderr, "\nType %s ${SUBCOMMAND} --help for details\n", argv[0]);
+            fprintf(stderr, "\nType %s ${SUBCOMMAND} --help for details\n", program_name);
             return 1;
         };
 
