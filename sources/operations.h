@@ -78,6 +78,7 @@ namespace operations
         optional<uint32_t> flags;
         optional<unsigned> block_size;
         optional<unsigned> iv_size;
+        std::shared_ptr<FileStream> lock_stream;
 
         MountOptions();
         ~MountOptions();
@@ -103,6 +104,7 @@ namespace operations
         optional<fuse_uid_t> uid_override;
         optional<fuse_gid_t> gid_override;
         uint32_t flags;
+        std::shared_ptr<FileStream> lock_stream;
 
         explicit FileSystemContext(const MountOptions& opt);
 

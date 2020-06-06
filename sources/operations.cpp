@@ -36,13 +36,22 @@ namespace operations
         , root(opt.root)
         , root_id()
         , flags(opt.flags.value())
+        , lock_stream(opt.lock_stream)
     {
         if (opt.version.value() > 3)
             throwInvalidArgumentException("This context object only works with format 1,2,3");
         block_size = opt.block_size.value();
     }
 
-    FileSystemContext::~FileSystemContext() {}
+    FileSystemContext::~FileSystemContext()
+    {
+        if (!lock_stream)
+        {
+            return;
+        }
+        lock_stream->close();
+        root->remove_file_nothrow(LOCK_FILENAME);
+    }
 }    // namespace operations
 }    // namespace securefs
 

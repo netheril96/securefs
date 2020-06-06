@@ -1096,19 +1096,12 @@ public:
             INFO_LOG("Mounting as a Unicode normalized filesystem");
             fsopt.flags.value() |= kOptionNFCFileName;
         }
-        std::shared_ptr<FileStream> lock_stream;
-        DEFER(if (lock_stream) {
-            lock_stream->close();
-            lock_stream.reset();
-            fsopt.root->remove_file_nothrow(operations::LOCK_FILENAME);
-        });
 
         if (config.version < 4)
         {
-
             try
             {
-                lock_stream = fsopt.root->open_file_stream(
+                fsopt.lock_stream = fsopt.root->open_file_stream(
                     securefs::operations::LOCK_FILENAME, O_CREAT | O_EXCL | O_RDONLY, 0644);
             }
             catch (const ExceptionBase& e)
