@@ -48,6 +48,24 @@ First `fuse` must be installed.
 
 Then clone the sources by `git clone --recursive`, and execute `linux-build.sh`.
 
+### FreeBSD (unofficial)
+
+Install using packages (recommended):
+```bash
+pkg install fusefs-securefs
+```
+
+or ports:
+```bash
+make -C /usr/ports/sysutils/fusefs-securefs install
+```
+
+Make sure you load the fuse kernel module before using securefs:
+```bash
+kldload fuse
+sysrc -f /boot/loader.conf fuse_load="YES"  # Load fuse automatically at boot
+```
+
 ## Basic usage
 
 *It is recommended to disable or encrypt the swap and hibernation file. Otherwise plaintext and keys stored in the main memory may be written to disk by the OS at any time.*
