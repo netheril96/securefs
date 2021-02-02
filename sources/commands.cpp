@@ -1409,19 +1409,20 @@ int commands_main(int argc, const char* const* argv)
 
         if (argc < 2)
             return print_usage();
-        argc--;
-        argv++;
-
+        
         for (std::unique_ptr<CommandBase>& command : cmds)
         {
-            if (strcmp(argv[0], command->long_name()) == 0
-                || (argv[0] != nullptr && argv[0][0] == command->short_name() && argv[0][1] == 0))
+            if (strcmp(argv[1], command->long_name()) == 0
+                || (argv[1] != nullptr && argv[1][0] == command->short_name() && argv[1][1] == 0))
             {
-                command->parse_cmdline(argc, argv);
+                command->parse_cmdline(argc-1, argv+1);
                 return command->execute();
             }
         }
-        return print_usage();
+        //when run "securefs --help " from cmd of my win7/64, 
+        //argv++ change program_name to "--help" and cause this output "Type --help ${SUBCOMMAND} --help for details"
+        //this maybe a bug of C++ compiler you use.
+        return print_usage(); 
     }
     catch (const TCLAP::ArgException& e)
     {
