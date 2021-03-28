@@ -1252,12 +1252,6 @@ public:
                 printf("WinFsp %u.%u\n", vn >> 16, vn & 0xFFFFu);
             }
         }
-#elif defined(__APPLE__)
-        typedef const char* version_function(void);
-        auto osx_version_func
-            = reinterpret_cast<version_function*>(::dlsym(RTLD_DEFAULT, "osxfuse_version"));
-        if (osx_version_func)
-            printf("osxfuse %s\n", osx_version_func());
 #else
         typedef int version_function(void);
         auto fuse_version_func

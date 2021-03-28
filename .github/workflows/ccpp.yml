@@ -40,7 +40,7 @@ jobs:
         with:
           python-version: "3.x"
       - name: install
-        run: brew cask install osxfuse
+        run: brew install macfuse
       - name: configure
         run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..
       - name: build
