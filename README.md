@@ -28,7 +28,7 @@ There are already many encrypting filesystem in widespread use. Some notable one
 
 ### macOS
 
-Install with [Homebrew](https://brew.sh). [osxfuse](https://osxfuse.github.io) has to be installed beforehand.
+Install with [Homebrew](https://brew.sh). [macFUSE](https://osxfuse.github.io) has to be installed beforehand.
 ```
 brew install securefs
 ```

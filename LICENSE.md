@@ -758,13 +758,11 @@ Public License instead of this License.
 
 ------------------------------------------------------------------------------
 
-# [osxfuse] (https://github.com/osxfuse/osxfuse)
+# [macFUSE] (https://github.com/osxfuse/osxfuse)
 
-FUSE for macOS is a software developed by the osxfuse project and is covered
-under the following BSD-style license:
+macFUSE is covered under the following license:
 
-  Copyright (c) 2011-2016 Benjamin Fleischer
-  Copyright (c) 2011-2012 Erik Larsson
+  Copyright (c) 2011-2021 Benjamin Fleischer
   All rights reserved.
 
   Redistribution  and  use  in  source  and  binary  forms,  with   or   without
@@ -775,9 +773,13 @@ under the following BSD-style license:
   2. Redistributions in binary form must reproduce the above  copyright  notice,
      this list of conditions and the following disclaimer in  the  documentation
      and/or other materials provided with the distribution.
-  3. Neither the name of osxfuse nor the names of its contributors may  be  used
-     to endorse or promote products derived from this software without  specific
-     prior written permission.
+  3. Neither the name of the copyright holder nor the names of its  contributors
+     may be used to endorse or  promote  products  derived  from  this  software 
+     without specific prior written permission.
+  4. Redistributions in binary form, bundled with commercial software,  are  not
+     allowed without  specific  prior  written  permission.  This  includes  the
+     automated download or installation or  both  of  the  binary  form  in  the
+     context of commercial software.
 
   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND  CONTRIBUTORS  "AS  IS"
   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,  BUT  NOT  LIMITED  TO,  THE
@@ -791,9 +793,9 @@ under the following BSD-style license:
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN  IF  ADVISED  OF  THE
   POSSIBILITY OF SUCH DAMAGE.
 
-FUSE for macOS is a fork of MacFUSE. MacFUSE has been developed by Google Inc..
-Additional information and the original source of MacFUSE are available on
-http://code.google.com/p/macfuse/. MacFUSE is covered under the following
+macFUSE is a fork of the legacy Google MacFUSE software. Additional information
+and the original source code of Google MacFUSE are available on
+http://code.google.com/p/macfuse/. Google MacFUSE is covered under the following
 BSD-style license:
 
   Copyright (c) 2007—2009 Google Inc.
@@ -830,9 +832,9 @@ BSD-style license:
 Portions of this package were derived from code developed by other authors.
 Please read further for specific details.
 
-* Unless otherwise noted, parts of the FUSE for macOS kernel extension contain
-  code derived from the FreeBSD version of FUSE, which is covered under the
-  following BSD-style license:
+* Unless otherwise noted, parts of the macFUSE kernel extension contain code
+  derived from the FreeBSD version of FUSE, which is covered under the following
+  BSD-style license:
 
     Copyright (C) 2005 Csaba Henk. All rights reserved.
 
@@ -856,12 +858,13 @@ Please read further for specific details.
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT  OF  THE  USE  OF
     THIS  SOFTWARE,  EVEN  IF  ADVISED  OF  THE  POSSIBILITY  OF  SUCH   DAMAGE.
 
-* Parts of the FUSE for macOS kernel extension contain code derived from Tuxera
-  Inc.'s "rebel" branch. The original source of the "rebel" branch is available
-  on https://github.com/tuxera. These modifications are covered under the
-  following BSD-style license:
+* Parts of the macFUSE kernel extension contain code derived from Tuxera's
+  "rebel" branch. The original source code of the "rebel" branch is available on
+  https://github.com/tuxera. These modifications are covered under the following
+  BSD-style license:
 
     Copyright (c) 2010 Tuxera Inc.
+    Copyright (c) 2011-2012 Erik Larsson
     All rights reserved.
 
     Redistribution  and  use  in  source  and  binary  forms,  with  or  without
@@ -888,9 +891,9 @@ Please read further for specific details.
     ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED  OF  THE
     POSSIBILITY OF SUCH DAMAGE.
 
-* Parts of FUSE for macOS contain code derived from Fuse4X. The original source
-  of Fuse4X is available on https://github.com/fuse4x. Fuse4X is covered under
-  the following BSD-style license:
+* Parts of macFUSE contain code derived from Fuse4X. The original source code of
+  Fuse4X is available on https://github.com/fuse4x. Fuse4X is covered under the
+  following BSD-style license:
 
     Copyright (c) 2011 Anatol Pomozov
     All rights reserved.
@@ -916,21 +919,20 @@ Please read further for specific details.
     ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED  OF  THE
     POSSIBILITY OF SUCH DAMAGE.
 
-* Parts of the mount_osxfuse command-line program are covered under the Apple
+* Parts of the mount_macfuse command-line program are covered under the Apple
   Public Source License (APSL). You can read the APSL at:
 
     http://www.opensource.apple.com/license/apsl/
 
-* fuse_kernel.h is an unmodified copy of the interface header from the Linux
+* fuse_kernel.h is a modified copy of the interface header from the Linux
   FUSE distribution (https://github.com/libfuse/libfuse). fuse_kernel.h can be
   redistributed either under the GPL or under the BSD license. It is being
   redistributed here under the BSD license.
 
-* fuse_nodehash.c is a slightly modified version of HashNode.c from an
-  Apple Developer Technical Support (DTS) sample code example. The original
-  source, which is available on
-  http://developer.apple.com/library/mac/#samplecode/MFSLives/, has the
-  following disclaimer:
+* fuse_nodehash.c is a modified version of HashNode.c from an Apple Developer
+  Technical Support (DTS) sample code example. The original source, which is
+  available on http://developer.apple.com/library/mac/#samplecode/MFSLives/,
+  has the following disclaimer:
 
     Disclaimer: IMPORTANT: This Apple software  is  supplied  to  you  by  Apple
     Computer, Inc.  Apple") in consideration of your agreement to the  following
