@@ -81,10 +81,12 @@ void fix_hardlink_count(operations::FileSystemContext* fs,
                         NLinkFixPhase phase)
 {
     std::vector<std::pair<id_type, int>> listings;
-    dir->iterate_over_entries([&listings](const std::string&, const id_type& id, int type) {
-        listings.emplace_back(id, type);
-        return true;
-    });
+    dir->iterate_over_entries(
+        [&listings](const std::string&, const id_type& id, int type)
+        {
+            listings.emplace_back(id, type);
+            return true;
+        });
 
     for (auto&& entry : listings)
     {
@@ -128,10 +130,12 @@ void fix_helper(operations::FileSystemContext* fs,
                 std::unordered_set<id_type, id_hash>* all_ids)
 {
     std::vector<std::tuple<std::string, id_type, int>> listings;
-    dir->iterate_over_entries([&listings](const std::string& name, const id_type& id, int type) {
-        listings.emplace_back(name, id, type);
-        return true;
-    });
+    dir->iterate_over_entries(
+        [&listings](const std::string& name, const id_type& id, int type)
+        {
+            listings.emplace_back(name, id, type);
+            return true;
+        });
 
     for (auto&& entry : listings)
     {
@@ -171,7 +175,8 @@ void fix_helper(operations::FileSystemContext* fs,
                    FileBase::type_name(type));
             fflush(stdout);
 
-            auto fix_type = [&]() {
+            auto fix_type = [&]()
+            {
                 dir->remove_entry(name, id, type);
                 dir->add_entry(name, id, real_type);
             };
@@ -213,12 +218,14 @@ void fix(const std::string& basedir, operations::FileSystemContext* fs)
                    hexify(id).c_str());
             fflush(stdout);
 
-            auto recover = [&]() {
+            auto recover = [&]()
+            {
                 auto base = open_as(fs->table, id, FileBase::BASE);
                 root_dir.get_as<Directory>()->add_entry(hexify(id), id, base->get_real_type());
             };
 
-            auto remove = [&]() {
+            auto remove = [&]()
+            {
                 FileBase* base = fs->table.open_as(id, FileBase::BASE);
                 int real_type = base->get_real_type();
                 fs->table.close(base);
@@ -683,9 +690,8 @@ public:
 
         auto config_stream
             = open_config_stream(get_real_config_path(), O_WRONLY | O_CREAT | O_EXCL);
-        DEFER(if (std::uncaught_exception()) {
-            OSService::get_default().remove_file(get_real_config_path());
-        });
+        DEFER(if (std::uncaught_exception())
+              { OSService::get_default().remove_file(get_real_config_path()); });
         write_config(config_stream.get(),
                      keyfile.getValue(),
                      pbkdf.getValue(),
@@ -866,9 +872,10 @@ private:
     std::vector<const char*> to_c_style_args(const std::vector<std::string>& args)
     {
         std::vector<const char*> result(args.size());
-        std::transform(args.begin(), args.end(), result.begin(), [](const std::string& s) {
-            return s.c_str();
-        });
+        std::transform(args.begin(),
+                       args.end(),
+                       result.begin(),
+                       [](const std::string& s) { return s.c_str(); });
         return result;
     }
 
@@ -1027,7 +1034,7 @@ public:
             fuse_args.push_back("noappledouble");
         }
 #elif _WIN32
-        fuse_args.push_back("-ouid=-1,gid=-1");
+        fuse_args.push_back("-ouid=-1,gid=-1,umask=0");
 #else
         fuse_args.push_back("-o");
         fuse_args.push_back("big_writes");
@@ -1378,7 +1385,8 @@ int commands_main(int argc, const char* const* argv)
                                                make_unique<InfoCommand>()};
         const char* const program_name = argv[0];
 
-        auto print_usage = [&]() {
+        auto print_usage = [&]()
+        {
             fputs("Available subcommands:\n\n", stderr);
 
             for (auto&& command : cmds)
