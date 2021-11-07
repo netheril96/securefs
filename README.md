@@ -43,8 +43,8 @@ Linux users have to build it from source.
 
 First `fuse` must be installed.
 
-* On Debian based Linux distro, `sudo apt-get install fuse libfuse-dev build-essential cmake`.
-* On RPM based Linux, `sudo yum install fuse fuse-devel`.
+* On Debian based Linux distro, `sudo apt-get install fuse libfuse-dev build-essential cmake python3`.
+* On RPM based Linux, `sudo yum install fuse fuse-devel python3`.
 
 Then clone the sources by `git clone --recursive`, and execute `linux-build.sh`.
 
