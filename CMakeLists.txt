@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 
 project(securefs)
+enable_testing()
 if (POLICY CMP0048)
   cmake_policy(SET CMP0048 NEW)
 endif()
@@ -117,7 +118,6 @@ int main() {
 configure_file(sources/securefs_config.in securefs_config.h)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-enable_testing()
 add_test(NAME sec_test COMMAND securefs_test)
 find_package(Python3 COMPONENTS Interpreter)
 if (Python3_FOUND)
