@@ -1,4 +1,6 @@
 cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 11)
 
 project(securefs)
 enable_testing()
@@ -24,7 +26,6 @@ if (UNIX)
     include_directories(${FUSE_INCLUDE_DIR})
     link_libraries(${FUSE_LIBRARIES})
     add_compile_options(-Wall -Wextra -Wno-unknown-pragmas)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=gnu++11")
 
     if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         add_compile_options(-Wthread-safety -Wthread-safety-negative)
