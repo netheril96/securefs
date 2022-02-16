@@ -690,8 +690,9 @@ public:
 
         auto config_stream
             = open_config_stream(get_real_config_path(), O_WRONLY | O_CREAT | O_EXCL);
-        DEFER(if (std::uncaught_exception())
-              { OSService::get_default().remove_file(get_real_config_path()); });
+        DEFER(if (std::uncaught_exception()) {
+            OSService::get_default().remove_file(get_real_config_path());
+        });
         write_config(config_stream.get(),
                      keyfile.getValue(),
                      pbkdf.getValue(),
@@ -758,6 +759,25 @@ private:
         "When set to true, ask for password even if a key file is used. "
         "password+keyfile provides even stronger security than one of them alone.",
         false};
+    TCLAP::ValueArg<std::string> oldpass{
+        "",
+        "oldpass",
+        "The old password (prefer manually typing or piping since those methods are more secure)",
+        false,
+        "",
+        "string"};
+    TCLAP::ValueArg<std::string> newpass{
+        "",
+        "newpass",
+        "The new password (prefer manually typing or piping since those methods are more secure)",
+        false,
+        "",
+        "string"};
+
+    static void assign(StringRef value, CryptoPP::AlignedSecByteBlock& output)
+    {
+        output.Assign(reinterpret_cast<const byte*>(value.data()), value.size());
+    }
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
@@ -770,24 +790,33 @@ public:
         cmdline.add(&new_key_file);
         cmdline.add(&askoldpass);
         cmdline.add(&asknewpass);
+        cmdline.add(&oldpass);
+        cmdline.add(&newpass);
         cmdline.parse(argc, argv);
-        if (old_key_file.getValue().empty() || askoldpass.getValue())
+        if (oldpass.isSet())
+        {
+            assign(oldpass.getValue(), old_password);
+        }
+        else if (old_key_file.getValue().empty() || askoldpass.getValue())
         {
             OSService::read_password_no_confirmation("Old password: ", &old_password);
         }
         else
         {
-            old_password.Assign(reinterpret_cast<const byte*>(EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED),
-                                strlen(EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED));
+            assign(EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED, old_password);
         }
-        if (new_key_file.getValue().empty() || asknewpass.getValue())
+
+        if (newpass.isSet())
+        {
+            assign(newpass.getValue(), new_password);
+        }
+        else if (new_key_file.getValue().empty() || asknewpass.getValue())
         {
             OSService::read_password_with_confirmation("New password: ", &new_password);
         }
         else
         {
-            new_password.Assign(reinterpret_cast<const byte*>(EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED),
-                                strlen(EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED));
+            assign(EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED, new_password);
         }
     }
 
