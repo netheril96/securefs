@@ -37,6 +37,8 @@ brew install securefs
 
 Windows users can download prebuilt package from the releases section. It depends on [WinFsp](https://github.com/billziss-gh/winfsp/releases) and [VC++ 2017 redistribution package](https://support.microsoft.com/en-us/help/2977003/the-latest-supported-visual-c-downloads).
 
+On Windows, you should encrypt the pagefile to avoid leaking sensitive data on disk. Run with admin privileges with the command `fsutil behavior set EncryptPagingFile 1` before mounting a volume with `securefs`.
+
 ### Linux
 
 Linux users have to build it from source.
