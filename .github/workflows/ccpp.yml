@@ -35,6 +35,9 @@ jobs:
       - uses: actions/setup-python@v1
         with:
           python-version: "3.x"
+          cache: 'pip'
+      - name: pip
+        run: pip install xattr
       - name: install
         run: brew install macfuse
       - name: configure
