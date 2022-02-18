@@ -234,14 +234,14 @@ def make_test_case(format_version):
                     with open(fn, "wt") as f:
                         f.write("hello\n")
                     x = xattr.xattr(fn)
-                    x.set(b"abc", b"def")
-                    x.set(b"123", b"456")
+                    x.set("abc", b"def")
+                    x.set("123", b"456")
                     self.unmount()
                     self.mount()
-                    self.assertEqual(x.get(b"abc"), b"def")
-                    self.assertEqual(set(x.list()), {b"abc", b"123"})
-                    xattr.removexattr(fn, b"abc")
-                    self.assertEqual(set(x.list()), {b"123"})
+                    self.assertEqual(x.get("abc"), b"def")
+                    self.assertEqual(set(x.list()), {"abc", "123"})
+                    xattr.removexattr(fn, "abc")
+                    self.assertEqual(set(x.list()), {"123"})
                 finally:
                     try:
                         os.remove(fn)
