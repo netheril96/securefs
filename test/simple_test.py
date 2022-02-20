@@ -522,23 +522,18 @@ class ChpassTest(unittest.TestCase):
             f.write(os.urandom(9))
             return f.name
 
-    def _test_chpass(self, old_pass, new_pass, old_keyfile, new_keyfile, use_stdin):
+    def _test_chpass(
+        self, old_pass, new_pass, old_keyfile, new_keyfile, use_stdin, securefs_version
+    ):
         data_dir = get_data_dir()
         mount_point = get_mount_point()
         test_dir_path = os.path.join(mount_point, "test")
 
-        logging.info(
-            "Testing chpass on data_dir=%s mount_point=%s old_pass=%s new_pass=%s old_keyfile=%s new_keyfile=%s",
-            data_dir,
-            mount_point,
-            old_pass,
-            new_pass,
-            old_keyfile,
-            new_keyfile,
-        )
-
         securefs_create(
-            data_dir=data_dir, password=old_pass, version=4, keyfile=old_keyfile
+            data_dir=data_dir,
+            password=old_pass,
+            keyfile=old_keyfile,
+            version=securefs_version,
         )
 
         self.assertFalse(os.path.exists(test_dir_path))
@@ -578,8 +573,14 @@ class ChpassTest(unittest.TestCase):
             old_keyfile,
             new_keyfile,
             use_stdin,
+            version,
         ) in itertools.product(
-            old_passes, new_passes, old_keyfiles, new_keyfiles, [True, False]
+            old_passes,
+            new_passes,
+            old_keyfiles,
+            new_keyfiles,
+            [True, False],
+            range(1, 5),
         ):
             with self.subTest(
                 old_pass=old_pass,
@@ -587,6 +588,7 @@ class ChpassTest(unittest.TestCase):
                 old_keyfile=old_keyfile,
                 new_keyfile=new_keyfile,
                 use_stdin=use_stdin,
+                version=version,
             ):
                 if not old_pass and not old_keyfile:
                     continue
@@ -598,6 +600,7 @@ class ChpassTest(unittest.TestCase):
                     old_keyfile=old_keyfile,
                     new_keyfile=new_keyfile,
                     use_stdin=use_stdin,
+                    securefs_version=version,
                 )
 
 
