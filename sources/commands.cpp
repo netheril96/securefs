@@ -907,6 +907,32 @@ private:
                        [](const std::string& s) { return s.c_str(); });
         return result;
     }
+#ifdef WIN32
+    static bool is_letter(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
+    static bool is_drive_mount(StringRef mount_point)
+    {
+        return mount_point.size() == 2 && is_letter(mount_point[0]) && mount_point[1] == ':';
+    }
+    static bool is_network_mount(StringRef mount_point)
+    {
+        return mount_point.starts_with("\\\\") && !mount_point.starts_with("\\\\?\\");
+    }
+#endif
+
+    static std::string escape_args(const std::vector<std::string>& args)
+    {
+        std::string result;
+        for (const auto& a : args)
+        {
+            result.append(securefs::escape_nonprintable(a.data(), a.size()));
+            result.push_back(' ');
+        }
+        if (!result.empty())
+        {
+            result.pop_back();
+        }
+        return result;
+    }
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
@@ -975,11 +1001,11 @@ public:
         }
 
 #ifdef WIN32
-        auto is_letter = [](char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); };
-        if (mount_point.getValue().size() != 2 || mount_point.getValue()[1] != ':'
-            || !is_letter(mount_point.getValue().front()))
+        bool network_mount = is_network_mount(mount_point.getValue());
+        if (!network_mount && !is_drive_mount(mount_point.getValue()))
         {
-            WARN_LOG("The mount point on Windows should be a drive path, such as Z:, or some "
+            WARN_LOG("The mount point on Windows should be a drive path, such as Z:, or a network "
+                     "mount like \\\\securefs\\abcde. Otherwise some "
                      "programs will get confused due to case sensitivity");
         }
 #else
@@ -1064,6 +1090,10 @@ public:
         }
 #elif _WIN32
         fuse_args.push_back("-ouid=-1,gid=-1,umask=0");
+        if (network_mount)
+        {
+            fuse_args.push_back("--VolumePrefix=" + mount_point.getValue().substr(1));
+        }
 #else
         fuse_args.push_back("-o");
         fuse_args.push_back("big_writes");
@@ -1081,7 +1111,10 @@ public:
             }
         }
 
-        fuse_args.push_back(mount_point.getValue().c_str());
+#ifdef WIN32
+        if (!network_mount)
+#endif
+            fuse_args.push_back(mount_point.getValue());
 
         VERBOSE_LOG("Filesystem parameters: format version %d, block size %u (bytes), iv size %u "
                     "(bytes)",
@@ -1179,6 +1212,7 @@ public:
         {
             lite::init_fuse_operations(&operations, native_xattr);
         }
+        VERBOSE_LOG("Calling fuse_main with arguments: %s", escape_args(fuse_args).c_str());
         recreate_logger();
         return fuse_main(static_cast<int>(fuse_args.size()),
                          const_cast<char**>(to_c_style_args(fuse_args).data()),
