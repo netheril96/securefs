@@ -7,6 +7,7 @@
 #include "operations.h"
 #include "platform.h"
 
+#include <argon2.h>
 #include <cryptopp/cpu.h>
 #include <cryptopp/hmac.h>
 #include <cryptopp/osrng.h>
@@ -42,8 +43,11 @@ const char* const CONFIG_FILE_NAME = ".securefs.json";
 const unsigned MIN_ITERATIONS = 20000;
 const unsigned MIN_DERIVE_SECONDS = 1;
 const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
+
 const char* const PBKDF_ALGO_PKCS5 = "pkcs5-pbkdf2-hmac-sha256";
 const char* const PBKDF_ALGO_SCRYPT = "scrypt";
+const char* const PBKDF_ALGO_ARGON2ID = "argon2id";
+
 const char* const EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED = " ";
 
 const char* get_version_header(unsigned version)
@@ -320,6 +324,26 @@ Json::Value generate_config(unsigned int version,
                                    password_derived_key.data(),
                                    password_derived_key.size());
     }
+    else if (pbkdf_algorithm == PBKDF_ALGO_ARGON2ID)
+    {
+        uint32_t t_cost = rounds > 0 ? rounds : 10, m_cost = (1u << 18u), p = 4;
+        config["iterations"] = t_cost;
+        config["argon2_m_cost"] = m_cost;
+        config["argon2_p"] = p;
+        int rc = argon2id_hash_raw(t_cost,
+                                   m_cost,
+                                   p,
+                                   password,
+                                   pass_len,
+                                   salt.data(),
+                                   salt.size(),
+                                   password_derived_key.data(),
+                                   password_derived_key.size());
+        if (!rc)
+        {
+            throw_runtime_error("Argon2 hashing failed with status code " + std::to_string(rc));
+        }
+    }
     else
     {
         throw_runtime_error("Unknown pbkdf algorithm " + pbkdf_algorithm);
@@ -436,6 +460,24 @@ bool parse_config(const Json::Value& config,
                          p,
                          password_derived_key.data(),
                          password_derived_key.size());
+    }
+    else if (pbkdf_algorithm == PBKDF_ALGO_ARGON2ID)
+    {
+        auto m_cost = config["argon2_m_cost"].asUInt();
+        auto p = config["argon2_p"].asUInt();
+        int rc = argon2id_hash_raw(iterations,
+                                   m_cost,
+                                   p,
+                                   password,
+                                   pass_len,
+                                   salt.data(),
+                                   salt.size(),
+                                   password_derived_key.data(),
+                                   password_derived_key.size());
+        if (!rc)
+        {
+            throw_runtime_error("Argon2 hashing failed with status code " + std::to_string(rc));
+        }
     }
     else
     {
