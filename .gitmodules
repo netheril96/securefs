@@ -2,3 +2,6 @@
 	path = external/utf8proc
 	url = https://github.com/JuliaStrings/utf8proc.git
 	branch = release-1.2
+[submodule "external/argon2"]
+	path = external/argon2
+	url = https://github.com/netheril96/phc-winner-argon2
