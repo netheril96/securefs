@@ -89,6 +89,7 @@ def securefs_mount(
 
 
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
+    time.sleep(0.125) # Deal with some race condition
     try:
         if IS_WINDOWS:
             p.send_signal(signal.CTRL_BREAK_EVENT)
