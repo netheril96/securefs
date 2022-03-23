@@ -79,14 +79,4 @@ unsigned int pbkdf_hmac_sha256(const void* password,
                                size_t derive_len);
 
 void generate_random(void* buffer, size_t size);
-
-void libscrypt_scrypt(const uint8_t* passwd,
-                      size_t passwdlen,
-                      const uint8_t* salt,
-                      size_t saltlen,
-                      uint64_t N,
-                      uint32_t r,
-                      uint32_t p,
-                      uint8_t* buf,
-                      size_t buflen);
 }    // namespace securefs

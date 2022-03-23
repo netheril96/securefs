@@ -1,4 +1,5 @@
 #include <catch.hpp>
+#include <cryptopp/scrypt.h>
 
 #include "crypto.h"
 #include "lite_fs.h"
@@ -304,15 +305,16 @@ static void test_scrypt(const char* password,
                         const char* expected)
 {
     std::vector<byte> output(dkLen);
-    securefs::libscrypt_scrypt(reinterpret_cast<const byte*>(password),
-                               strlen(password),
-                               reinterpret_cast<const byte*>(salt),
-                               strlen(salt),
-                               N,
-                               r,
-                               p,
-                               output.data(),
-                               dkLen);
+    CryptoPP::Scrypt scrypt;
+    scrypt.DeriveKey(output.data(),
+                     output.size(),
+                     reinterpret_cast<const byte*>(password),
+                     strlen(password),
+                     reinterpret_cast<const byte*>(salt),
+                     strlen(salt),
+                     N,
+                     r,
+                     p);
     CAPTURE(password);
     CAPTURE(salt);
     CHECK(memcmp(expected, output.data(), dkLen) == 0);

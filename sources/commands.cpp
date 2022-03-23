@@ -11,6 +11,7 @@
 #include <cryptopp/cpu.h>
 #include <cryptopp/hmac.h>
 #include <cryptopp/osrng.h>
+#include <cryptopp/scrypt.h>
 #include <cryptopp/secblock.h>
 #include <fuse.h>
 #include <json/json.h>
@@ -314,15 +315,16 @@ Json::Value generate_config(unsigned int version,
         config["iterations"] = N;
         config["scrypt_r"] = r;
         config["scrypt_p"] = p;
-        securefs::libscrypt_scrypt(static_cast<const byte*>(password),
-                                   pass_len,
-                                   salt.data(),
-                                   salt.size(),
-                                   N,
-                                   r,
-                                   p,
-                                   password_derived_key.data(),
-                                   password_derived_key.size());
+        CryptoPP::Scrypt scrypt;
+        scrypt.DeriveKey(password_derived_key.data(),
+                         password_derived_key.size(),
+                         static_cast<const byte*>(password),
+                         pass_len,
+                         salt.data(),
+                         salt.size(),
+                         N,
+                         r,
+                         p);
     }
     else if (pbkdf_algorithm == PBKDF_ALGO_ARGON2ID)
     {
@@ -455,15 +457,16 @@ bool parse_config(const Json::Value& config,
     {
         auto r = config["scrypt_r"].asUInt();
         auto p = config["scrypt_p"].asUInt();
-        libscrypt_scrypt(static_cast<const byte*>(password),
+        CryptoPP::Scrypt scrypt;
+        scrypt.DeriveKey(password_derived_key.data(),
+                         password_derived_key.size(),
+                         static_cast<const byte*>(password),
                          pass_len,
                          salt.data(),
                          salt.size(),
                          iterations,
                          r,
-                         p,
-                         password_derived_key.data(),
-                         password_derived_key.size());
+                         p);
     }
     else if (pbkdf_algorithm == PBKDF_ALGO_ARGON2ID)
     {
