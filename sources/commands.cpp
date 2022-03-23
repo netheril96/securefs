@@ -664,7 +664,7 @@ protected:
 static const std::string message_for_setting_pbkdf
     = strprintf("The algorithm to stretch passwords. Use %s for maximum protection (default), or "
                 "%s for compatibility with old versions of securefs",
-                PBKDF_ALGO_SCRYPT,
+                PBKDF_ALGO_ARGON2ID,
                 PBKDF_ALGO_PKCS5);
 
 class CreateCommand : public _SinglePasswordCommandBase
@@ -688,7 +688,7 @@ private:
         "store_time",
         "alias for \"--format 3\", enables the extension where timestamp are stored and encrypted"};
     TCLAP::ValueArg<std::string> pbkdf{
-        "", "pbkdf", message_for_setting_pbkdf, false, PBKDF_ALGO_SCRYPT, "string"};
+        "", "pbkdf", message_for_setting_pbkdf, false, PBKDF_ALGO_ARGON2ID, "string"};
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
@@ -784,7 +784,7 @@ private:
         0,
         "integer"};
     TCLAP::ValueArg<std::string> pbkdf{
-        "", "pbkdf", message_for_setting_pbkdf, false, PBKDF_ALGO_SCRYPT, "string"};
+        "", "pbkdf", message_for_setting_pbkdf, false, PBKDF_ALGO_ARGON2ID, "string"};
     TCLAP::ValueArg<std::string> old_key_file{
         "", "oldkeyfile", "Path to original key file", false, "", "path"};
     TCLAP::ValueArg<std::string> new_key_file{
