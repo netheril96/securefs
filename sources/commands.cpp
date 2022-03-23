@@ -339,7 +339,7 @@ Json::Value generate_config(unsigned int version,
                                    salt.size(),
                                    password_derived_key.data(),
                                    password_derived_key.size());
-        if (!rc)
+        if (rc)
         {
             throw_runtime_error("Argon2 hashing failed with status code " + std::to_string(rc));
         }
@@ -474,7 +474,7 @@ bool parse_config(const Json::Value& config,
                                    salt.size(),
                                    password_derived_key.data(),
                                    password_derived_key.size());
-        if (!rc)
+        if (rc)
         {
             throw_runtime_error("Argon2 hashing failed with status code " + std::to_string(rc));
         }
