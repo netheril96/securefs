@@ -326,7 +326,11 @@ Json::Value generate_config(unsigned int version,
     }
     else if (pbkdf_algorithm == PBKDF_ALGO_ARGON2ID)
     {
-        uint32_t t_cost = rounds > 0 ? rounds : 10, m_cost = (1u << 18u), p = 4;
+        const char* env_m_cost = getenv("SECUREFS_ARGON2_M_COST");
+        const char* env_p = getenv("SECUREFS_ARGON2_P");
+        uint32_t t_cost = rounds > 0 ? rounds : 9,
+                 m_cost = env_m_cost ? std::stoi(env_m_cost) : (1u << 18u),
+                 p = env_p ? std::stoi(env_p) : 4;
         config["iterations"] = t_cost;
         config["argon2_m_cost"] = m_cost;
         config["argon2_p"] = p;

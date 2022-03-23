@@ -605,5 +605,7 @@ class ChpassTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    os.environ["SECUREFS_ARGON2_M_COST"] = "16"
+    os.environ["SECUREFS_ARGON2_P"] = "2"
     logging.getLogger().setLevel(logging.INFO)
     unittest.main()
