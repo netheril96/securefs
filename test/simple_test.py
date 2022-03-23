@@ -89,7 +89,7 @@ def securefs_mount(
 
 
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
-    time.sleep(0.125) # Deal with some race condition
+    time.sleep(0.125)  # Deal with some race condition
     try:
         if IS_WINDOWS:
             p.send_signal(signal.CTRL_BREAK_EVENT)
@@ -416,86 +416,64 @@ def make_test_case(format_version):
     return SimpleSecureFSTestBase
 
 
-class TestVersion1(make_test_case(1)):
-    pass
+reference_data_dir = shutil.copytree(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "reference"),
+    f"tmp/{uuid.uuid4()}",
+)
 
 
-class TestVersion2(make_test_case(2)):
-    pass
+def make_regression_test(version: int, use_keyfile: bool):
+    class RegressionTestBase(unittest.TestCase):
+        """
+        Ensures that future versions of securefs can read old versions just fine.
+        """
 
+        def test_regression(self):
+            mount_point = get_mount_point()
+            if use_keyfile:
+                p = securefs_mount(
+                    os.path.join(reference_data_dir, f"{version}-keyfile"),
+                    mount_point,
+                    password=None,
+                    keyfile=os.path.join(reference_data_dir, "keyfile"),
+                )
+            else:
+                p = securefs_mount(
+                    os.path.join(reference_data_dir, str(version)),
+                    mount_point,
+                    password="abc",
+                )
+            try:
+                self.compare_directory(
+                    os.path.join(reference_data_dir, "plain"), mount_point
+                )
+            finally:
+                securefs_unmount(p, mount_point)
 
-class TestVersion3(make_test_case(3)):
-    pass
+        def compare_directory(self, dir1, dir2):
+            listing1 = list_dir_recursive(dir1, relpath=True)
+            listing2 = list_dir_recursive(dir2, relpath=True)
 
-
-class TestVersion4(make_test_case(4)):
-    pass
-
-
-class RegressionTest(unittest.TestCase):
-    """
-    Ensures that future versions of securefs can read old versions just fine.
-    """
-
-    def test_all(self):
-        # Because securefs cannot handle readonly filesystem for now, we need to copy
-        # all the reference data to the working dir.
-        reference_data_dir = shutil.copytree(
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "reference"),
-            f"tmp/{uuid.uuid4()}",
-        )
-        for i in [1, 2, 3, 4]:
-            self._run_test(
-                version=i, use_keyfile=False, reference_data_dir=reference_data_dir
+            self.assertEqual(
+                listing1,
+                listing2,
+                f"{dir1} and {dir2} differ in file names",
             )
-            self._run_test(
-                version=i, use_keyfile=True, reference_data_dir=reference_data_dir
-            )
 
-    def _run_test(self, version: int, use_keyfile: bool, reference_data_dir: str):
-        mount_point = get_mount_point()
-        if use_keyfile:
-            p = securefs_mount(
-                os.path.join(reference_data_dir, f"{version}-keyfile"),
-                mount_point,
-                password=None,
-                keyfile=os.path.join(reference_data_dir, "keyfile"),
-            )
-        else:
-            p = securefs_mount(
-                os.path.join(reference_data_dir, str(version)),
-                mount_point,
-                password="abc",
-            )
-        try:
-            self.compare_directory(
-                os.path.join(reference_data_dir, "plain"), mount_point
-            )
-        finally:
-            securefs_unmount(p, mount_point)
+            for fn in listing1:
+                fn1 = os.path.join(dir1, fn)
+                fn2 = os.path.join(dir2, fn)
 
-    def compare_directory(self, dir1, dir2):
-        listing1 = list_dir_recursive(dir1, relpath=True)
-        listing2 = list_dir_recursive(dir2, relpath=True)
+                if os.path.isdir(fn1) and os.path.isdir(fn2):
+                    continue
 
-        self.assertEqual(
-            listing1,
-            listing2,
-            f"{dir1} and {dir2} differ in file names",
-        )
+                with open(fn1, "rb") as f:
+                    data1 = f.read()
+                with open(fn2, "rb") as f:
+                    data2 = f.read()
+                self.assertEqual(data1, data2, f"{fn1} and {fn2} differ in contents")
 
-        for fn in listing1:
-            fn1 = os.path.join(dir1, fn)
-            fn2 = os.path.join(dir2, fn)
-
-            if os.path.isdir(fn1) and os.path.isdir(fn2):
-                continue
-
-            with open(fn1, "rb") as f:
-                data1 = f.read()
-            with open(fn2, "rb") as f:
-                data2 = f.read()
-            self.assertEqual(data1, data2, f"{fn1} and {fn2} differ in contents")
+    return RegressionTestBase
 
 
 def list_dir_recursive(dirname: str, relpath=False) -> Set[str]:
@@ -515,95 +493,114 @@ def list_dir_recursive(dirname: str, relpath=False) -> Set[str]:
     return result
 
 
-class ChpassTest(unittest.TestCase):
-    def _generate_keyfile(self):
-        with tempfile.NamedTemporaryFile(
-            dir="tmp", mode="wb", delete=False, prefix="key"
-        ) as f:
-            f.write(os.urandom(9))
-            return f.name
+def generate_keyfile():
+    with tempfile.NamedTemporaryFile(
+        dir="tmp", mode="wb", delete=False, prefix="key"
+    ) as f:
+        f.write(os.urandom(9))
+        return f.name
 
-    def _test_chpass(
-        self, old_pass, new_pass, old_keyfile, new_keyfile, use_stdin, securefs_version
-    ):
-        data_dir = get_data_dir()
-        mount_point = get_mount_point()
-        test_dir_path = os.path.join(mount_point, "test")
 
-        securefs_create(
-            data_dir=data_dir,
-            password=old_pass,
-            keyfile=old_keyfile,
-            version=securefs_version,
-        )
+def make_chpass_test(
+    old_pass, new_pass, old_keyfile, new_keyfile, use_stdin, securefs_version
+):
+    class ChpassTestBase(unittest.TestCase):
+        def test_chpass(self):
+            data_dir = get_data_dir()
+            mount_point = get_mount_point()
+            test_dir_path = os.path.join(mount_point, "test")
 
-        self.assertFalse(os.path.exists(test_dir_path))
+            securefs_create(
+                data_dir=data_dir,
+                password=old_pass,
+                keyfile=old_keyfile,
+                version=securefs_version,
+            )
 
-        p = securefs_mount(data_dir, mount_point, old_pass, old_keyfile)
-        try:
-            os.mkdir(test_dir_path)
-        finally:
-            securefs_unmount(p, mount_point)
+            self.assertFalse(os.path.exists(test_dir_path))
 
-        self.assertFalse(os.path.exists(test_dir_path))
+            p = securefs_mount(data_dir, mount_point, old_pass, old_keyfile)
+            try:
+                os.mkdir(test_dir_path)
+            finally:
+                securefs_unmount(p, mount_point)
 
-        securefs_chpass(
-            data_dir,
-            old_pass=old_pass,
-            new_pass=new_pass,
-            old_keyfile=old_keyfile,
-            new_keyfile=new_keyfile,
-            use_stdin=use_stdin,
-        )
+            self.assertFalse(os.path.exists(test_dir_path))
 
-        p = securefs_mount(data_dir, mount_point, new_pass, new_keyfile)
-        try:
-            self.assertTrue(os.path.isdir(test_dir_path))
-        finally:
-            securefs_unmount(p, mount_point)
-
-    def test_chpass(self):
-        old_passes = [None, "abc"]
-        new_passes = [None, "def"]
-        old_keyfiles = [None, self._generate_keyfile()]
-        new_keyfiles = [None, self._generate_keyfile()]
-
-        for (
-            old_pass,
-            new_pass,
-            old_keyfile,
-            new_keyfile,
-            use_stdin,
-            version,
-        ) in itertools.product(
-            old_passes,
-            new_passes,
-            old_keyfiles,
-            new_keyfiles,
-            [True, False],
-            range(1, 5),
-        ):
-            with self.subTest(
+            securefs_chpass(
+                data_dir,
                 old_pass=old_pass,
                 new_pass=new_pass,
                 old_keyfile=old_keyfile,
                 new_keyfile=new_keyfile,
                 use_stdin=use_stdin,
-                version=version,
-            ):
-                if not old_pass and not old_keyfile:
-                    continue
-                if not new_pass and not new_keyfile:
-                    continue
-                self._test_chpass(
+            )
+
+            p = securefs_mount(data_dir, mount_point, new_pass, new_keyfile)
+            try:
+                self.assertTrue(os.path.isdir(test_dir_path))
+            finally:
+                securefs_unmount(p, mount_point)
+
+    return ChpassTestBase
+
+
+def make_all_tests():
+
+    for version in range(1, 5):
+        class_name = f"SimpleSecureFSTest{version}"
+        globals()[class_name] = type(class_name, (make_test_case(version),), {})
+
+        for use_keyfile in [True, False]:
+            class_name = f"RegressionTest{version}(keyfile={use_keyfile})"
+            globals()[class_name] = type(
+                class_name,
+                (make_regression_test(version=version, use_keyfile=use_keyfile),),
+                {},
+            )
+
+    old_passes = [None, "abc"]
+    new_passes = [None, "def"]
+    old_keyfiles = [None, generate_keyfile()]
+    new_keyfiles = [None, generate_keyfile()]
+
+    for (
+        old_pass,
+        new_pass,
+        old_keyfile,
+        new_keyfile,
+        use_stdin,
+        version,
+    ) in itertools.product(
+        old_passes,
+        new_passes,
+        old_keyfiles,
+        new_keyfiles,
+        [True, False],
+        range(1, 5),
+    ):
+        if not old_pass and not old_keyfile:
+            continue
+        if not new_pass and not new_keyfile:
+            continue
+        class_name = f"ChpassTest{version}{dict(old_pass=old_pass,new_pass=new_pass,old_keyfile=old_keyfile,new_keyfile=new_keyfile,use_stdin=use_stdin)}"
+        globals()[class_name] = type(
+            class_name,
+            (
+                make_chpass_test(
                     old_pass=old_pass,
                     new_pass=new_pass,
                     old_keyfile=old_keyfile,
                     new_keyfile=new_keyfile,
                     use_stdin=use_stdin,
                     securefs_version=version,
-                )
+                ),
+            ),
+            {},
+        )
 
+
+make_all_tests()
 
 if __name__ == "__main__":
     logging.getLogger().setLevel(logging.INFO)
