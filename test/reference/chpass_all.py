@@ -15,7 +15,7 @@ import glob
 class SecretInputMode(enum.IntEnum):
     PASSWORD = 0b1
     KEYFILE = 0b10
-    PASSWORD_WITH_KEYFILE = 0b11
+    PASSWORD_WITH_KEYFILE = PASSWORD | KEYFILE
 
 
 def create(securefs_binary: str, version: int, pbkdf: str, mode: SecretInputMode):

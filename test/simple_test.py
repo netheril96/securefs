@@ -16,7 +16,9 @@ import time
 import traceback
 import unittest
 import uuid
+from typing import Optional
 from typing import Set
+import enum
 
 faulthandler.enable()
 
@@ -57,7 +59,11 @@ else:
 
 
 def securefs_mount(
-    data_dir: str, mount_point: str, password: str, keyfile: str = None
+    data_dir: str,
+    mount_point: str,
+    password: Optional[str],
+    keyfile: Optional[str] = None,
+    config_filename: Optional[str] = None,
 ) -> subprocess.Popen:
     command = [
         SECUREFS_BINARY,
@@ -73,13 +79,13 @@ def securefs_mount(
     if keyfile:
         command.append("--keyfile")
         command.append(keyfile)
+    if config_filename:
+        command.append("--config")
+        command.append(config_filename)
     logging.info("Start mounting, command:\n%s", " ".join(command))
     p = subprocess.Popen(
         command,
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if IS_WINDOWS else 0,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
     )
 
     for _ in range(300):
@@ -89,6 +95,8 @@ def securefs_mount(
                 return p
         except EnvironmentError:
             traceback.print_exc()
+    p.communicate(timeout=0.1)
+    p.kill()
     raise RuntimeError(f"Failed to mount, command {command}")
 
 
@@ -99,20 +107,25 @@ def securefs_unmount(p: subprocess.Popen, mount_point: str):
             p.send_signal(signal.CTRL_BREAK_EVENT)
         else:
             p.send_signal(signal.SIGINT)
-        stdout, stderr = p.communicate(timeout=5)
+        p.communicate(timeout=5)
         if p.returncode:
-            raise RuntimeError(
-                f"securefs failed with code {p.returncode} and output\n{repr(stdout)}\n{repr(stderr)}"
-            )
+            raise RuntimeError(f"securefs failed with code {p.returncode}")
         if ismount(mount_point):
             raise RuntimeError(f"{mount_point} still mounted")
     except:
         if ismount(mount_point):
+            p.kill()
             raise  # Still mounted
         traceback.print_exc()
 
 
-def securefs_create(data_dir, password, version, keyfile=None):
+def securefs_create(
+    data_dir: str,
+    version: int,
+    pbkdf: str,
+    password: Optional[str],
+    keyfile: Optional[str] = None,
+):
     command = [
         SECUREFS_BINARY,
         "create",
@@ -121,6 +134,8 @@ def securefs_create(data_dir, password, version, keyfile=None):
         data_dir,
         "--rounds",
         "2",
+        "--pbkdf",
+        pbkdf,
     ]
     if password:
         command.append("--pass")
@@ -128,12 +143,13 @@ def securefs_create(data_dir, password, version, keyfile=None):
     if keyfile:
         command.append("--keyfile")
         command.append(keyfile)
-    p = subprocess.Popen(command)
-    p.communicate(timeout=5)
+    logging.info("Creating securefs repo with command %s", command)
+    subprocess.check_call(command)
 
 
 def securefs_chpass(
     data_dir,
+    pbkdf: str,
     old_pass: str = None,
     new_pass: str = None,
     old_keyfile: str = None,
@@ -145,7 +161,7 @@ def securefs_chpass(
     if not new_pass and not new_keyfile:
         raise ValueError("At least one of new_pass and new_keyfile must be specified")
 
-    args = [SECUREFS_BINARY, "chpass", data_dir, "--rounds", "2"]
+    args = [SECUREFS_BINARY, "chpass", data_dir, "--rounds", "2", "--pbkdf", pbkdf]
     if old_pass:
         if use_stdin:
             args.append("--askoldpass")
@@ -179,7 +195,8 @@ def securefs_chpass(
         if new_pass:
             input += (new_pass + "\n") * 2
     out, err = p.communicate(input=input, timeout=3)
-    logging.info("chpass output:\n%s\n%s", out, err)
+    if p.returncode:
+        raise subprocess.CalledProcessError(p.returncode, args, out, err)
 
 
 def get_data_dir(format_version=4):
@@ -194,19 +211,34 @@ def get_mount_point():
     return result
 
 
-def make_test_case(format_version):
+class SecretInputMode(enum.IntEnum):
+    PASSWORD = 0b1
+    KEYFILE = 0b10
+    PASSWORD_WITH_KEYFILE = PASSWORD | KEYFILE
+
+
+def make_test_case(version: int, pbkdf: str, mode: SecretInputMode):
     class SimpleSecureFSTestBase(unittest.TestCase):
+        data_dir: str
+        password: Optional[str]
+        keyfile: Optional[str]
+        mount_point: str
+        securefs_process: Optional[subprocess.Popen]
+
         @classmethod
         def setUpClass(cls):
-            try:
-                os.mkdir("tmp")
-            except EnvironmentError as e:
-                if e.errno != errno.EEXIST:
-                    raise
-            cls.data_dir = get_data_dir(format_version=format_version)
+            os.makedirs("tmp", exist_ok=True)
+            cls.data_dir = get_data_dir(format_version=version)
             cls.mount_point = get_mount_point()
-            cls.password = "pvj8lRgrrsqzlr"
-            securefs_create(cls.data_dir, cls.password, format_version)
+            cls.password = "pvj8lRgrrsqzlr" if mode & SecretInputMode.PASSWORD else None
+            cls.keyfile = generate_keyfile() if mode & SecretInputMode.KEYFILE else None
+            securefs_create(
+                data_dir=cls.data_dir,
+                password=cls.password,
+                version=version,
+                keyfile=cls.keyfile,
+                pbkdf=pbkdf,
+            )
             cls.mount()
 
         @classmethod
@@ -216,7 +248,10 @@ def make_test_case(format_version):
         @classmethod
         def mount(cls):
             cls.securefs_process = securefs_mount(
-                cls.data_dir, cls.mount_point, cls.password
+                cls.data_dir,
+                cls.mount_point,
+                password=cls.password,
+                keyfile=cls.keyfile,
             )
 
         @classmethod
@@ -255,7 +290,7 @@ def make_test_case(format_version):
                     except EnvironmentError:
                         pass
 
-        if format_version < 4 and not IS_WINDOWS:
+        if version < 4 and not IS_WINDOWS:
 
             def test_hardlink(self):
                 data = os.urandom(16)
@@ -398,7 +433,7 @@ def make_test_case(format_version):
                 except EnvironmentError:
                     pass
 
-        if format_version == 3:
+        if version == 3:
 
             def test_time(self):
                 rand_dirname = os.path.join(self.mount_point, str(uuid.uuid4()))
@@ -428,7 +463,7 @@ reference_data_dir = shutil.copytree(
 )
 
 
-def make_regression_test(version: int, use_keyfile: bool):
+def make_regression_test(version: int, pbkdf: str, mode: SecretInputMode):
     class RegressionTestBase(unittest.TestCase):
         """
         Ensures that future versions of securefs can read old versions just fine.
@@ -436,19 +471,18 @@ def make_regression_test(version: int, use_keyfile: bool):
 
         def test_regression(self):
             mount_point = get_mount_point()
-            if use_keyfile:
-                p = securefs_mount(
-                    os.path.join(reference_data_dir, f"{version}-keyfile"),
-                    mount_point,
-                    password=None,
-                    keyfile=os.path.join(reference_data_dir, "keyfile"),
-                )
-            else:
-                p = securefs_mount(
-                    os.path.join(reference_data_dir, str(version)),
-                    mount_point,
-                    password="abc",
-                )
+            config_filename = os.path.join(
+                reference_data_dir, str(version), f".securefs.{pbkdf}.{mode.name}.json"
+            )
+            p = securefs_mount(
+                os.path.join(reference_data_dir, str(version)),
+                mount_point,
+                password="abc" if mode & SecretInputMode.PASSWORD else None,
+                keyfile=os.path.join(reference_data_dir, "keyfile")
+                if mode & SecretInputMode.KEYFILE
+                else None,
+                config_filename=config_filename,
+            )
             try:
                 self.compare_directory(
                     os.path.join(reference_data_dir, "plain"), mount_point
@@ -508,7 +542,7 @@ def generate_keyfile():
 
 
 def make_chpass_test(
-    old_pass, new_pass, old_keyfile, new_keyfile, use_stdin, securefs_version
+    old_pass, new_pass, old_keyfile, new_keyfile, use_stdin, version, pbkdf
 ):
     class ChpassTestBase(unittest.TestCase):
         def test_chpass(self):
@@ -520,7 +554,8 @@ def make_chpass_test(
                 data_dir=data_dir,
                 password=old_pass,
                 keyfile=old_keyfile,
-                version=securefs_version,
+                version=version,
+                pbkdf=pbkdf,
             )
 
             self.assertFalse(os.path.exists(test_dir_path))
@@ -540,6 +575,7 @@ def make_chpass_test(
                 old_keyfile=old_keyfile,
                 new_keyfile=new_keyfile,
                 use_stdin=use_stdin,
+                pbkdf=pbkdf,
             )
 
             p = securefs_mount(data_dir, mount_point, new_pass, new_keyfile)
@@ -552,19 +588,20 @@ def make_chpass_test(
 
 
 def make_all_tests():
+    all_pbkdfs = ("scrypt", "pkcs5-pbkdf2-hmac-sha256", "argon2id")
 
-    for version in range(1, 5):
-        class_name = f"SimpleSecureFSTest{version}"
-        globals()[class_name] = type(class_name, (make_test_case(version),), {})
-
-        for use_keyfile in [True, False]:
-            class_name = f"RegressionTest{version}(keyfile={use_keyfile})"
-            globals()[class_name] = type(
-                class_name,
-                (make_regression_test(version=version, use_keyfile=use_keyfile),),
-                {},
-            )
-
+    for version, mode, pbkdf in itertools.product(
+        range(1, 5), SecretInputMode, all_pbkdfs
+    ):
+        params = dict(version=version, mode=mode, pbkdf=pbkdf)
+        class_name = f"SimpleSecureFSTest{params}"
+        globals()[class_name] = type(class_name, (make_test_case(**params),), {})
+        class_name = f"RegressionTest{params}"
+        globals()[class_name] = type(
+            class_name,
+            (make_regression_test(**params),),
+            {},
+        )
     old_passes = [None, "abc"]
     new_passes = [None, "def"]
     old_keyfiles = [None, generate_keyfile()]
@@ -577,6 +614,7 @@ def make_all_tests():
         new_keyfile,
         use_stdin,
         version,
+        pbkdf,
     ) in itertools.product(
         old_passes,
         new_passes,
@@ -584,24 +622,25 @@ def make_all_tests():
         new_keyfiles,
         [True, False],
         range(1, 5),
+        all_pbkdfs,
     ):
         if not old_pass and not old_keyfile:
             continue
         if not new_pass and not new_keyfile:
             continue
-        class_name = f"ChpassTest{version}{dict(old_pass=old_pass,new_pass=new_pass,old_keyfile=old_keyfile,new_keyfile=new_keyfile,use_stdin=use_stdin)}"
+        params = dict(
+            old_pass=old_pass,
+            new_pass=new_pass,
+            old_keyfile=old_keyfile,
+            new_keyfile=new_keyfile,
+            use_stdin=use_stdin,
+            version=version,
+            pbkdf=pbkdf,
+        )
+        class_name = f"ChpassTest{params}"
         globals()[class_name] = type(
             class_name,
-            (
-                make_chpass_test(
-                    old_pass=old_pass,
-                    new_pass=new_pass,
-                    old_keyfile=old_keyfile,
-                    new_keyfile=new_keyfile,
-                    use_stdin=use_stdin,
-                    securefs_version=version,
-                ),
-            ),
+            (make_chpass_test(**params),),
             {},
         )
 
