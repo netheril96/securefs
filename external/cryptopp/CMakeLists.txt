@@ -1241,9 +1241,7 @@ if (BUILD_TESTING)
   file(COPY ${SRC_DIR}/TestData DESTINATION ${PROJECT_BINARY_DIR})
   file(COPY ${SRC_DIR}/TestVectors DESTINATION ${PROJECT_BINARY_DIR})
 
-  add_test(NAME build_cryptest COMMAND "${CMAKE_COMMAND}" --build ${CMAKE_BINARY_DIR} --target cryptest)
   add_test(NAME cryptest COMMAND $<TARGET_FILE:cryptest> v)
-  set_tests_properties(cryptest PROPERTIES DEPENDS build_cryptest)
 endif ()
 
 #============================================================================
