@@ -16,16 +16,16 @@ jobs:
       - name: install
         run: sudo apt-get install fuse libfuse-dev
       - name: configure
-        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..
+        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release ..
       - name: build
-        run: cmake --build build
+        run: cmake --build build --config Release
       - name: test
-        run: cd build && ctest -V
+        run: cd build && ctest -V -C Release
       - name: upload
         uses: actions/upload-artifact@v1
         with:
           path: build/securefs
-          name: securefs-binary-ubuntu-debug
+          name: securefs-binary-ubuntu-release
   build-mac:
     runs-on: macos-10.15
     steps:
@@ -40,16 +40,16 @@ jobs:
       - name: install
         run: brew install macfuse
       - name: configure
-        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..
+        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release ..
       - name: build
-        run: cmake --build build
+        run: cmake --build build --config Release
       - name: test
-        run: cd build && ctest -V
+        run: cd build && ctest -V -C Release
       - name: upload
         uses: actions/upload-artifact@v1
         with:
           path: build/securefs
-          name: securefs-binary-macos-debug
+          name: securefs-binary-macos-release
   build-windows:
     runs-on: windows-latest
 
@@ -63,13 +63,13 @@ jobs:
       - name: install
         run: choco install winfsp
       - name: configure
-        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..
+        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release ..
       - name: build
-        run: cmake --build build --config Debug
+        run: cmake --build build --config Release
       - name: test
-        run: cd build && ctest -V -C Debug
+        run: cd build && ctest -V -C Release
       - name: upload
         uses: actions/upload-artifact@v1
         with:
-          path: build/Debug/securefs.exe
-          name: securefs-binary-win-debug.exe
+          path: build/Release/securefs.exe
+          name: securefs-binary-win64-release.exe
