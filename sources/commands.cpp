@@ -707,6 +707,7 @@ public:
         cmdline.add(&format);
         cmdline.add(&store_time);
         cmdline.add(&block_size);
+        cmdline.add(&pbkdf);
         cmdline.parse(argc, argv);
         get_password(true);
     }
@@ -841,6 +842,7 @@ public:
         cmdline.add(&asknewpass);
         cmdline.add(&oldpass);
         cmdline.add(&newpass);
+        cmdline.add(&pbkdf);
         cmdline.parse(argc, argv);
         if (oldpass.isSet())
         {
