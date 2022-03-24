@@ -258,18 +258,18 @@ void fix(const std::string& basedir, operations::FileSystemContext* fs)
     puts("Fix complete");
 }
 
-void maybe_derive_with_keyfile(const securefs::key_type& password_dervied_key,
-                               StringRef maybe_key_file_path,
-                               securefs::key_type& out_key)
+void hmac_sha256(const securefs::key_type& base_key,
+                 StringRef maybe_key_file_path,
+                 securefs::key_type& out_key)
 {
     if (maybe_key_file_path.empty())
     {
-        out_key = password_dervied_key;
+        out_key = base_key;
         return;
     }
     auto file_stream = OSService::get_default().open_file_stream(maybe_key_file_path, O_RDONLY, 0);
     byte buffer[4096];
-    CryptoPP::HMAC<CryptoPP::SHA256> hmac(password_dervied_key.data(), password_dervied_key.size());
+    CryptoPP::HMAC<CryptoPP::SHA256> hmac(base_key.data(), base_key.size());
     while (true)
     {
         auto sz = file_stream->sequential_read(buffer, sizeof(buffer));
@@ -293,26 +293,29 @@ Json::Value generate_config(unsigned int version,
                             unsigned iv_size,
                             unsigned rounds = 0)
 {
+    securefs::key_type effective_salt;
+    hmac_sha256(salt, maybe_key_file_path, effective_salt);
+
     Json::Value config;
     config["version"] = version;
-    securefs::key_type password_derived_key;
+    key_type password_derived_key;
     CryptoPP::AlignedSecByteBlock encrypted_master_key(nullptr, master_key.size());
 
     if (pbkdf_algorithm == PBKDF_ALGO_PKCS5)
     {
-        config["iterations"] = securefs::pbkdf_hmac_sha256(password,
-                                                           pass_len,
-                                                           salt.data(),
-                                                           salt.size(),
-                                                           rounds ? rounds : MIN_ITERATIONS,
-                                                           rounds ? 0 : MIN_DERIVE_SECONDS,
-                                                           password_derived_key.data(),
-                                                           password_derived_key.size());
+        config["iterations"] = pbkdf_hmac_sha256(password,
+                                                 pass_len,
+                                                 effective_salt.data(),
+                                                 effective_salt.size(),
+                                                 rounds ? rounds : MIN_ITERATIONS,
+                                                 rounds ? 0 : MIN_DERIVE_SECONDS,
+                                                 password_derived_key.data(),
+                                                 password_derived_key.size());
     }
     else if (pbkdf_algorithm == PBKDF_ALGO_SCRYPT)
     {
-        uint32_t N = rounds > 0 ? rounds : (1u << 18u), r = 8, p = 1;
-        config["iterations"] = N;
+        uint32_t n = rounds > 0 ? rounds : (1u << 18u), r = 8, p = 1;
+        config["iterations"] = n;
         config["scrypt_r"] = r;
         config["scrypt_p"] = p;
         CryptoPP::Scrypt scrypt;
@@ -320,9 +323,9 @@ Json::Value generate_config(unsigned int version,
                          password_derived_key.size(),
                          static_cast<const byte*>(password),
                          pass_len,
-                         salt.data(),
-                         salt.size(),
-                         N,
+                         effective_salt.data(),
+                         effective_salt.size(),
+                         n,
                          r,
                          p);
     }
@@ -341,8 +344,8 @@ Json::Value generate_config(unsigned int version,
                                    p,
                                    password,
                                    pass_len,
-                                   salt.data(),
-                                   salt.size(),
+                                   effective_salt.data(),
+                                   effective_salt.size(),
                                    password_derived_key.data(),
                                    password_derived_key.size());
         if (rc)
@@ -355,18 +358,15 @@ Json::Value generate_config(unsigned int version,
         throw_runtime_error("Unknown pbkdf algorithm " + pbkdf_algorithm);
     }
     config["pbkdf"] = pbkdf_algorithm;
-
-    config["salt"] = securefs::hexify(salt);
+    config["salt"] = hexify(salt);
 
     byte iv[CONFIG_IV_LENGTH];
     byte mac[CONFIG_MAC_LENGTH];
     generate_random(iv, array_length(iv));
 
-    securefs::key_type wrapping_key;
-    maybe_derive_with_keyfile(password_derived_key, maybe_key_file_path, wrapping_key);
-
     CryptoPP::GCM<CryptoPP::AES>::Encryption encryptor;
-    encryptor.SetKeyWithIV(wrapping_key.data(), wrapping_key.size(), iv, array_length(iv));
+    encryptor.SetKeyWithIV(
+        password_derived_key.data(), password_derived_key.size(), iv, array_length(iv));
     encryptor.EncryptAndAuthenticate(encrypted_master_key.data(),
                                      mac,
                                      array_length(mac),
@@ -378,9 +378,9 @@ Json::Value generate_config(unsigned int version,
                                      master_key.size());
 
     Json::Value encrypted_key;
-    encrypted_key["IV"] = securefs::hexify(iv, array_length(iv));
-    encrypted_key["MAC"] = securefs::hexify(mac, array_length(mac));
-    encrypted_key["key"] = securefs::hexify(encrypted_master_key);
+    encrypted_key["IV"] = hexify(iv, array_length(iv));
+    encrypted_key["MAC"] = hexify(mac, array_length(mac));
+    encrypted_key["key"] = hexify(encrypted_master_key);
 
     config["encrypted_key"] = std::move(encrypted_key);
 
@@ -392,53 +392,13 @@ Json::Value generate_config(unsigned int version,
     return config;
 }
 
-bool parse_config(const Json::Value& config,
-                  StringRef maybe_key_file_path,
-                  const void* password,
-                  size_t pass_len,
-                  CryptoPP::AlignedSecByteBlock& master_key,
-                  unsigned& block_size,
-                  unsigned& iv_size)
+void compute_password_derived_key(const Json::Value& config,
+                                  const void* password,
+                                  size_t pass_len,
+                                  key_type& salt,
+                                  key_type& password_derived_key)
 {
-    using namespace securefs;
-    unsigned version = config["version"].asUInt();
-
-    if (version == 1)
-    {
-        block_size = 4096;
-        iv_size = 32;
-    }
-    else if (version == 2 || version == 3 || version == 4)
-    {
-        block_size = config["block_size"].asUInt();
-        iv_size = config["iv_size"].asUInt();
-    }
-    else
-    {
-        throwInvalidArgumentException(strprintf("Unsupported version %u", version));
-    }
-
     unsigned iterations = config["iterations"].asUInt();
-
-    byte iv[CONFIG_IV_LENGTH];
-    byte mac[CONFIG_MAC_LENGTH];
-    key_type salt, password_derived_key;
-    CryptoPP::AlignedSecByteBlock encrypted_key;
-
-    std::string salt_hex = config["salt"].asString();
-    const auto& encrypted_key_json_value = config["encrypted_key"];
-    std::string iv_hex = encrypted_key_json_value["IV"].asString();
-    std::string mac_hex = encrypted_key_json_value["MAC"].asString();
-    std::string ekey_hex = encrypted_key_json_value["key"].asString();
-
-    parse_hex(salt_hex, salt.data(), salt.size());
-    parse_hex(iv_hex, iv, array_length(iv));
-    parse_hex(mac_hex, mac, array_length(mac));
-
-    encrypted_key.resize(ekey_hex.size() / 2);
-    parse_hex(ekey_hex, encrypted_key.data(), encrypted_key.size());
-    master_key.resize(encrypted_key.size());
-
     std::string pbkdf_algorithm = config.get("pbkdf", PBKDF_ALGO_PKCS5).asString();
     VERBOSE_LOG("Setting the password key derivation function to %s", pbkdf_algorithm.c_str());
 
@@ -490,20 +450,89 @@ bool parse_config(const Json::Value& config,
     {
         throw_runtime_error("Unknown pbkdf algorithm " + pbkdf_algorithm);
     }
+}
 
-    securefs::key_type wrapping_key;
-    maybe_derive_with_keyfile(password_derived_key, maybe_key_file_path, wrapping_key);
-    CryptoPP::GCM<CryptoPP::AES>::Decryption decryptor;
-    decryptor.SetKeyWithIV(wrapping_key.data(), wrapping_key.size(), iv, array_length(iv));
-    return decryptor.DecryptAndVerify(master_key.data(),
-                                      mac,
-                                      array_length(mac),
-                                      iv,
-                                      array_length(iv),
-                                      reinterpret_cast<const byte*>(get_version_header(version)),
-                                      strlen(get_version_header(version)),
-                                      encrypted_key.data(),
-                                      encrypted_key.size());
+bool parse_config(const Json::Value& config,
+                  StringRef maybe_key_file_path,
+                  const void* password,
+                  size_t pass_len,
+                  CryptoPP::AlignedSecByteBlock& master_key,
+                  unsigned& block_size,
+                  unsigned& iv_size)
+{
+    using namespace securefs;
+    unsigned version = config["version"].asUInt();
+
+    if (version == 1)
+    {
+        block_size = 4096;
+        iv_size = 32;
+    }
+    else if (version == 2 || version == 3 || version == 4)
+    {
+        block_size = config["block_size"].asUInt();
+        iv_size = config["iv_size"].asUInt();
+    }
+    else
+    {
+        throwInvalidArgumentException(strprintf("Unsupported version %u", version));
+    }
+
+    byte iv[CONFIG_IV_LENGTH];
+    byte mac[CONFIG_MAC_LENGTH];
+    key_type salt;
+    CryptoPP::AlignedSecByteBlock encrypted_key;
+
+    std::string salt_hex = config["salt"].asString();
+    const auto& encrypted_key_json_value = config["encrypted_key"];
+    std::string iv_hex = encrypted_key_json_value["IV"].asString();
+    std::string mac_hex = encrypted_key_json_value["MAC"].asString();
+    std::string ekey_hex = encrypted_key_json_value["key"].asString();
+
+    parse_hex(salt_hex, salt.data(), salt.size());
+    parse_hex(iv_hex, iv, array_length(iv));
+    parse_hex(mac_hex, mac, array_length(mac));
+
+    encrypted_key.resize(ekey_hex.size() / 2);
+    parse_hex(ekey_hex, encrypted_key.data(), encrypted_key.size());
+    master_key.resize(encrypted_key.size());
+
+    auto decrypt_and_verify = [&](const securefs::key_type& wrapping_key)
+    {
+        CryptoPP::GCM<CryptoPP::AES>::Decryption decryptor;
+        decryptor.SetKeyWithIV(wrapping_key.data(), wrapping_key.size(), iv, array_length(iv));
+        return decryptor.DecryptAndVerify(
+            master_key.data(),
+            mac,
+            array_length(mac),
+            iv,
+            array_length(iv),
+            reinterpret_cast<const byte*>(get_version_header(version)),
+            strlen(get_version_header(version)),
+            encrypted_key.data(),
+            encrypted_key.size());
+    };
+
+    {
+        securefs::key_type new_salt;
+        hmac_sha256(salt, maybe_key_file_path, new_salt);
+
+        securefs::key_type password_derived_key;
+        compute_password_derived_key(config, password, pass_len, new_salt, password_derived_key);
+        if (decrypt_and_verify(password_derived_key))
+        {
+            return true;
+        }
+    }
+
+    // `securefs` used to derive keyfile based key in another way. Try it here for compatibility.
+    {
+        securefs::key_type wrapping_key;
+        securefs::key_type password_derived_key;
+        compute_password_derived_key(config, password, pass_len, salt, password_derived_key);
+        hmac_sha256(password_derived_key, maybe_key_file_path, wrapping_key);
+        return decrypt_and_verify(wrapping_key);
+    }
 }
 }    // namespace
 
@@ -546,7 +575,7 @@ FSConfig CommandBase::read_config(FileStream* stream,
                       result.master_key,
                       result.block_size,
                       result.iv_size))
-        throw_runtime_error("Invalid password");
+        throw_runtime_error("Invalid password and/or keyfile");
     result.version = value["version"].asUInt();
     return result;
 }
