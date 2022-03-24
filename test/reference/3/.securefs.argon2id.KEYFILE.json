@@ -1,0 +1,16 @@
+{
+	"argon2_m_cost" : 16,
+	"argon2_p" : 2,
+	"block_size" : 4096,
+	"encrypted_key" : 
+	{
+		"IV" : "6250a5eed5690f326302c4328171f152be37787334d12ca316f455da84cc4fb2",
+		"MAC" : "451359fcff33b45ed7fce2bb915409de",
+		"key" : "fb8f91228a9055320b1e106405e7e3308e9fef5142ad21e4d177e494e8b9593e"
+	},
+	"iterations" : 2,
+	"iv_size" : 12,
+	"pbkdf" : "argon2id",
+	"salt" : "6f5905d32055bc8074deacc817c7a3678571eadfee43b917877184b3aa1ea549",
+	"version" : 3
+}
