@@ -87,6 +87,9 @@ add_executable(securefs main.cpp)
 add_executable(securefs_test ${TEST_SOURCES})
 
 include(CheckCXXSourceRuns)
+if (APPLE)
+    set(CMAKE_REQUIRED_FLAGS "--std=c++11") # Workaround for Apple CMake bug.
+endif()
 CHECK_CXX_SOURCE_RUNS("int main() { thread_local int i = 0; return i; }" HAS_THREAD_LOCAL)
 
 CHECK_CXX_SOURCE_RUNS("
