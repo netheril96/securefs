@@ -12,10 +12,13 @@ import sys
 import glob
 
 
+@enum.unique
 class SecretInputMode(enum.IntEnum):
     PASSWORD = 0b1
     KEYFILE = 0b10
     PASSWORD_WITH_KEYFILE = PASSWORD | KEYFILE
+    KEYFILE2 = KEYFILE | 0b1000
+    PASSWORD_WITH_KEYFILE2 = PASSWORD | KEYFILE2
 
 
 def create(securefs_binary: str, version: int, pbkdf: str, mode: SecretInputMode):
@@ -23,7 +26,7 @@ def create(securefs_binary: str, version: int, pbkdf: str, mode: SecretInputMode
     if os.path.exists(new_config_filename):
         print(new_config_filename, "already exists", file=sys.stderr)
         return
-    original_config_filename = next(glob.iglob(f"{version}/.securefs.*.json"))
+    original_config_filename = next(glob.iglob(f"{version}/.securefs.*.PASSWORD.json"))
     shutil.copy(original_config_filename, new_config_filename)
     args = [
         securefs_binary,
@@ -48,11 +51,12 @@ def create(securefs_binary: str, version: int, pbkdf: str, mode: SecretInputMode
 def main():
     os.environ["SECUREFS_ARGON2_M_COST"] = "16"
     os.environ["SECUREFS_ARGON2_P"] = "2"
+    binary = os.path.realpath(sys.argv[1])
     os.chdir(os.path.dirname(__file__))
     for version in range(1, 5):
         for pbkdf in ("scrypt", "pkcs5-pbkdf2-hmac-sha256", "argon2id"):
             for mode in SecretInputMode:
-                create(sys.argv[1], version=version, pbkdf=pbkdf, mode=mode)
+                create(binary, version=version, pbkdf=pbkdf, mode=mode)
 
 
 if __name__ == "__main__":

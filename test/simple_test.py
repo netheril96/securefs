@@ -211,10 +211,13 @@ def get_mount_point():
     return result
 
 
+@enum.unique
 class SecretInputMode(enum.IntEnum):
     PASSWORD = 0b1
     KEYFILE = 0b10
     PASSWORD_WITH_KEYFILE = PASSWORD | KEYFILE
+    KEYFILE2 = KEYFILE | 0b1000
+    PASSWORD_WITH_KEYFILE2 = PASSWORD | KEYFILE2
 
 
 def make_test_case(version: int, pbkdf: str, mode: SecretInputMode):
@@ -590,18 +593,32 @@ def make_chpass_test(
 def make_all_tests():
     all_pbkdfs = ("scrypt", "pkcs5-pbkdf2-hmac-sha256", "argon2id")
 
+    # `securefs` has two different methods of operating on keyfiles, but on new repos, only one is supported.
     for version, mode, pbkdf in itertools.product(
-        range(1, 5), SecretInputMode, all_pbkdfs
+        range(1, 5),
+        [
+            SecretInputMode.PASSWORD,
+            SecretInputMode.KEYFILE2,
+            SecretInputMode.PASSWORD_WITH_KEYFILE2,
+        ],
+        all_pbkdfs,
     ):
         params = dict(version=version, mode=mode, pbkdf=pbkdf)
         class_name = f"SimpleSecureFSTest{params}"
         globals()[class_name] = type(class_name, (make_test_case(**params),), {})
+
+    # For regression test, however, we need to test all modes.
+    for version, mode, pbkdf in itertools.product(
+        range(1, 5), SecretInputMode, all_pbkdfs
+    ):
+        params = dict(version=version, mode=mode, pbkdf=pbkdf)
         class_name = f"RegressionTest{params}"
         globals()[class_name] = type(
             class_name,
             (make_regression_test(**params),),
             {},
         )
+
     old_passes = [None, "abc"]
     new_passes = [None, "def"]
     old_keyfiles = [None, generate_keyfile()]
