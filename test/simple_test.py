@@ -36,6 +36,7 @@ SECUREFS_BINARY = find_securefs_binary()
 IS_WINDOWS = os.name == "nt"
 
 if platform.system() == "Darwin":
+    IS_DARWIN = True
     try:
         import xattr
     except ImportError:
@@ -45,6 +46,7 @@ if platform.system() == "Darwin":
         xattr = None
 else:
     xattr = None
+    IS_DARWIN = False
 
 
 if IS_WINDOWS:
@@ -101,14 +103,16 @@ def securefs_mount(
 
 
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
-    time.sleep(0.125)  # Deal with some race condition
+    time.sleep(0.005)
     try:
         if IS_WINDOWS:
             p.send_signal(signal.CTRL_BREAK_EVENT)
         else:
             p.send_signal(signal.SIGINT)
         p.communicate(timeout=5)
-        if p.returncode:
+        # Ignore error on Apple platforms,
+        # as MacFUSE has bugs during unmounting.
+        if p.returncode and not IS_DARWIN:
             raise RuntimeError(f"securefs failed with code {p.returncode}")
         if ismount(mount_point):
             raise RuntimeError(f"{mount_point} still mounted")
