@@ -86,46 +86,6 @@ link_libraries(securefs-static)
 add_executable(securefs main.cpp)
 add_executable(securefs_test ${TEST_SOURCES})
 
-include(CheckCXXSourceRuns)
-if (APPLE)
-    set(CMAKE_REQUIRED_FLAGS "--std=c++11") # Workaround for Apple CMake bug.
-endif()
-CHECK_CXX_SOURCE_RUNS("int main() { thread_local int i = 0; return i; }" HAS_THREAD_LOCAL)
-
-CHECK_CXX_SOURCE_RUNS("
-#include <time.h>
-
-int main() {
-    timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    return 0;
-}
-" HAS_CLOCK_GETTIME)
-
-CHECK_CXX_SOURCE_RUNS("
-#include <unistd.h>
-#include <sys/stat.h>
-
-int main() {
-    futimens(-1, nullptr);
-    return 0;
-}
-" HAS_FUTIMENS)
-
-CHECK_CXX_SOURCE_RUNS("
-#include <unistd.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-
-int main() {
-    utimensat(-1, nullptr, nullptr, 0);
-    return 0;
-}
-" HAS_UTIMENSAT)
-
-configure_file(sources/securefs_config.in securefs_config.h)
-include_directories(${CMAKE_CURRENT_BINARY_DIR})
-
 add_test(NAME sec_test COMMAND securefs_test)
 find_package(Python3 COMPONENTS Interpreter)
 if (Python3_FOUND)

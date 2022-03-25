@@ -6,8 +6,6 @@
 #include "platform.h"
 #include "streams.h"
 
-#include <securefs_config.h>
-
 #include <algorithm>
 #include <locale.h>
 #include <vector>
@@ -149,28 +147,9 @@ public:
 
     void utimens(const struct fuse_timespec ts[2]) override
     {
-#if HAS_FUTIMENS
         int rc = ::futimens(m_fd, ts);
         if (rc < 0)
             THROW_POSIX_EXCEPTION(errno, "utimens");
-#else
-        int rc;
-        if (!ts)
-            rc = ::futimes(m_fd, nullptr);
-        else
-        {
-            struct timeval time_values[2];
-            for (size_t i = 0; i < 2; ++i)
-            {
-                time_values[i].tv_sec = ts[i].tv_sec;
-                time_values[i].tv_usec
-                    = static_cast<decltype(time_values[i].tv_usec)>(ts[i].tv_nsec / 1000);
-            }
-            rc = ::futimes(m_fd, time_values);
-        }
-        if (rc < 0)
-            THROW_POSIX_EXCEPTION(errno, "futimes");
-#endif
     }
 
 #ifdef __APPLE__
@@ -423,29 +402,9 @@ ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
 
 void OSService::utimens(StringRef path, const fuse_timespec* ts) const
 {
-    int rc;
-#if HAS_UTIMENSAT
-    rc = ::utimensat(m_dir_fd, path.c_str(), ts, AT_SYMLINK_NOFOLLOW);
+    int rc = ::utimensat(m_dir_fd, path.c_str(), ts, AT_SYMLINK_NOFOLLOW);
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno, "utimensat");
-#else
-    // When controls flows to here, the stub function has been called
-    if (!ts)
-    {
-        rc = ::lutimes(norm_path(path).c_str(), nullptr);
-    }
-    else
-    {
-        struct timeval tv[2];
-        tv[0].tv_sec = ts[0].tv_sec;
-        tv[0].tv_usec = ts[0].tv_nsec / 1000;
-        tv[1].tv_sec = ts[1].tv_sec;
-        tv[1].tv_usec = ts[1].tv_nsec / 1000;
-        rc = ::lutimes(norm_path(path).c_str(), tv);
-    }
-    if (rc < 0)
-        THROW_POSIX_EXCEPTION(errno, "lutimes");
-#endif
 }
 
 std::unique_ptr<DirectoryTraverser> OSService::create_traverser(StringRef dir) const
@@ -485,14 +444,7 @@ int OSService::raise_fd_limit()
 
 void OSService::get_current_time(fuse_timespec& current_time)
 {
-#if HAS_CLOCK_GETTIME
     clock_gettime(CLOCK_REALTIME, &current_time);
-#else
-    timeval tv;
-    gettimeofday(&tv, nullptr);
-    current_time.tv_sec = tv.tv_sec;
-    current_time.tv_nsec = tv.tv_usec * 1000;
-#endif
 }
 
 #ifdef __APPLE__
