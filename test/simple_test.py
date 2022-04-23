@@ -23,15 +23,9 @@ import enum
 faulthandler.enable()
 
 
-def find_securefs_binary():
-    for dir_path, _, files in os.walk("."):
-        for fn in files:
-            if fn == "securefs" or fn == "securefs.exe":
-                return os.path.join(dir_path, fn)
-    raise RuntimeError("securefs binary not found")
-
-
-SECUREFS_BINARY = find_securefs_binary()
+SECUREFS_BINARY = os.environ["SECUREFS_BINARY"]
+if not os.path.isfile(SECUREFS_BINARY):
+    raise ValueError(f"{repr(SECUREFS_BINARY)} is not a file!")
 
 if sys.platform == "darwin":
     try:
