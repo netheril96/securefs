@@ -33,10 +33,7 @@ def find_securefs_binary():
 
 SECUREFS_BINARY = find_securefs_binary()
 
-IS_WINDOWS = os.name == "nt"
-
-if platform.system() == "Darwin":
-    IS_DARWIN = True
+if sys.platform == "darwin":
     try:
         import xattr
     except ImportError:
@@ -46,10 +43,9 @@ if platform.system() == "Darwin":
         xattr = None
 else:
     xattr = None
-    IS_DARWIN = False
 
 
-if IS_WINDOWS:
+if sys.platform == "win32":
 
     def ismount(path):
         # Not all reparse points are mounts, but in our test, that is close enough
@@ -66,7 +62,7 @@ def securefs_mount(
     password: Optional[str],
     keyfile: Optional[str] = None,
     config_filename: Optional[str] = None,
-) -> subprocess.Popen:
+) -> subprocess.Popen[bytes]:
     command = [
         SECUREFS_BINARY,
         "mount",
@@ -87,40 +83,39 @@ def securefs_mount(
     logging.info("Start mounting, command:\n%s", " ".join(command))
     p = subprocess.Popen(
         command,
-        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if IS_WINDOWS else 0,
+        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+        if sys.platform == "win32"
+        else 0,
     )
-
-    for _ in range(300):
-        time.sleep(0.05)
-        try:
-            if ismount(mount_point):
-                return p
-        except EnvironmentError:
-            traceback.print_exc()
-    p.communicate(timeout=0.1)
-    p.kill()
-    raise RuntimeError(f"Failed to mount, command {command}")
+    try:
+        for _ in range(300):
+            time.sleep(0.05)
+            try:
+                if ismount(mount_point):
+                    return p
+            except EnvironmentError:
+                traceback.print_exc()
+        raise TimeoutError(f"Failed to mount {repr(mount_point)} after many attempts")
+    except:
+        p.communicate(timeout=0.1)
+        p.kill()
+        raise
 
 
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
     time.sleep(0.005)
-    try:
-        if IS_WINDOWS:
+    with p:
+        if sys.platform == "win32":
             p.send_signal(signal.CTRL_BREAK_EVENT)
         else:
             p.send_signal(signal.SIGINT)
         p.communicate(timeout=5)
         # Ignore error on Apple platforms,
         # as MacFUSE has bugs during unmounting.
-        if p.returncode and not IS_DARWIN:
+        if p.returncode and sys.platform != "darwin":
             raise RuntimeError(f"securefs failed with code {p.returncode}")
         if ismount(mount_point):
             raise RuntimeError(f"{mount_point} still mounted")
-    except:
-        if ismount(mount_point):
-            p.kill()
-            raise  # Still mounted
-        traceback.print_exc()
 
 
 def securefs_create(
@@ -154,10 +149,10 @@ def securefs_create(
 def securefs_chpass(
     data_dir,
     pbkdf: str,
-    old_pass: str = None,
-    new_pass: str = None,
-    old_keyfile: str = None,
-    new_keyfile: str = None,
+    old_pass: Optional[str] = None,
+    new_pass: Optional[str] = None,
+    old_keyfile: Optional[str] = None,
+    new_keyfile: Optional[str] = None,
     use_stdin: bool = True,
 ):
     if not old_pass and not old_keyfile:
@@ -185,22 +180,22 @@ def securefs_chpass(
         args.append("--newkeyfile")
         args.append(new_keyfile)
     logging.info("Executing command: %s", args)
-    p = subprocess.Popen(
+    with subprocess.Popen(
         args,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         universal_newlines=True,
-    )
-    input = ""
-    if use_stdin:
-        if old_pass:
-            input += old_pass + "\n"
-        if new_pass:
-            input += (new_pass + "\n") * 2
-    out, err = p.communicate(input=input, timeout=3)
-    if p.returncode:
-        raise subprocess.CalledProcessError(p.returncode, args, out, err)
+    ) as p:
+        input = ""
+        if use_stdin:
+            if old_pass:
+                input += old_pass + "\n"
+            if new_pass:
+                input += (new_pass + "\n") * 2
+        out, err = p.communicate(input=input, timeout=3)
+        if p.returncode:
+            raise subprocess.CalledProcessError(p.returncode, args, out, err)
 
 
 def get_data_dir(format_version=4):
@@ -272,10 +267,10 @@ def make_test_case(version: int, pbkdf: str, mode: SecretInputMode):
             with self.assertRaises(EnvironmentError) as context:
                 os.mkdir(os.path.join(self.mount_point, "k" * 256))
                 self.fail("mkdir should fail")
-            if not IS_WINDOWS:
+            if sys.platform != "win32":
                 self.assertEqual(context.exception.errno, errno.ENAMETOOLONG)
 
-        if xattr:
+        if xattr is not None:
 
             def test_xattr(self):
                 fn = os.path.join(self.mount_point, str(uuid.uuid4()))
@@ -297,7 +292,7 @@ def make_test_case(version: int, pbkdf: str, mode: SecretInputMode):
                     except EnvironmentError:
                         pass
 
-        if version < 4 and not IS_WINDOWS:
+        if version < 4 and sys.platform != "win32":
 
             def test_hardlink(self):
                 data = os.urandom(16)
@@ -328,7 +323,7 @@ def make_test_case(version: int, pbkdf: str, mode: SecretInputMode):
                     except EnvironmentError:
                         pass
 
-        if not IS_WINDOWS:
+        if sys.platform != "win32":
 
             def test_symlink(self):
                 data = os.urandom(16)
