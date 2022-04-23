@@ -6,7 +6,7 @@ import faulthandler
 import itertools
 import logging
 import os
-import platform
+import inspect
 import shutil
 import signal
 import subprocess
@@ -16,7 +16,7 @@ import time
 import traceback
 import unittest
 import uuid
-from typing import Optional
+from typing import List, Optional, Sequence
 from typing import Set
 import enum
 
@@ -219,6 +219,45 @@ class SecretInputMode(enum.IntEnum):
     PASSWORD_WITH_KEYFILE2 = PASSWORD | KEYFILE2
 
 
+def parametrize(possible_args: Sequence[Sequence]):
+    def real_parametrize(func):
+        sig = inspect.signature(func)
+        for l in possible_args:
+            if len(l) != len(sig.parameters):
+                raise ValueError(
+                    "The possible arguments list does not match the parameters"
+                )
+        for l in possible_args:
+            cls = func(*l)
+            if cls is None:
+                continue
+            assert isinstance(cls, type)
+            kwargs = {}
+            for l, p in zip(l, sig.parameters.keys()):
+                kwargs[p] = l
+            cls_name = cls.__name__ + repr(kwargs)
+            globals()[cls_name] = type(cls_name, (cls,), {})  # type: ignore
+        return func
+
+    return real_parametrize
+
+
+ALL_PBKDFS = ("scrypt", "pkcs5-pbkdf2-hmac-sha256", "argon2id")
+
+
+@parametrize(
+    tuple(
+        itertools.product(
+            range(1, 5),
+            ALL_PBKDFS,
+            [
+                SecretInputMode.PASSWORD,
+                SecretInputMode.KEYFILE2,
+                SecretInputMode.PASSWORD_WITH_KEYFILE2,
+            ],
+        )
+    )
+)
 def make_test_case(version: int, pbkdf: str, mode: SecretInputMode):
     class SimpleSecureFSTestBase(unittest.TestCase):
         data_dir: str
@@ -465,6 +504,7 @@ reference_data_dir = shutil.copytree(
 )
 
 
+@parametrize(tuple(itertools.product(range(1, 5), ALL_PBKDFS, SecretInputMode)))
 def make_regression_test(version: int, pbkdf: str, mode: SecretInputMode):
     class RegressionTestBase(unittest.TestCase):
         """
@@ -543,9 +583,27 @@ def generate_keyfile():
         return f.name
 
 
+@parametrize(
+    tuple(
+        itertools.product(
+            [None, "abc"],
+            [None, "abc"],
+            [None, generate_keyfile()],
+            [None, generate_keyfile()],
+            [True, False],
+            range(1, 5),
+            ALL_PBKDFS,
+        )
+    )
+)
 def make_chpass_test(
     old_pass, new_pass, old_keyfile, new_keyfile, use_stdin, version, pbkdf
 ):
+    if not old_pass and not old_keyfile:
+        return
+    if not new_pass and not new_keyfile:
+        return
+
     class ChpassTestBase(unittest.TestCase):
         def test_chpass(self):
             data_dir = get_data_dir()
@@ -588,80 +646,6 @@ def make_chpass_test(
 
     return ChpassTestBase
 
-
-def make_all_tests():
-    all_pbkdfs = ("scrypt", "pkcs5-pbkdf2-hmac-sha256", "argon2id")
-
-    # `securefs` has two different methods of operating on keyfiles, but on new repos, only one is supported.
-    for version, mode, pbkdf in itertools.product(
-        range(1, 5),
-        [
-            SecretInputMode.PASSWORD,
-            SecretInputMode.KEYFILE2,
-            SecretInputMode.PASSWORD_WITH_KEYFILE2,
-        ],
-        all_pbkdfs,
-    ):
-        params = dict(version=version, mode=mode, pbkdf=pbkdf)
-        class_name = f"SimpleSecureFSTest{params}"
-        globals()[class_name] = type(class_name, (make_test_case(**params),), {})
-
-    # For regression test, however, we need to test all modes.
-    for version, mode, pbkdf in itertools.product(
-        range(1, 5), SecretInputMode, all_pbkdfs
-    ):
-        params = dict(version=version, mode=mode, pbkdf=pbkdf)
-        class_name = f"RegressionTest{params}"
-        globals()[class_name] = type(
-            class_name,
-            (make_regression_test(**params),),
-            {},
-        )
-
-    old_passes = [None, "abc"]
-    new_passes = [None, "def"]
-    old_keyfiles = [None, generate_keyfile()]
-    new_keyfiles = [None, generate_keyfile()]
-
-    for (
-        old_pass,
-        new_pass,
-        old_keyfile,
-        new_keyfile,
-        use_stdin,
-        version,
-        pbkdf,
-    ) in itertools.product(
-        old_passes,
-        new_passes,
-        old_keyfiles,
-        new_keyfiles,
-        [True, False],
-        range(1, 5),
-        all_pbkdfs,
-    ):
-        if not old_pass and not old_keyfile:
-            continue
-        if not new_pass and not new_keyfile:
-            continue
-        params = dict(
-            old_pass=old_pass,
-            new_pass=new_pass,
-            old_keyfile=old_keyfile,
-            new_keyfile=new_keyfile,
-            use_stdin=use_stdin,
-            version=version,
-            pbkdf=pbkdf,
-        )
-        class_name = f"ChpassTest{params}"
-        globals()[class_name] = type(
-            class_name,
-            (make_chpass_test(**params),),
-            {},
-        )
-
-
-make_all_tests()
 
 if __name__ == "__main__":
     os.environ["SECUREFS_ARGON2_M_COST"] = "16"
