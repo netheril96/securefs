@@ -1149,13 +1149,13 @@ public:
         }
 
         std::vector<std::string> fuse_args;
-        fuse_args.push_back("securefs");
+        fuse_args.emplace_back("securefs");
         if (config.version < 4 || single_threaded.getValue())
         {
-            fuse_args.push_back("-s");
+            fuse_args.emplace_back("-s");
         }
         if (!background.getValue())
-            fuse_args.push_back("-f");
+            fuse_args.emplace_back("-f");
 
 #ifdef __APPLE__
         const char* copyfile_disable = ::getenv("COPYFILE_DISABLE");
@@ -1165,36 +1165,38 @@ public:
                         "environmental "
                         "variable COPYFILE_DISABLE is set to \"%s\"",
                         copyfile_disable);
-            fuse_args.push_back("-o");
-            fuse_args.push_back("noappledouble");
+            fuse_args.emplace_back("-o");
+            fuse_args.emplace_back("noappledouble");
         }
 #elif _WIN32
-        fuse_args.push_back("-ouid=-1,gid=-1,umask=0");
+        fuse_args.emplace_back("-ouid=-1,gid=-1,umask=0");
         if (network_mount)
         {
-            fuse_args.push_back("--VolumePrefix=" + mount_point.getValue().substr(1));
+            fuse_args.emplace_back("--VolumePrefix=" + mount_point.getValue().substr(1));
         }
 #else
-        fuse_args.push_back("-o");
-        fuse_args.push_back("big_writes");
+        fuse_args.emplace_back("-o");
+        fuse_args.emplace_back("big_writes");
 #endif
-        fuse_args.push_back("-o");
-        fuse_args.push_back("fsname=" + fsname.getValue());
-        fuse_args.push_back("-o");
-        fuse_args.push_back("subtype=" + fssubtype.getValue());
+        fuse_args.emplace_back("-o");
+        fuse_args.emplace_back("hard_remove");
+        fuse_args.emplace_back("-o");
+        fuse_args.emplace_back("fsname=" + fsname.getValue());
+        fuse_args.emplace_back("-o");
+        fuse_args.emplace_back("subtype=" + fssubtype.getValue());
         if (fuse_options.isSet())
         {
             for (const std::string& opt : fuse_options.getValue())
             {
-                fuse_args.push_back("-o");
-                fuse_args.push_back(opt);
+                fuse_args.emplace_back("-o");
+                fuse_args.emplace_back(opt);
             }
         }
 
 #ifdef WIN32
         if (!network_mount)
 #endif
-            fuse_args.push_back(mount_point.getValue());
+            fuse_args.emplace_back(mount_point.getValue());
 
         VERBOSE_LOG("Filesystem parameters: format version %d, block size %u (bytes), iv size %u "
                     "(bytes)",
