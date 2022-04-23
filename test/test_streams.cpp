@@ -1,5 +1,6 @@
 #include "catch.hpp"
 
+#include "crypto.h"
 #include "lite_stream.h"
 #include "platform.h"
 #include "streams.h"
@@ -13,6 +14,25 @@
 
 using securefs::OSService;
 
+static std::mt19937& get_random_number_engine()
+{
+    struct Initializer
+    {
+        std::mt19937 mt;
+
+        Initializer()
+        {
+            uint32_t data[64];
+            ::securefs::generate_random(data, sizeof(data));
+            std::seed_seq seq(std::begin(data), std::end(data));
+            mt.seed(seq);
+        }
+    };
+
+    static Initializer initializer;
+    return initializer.mt;
+}
+
 static void test(securefs::StreamBase& stream, unsigned times)
 {
     auto posix_stream_impl = OSService::get_default().open_file_stream(
@@ -24,10 +44,10 @@ static void test(securefs::StreamBase& stream, unsigned times)
 
     std::vector<byte> data(4096 * 5);
     std::vector<byte> buffer(data), posix_buffer(data);
-    std::mt19937 mt{std::random_device{}()};
+    auto& mt = get_random_number_engine();
 
     {
-        std::uniform_int_distribution<unsigned> dist;
+        std::uniform_int_distribution<unsigned> dist(0, 255);
         for (auto&& b : data)
             b = static_cast<byte>(dist(mt));
     }
@@ -62,8 +82,10 @@ static void test(securefs::StreamBase& stream, unsigned times)
             break;
 
         case 3:
-            // stream.resize(a);
-            // posix_stream.resize(a);
+            stream.resize(a);
+            posix_stream.resize(a);
+            REQUIRE(stream.size() == a);
+            REQUIRE(posix_stream.size() == a);
             break;
 
         case 4:
@@ -152,7 +174,28 @@ namespace dummy
             memcpy(m_buffer[block_number].data(), input, length);
         }
 
-        void adjust_logical_size(length_type length) override { (void)length; }
+        void adjust_logical_size(length_type length) override
+        {
+            if (length == 0)
+            {
+                m_buffer.clear();
+                return;
+            }
+            auto num_blocks = (length + (BLOCK_SIZE - 1)) / BLOCK_SIZE;
+            auto residue = length % BLOCK_SIZE;
+            if (num_blocks > m_buffer.size())
+            {
+                for (auto i = m_buffer.size(); i < num_blocks; ++i)
+                {
+                    m_buffer.emplace_back(BLOCK_SIZE, 0);
+                }
+            }
+            else if (num_blocks < m_buffer.size())
+            {
+                m_buffer.resize(num_blocks);
+            }
+            m_buffer.back().resize(residue ? residue : BLOCK_SIZE);
+        }
     };
 
     const size_t DummyBlockStream::BLOCK_SIZE = 1000;
