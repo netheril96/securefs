@@ -2,9 +2,15 @@
 	path = external/utf8proc
 	url = https://github.com/JuliaStrings/utf8proc.git
 	branch = release-1.2
+	shallow = true
+
 [submodule "external/argon2"]
 	path = external/argon2
 	url = https://github.com/netheril96/phc-winner-argon2
+	shallow = true
+
 [submodule "external/cryptopp"]
 	path = external/cryptopp
 	url = https://github.com/weidai11/cryptopp.git
+	shallow = true
+	ignore = untracked
