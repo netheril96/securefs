@@ -24,6 +24,9 @@ git_describe(GIT_VERSION --tags)
 configure_file(${CMAKE_SOURCE_DIR}/sources/git-version.cpp.in
                ${CMAKE_BINARY_DIR}/git-version.cpp)
 
+file(COPY ${CMAKE_SOURCE_DIR}/external/cmake-cryptopp/CMakeLists.txt
+     DESTINATION ${CMAKE_SOURCE_DIR}/external/cryptopp)
+
 if(UNIX)
     find_path(FUSE_INCLUDE_DIR fuse.h PATHS /usr/local/include)
     find_library(FUSE_LIBRARIES fuse PATHS /usr/local/lib)
