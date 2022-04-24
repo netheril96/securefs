@@ -4,10 +4,16 @@ set(CMAKE_CXX_STANDARD 11)
 
 project(securefs)
 enable_testing()
-if(POLICY CMP0048)
-    cmake_policy(SET CMP0048 NEW)
-endif()
+cmake_policy(SET CMP0048 NEW)
+cmake_policy(SET CMP0069 NEW)
+set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
 
+include(CheckIPOSupported)
+check_ipo_supported(RESULT IPO_SUPPORTED OUTPUT error)
+
+if(IPO_SUPPORTED)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+endif()
 set(CMAKE_FIND_FRAMEWORK NEVER)
 
 execute_process(COMMAND bash -c "uname -m" OUTPUT_VARIABLE architecture)
