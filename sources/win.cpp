@@ -768,10 +768,8 @@ native_string_type OSService::concat_and_norm(StringRef base_dir, StringRef path
 
 OSService::OSService(StringRef path)
 {
-    wchar_t resolved[4000];
-    CHECK_CALL(GetFullPathNameW(widen_string(path).c_str(), 4000, resolved, nullptr));
-    m_dir_name = narrow_string(resolved);
-    m_root_handle = CreateFileW(resolved,
+    auto wide_path = widen_string(path);
+    m_root_handle = CreateFileW(wide_path.c_str(),
                                 GENERIC_READ,
                                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                                 nullptr,
@@ -779,7 +777,15 @@ OSService::OSService(StringRef path)
                                 FILE_FLAG_BACKUP_SEMANTICS,
                                 nullptr);
     if (m_root_handle == INVALID_HANDLE_VALUE)
-        THROW_WINDOWS_EXCEPTION_WITH_PATH(GetLastError(), L"CreateFileW", resolved);
+        THROW_WINDOWS_EXCEPTION_WITH_PATH(GetLastError(), L"CreateFileW", wide_path);
+    std::wstring fullname(33000, 0);
+    DWORD size = GetFinalPathNameByHandleW(m_root_handle, &fullname[0], fullname.size(), 0);
+    if (size <= 0)
+    {
+        THROW_WINDOWS_EXCEPTION(GetLastError(), L"GetFinalPathNameByHandleW");
+    }
+    fullname.resize(size);
+    m_dir_name = narrow_string(fullname);
 }
 
 std::shared_ptr<FileStream>
@@ -1101,6 +1107,10 @@ void windows_init(void)
 
 std::wstring widen_string(StringRef str)
 {
+    if (str.empty())
+    {
+        return {};
+    }
     if (str.size() >= std::numeric_limits<int>::max())
         throwInvalidArgumentException("String too long");
     int sz = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), nullptr, 0);
@@ -1113,6 +1123,10 @@ std::wstring widen_string(StringRef str)
 
 std::string narrow_string(WideStringRef str)
 {
+    if (str.empty())
+    {
+        return {};
+    }
     if (str.size() >= std::numeric_limits<int>::max())
         throwInvalidArgumentException("String too long");
     int sz = WideCharToMultiByte(
