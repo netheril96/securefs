@@ -102,10 +102,10 @@ def securefs_unmount(p: subprocess.Popen, mount_point: str):
         if sys.platform == "win32":
             p.send_signal(signal.CTRL_BREAK_EVENT)
         else:
-            p.send_signal(signal.SIGINT)
-        p.communicate(timeout=5)
+            subprocess.check_call(["umount", mount_point])
         # Ignore error on Apple platforms,
         # as MacFUSE has bugs during unmounting.
+        p.wait(timeout=5)
         if p.returncode and sys.platform != "darwin":
             raise RuntimeError(f"securefs failed with code {p.returncode}")
         if ismount(mount_point):

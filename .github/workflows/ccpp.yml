@@ -5,6 +5,7 @@ on: [push, pull_request]
 jobs:
   build-ubuntu:
     runs-on: ubuntu-18.04
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v1
         with:
@@ -27,6 +28,7 @@ jobs:
           name: securefs-linux-amd64
   build-mac:
     runs-on: macos-10.15
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v1
         with:
@@ -51,6 +53,7 @@ jobs:
           name: securefs-macos-amd64
   build-windows:
     runs-on: windows-latest
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v1
         with:
