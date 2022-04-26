@@ -10,7 +10,7 @@ TEST_CASE("Test windows path normalization")
     REQUIRE(OSService::concat_and_norm(R"(C:\Users)", R"(C:\abc.txt)") == LR"(C:\abc.txt)");
     REQUIRE(OSService::concat_and_norm(R"(C:\Users)", R"(\\server\share)") == LR"(\\server\share)");
     REQUIRE(OSService::concat_and_norm(R"(C:\Users)", R"(/cygwin)") == LR"(/cygwin)");
-    REQUIRE(OSService::concat_and_norm(R"(C:\Users)", R"(cygwin)") == LR"(\\?\C:\Users\cygwin)");
+    REQUIRE(OSService::concat_and_norm(R"(C:\Users)", R"(👌🎍😍)") == LR"(\\?\C:\Users\👌🎍😍)");
     REQUIRE(OSService::concat_and_norm(R"(C:\Users)", R"(cygwin\..\abc\.\.\.)")
             == LR"(\\?\C:\Users\abc)");
     REQUIRE(OSService::concat_and_norm(R"(\\server\share\)", R"(cygwin\..\abc\.\.\.)")

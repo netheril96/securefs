@@ -65,6 +65,7 @@ else()
     link_libraries(-DELAYLOAD:winfsp-${ARCH}.dll)
     link_libraries(delayimp.lib)
     add_compile_options(/MP)
+    add_compile_options(/utf-8)
 endif()
 
 add_definitions(-D_REENTRANT -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=28
