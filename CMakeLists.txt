@@ -102,7 +102,12 @@ file(GLOB TEST_SOURCES test/*.cpp)
 add_library(securefs-static STATIC ${SOURCES})
 link_libraries(securefs-static)
 
-add_executable(securefs main.cpp)
+if(MSVC)
+    add_executable(securefs main.cpp securefs.manifest)
+else()
+    add_executable(securefs main.cpp)
+endif()
+
 add_executable(securefs_test ${TEST_SOURCES})
 
 add_test(NAME sec_test COMMAND securefs_test)
