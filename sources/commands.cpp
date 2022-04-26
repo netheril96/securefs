@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <thread>
 #include <typeinfo>
 #include <unordered_map>
 #include <vector>
@@ -976,6 +977,12 @@ private:
                                                "none",
 #endif
                                                ""};
+    TCLAP::ValueArg<int> attr_timeout{"",
+                                      "attr-timeout",
+                                      "Number of seconds to cache file attributes. Default is 30.",
+                                      false,
+                                      30,
+                                      "int"};
 
 private:
     std::vector<const char*> to_c_style_args(const std::vector<std::string>& args)
@@ -1035,6 +1042,7 @@ public:
         cmdline.add(&fsname);
         cmdline.add(&fssubtype);
         cmdline.add(&noflock);
+        cmdline.add(&attr_timeout);
         cmdline.parse(argc, argv);
 
         get_password(false);
@@ -1148,11 +1156,32 @@ public:
                      e.what());
         }
 
-        std::vector<std::string> fuse_args;
-        fuse_args.emplace_back("securefs");
+        std::vector<std::string> fuse_args{
+            "securefs",
+            "-o",
+            "hard_remove",
+            "-o",
+            "fsname=" + fsname.getValue(),
+            "-o",
+            "subtype=" + fssubtype.getValue(),
+            "-o",
+            strprintf("entry_timeout=%d", attr_timeout.getValue()),
+            "-o",
+            strprintf("attr_timeout=%d", attr_timeout.getValue()),
+            "-o",
+            strprintf("negative_timeout=%d", attr_timeout.getValue()),
+        };
         if (config.version < 4 || single_threaded.getValue())
         {
             fuse_args.emplace_back("-s");
+        }
+        else
+        {
+#ifdef _WIN32
+            fuse_args.emplace_back("-o");
+            fuse_args.emplace_back(
+                strprintf("ThreadCount=%d", 2 * std::thread::hardware_concurrency()));
+#endif
         }
         if (!background.getValue())
             fuse_args.emplace_back("-f");
@@ -1174,16 +1203,18 @@ public:
         {
             fuse_args.emplace_back("--VolumePrefix=" + mount_point.getValue().substr(1));
         }
+        fuse_args.emplace_back("-o");
+        fuse_args.emplace_back(strprintf("FileInfoTimeout=%d", attr_timeout.getValue() * 1000));
+        fuse_args.emplace_back("-o");
+        fuse_args.emplace_back(strprintf("DirInfoTimeout=%d", attr_timeout.getValue() * 1000));
+        fuse_args.emplace_back("-o");
+        fuse_args.emplace_back(strprintf("EaTimeout=%d", attr_timeout.getValue() * 1000));
+        fuse_args.emplace_back("-o");
+        fuse_args.emplace_back(strprintf("VolumeInfoTimeout=%d", attr_timeout.getValue() * 1000));
 #else
         fuse_args.emplace_back("-o");
         fuse_args.emplace_back("big_writes");
 #endif
-        fuse_args.emplace_back("-o");
-        fuse_args.emplace_back("hard_remove");
-        fuse_args.emplace_back("-o");
-        fuse_args.emplace_back("fsname=" + fsname.getValue());
-        fuse_args.emplace_back("-o");
-        fuse_args.emplace_back("subtype=" + fssubtype.getValue());
         if (fuse_options.isSet())
         {
             for (const std::string& opt : fuse_options.getValue())
