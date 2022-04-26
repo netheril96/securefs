@@ -522,7 +522,7 @@ private:
 
 public:
     explicit WindowsFileStream(WideStringRef path, int flags, unsigned mode)
-        : m_handle(INVALID_HANDLE_VALUE), m_is_ntfs(false)
+        : m_handle(INVALID_HANDLE_VALUE)
     {
         DWORD access_flags = 0;
         switch (flags & O_ACCMODE)
@@ -569,15 +569,6 @@ public:
             DWORD err = GetLastError();
             throw WindowsException(err, L"CreateFileW", path.to_string());
         }
-
-        wchar_t fsname[128];
-        if (!GetVolumeInformationByHandleW(
-                m_handle, nullptr, 0, nullptr, nullptr, 0, fsname, array_length(fsname)))
-            return;
-        m_is_ntfs = (CompareStringEx(
-                         LOCALE_NAME_INVARIANT, NORM_IGNORECASE, fsname, -1, L"NTFS", -1, 0, 0, 0)
-                     == CSTR_EQUAL);
-        TRACE_LOG("Opening file on a %s volume", narrow_string(fsname).c_str());
     }
 
     ~WindowsFileStream() { CloseHandle(m_handle); }
@@ -651,8 +642,6 @@ public:
 
     void write(const void* input, offset_type offset, length_type length) override
     {
-        if (offset > size())
-            resize(offset + length);    // Ensure that intervening data is zeroed
         while (length > MAX_SINGLE_BLOCK)
         {
             write32(input, offset, MAX_SINGLE_BLOCK);
@@ -685,20 +674,6 @@ public:
 
     void resize(length_type len) override
     {
-        if (!m_is_ntfs)
-        {
-            // For files on other filesystems, SetEndOfFile beyond end will leave intervening bytes
-            // uninitialized
-            // Manually zeroing ourselves
-            auto old_size = this->size();
-            if (old_size < len)
-            {
-                const char buffer[4096] = {0};
-                for (size_t sz = old_size; sz < len; sz += sizeof(buffer))
-                    write32(buffer, sz, std::min<size_t>(sizeof(buffer), len - sz));
-                return;
-            }
-        }
         LARGE_INTEGER llen;
         llen.QuadPart = len;
         CHECK_CALL(SetFilePointerEx(m_handle, llen, nullptr, FILE_BEGIN));
@@ -724,7 +699,7 @@ public:
         CHECK_CALL(SetFileTime(m_handle, nullptr, &access_time, &mod_time));
     }
     void fstat(struct fuse_stat* st) const override { stat_file_handle(m_handle, st); }
-    bool is_sparse() const noexcept override { return m_is_ntfs; }
+    bool is_sparse() const noexcept override { return true; }
 };
 
 OSService::OSService() : m_root_handle(INVALID_HANDLE_VALUE) {}
