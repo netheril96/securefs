@@ -19,6 +19,7 @@ import uuid
 from typing import List, Optional, Sequence
 from typing import Set
 import enum
+import random
 
 faulthandler.enable()
 
@@ -26,6 +27,8 @@ faulthandler.enable()
 SECUREFS_BINARY = os.environ["SECUREFS_BINARY"]
 if not os.path.isfile(SECUREFS_BINARY):
     raise ValueError(f"{repr(SECUREFS_BINARY)} is not a file!")
+TOTAL_NUM_SHARDS = int(os.environ.get("SECUREFS_TEST_NUM_SHARDS", "1"))
+SHARD_INDEX = int(os.environ.get("SECUREFS_TEST_SHARD_INDEX", "0"))
 
 if sys.platform == "darwin":
     try:
@@ -82,8 +85,8 @@ def securefs_mount(
         else 0,
     )
     try:
-        for _ in range(300):
-            time.sleep(0.05)
+        for _ in range(10):
+            time.sleep(random.random() * 0.25 + 0.75)
             try:
                 if ismount(mount_point):
                     return p
@@ -91,23 +94,21 @@ def securefs_mount(
                 traceback.print_exc()
         raise TimeoutError(f"Failed to mount {repr(mount_point)} after many attempts")
     except:
-        p.communicate(timeout=0.1)
+        p.wait(timeout=10)
         p.kill()
         raise
 
 
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
-    time.sleep(0.005)
+    time.sleep(random.random() * 0.25 + 0.75)
     with p:
         if sys.platform == "win32":
             p.send_signal(signal.CTRL_BREAK_EVENT)
         else:
-            subprocess.check_call(["umount", mount_point])
-        # Ignore error on Apple platforms,
-        # as MacFUSE has bugs during unmounting.
+            p.send_signal(signal.SIGINT)
         p.wait(timeout=5)
-        if p.returncode and sys.platform != "darwin":
-            raise RuntimeError(f"securefs failed with code {p.returncode}")
+        if p.returncode:
+            logging.warn("securefs returns non-zero exit code: %d", p.returncode)
         if ismount(mount_point):
             raise RuntimeError(f"{mount_point} still mounted")
 
@@ -221,7 +222,9 @@ def parametrize(possible_args: Sequence[Sequence]):
                 raise ValueError(
                     "The possible arguments list does not match the parameters"
                 )
-        for l in possible_args:
+        for i, l in enumerate(possible_args):
+            if i % TOTAL_NUM_SHARDS != SHARD_INDEX:
+                continue
             cls = func(*l)
             if cls is None:
                 continue
