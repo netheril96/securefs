@@ -117,10 +117,8 @@ find_package(Python3 COMPONENTS Interpreter)
 if(Python3_FOUND)
     add_test(
         NAME simple_test
-        COMMAND
-            ${Python3_EXECUTABLE}
-            ${PROJECT_SOURCE_DIR}/test/sharded_simple_test_main.py --binary
-            $<TARGET_FILE:securefs>)
+        COMMAND ${CMAKE_COMMAND} -E env SECUREFS_BINARY=$<TARGET_FILE:securefs>
+                ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/simple_test.py)
 endif()
 
 install(TARGETS securefs DESTINATION bin)
