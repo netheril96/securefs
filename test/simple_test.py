@@ -46,8 +46,13 @@ if sys.platform == "win32":
         attribute = ctypes.windll.kernel32.GetFileAttributesW(path.rstrip("/\\"))
         return attribute != -1 and (attribute & 0x400) == 0x400
 
+    def statvfs(path):
+        if not ctypes.windll.kernel32.GetDiskFreeSpaceExW(path, None, None, None):
+            raise ctypes.WinError()
+
 else:
     ismount = os.path.ismount
+    statvfs = os.statvfs
 
 
 def securefs_mount(
@@ -83,12 +88,13 @@ def securefs_mount(
     )
     try:
         for _ in range(300):
-            time.sleep(0.05)
             try:
                 if ismount(mount_point):
+                    statvfs(mount_point)
                     return p
             except EnvironmentError:
                 traceback.print_exc()
+            time.sleep(0.005)
         raise TimeoutError(f"Failed to mount {repr(mount_point)} after many attempts")
     except:
         p.communicate(timeout=0.1)
@@ -97,17 +103,15 @@ def securefs_mount(
 
 
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
-    time.sleep(0.005)
+    statvfs(mount_point)
     with p:
         if sys.platform == "win32":
             p.send_signal(signal.CTRL_BREAK_EVENT)
         else:
-            subprocess.check_call(["umount", mount_point])
-        # Ignore error on Apple platforms,
-        # as MacFUSE has bugs during unmounting.
+            p.send_signal(signal.SIGINT)
         p.wait(timeout=5)
-        if p.returncode and sys.platform != "darwin":
-            raise RuntimeError(f"securefs failed with code {p.returncode}")
+        if p.returncode:
+            logging.warn("securefs exited with non-zero code: %d", p.returncode)
         if ismount(mount_point):
             raise RuntimeError(f"{mount_point} still mounted")
 
