@@ -99,18 +99,10 @@ def securefs_mount(
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
     time.sleep(0.005)
     with p:
-        for _ in range(10):
-            if sys.platform == "win32":
-                p.send_signal(signal.CTRL_BREAK_EVENT)
-            else:
-                if subprocess.call(["umount", mount_point]):
-                    p.send_signal(signal.SIGINT)
-            try:
-                p.wait(0.05)
-            except subprocess.TimeoutExpired:
-                pass
-            else:
-                break
+        if sys.platform == "win32":
+            p.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            subprocess.check_call(["umount", mount_point])
         # Ignore error on Apple platforms,
         # as MacFUSE has bugs during unmounting.
         p.wait(timeout=5)
