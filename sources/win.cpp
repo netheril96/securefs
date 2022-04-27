@@ -1078,7 +1078,10 @@ std::string OSService::stringify_system_error(int errcode)
 
 void windows_init(void)
 {
+    static auto original_cp = ::GetConsoleOutputCP();
     ::SetConsoleOutputCP(CP_UTF8);
+    atexit([]() { ::SetConsoleOutputCP(original_cp); });
+
     // Use a large buffer to prevent Windows from chopping valid UTF-8 sequences.
     setvbuf(stdout, nullptr, _IOFBF, 65535);
     setvbuf(stderr, nullptr, _IOFBF, 65535);
