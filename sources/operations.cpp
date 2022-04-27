@@ -3,6 +3,7 @@
 #include "constants.h"
 #include "crypto.h"
 #include "platform.h"
+#include "test_workaround.h"
 
 #include <algorithm>
 #include <chrono>
@@ -191,7 +192,8 @@ namespace internal
         {
             std::string contents;
             static_cast<Directory*>(inner_fb)->iterate_over_entries(
-                [&contents](const std::string& str, const id_type&, int) -> bool {
+                [&contents](const std::string& str, const id_type&, int) -> bool
+                {
                     contents.push_back('\n');
                     contents += str;
                     return true;
@@ -262,6 +264,8 @@ namespace operations
             fg->stat(st);
             st->st_uid = OSService::getuid();
             st->st_gid = OSService::getgid();
+            TestWorkaround::instance().postprocess_getattr(path, st);
+
             return 0;
         }
         COMMON_CATCH_BLOCK
@@ -306,7 +310,8 @@ namespace operations
             struct fuse_stat st;
             memset(&st, 0, sizeof(st));
             auto actions
-                = [&st, filler, buffer](const std::string& name, const id_type&, int type) -> bool {
+                = [&st, filler, buffer](const std::string& name, const id_type&, int type) -> bool
+            {
                 st.st_mode = FileBase::mode_for_type(type);
                 bool success = filler(buffer, name.c_str(), &st, 0) == 0;
                 if (!success)
@@ -666,6 +671,10 @@ namespace operations
 
         try
         {
+            if (TestWorkaround::instance().preprocess_utimens(path, ts))
+            {
+                return 0;
+            }
             auto fg = internal::open_all(fs, path);
             fg->utimens(ts);
             return 0;
