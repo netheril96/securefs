@@ -41,13 +41,31 @@ else:
 
 if sys.platform == "win32":
 
-    def ismount(path):
-        # Not all reparse points are mounts, but in our test, that is close enough
+    def is_mounted(path: str):
         attribute = ctypes.windll.kernel32.GetFileAttributesW(path.rstrip("/\\"))
         return attribute != -1 and (attribute & 0x400) == 0x400
 
+    def is_mounted_and_ready(path: str) -> bool:
+        if not is_mounted(path):
+            return False
+        free_bytes = ctypes.c_ulonglong(0)
+        success = ctypes.windll.kernel32.GetDiskFreeSpaceExW(
+            ctypes.c_wchar_p(path), None, None, ctypes.pointer(free_bytes)
+        )
+        return success != 0
+
 else:
-    ismount = os.path.ismount
+    is_mounted = os.path.ismount
+
+    def is_mounted_and_ready(path: str) -> bool:
+        if not is_mounted(path):
+            return False
+        try:
+            os.statvfs(path)
+        except OSError:
+            return False
+        else:
+            return True
 
 
 def securefs_mount(
@@ -83,15 +101,15 @@ def securefs_mount(
     )
     try:
         for _ in range(300):
-            time.sleep(0.05)
             try:
-                if ismount(mount_point):
+                if is_mounted_and_ready(mount_point):
                     return p
             except EnvironmentError:
                 traceback.print_exc()
+                time.sleep(0.005)
         raise TimeoutError(f"Failed to mount {repr(mount_point)} after many attempts")
     except:
-        p.communicate(timeout=0.1)
+        p.wait(timeout=5)
         p.kill()
         raise
 
@@ -106,17 +124,17 @@ def securefs_unmount(p: subprocess.Popen, mount_point: str):
                 if subprocess.call(["umount", mount_point]):
                     p.send_signal(signal.SIGINT)
             try:
-                p.wait(0.05)
+                p.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 pass
             else:
                 break
-        # Ignore error on Apple platforms,
-        # as MacFUSE has bugs during unmounting.
         p.wait(timeout=5)
-        if p.returncode and sys.platform != "darwin":
-            raise RuntimeError(f"securefs failed with code {p.returncode}")
-        if ismount(mount_point):
+        if p.returncode:
+            logging.warn(
+                "securefs un-mounting failed with return code %d", p.returncode
+            )
+        if is_mounted_and_ready(mount_point):
             raise RuntimeError(f"{mount_point} still mounted")
 
 
