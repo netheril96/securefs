@@ -1,6 +1,8 @@
 .DS_Store
 ._*
 build/
+*-build/
+build-*/
 make/
 *.exe
 *.obj
@@ -8,3 +10,4 @@ make/
 .vscode
 out/
 CMakeSettings.json
+__pycache__
