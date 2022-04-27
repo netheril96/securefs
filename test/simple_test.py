@@ -91,6 +91,8 @@ def securefs_mount(
             try:
                 if ismount(mount_point):
                     statvfs(mount_point)
+                    if sys.platform == "darwin":
+                        time.sleep(0.01)
                     return p
             except EnvironmentError:
                 traceback.print_exc()
@@ -104,6 +106,8 @@ def securefs_mount(
 
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
     statvfs(mount_point)
+    if sys.platform == "darwin":
+        time.sleep(0.01)
     with p:
         if sys.platform == "win32":
             p.send_signal(signal.CTRL_BREAK_EVENT)
