@@ -770,9 +770,10 @@ Json::Value obj_value(Json::objectValue); // {}
 #endif
   ~Value();
 
-  /// Deep copy, then swap(other).
+  /// Deep copy.
   /// \note Over-write existing comments. To preserve comments, use #swapPayload().
-  Value& operator=(Value other);
+  Value& operator=(const Value& other);
+  Value& operator=(Value&& other);
 
   /// Swap everything.
   void swap(Value& other);
@@ -1695,7 +1696,7 @@ public:
 
   /** A simple way to update a specific setting.
    */
-  Value& operator[](JSONCPP_STRING key);
+  Value& operator[](const JSONCPP_STRING& key);
 
   /** Called by ctor, but you can use this to reset settings_.
    * \pre 'settings' != NULL (but Json::null is fine)

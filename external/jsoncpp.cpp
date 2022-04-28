@@ -2211,7 +2211,7 @@ bool CharReaderBuilder::validate(Json::Value* invalid) const
   }
   return 0u == inv.size();
 }
-Value& CharReaderBuilder::operator[](JSONCPP_STRING key)
+Value& CharReaderBuilder::operator[](const JSONCPP_STRING& key)
 {
   return settings_[key];
 }
@@ -2994,7 +2994,12 @@ Value::~Value() {
   value_.uint_ = 0;
 }
 
-Value& Value::operator=(Value other) {
+Value& Value::operator=(const Value& other) {
+  copy(other);
+  return *this;
+}
+
+Value& Value::operator=(Value&& other) {
   swap(other);
   return *this;
 }
