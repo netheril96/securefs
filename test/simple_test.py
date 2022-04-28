@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 # coding: utf-8
+import ctypes
 import errno
 import faulthandler
 import itertools
@@ -7,23 +8,19 @@ import logging
 import os
 import inspect
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
 import time
+import traceback
 import unittest
 import uuid
 from typing import List, Optional, Sequence
 from typing import Set
 import enum
-import random
 
 faulthandler.enable()
-
-SECUREF_TEST_WORKAROUND_SPECIAL_ATIME = random.randrange(0x1FFF, 0xAFFF)
-os.environ["SECUREF_TEST_WORKAROUND_SPECIAL_ATIME"] = str(
-    SECUREF_TEST_WORKAROUND_SPECIAL_ATIME
-)
 
 
 SECUREFS_BINARY = os.environ["SECUREFS_BINARY"]
@@ -34,12 +31,28 @@ if sys.platform == "darwin":
     try:
         import xattr
     except ImportError:
-        logging.error(
-            'Importing module "xattr" failed. Testing for extended attribute support is skipped.'
+        sys.stderr.write(
+            'Importing module "xattr" failed. Testing for extended attribute support is skipped\n'
         )
         xattr = None
 else:
     xattr = None
+
+
+if sys.platform == "win32":
+
+    def ismount(path):
+        # Not all reparse points are mounts, but in our test, that is close enough
+        attribute = ctypes.windll.kernel32.GetFileAttributesW(path.rstrip("/\\"))
+        return attribute != -1 and (attribute & 0x400) == 0x400
+
+    def statvfs(path):
+        if not ctypes.windll.kernel32.GetDiskFreeSpaceExW(path, None, None, None):
+            raise ctypes.WinError()
+
+else:
+    ismount = os.path.ismount
+    statvfs = os.statvfs
 
 
 def securefs_mount(
@@ -67,53 +80,44 @@ def securefs_mount(
         command.append("--config")
         command.append(config_filename)
     logging.info("Start mounting, command:\n%s", " ".join(command))
-    p = subprocess.Popen(command)
+    p = subprocess.Popen(
+        command,
+        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+        if sys.platform == "win32"
+        else 0,
+    )
     try:
-        for _ in range(3000):
+        for _ in range(300):
             try:
-                st = os.stat(mount_point)
-            except OSError:
-                pass
-            else:
-                if st.st_atime_ns == SECUREF_TEST_WORKAROUND_SPECIAL_ATIME * 1000000000:
+                if ismount(mount_point):
+                    statvfs(mount_point)
+                    if sys.platform == "darwin":
+                        time.sleep(0.01)
                     return p
-            time.sleep(0.001)
+            except EnvironmentError:
+                traceback.print_exc()
+            time.sleep(0.005)
         raise TimeoutError(f"Failed to mount {repr(mount_point)} after many attempts")
     except:
-        p.wait(timeout=5)
+        p.communicate(timeout=0.1)
         p.kill()
         raise
 
 
-def _is_connection_reset(o: OSError) -> bool:
-    if o.errno == errno.ECONNRESET:
-        return True
-    try:
-        return o.winerror == 995
-    except AttributeError:
-        return False
-
-
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
+    statvfs(mount_point)
+    if sys.platform == "darwin":
+        time.sleep(0.01)
     with p:
-        try:
-            os.utime(mount_point, (SECUREF_TEST_WORKAROUND_SPECIAL_ATIME, 0))
-        except OSError as o:
-            if not _is_connection_reset(o):
-                raise
-        for _ in range(3000):
-            try:
-                st = os.stat(mount_point)
-            except OSError as o:
-                if o.errno == errno.ENOENT:
-                    break
-            else:
-                if st.st_atime_ns != SECUREF_TEST_WORKAROUND_SPECIAL_ATIME * 1000000000:
-                    break
-            time.sleep(0.001)
+        if sys.platform == "win32":
+            p.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            p.send_signal(signal.SIGINT)
         p.wait(timeout=5)
         if p.returncode:
             logging.warn("securefs exited with non-zero code: %d", p.returncode)
+        if ismount(mount_point):
+            raise RuntimeError(f"{mount_point} still mounted")
 
 
 def securefs_create(
