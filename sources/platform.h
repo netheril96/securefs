@@ -147,6 +147,7 @@ class OSService
 private:
 #if defined(WIN32)
     void* m_root_handle;
+    bool m_is_long_path_supported = false;
 #else
     int m_dir_fd;
 #endif
@@ -155,7 +156,7 @@ private:
 public:
     static bool is_absolute(StringRef path);
     static native_string_type concat_and_norm(StringRef base_dir, StringRef path);
-    native_string_type norm_path(StringRef path) const { return concat_and_norm(m_dir_name, path); }
+    native_string_type norm_path(StringRef path) const;
 
 public:
     OSService();
@@ -194,8 +195,8 @@ public:
     // <errno.h>
     ssize_t listxattr(const char* path, char* buf, size_t size) const noexcept;
     ssize_t getxattr(const char* path, const char* name, void* buf, size_t size) const noexcept;
-    int setxattr(const char* path, const char* name, void* buf, size_t size, int flags) const
-        noexcept;
+    int
+    setxattr(const char* path, const char* name, void* buf, size_t size, int flags) const noexcept;
     int removexattr(const char* path, const char* name) const noexcept;
 #endif
 public:
