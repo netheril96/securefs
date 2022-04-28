@@ -7,7 +7,6 @@
 #include "myutils.h"
 #include "operations.h"
 #include "platform.h"
-#include "test_workaround.h"
 
 #include <math.h>
 
@@ -99,7 +98,6 @@ namespace lite
         {
             if (!filesystem->stat(path, st))
                 return -ENOENT;
-            TestWorkaround::instance().postprocess_getattr(path, st);
             TRACE_LOG("stat (%s): mode=0%o, uid=%u, gid=%u, size=%zu",
                       path,
                       st->st_mode,
@@ -427,10 +425,6 @@ namespace lite
         SINGLE_COMMON_PROLOGUE
         try
         {
-            if (TestWorkaround::instance().preprocess_utimens(path, ts))
-            {
-                return 0;
-            }
             filesystem->utimens(path, ts);
             return 0;
         }
