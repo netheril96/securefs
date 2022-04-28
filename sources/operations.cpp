@@ -191,7 +191,8 @@ namespace internal
         {
             std::string contents;
             static_cast<Directory*>(inner_fb)->iterate_over_entries(
-                [&contents](const std::string& str, const id_type&, int) -> bool {
+                [&contents](const std::string& str, const id_type&, int) -> bool
+                {
                     contents.push_back('\n');
                     contents += str;
                     return true;
@@ -306,7 +307,8 @@ namespace operations
             struct fuse_stat st;
             memset(&st, 0, sizeof(st));
             auto actions
-                = [&st, filler, buffer](const std::string& name, const id_type&, int type) -> bool {
+                = [&st, filler, buffer](const std::string& name, const id_type&, int type) -> bool
+            {
                 st.st_mode = FileBase::mode_for_type(type);
                 bool success = filler(buffer, name.c_str(), &st, 0) == 0;
                 if (!success)
@@ -773,6 +775,11 @@ namespace operations
     void init_fuse_operations(struct fuse_operations* opt, bool xattr)
     {
         memset(opt, 0, sizeof(*opt));
+
+        opt->flag_nopath = true;
+        opt->flag_nullpath_ok = true;
+        opt->flag_utime_omit_ok = true;
+
         opt->getattr = &securefs::operations::getattr;
         opt->init = &securefs::operations::init;
         opt->destroy = &securefs::operations::destroy;

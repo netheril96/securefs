@@ -531,6 +531,9 @@ namespace lite
     {
         memset(opt, 0, sizeof(*opt));
 
+        opt->flag_nopath = true;
+        opt->flag_nullpath_ok = true;
+
         opt->init = &::securefs::lite::init;
         opt->destroy = &::securefs::lite::destroy;
         opt->statfs = &::securefs::lite::statfs;

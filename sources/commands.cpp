@@ -1170,6 +1170,10 @@ public:
             strprintf("attr_timeout=%d", attr_timeout.getValue()),
             "-o",
             strprintf("negative_timeout=%d", attr_timeout.getValue()),
+#ifndef _WIN32
+            "-o",
+            "atomic_o_trunc",
+#endif
         };
         if (config.version < 4 || single_threaded.getValue())
         {
