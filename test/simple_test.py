@@ -61,7 +61,7 @@ def securefs_mount(
     password: Optional[str],
     keyfile: Optional[str] = None,
     config_filename: Optional[str] = None,
-) -> subprocess.Popen[bytes]:
+) -> subprocess.Popen:
     command = [
         SECUREFS_BINARY,
         "mount",
@@ -106,13 +106,13 @@ def securefs_mount(
 
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
     statvfs(mount_point)
-    if sys.platform == "darwin":
-        time.sleep(0.01)
     with p:
         if sys.platform == "win32":
             p.send_signal(signal.CTRL_BREAK_EVENT)
+        elif sys.platform == "linux":
+            subprocess.check_call(["fusermount", "-u", mount_point])
         else:
-            p.send_signal(signal.SIGINT)
+            subprocess.check_call(["umount", mount_point])
         p.wait(timeout=5)
         if p.returncode:
             logging.warn("securefs exited with non-zero code: %d", p.returncode)
