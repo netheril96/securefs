@@ -255,11 +255,6 @@ native_string_type OSService::concat_and_norm(StringRef base_dir, StringRef path
     return base_dir + "/" + path;
 }
 
-native_string_type OSService::norm_path(StringRef path) const
-{
-    return concat_and_norm(m_dir_name, path);
-}
-
 OSService::OSService() { m_dir_fd = AT_FDCWD; }
 
 OSService::~OSService()
@@ -459,15 +454,15 @@ ssize_t OSService::listxattr(const char* path, char* buf, size_t size) const noe
     return rc < 0 ? -errno : rc;
 }
 
-ssize_t
-OSService::getxattr(const char* path, const char* name, void* buf, size_t size) const noexcept
+ssize_t OSService::getxattr(const char* path, const char* name, void* buf, size_t size) const
+    noexcept
 {
     auto rc = ::getxattr(norm_path(path).c_str(), name, buf, size, 0, XATTR_NOFOLLOW);
     return rc < 0 ? -errno : rc;
 }
 
-int OSService::setxattr(
-    const char* path, const char* name, void* buf, size_t size, int flags) const noexcept
+int OSService::setxattr(const char* path, const char* name, void* buf, size_t size, int flags) const
+    noexcept
 {
     auto rc = ::setxattr(norm_path(path).c_str(), name, buf, size, 0, flags | XATTR_NOFOLLOW);
     return rc < 0 ? -errno : rc;

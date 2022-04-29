@@ -766,67 +766,12 @@ native_string_type OSService::concat_and_norm(StringRef base_dir, StringRef path
     return widen_string(str);
 }
 
-native_string_type OSService::norm_path(StringRef path) const
-{
-    if (!m_is_long_path_supported)
-    {
-        return concat_and_norm(m_dir_name, path);
-    }
-    if (m_dir_name.empty())
-    {
-        return widen_string(path);
-    }
-    if (m_dir_name.back() == '/' || m_dir_name.back() == '\\')
-    {
-        return widen_string(m_dir_name + path);
-    }
-    std::string result;
-    result.reserve(m_dir_name.size() + 1 + path.size());
-    result.append(m_dir_name);
-    result.push_back('\\');
-    result.append(path.c_str(), path.size());
-    return widen_string(result);
-}
-
 OSService::OSService(StringRef path)
 {
-    HANDLE test_handle = CreateFileW(
-        L"C:"
-        L"\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\"
-        L"x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x"
-        L"\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\"
-        L"x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x"
-        L"\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\"
-        L"x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x"
-        L"\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\"
-        L"x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x"
-        L"\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\"
-        L"x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x"
-        L"\\x\\x\\x\\x\\x",
-        GENERIC_READ,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        nullptr,
-        OPEN_EXISTING,
-        FILE_FLAG_BACKUP_SEMANTICS,
-        nullptr);
-    DEFER(if (test_handle != INVALID_HANDLE_VALUE) { CloseHandle(test_handle); })
-    if (test_handle != INVALID_HANDLE_VALUE)
-    {
-        m_is_long_path_supported = true;
-    }
-    else
-    {
-        DWORD err = GetLastError();
-        if (err != ERROR_INVALID_NAME)
-        {
-            m_is_long_path_supported = true;
-        }
-    }
-    VERBOSE_LOG("The current version of Windows supports long path: %s",
-                m_is_long_path_supported ? "yes" : "no");
-
-    auto wide_path = widen_string(path);
-    m_root_handle = CreateFileW(wide_path.c_str(),
+    wchar_t resolved[4000];
+    CHECK_CALL(GetFullPathNameW(widen_string(path).c_str(), 4000, resolved, nullptr));
+    m_dir_name = narrow_string(resolved);
+    m_root_handle = CreateFileW(resolved,
                                 GENERIC_READ,
                                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                                 nullptr,
@@ -834,23 +779,7 @@ OSService::OSService(StringRef path)
                                 FILE_FLAG_BACKUP_SEMANTICS,
                                 nullptr);
     if (m_root_handle == INVALID_HANDLE_VALUE)
-        THROW_WINDOWS_EXCEPTION_WITH_PATH(GetLastError(), L"CreateFileW", wide_path.c_str());
-
-    if (m_is_long_path_supported)
-    {
-        m_dir_name.assign(path.c_str(), path.size());
-    }
-    else
-    {
-        wide_path.resize(1 << 15u, 0);
-        DWORD size = GetFinalPathNameByHandleW(m_root_handle, &wide_path[0], wide_path.size(), 0);
-        if (size <= 0)
-        {
-            THROW_WINDOWS_EXCEPTION(GetLastError(), L"GetFinalPathNameByHandleW");
-        }
-        wide_path.resize(size);
-        m_dir_name = narrow_string(wide_path);
-    }
+        THROW_WINDOWS_EXCEPTION_WITH_PATH(GetLastError(), L"CreateFileW", resolved);
 }
 
 std::shared_ptr<FileStream>
@@ -1172,10 +1101,6 @@ void windows_init(void)
 
 std::wstring widen_string(StringRef str)
 {
-    if (str.empty())
-    {
-        return {};
-    }
     if (str.size() >= std::numeric_limits<int>::max())
         throwInvalidArgumentException("String too long");
     int sz = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), nullptr, 0);
@@ -1188,10 +1113,6 @@ std::wstring widen_string(StringRef str)
 
 std::string narrow_string(WideStringRef str)
 {
-    if (str.empty())
-    {
-        return {};
-    }
     if (str.size() >= std::numeric_limits<int>::max())
         throwInvalidArgumentException("String too long");
     int sz = WideCharToMultiByte(
