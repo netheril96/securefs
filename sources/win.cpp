@@ -712,6 +712,50 @@ bool OSService::is_absolute(StringRef path)
         || (path.size() >= 2 && path[1] == ':');
 }
 
+namespace
+{
+    // Convert forward slashes to back slashes, and remove "." and ".." from path components
+    void canonicalize(std::string& prepath)
+    {
+        for (char& c : prepath)
+        {
+            if (c == '/')
+                c = '\\';
+        }
+        std::vector<std::string> components = split(prepath, '\\');
+        std::vector<const std::string*> norm_components;
+        norm_components.reserve(components.size());
+        for (const std::string& name : components)
+        {
+            if (name.empty() || name == ".")
+                continue;
+            if (name == "..")
+            {
+                if (norm_components.size() > 0)
+                    norm_components.pop_back();
+                continue;
+            }
+            norm_components.push_back(&name);
+        }
+        bool is_already_universal = prepath.size() >= 2 && prepath[0] == '\\' && prepath[1] == '\\';
+
+        prepath.clear();
+        if (is_already_universal)
+        {
+            prepath.push_back('\\');
+        }
+        else
+        {
+            prepath.assign(("\\\\?"));
+        }
+        for (const std::string* name : norm_components)
+        {
+            prepath.push_back('\\');
+            prepath.append(*name);
+        }
+    }
+}    // namespace
+
 native_string_type OSService::concat_and_norm(StringRef base_dir, StringRef path)
 {
     if (base_dir.empty() || is_absolute(path))
@@ -723,47 +767,13 @@ native_string_type OSService::concat_and_norm(StringRef base_dir, StringRef path
         throwInvalidArgumentException("base_dir must be an absolute path, yet we received "
                                       + base_dir);
     }
-    std::string prepath = base_dir.to_string();
+    std::string prepath;
     prepath.reserve(prepath.size() + 1 + path.size());
+    prepath.append(base_dir.c_str(), base_dir.size());
     prepath.push_back('\\');
     prepath.append(path.data(), path.size());
-    for (char& c : prepath)
-    {
-        if (c == '/')
-            c = '\\';
-    }
-    std::vector<std::string> components = split(prepath, '\\');
-    std::vector<const std::string*> norm_components;
-    norm_components.reserve(components.size());
-    for (const std::string& name : components)
-    {
-        if (name.empty() || name == ".")
-            continue;
-        if (name == "..")
-        {
-            if (norm_components.size() > 0)
-                norm_components.pop_back();
-            continue;
-        }
-        norm_components.push_back(&name);
-    }
-    std::string str;
-    str.reserve(prepath.size() + 8);
-    bool is_already_universal = prepath.size() >= 2 && prepath[0] == '\\' && prepath[1] == '\\';
-    if (is_already_universal)
-    {
-        str.push_back('\\');
-    }
-    else
-    {
-        str.assign(("\\\\?"));
-    }
-    for (const std::string* name : norm_components)
-    {
-        str.push_back('\\');
-        str.append(*name);
-    }
-    return widen_string(str);
+    canonicalize(prepath);
+    return widen_string(prepath);
 }
 
 OSService::OSService(StringRef path)
