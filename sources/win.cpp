@@ -725,7 +725,7 @@ namespace
         if (!path.starts_with(LONG_PATH_PREFIX))
             return false;
         size_t last_boundary = LONG_PATH_PREFIX.size();
-        for (size_t i = 0; i <= path.size(); ++i)
+        for (size_t i = last_boundary; i <= path.size(); ++i)
         {
             bool is_boundary = i >= path.size() || path[i] == '\\';
             if (!is_boundary)
@@ -808,10 +808,17 @@ native_string_type OSService::concat_and_norm(StringRef base_dir, StringRef path
                                       + base_dir);
     }
     std::string prepath;
-    prepath.reserve(prepath.size() + 1 + path.size());
-    prepath.append(base_dir.c_str(), base_dir.size());
-    prepath.push_back('\\');
-    prepath.append(path.data(), path.size());
+    if (path == ".")
+    {
+        prepath = base_dir.to_string();
+    }
+    else
+    {
+        prepath.reserve(prepath.size() + 1 + path.size());
+        prepath.append(base_dir.c_str(), base_dir.size());
+        prepath.push_back('\\');
+        prepath.append(path.data(), path.size());
+    }
     canonicalize(prepath);
     return widen_string(prepath);
 }
