@@ -714,6 +714,42 @@ bool OSService::is_absolute(StringRef path)
 
 namespace
 {
+    const StringRef LONG_PATH_PREFIX = R"(\\?\)";
+
+    bool is_canonical(StringRef path)
+    {
+        if (path.empty())
+        {
+            return true;
+        }
+        if (!path.starts_with(LONG_PATH_PREFIX))
+            return false;
+        size_t last_boundary = LONG_PATH_PREFIX.size();
+        for (size_t i = 0; i <= path.size(); ++i)
+        {
+            bool is_boundary = i >= path.size() || path[i] == '\\';
+            if (!is_boundary)
+            {
+                continue;
+            }
+            if (i == last_boundary || i == last_boundary + 1)
+            {
+                return false;
+            }
+            if (i == last_boundary + 2 && path[last_boundary + 1] == '.')
+            {
+                return false;
+            }
+            if (i == last_boundary + 3 && path[last_boundary + 1] == '.'
+                && path[last_boundary + 2] == '..')
+            {
+                return false;
+            }
+            last_boundary = i;
+        }
+        return true;
+    }
+
     // Convert forward slashes to back slashes, and remove "." and ".." from path components
     void canonicalize(std::string& prepath)
     {
@@ -721,6 +757,10 @@ namespace
         {
             if (c == '/')
                 c = '\\';
+        }
+        if (is_canonical(prepath))
+        {
+            return;
         }
         std::vector<std::string> components = split(prepath, '\\');
         std::vector<const std::string*> norm_components;
