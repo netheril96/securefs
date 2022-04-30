@@ -393,9 +393,9 @@ def make_test_case(version: int, pbkdf: str, mode: SecretInputMode):
 
             def test_long_path(self):
                 long_mount_point = rf"\\?\{os.path.abspath(self.mount_point)}"
-                long_dir = os.path.join(long_mount_point, *(["abc" * 20] * 11))
+                long_dir = os.path.join(long_mount_point, *(["🐋🐳" * 10] * 40))
                 os.makedirs(long_dir)
-                shutil.rmtree(os.path.join(long_mount_point, "abc" * 20))
+                shutil.rmtree(os.path.join(long_mount_point, "🐋🐳" * 10))
 
         def test_rename(self):
             data = os.urandom(32)
