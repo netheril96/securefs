@@ -401,15 +401,24 @@ namespace lite
     ssize_t
     FileSystem::getxattr(const char* path, const char* name, void* buf, size_t size) noexcept
     {
+        auto iv_size = m_iv_size;
+        auto mac_size = AESGCMCryptStream::get_mac_size();
         if (!buf)
         {
-            return m_root->getxattr(translate_path(path, false).c_str(), name, nullptr, 0);
+            auto rc = m_root->getxattr(translate_path(path, false).c_str(), name, nullptr, 0);
+            if (rc < 0)
+            {
+                return rc;
+            }
+            if (rc <= iv_size + mac_size)
+            {
+                return 0;
+            }
+            return rc - iv_size - mac_size;
         }
 
         try
         {
-            auto iv_size = m_iv_size;
-            auto mac_size = AESGCMCryptStream::get_mac_size();
             auto underbuf = securefs::make_unique_array<byte>(size + iv_size + mac_size);
             ssize_t readlen = m_root->getxattr(translate_path(path, false).c_str(),
                                                name,

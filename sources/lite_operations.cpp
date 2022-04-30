@@ -8,8 +8,6 @@
 #include "operations.h"
 #include "platform.h"
 
-#include <math.h>
-
 namespace securefs
 {
 namespace lite
