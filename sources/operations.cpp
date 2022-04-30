@@ -304,8 +304,16 @@ namespace operations
                 return -EFAULT;
             if (fb->type() != FileBase::DIRECTORY)
                 return -ENOTDIR;
+
             struct fuse_stat st;
             memset(&st, 0, sizeof(st));
+
+#ifdef _WIN32
+            // We have to fill in "." and ".." entries ourselves due to WinFsp limitations.
+            fb->stat(&st);
+            filler(buffer, ".", &st, 0);
+            filler(buffer, "..", nullptr, 0);
+#endif
             auto actions
                 = [&st, filler, buffer](const std::string& name, const id_type&, int type) -> bool
             {

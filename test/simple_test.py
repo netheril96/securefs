@@ -389,6 +389,14 @@ def make_test_case(version: int, pbkdf: str, mode: SecretInputMode):
                     except EnvironmentError:
                         pass
 
+        else:
+
+            def test_long_path(self):
+                long_mount_point = rf"\\?\{os.path.abspath(self.mount_point)}"
+                long_dir = os.path.join(long_mount_point, *(["abc" * 20] * 11))
+                os.makedirs(long_dir)
+                shutil.rmtree(os.path.join(long_mount_point, "abc" * 20))
+
         def test_rename(self):
             data = os.urandom(32)
             source = os.path.join(self.mount_point, str(uuid.uuid4()))
