@@ -1,5 +1,6 @@
 #include "lite_operations.h"
 #include "apple_xattr_workaround.h"
+#include "fuse_tracer.h"
 #include "lite_fs.h"
 #include "lite_stream.h"
 #include "lock_guard.h"
@@ -76,35 +77,30 @@ namespace lite
 
     int statfs(const char* path, struct fuse_statvfs* buf)
     {
-        SINGLE_COMMON_PROLOGUE
-        try
+        auto func = [=]()
         {
             if (!buf)
                 return -EFAULT;
+            auto filesystem = get_local_filesystem();
             filesystem->statvfs(buf);
             // Due to the Base32 encoding and the extra 16 bytes of synthesized IV
             buf->f_namemax = buf->f_namemax * 5 / 8 - 16;
             return 0;
-        }
-        SINGLE_COMMON_EPILOGUE
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {buf}});
     }
 
     int getattr(const char* path, struct fuse_stat* st)
     {
-        SINGLE_COMMON_PROLOGUE
-        try
+        auto func = [=]()
         {
+            auto filesystem = get_local_filesystem();
             if (!filesystem->stat(path, st))
                 return -ENOENT;
-            TRACE_LOG("stat (%s): mode=0%o, uid=%u, gid=%u, size=%zu",
-                      path,
-                      st->st_mode,
-                      (unsigned)st->st_uid,
-                      (unsigned)st->st_gid,
-                      (size_t)st->st_size);
+
             return 0;
-        }
-        SINGLE_COMMON_EPILOGUE
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {st}});
     }
 
     int opendir(const char* path, struct fuse_file_info* info)

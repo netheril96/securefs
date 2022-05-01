@@ -36,9 +36,12 @@ inline const char* stringify(LoggingLevel lvl)
     return "UNKNOWN";
 }
 
+class FuseTracer;
+
 class Logger
 {
     DISABLE_COPY_MOVE(Logger)
+    friend class FuseTracer;
 
 private:
     LoggingLevel m_level;

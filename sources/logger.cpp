@@ -28,10 +28,6 @@ void Logger::vlog(
 {
     if (!m_fp || level < this->get_level())
         return;
-
-    flockfile(m_fp);
-    DEFER(funlockfile(m_fp));
-
     prelog(level, funcsig, lineno);
     vfprintf(m_fp, format, args);
     postlog(level);
@@ -62,6 +58,8 @@ void Logger::prelog(LoggingLevel level, const char* funcsig, int lineno) noexcep
     struct tm now;
     int now_ns = 0;
     OSService::get_current_time_in_tm(&now, &now_ns);
+
+    flockfile(m_fp);
     if (m_console_color)
     {
         switch (level)
@@ -101,6 +99,7 @@ void Logger::postlog(LoggingLevel level) noexcept
 
     putc('\n', m_fp);
     fflush(m_fp);
+    funlockfile(m_fp);
 }
 
 Logger::~Logger()
