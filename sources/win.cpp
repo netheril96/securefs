@@ -741,7 +741,7 @@ namespace
                 return false;
             }
             if (i == last_boundary + 3 && path[last_boundary + 1] == '.'
-                && path[last_boundary + 2] == '..')
+                && path[last_boundary + 2] == '.')
             {
                 return false;
             }
