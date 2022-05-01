@@ -29,13 +29,39 @@ void Logger::vlog(
     if (!m_fp || level < this->get_level())
         return;
 
-    struct tm now;
-    int now_ns = 0;
-    OSService::get_current_time_in_tm(&now, &now_ns);
-
     flockfile(m_fp);
     DEFER(funlockfile(m_fp));
 
+    prelog(level, funcsig, lineno);
+    vfprintf(m_fp, format, args);
+    postlog(level);
+}
+
+void Logger::log(
+    LoggingLevel level, const char* funcsig, int lineno, const char* format, ...) noexcept
+{
+    if (!m_fp || level < this->get_level())
+        return;
+    va_list args;
+    va_start(args, format);
+    vlog(level, funcsig, lineno, format, args);
+    va_end(args);
+}
+
+Logger::Logger(FILE* fp, bool close_on_exit)
+    : m_level(kLogInfo), m_fp(fp), m_close_on_exit(close_on_exit)
+{
+    m_console_color = ConsoleColourSetter::create_setter(m_fp);
+}
+
+void Logger::prelog(LoggingLevel level, const char* funcsig, int lineno) noexcept
+{
+    if (!m_fp || level < this->get_level())
+        return;
+
+    struct tm now;
+    int now_ns = 0;
+    OSService::get_current_time_in_tm(&now, &now_ns);
     if (m_console_color)
     {
         switch (level)
@@ -64,8 +90,10 @@ void Logger::vlog(
             now_ns,
             funcsig,
             lineno);
-    vfprintf(m_fp, format, args);
+}
 
+void Logger::postlog(LoggingLevel level) noexcept
+{
     if (m_console_color && (level == kLogWarning || level == kLogError))
     {
         m_console_color->use(Colour::Default);
@@ -73,23 +101,6 @@ void Logger::vlog(
 
     putc('\n', m_fp);
     fflush(m_fp);
-}
-
-void Logger::log(
-    LoggingLevel level, const char* funcsig, int lineno, const char* format, ...) noexcept
-{
-    if (!m_fp || level < this->get_level())
-        return;
-    va_list args;
-    va_start(args, format);
-    vlog(level, funcsig, lineno, format, args);
-    va_end(args);
-}
-
-Logger::Logger(FILE* fp, bool close_on_exit)
-    : m_level(kLogInfo), m_fp(fp), m_close_on_exit(close_on_exit)
-{
-    m_console_color = ConsoleColourSetter::create_setter(m_fp);
 }
 
 Logger::~Logger()

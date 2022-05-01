@@ -48,6 +48,9 @@ private:
 
     explicit Logger(FILE* fp, bool close_on_exit);
 
+    void prelog(LoggingLevel level, const char* funcsig, int lineno) noexcept;
+    void postlog(LoggingLevel level) noexcept;
+
 public:
     static Logger* create_stderr_logger();
     static Logger* create_file_logger(const std::string& path);
