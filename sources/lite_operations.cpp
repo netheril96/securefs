@@ -150,8 +150,10 @@ namespace lite
             }
             return 0;
         };
-        return FuseTracer::traced_call(
-            func, FULL_FUNCTION_NAME, __LINE__, {{path}, {buf}, {filler}, {&off}, {info}});
+        return FuseTracer::traced_call(func,
+                                       FULL_FUNCTION_NAME,
+                                       __LINE__,
+                                       {{path}, {buf}, {(const void*)filler}, {&off}, {info}});
     }
 
     int create(const char* path, fuse_mode_t mode, struct fuse_file_info* info)
