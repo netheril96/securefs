@@ -124,7 +124,7 @@ typedef BasicStringRef<char> StringRef;
 typedef BasicStringRef<wchar_t> WideStringRef;
 
 std::string strprintf(const char* format, ...)
-#ifndef WIN32
+#ifndef _MSC_VER
     __attribute__((format(printf, 1, 2)))
 #endif
     ;
