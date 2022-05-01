@@ -11,7 +11,6 @@
 #include <mutex>
 #include <stdint.h>
 #include <stdlib.h>
-#include <sys/stat.h>
 #include <sys/utime.h>
 #include <time.h>
 #include <typeinfo>

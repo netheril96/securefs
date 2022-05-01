@@ -30,7 +30,7 @@
 #include <unordered_map>
 #include <vector>
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include <Windows.h>
 #else
 #include <dlfcn.h>
