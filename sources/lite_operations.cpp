@@ -50,12 +50,6 @@ namespace lite
         return &(*opt_fs);
     }
 
-#define SINGLE_COMMON_PROLOGUE                                                                     \
-    auto filesystem = get_local_filesystem();                                                      \
-    OPT_TRACE_WITH_PATH;
-
-#define SINGLE_COMMON_EPILOGUE OPT_CATCH_WITH_PATH
-
     void* init(struct fuse_conn_info* fsinfo)
     {
         (void)fsinfo;
@@ -105,25 +99,24 @@ namespace lite
 
     int opendir(const char* path, struct fuse_file_info* info)
     {
-        SINGLE_COMMON_PROLOGUE
-        try
+        auto func = [=]()
         {
+            auto filesystem = get_local_filesystem();
             auto traverser = filesystem->create_traverser(path);
             info->fh = reinterpret_cast<uintptr_t>(traverser.release());
             return 0;
-        }
-        SINGLE_COMMON_EPILOGUE
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int releasedir(const char* path, struct fuse_file_info* info)
     {
-        TRACE_LOG("%s %s", __func__, path);
-        try
+        auto func = [=]()
         {
             delete reinterpret_cast<DirectoryTraverser*>(info->fh);
             return 0;
-        }
-        SINGLE_COMMON_EPILOGUE
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int readdir(const char* path,
@@ -132,9 +125,9 @@ namespace lite
                 fuse_off_t,
                 struct fuse_file_info* info)
     {
-        OPT_TRACE_WITH_PATH;
-        try
+        auto func = [=]()
         {
+            auto filesystem = get_local_filesystem();
             auto traverser = reinterpret_cast<DirectoryTraverser*>(info->fh);
             if (!traverser)
                 return -EFAULT;
@@ -156,59 +149,57 @@ namespace lite
                     return -abs(rc);
             }
             return 0;
-        }
-        SINGLE_COMMON_EPILOGUE
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int create(const char* path, fuse_mode_t mode, struct fuse_file_info* info)
     {
-        SINGLE_COMMON_PROLOGUE
-        try
+        auto func = [=]()
         {
+            auto filesystem = get_local_filesystem();
             AutoClosedFile file = filesystem->open(path, O_RDWR | O_CREAT | O_EXCL, mode);
             info->fh = reinterpret_cast<uintptr_t>(file.release());
             return 0;
-        }
-        SINGLE_COMMON_EPILOGUE
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int open(const char* path, struct fuse_file_info* info)
     {
-        SINGLE_COMMON_PROLOGUE
-        try
+        auto func = [=]()
         {
+            auto filesystem = get_local_filesystem();
             AutoClosedFile file = filesystem->open(path, info->flags, 0644);
             info->fh = reinterpret_cast<uintptr_t>(file.release());
             return 0;
-        }
-        SINGLE_COMMON_EPILOGUE
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int release(const char* path, struct fuse_file_info* info)
     {
-        TRACE_LOG("%s %s", __func__, path);
-        try
+        auto func = [=]()
         {
             delete reinterpret_cast<File*>(info->fh);
             return 0;
-        }
-        SINGLE_COMMON_EPILOGUE
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int
     read(const char* path, char* buf, size_t size, fuse_off_t offset, struct fuse_file_info* info)
     {
-        OPT_TRACE_WITH_PATH_OFF_LEN(offset, size);
-        auto fp = reinterpret_cast<File*>(info->fh);
-        if (!fp)
-            return -EFAULT;
-
-        try
+        auto func = [=]()
         {
+            auto fp = reinterpret_cast<File*>(info->fh);
+            if (!fp)
+                return -EFAULT;
+
             LockGuard<File> lock_guard(*fp, false);
             return static_cast<int>(fp->read(buf, offset, size));
-        }
-        OPT_CATCH_WITH_PATH_OFF_LEN(offset, size)
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int write(const char* path,
@@ -217,253 +208,219 @@ namespace lite
               fuse_off_t offset,
               struct fuse_file_info* info)
     {
-        OPT_TRACE_WITH_PATH_OFF_LEN(offset, size);
-        auto fp = reinterpret_cast<File*>(info->fh);
-        if (!fp)
-            return -EFAULT;
-
-        try
+        auto func = [=]()
         {
+            auto fp = reinterpret_cast<File*>(info->fh);
+            if (!fp)
+                return -EFAULT;
+
             LockGuard<File> lock_guard(*fp, true);
             fp->write(buf, offset, size);
             return static_cast<int>(size);
-        }
-        OPT_CATCH_WITH_PATH_OFF_LEN(offset, size)
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int flush(const char* path, struct fuse_file_info* info)
     {
-        TRACE_LOG("%s %s", __func__, path);
-        auto fp = reinterpret_cast<File*>(info->fh);
-        if (!fp)
-            return -EFAULT;
-
-        try
+        auto func = [=]()
         {
+            auto fp = reinterpret_cast<File*>(info->fh);
+            if (!fp)
+                return -EFAULT;
+
             LockGuard<File> lock_guard(*fp, true);
             fp->flush();
             return 0;
-        }
-        SINGLE_COMMON_EPILOGUE
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int ftruncate(const char* path, fuse_off_t len, struct fuse_file_info* info)
     {
-        TRACE_LOG("%s %s with length=%lld", __func__, path, static_cast<long long>(len));
-        auto fp = reinterpret_cast<File*>(info->fh);
-        if (!fp)
-            return -EFAULT;
-
-        try
+        auto func = [=]()
         {
+            auto fp = reinterpret_cast<File*>(info->fh);
+            if (!fp)
+                return -EFAULT;
+
             LockGuard<File> lock_guard(*fp, true);
             fp->resize(len);
             return 0;
-        }
-        catch (const std::exception& e)
-        {
-            auto ebase = dynamic_cast<const ExceptionBase*>(&e);
-            auto code = ebase ? ebase->error_number() : EPERM;
-            ERROR_LOG("%s %s (length=%lld) encounters exception %s (code=%d): %s",
-                      __func__,
-                      path,
-                      static_cast<long long>(len),
-                      get_type_name(e).get(),
-                      code,
-                      e.what());
-            return -code;
-        }
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int unlink(const char* path)
     {
-        SINGLE_COMMON_PROLOGUE
-        try
+        auto func = [=]()
         {
+            auto filesystem = get_local_filesystem();
             filesystem->unlink(path);
             return 0;
-        }
-        SINGLE_COMMON_EPILOGUE
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int mkdir(const char* path, fuse_mode_t mode)
     {
-        SINGLE_COMMON_PROLOGUE
-        try
+        auto func = [=]()
         {
+            auto filesystem = get_local_filesystem();
             filesystem->mkdir(path, mode);
             return 0;
-        }
-        SINGLE_COMMON_EPILOGUE
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int rmdir(const char* path)
     {
-        SINGLE_COMMON_PROLOGUE
-        try
+        auto func = [=]()
         {
+            auto filesystem = get_local_filesystem();
             filesystem->rmdir(path);
             return 0;
-        }
-        SINGLE_COMMON_EPILOGUE
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int chmod(const char* path, fuse_mode_t mode)
     {
-        SINGLE_COMMON_PROLOGUE
-        try
+        auto func = [=]()
         {
+            auto filesystem = get_local_filesystem();
             filesystem->chmod(path, mode);
             return 0;
-        }
-        SINGLE_COMMON_EPILOGUE
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int chown(const char* path, fuse_uid_t uid, fuse_gid_t gid)
     {
-        SINGLE_COMMON_PROLOGUE
-        try
+        auto func = [=]()
         {
+            auto filesystem = get_local_filesystem();
             filesystem->chown(path, uid, gid);
             return 0;
-        }
-        SINGLE_COMMON_EPILOGUE
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int symlink(const char* to, const char* from)
     {
-        auto filesystem = get_local_filesystem();
-        OPT_TRACE_WITH_TWO_PATHS(to, from);
-
-        try
+        auto func = [=]()
         {
+            auto filesystem = get_local_filesystem();
             filesystem->symlink(to, from);
             return 0;
-        }
-        OPT_CATCH_WITH_TWO_PATHS(to, from)
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int link(const char* src, const char* dest)
     {
-        auto filesystem = get_local_filesystem();
-        OPT_TRACE_WITH_TWO_PATHS(src, dest);
-
-        try
+        auto func = [=]()
         {
+            auto filesystem = get_local_filesystem();
             filesystem->link(src, dest);
             return 0;
-        }
-        OPT_CATCH_WITH_TWO_PATHS(src, dest)
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int readlink(const char* path, char* buf, size_t size)
     {
-        SINGLE_COMMON_PROLOGUE
-        try
+        auto func = [=]()
         {
+            auto filesystem = get_local_filesystem();
             (void)filesystem->readlink(path, buf, size);
             return 0;
-        }
-        SINGLE_COMMON_EPILOGUE
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int rename(const char* from, const char* to)
     {
-        auto filesystem = get_local_filesystem();
-        OPT_TRACE_WITH_TWO_PATHS(from, to);
-
-        try
+        auto func = [=]()
         {
+            auto filesystem = get_local_filesystem();
             filesystem->rename(from, to);
             return 0;
-        }
-        OPT_CATCH_WITH_TWO_PATHS(from, to)
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int fsync(const char* path, int, struct fuse_file_info* info)
     {
-        TRACE_LOG("%s %s", __func__, path);
-        auto fp = reinterpret_cast<File*>(info->fh);
-        if (!fp)
-            return -EFAULT;
-
-        try
+        auto func = [=]()
         {
+            auto filesystem = get_local_filesystem();
+            auto fp = reinterpret_cast<File*>(info->fh);
+            if (!fp)
+                return -EFAULT;
+
             LockGuard<File> lock_guard(*fp, true);
             fp->fsync();
             return 0;
-        }
-        SINGLE_COMMON_EPILOGUE
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int truncate(const char* path, fuse_off_t len)
     {
-        if (len < 0)
-            return -EINVAL;
-
-        TRACE_LOG("%s %s (len=%lld)", __func__, path, static_cast<long long>(len));
-        auto filesystem = get_local_filesystem();
-
-        try
+        auto func = [=]()
         {
+            if (len < 0)
+                return -EINVAL;
+            auto filesystem = get_local_filesystem();
+
             AutoClosedFile fp = filesystem->open(path, O_RDWR, 0644);
             LockGuard<File> lock_guard(*fp, true);
             fp->resize(static_cast<size_t>(len));
             return 0;
-        }
-        SINGLE_COMMON_EPILOGUE
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int utimens(const char* path, const struct fuse_timespec ts[2])
     {
-        SINGLE_COMMON_PROLOGUE
-        try
+        auto func = [=]()
         {
+            auto filesystem = get_local_filesystem();
             filesystem->utimens(path, ts);
             return 0;
-        }
-        SINGLE_COMMON_EPILOGUE
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
 #ifdef __APPLE__
     int listxattr(const char* path, char* list, size_t size)
     {
-        TRACE_LOG("%s %s", __func__, path);
-        auto filesystem = get_local_filesystem();
-        int rc = static_cast<int>(filesystem->listxattr(path, list, size));
-        transform_listxattr_result(list, size);
-        if (rc < 0)
+        auto func = [=]()
         {
-            TRACE_LOG("%s %s encountered error: %d (%s)",
-                      __func__,
-                      path,
-                      -rc,
-                      OSService::stringify_system_error(-rc).c_str());
-        }
-        return rc;
+            auto filesystem = get_local_filesystem();
+            int rc = static_cast<int>(filesystem->listxattr(path, list, size));
+            transform_listxattr_result(list, size);
+            return rc;
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position)
     {
-        TRACE_LOG("%s %s with position=%u, name=%s", __func__, path, position, name);
-        if (position != 0)
-            return -EINVAL;
-        int rc = precheck_getxattr(&name);
-        if (rc <= 0)
-            return rc;
-
-        auto filesystem = get_local_filesystem();
-        rc = static_cast<int>(filesystem->getxattr(path, name, value, size));
-        if (rc < 0)
+        auto func = [=]()
         {
-            TRACE_LOG("%s %s with name=%s encountered error: %d (%s)",
-                      __func__,
-                      path,
-                      name,
-                      -rc,
-                      OSService::stringify_system_error(-rc).c_str());
-        }
-        return rc;
+            if (position != 0)
+                return -EINVAL;
+            int rc = precheck_getxattr(&name);
+            if (rc <= 0)
+                return rc;
+
+            auto filesystem = get_local_filesystem();
+            rc = static_cast<int>(filesystem->getxattr(path, name, value, size));
+            return rc;
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int setxattr(const char* path,
@@ -473,51 +430,34 @@ namespace lite
                  int flags,
                  uint32_t position)
     {
-        TRACE_LOG("%s %s with position=%u, name=%s, value=%s",
-                  __func__,
-                  path,
-                  position,
-                  name,
-                  escape_nonprintable(value, size).c_str());
-        if (position != 0)
-            return -EINVAL;
-        int rc = precheck_setxattr(&name, &flags);
-        if (rc <= 0)
-            return rc;
-        if (!value || size == 0)
-            return 0;
-
-        auto filesystem = get_local_filesystem();
-        rc = filesystem->setxattr(path, name, const_cast<char*>(value), size, flags);
-        if (rc < 0)
+        auto func = [=]()
         {
-            TRACE_LOG("%s %s with name=%s encountered error: %d (%s)",
-                      __func__,
-                      path,
-                      name,
-                      -rc,
-                      OSService::stringify_system_error(-rc).c_str());
-        }
-        return rc;
+            if (position != 0)
+                return -EINVAL;
+            int rc = precheck_setxattr(&name, &flags);
+            if (rc <= 0)
+                return rc;
+            if (!value || size == 0)
+                return 0;
+
+            auto filesystem = get_local_filesystem();
+            rc = filesystem->setxattr(path, name, const_cast<char*>(value), size, flags);
+            return rc;
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
     int removexattr(const char* path, const char* name)
     {
-        TRACE_LOG("%s %s with name=%s", __func__, path, name);
-        int rc = precheck_removexattr(&name);
-        if (rc <= 0)
-            return rc;
-        auto filesystem = get_local_filesystem();
-        rc = filesystem->removexattr(path, name);
-        if (rc < 0)
+        auto func = [=]()
         {
-            TRACE_LOG("%s %s with name=%s encountered error: %d (%s)",
-                      __func__,
-                      path,
-                      name,
-                      -rc,
-                      OSService::stringify_system_error(-rc).c_str());
-        }
-        return rc;
+            int rc = precheck_removexattr(&name);
+            if (rc <= 0)
+                return rc;
+            auto filesystem = get_local_filesystem();
+            rc = filesystem->removexattr(path, name);
+            return rc;
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 #endif
 

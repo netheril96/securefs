@@ -27,11 +27,11 @@ private:
     static void print(FILE* fp, const WrappedFuseArg* args, size_t arg_size);
 
 public:
-    template <class ActualFunction, size_t N>
+    template <class ActualFunction>
     static inline auto traced_call(ActualFunction&& func,
                                    const char* funcsig,
                                    int lineno,
-                                   const WrappedFuseArg (&args)[N],
+                                   const std::initializer_list<WrappedFuseArg>& args,
                                    Logger* logger = global_logger) -> decltype(func())
     {
         if (!logger)
@@ -42,7 +42,7 @@ public:
         {
             logger->prelog(LoggingLevel::kLogTrace, funcsig, lineno);
             fputs("Function starts with arguments ", logger->m_fp);
-            print(logger->m_fp, args, N);
+            print(logger->m_fp, args.begin(), args.size());
             logger->postlog(LoggingLevel::kLogTrace);
         }
         try
@@ -52,7 +52,7 @@ public:
             {
                 logger->prelog(LoggingLevel::kLogTrace, funcsig, lineno);
                 fputs("Function with arguments ", logger->m_fp);
-                print(logger->m_fp, args, N);
+                print(logger->m_fp, args.begin(), args.size());
                 fprintf(logger->m_fp, " returns %lld", static_cast<long long>(rc));
                 logger->postlog(LoggingLevel::kLogTrace);
             }
@@ -66,7 +66,7 @@ public:
             {
                 logger->prelog(LoggingLevel::kLogError, funcsig, lineno);
                 fputs("Function with arguments ", logger->m_fp);
-                print(logger->m_fp, args, N);
+                print(logger->m_fp, args.begin(), args.size());
                 fprintf(logger->m_fp,
                         " returns error code %d because it encounters exception %s: %s",
                         -code,
