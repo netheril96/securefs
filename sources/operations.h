@@ -6,63 +6,6 @@
 
 #include <fuse.h>
 
-#define OPT_TRACE_WITH_PATH TRACE_LOG("%s path=%s", __func__, path)
-#define OPT_TRACE_WITH_PATH_OFF_LEN(off, len)                                                      \
-    TRACE_LOG("%s path=%s offset=%lld length=%zu",                                                 \
-              __func__,                                                                            \
-              path,                                                                                \
-              static_cast<long long>(off),                                                         \
-              static_cast<size_t>(len))
-#define OPT_TRACE_WITH_TWO_PATHS(path1, path2)                                                     \
-    TRACE_LOG("%s %s=%s %s=%s", __func__, #path1, path1, #path2, path2)
-
-#define OPT_CATCH_WITH_PATH                                                                        \
-    catch (const std::exception& e)                                                                \
-    {                                                                                              \
-        auto ebase = dynamic_cast<const ExceptionBase*>(&e);                                       \
-        auto code = ebase ? ebase->error_number() : EPERM;                                         \
-        ERROR_LOG("%s path=%s encounters exception %s (code=%d): %s",                              \
-                  __func__,                                                                        \
-                  path,                                                                            \
-                  get_type_name(e).get(),                                                          \
-                  code,                                                                            \
-                  e.what());                                                                       \
-        return -code;                                                                              \
-    }
-
-#define OPT_CATCH_WITH_PATH_OFF_LEN(off, len)                                                      \
-    catch (const std::exception& e)                                                                \
-    {                                                                                              \
-        auto ebase = dynamic_cast<const ExceptionBase*>(&e);                                       \
-        auto code = ebase ? ebase->error_number() : EPERM;                                         \
-        ERROR_LOG("%s path=%s offset=%lld length=%zu encounters exception %s (code=%d): %s",       \
-                  __func__,                                                                        \
-                  path,                                                                            \
-                  static_cast<long long>(off),                                                     \
-                  static_cast<size_t>(len),                                                        \
-                  get_type_name(e).get(),                                                          \
-                  code,                                                                            \
-                  e.what());                                                                       \
-        return -code;                                                                              \
-    }
-
-#define OPT_CATCH_WITH_TWO_PATHS(path1, path2)                                                     \
-    catch (const std::exception& e)                                                                \
-    {                                                                                              \
-        auto ebase = dynamic_cast<const ExceptionBase*>(&e);                                       \
-        auto code = ebase ? ebase->error_number() : EPERM;                                         \
-        ERROR_LOG("%s %s=%s %s=%s encounters exception %s (code=%d): %s",                          \
-                  __func__,                                                                        \
-                  #path1,                                                                          \
-                  path1,                                                                           \
-                  #path2,                                                                          \
-                  path2,                                                                           \
-                  get_type_name(e).get(),                                                          \
-                  code,                                                                            \
-                  e.what());                                                                       \
-        return -code;                                                                              \
-    }
-
 namespace securefs
 {
 class FileStream;

@@ -2,6 +2,7 @@
 #include "apple_xattr_workaround.h"
 #include "constants.h"
 #include "crypto.h"
+#include "fuse_tracer.h"
 #include "platform.h"
 
 #include <algorithm>
@@ -217,8 +218,6 @@ namespace operations
     (void)fs;                                                                                      \
     OPT_TRACE_WITH_PATH;
 
-#define COMMON_CATCH_BLOCK OPT_CATCH_WITH_PATH
-
     void* init(struct fuse_conn_info* fsinfo)
     {
         (void)fsinfo;
@@ -239,21 +238,22 @@ namespace operations
 
     int statfs(const char* path, struct fuse_statvfs* fs_info)
     {
-        COMMON_PROLOGUE
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             fs->table.statfs(fs_info);
             return 0;
-        }
-        COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int getattr(const char* path, struct fuse_stat* st)
     {
-        COMMON_PROLOGUE
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             if (!st)
                 return -EINVAL;
 
@@ -264,24 +264,24 @@ namespace operations
             st->st_uid = OSService::getuid();
             st->st_gid = OSService::getgid();
             return 0;
-        }
-        COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int opendir(const char* path, struct fuse_file_info* info)
     {
-        COMMON_PROLOGUE
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             auto fg = internal::open_all(fs, path);
             if (fg->type() != FileBase::DIRECTORY)
                 return -ENOTDIR;
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
 
             return 0;
-        }
-        COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int releasedir(const char* path, struct fuse_file_info* info)
@@ -295,10 +295,10 @@ namespace operations
                 fuse_off_t,
                 struct fuse_file_info* info)
     {
-        COMMON_PROLOGUE
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EFAULT;
@@ -327,40 +327,42 @@ namespace operations
             };
             fb->cast_as<Directory>()->iterate_over_entries(actions);
             return 0;
-        }
-        COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int create(const char* path, fuse_mode_t mode, struct fuse_file_info* info)
     {
-        COMMON_PROLOGUE
-
-        mode &= ~static_cast<uint32_t>(S_IFMT);
-        mode |= S_IFREG;
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
+            auto effective_mode = mode & ~static_cast<uint32_t>(S_IFMT);
+            effective_mode |= S_IFREG;
+
             if (internal::is_readonly(ctx))
                 return -EROFS;
-            auto fg = internal::create(fs, path, FileBase::REGULAR_FILE, mode, ctx->uid, ctx->gid);
+            auto fg = internal::create(
+                fs, path, FileBase::REGULAR_FILE, effective_mode, ctx->uid, ctx->gid);
             fg->cast_as<RegularFile>();
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
 
             return 0;
-        }
-        COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int open(const char* path, struct fuse_file_info* info)
     {
-        COMMON_PROLOGUE
-
-        int rdwr = info->flags & O_RDWR;
-        int wronly = info->flags & O_WRONLY;
-        int append = info->flags & O_APPEND;
-        int require_write = wronly | append | rdwr;
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
+            int rdwr = info->flags & O_RDWR;
+            int wronly = info->flags & O_WRONLY;
+            int append = info->flags & O_APPEND;
+            int require_write = wronly | append | rdwr;
+
             if (require_write && internal::is_readonly(ctx))
                 return -EROFS;
             auto fg = internal::open_all(fs, path);
@@ -372,16 +374,16 @@ namespace operations
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
 
             return 0;
-        }
-        COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int release(const char* path, struct fuse_file_info* info)
     {
-        COMMON_PROLOGUE
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EINVAL;
@@ -389,23 +391,23 @@ namespace operations
             internal::FileGuard fg(&internal::get_fs(ctx)->table, fb);
             fg.reset(nullptr);
             return 0;
-        }
-        COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int
     read(const char* path, char* buffer, size_t len, fuse_off_t off, struct fuse_file_info* info)
     {
-        OPT_TRACE_WITH_PATH_OFF_LEN(off, len);
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EFAULT;
             return static_cast<int>(fb->cast_as<RegularFile>()->read(buffer, off, len));
-        }
-        OPT_CATCH_WITH_PATH_OFF_LEN(off, len)
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int write(const char* path,
@@ -414,171 +416,172 @@ namespace operations
               fuse_off_t off,
               struct fuse_file_info* info)
     {
-        OPT_TRACE_WITH_PATH_OFF_LEN(off, len);
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EFAULT;
             fb->cast_as<RegularFile>()->write(buffer, off, len);
             return static_cast<int>(len);
-        }
-        OPT_CATCH_WITH_PATH_OFF_LEN(off, len)
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int flush(const char* path, struct fuse_file_info* info)
     {
-        COMMON_PROLOGUE
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EFAULT;
             fb->cast_as<RegularFile>()->flush();
             return 0;
-        }
-        COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int truncate(const char* path, fuse_off_t size)
     {
-        COMMON_PROLOGUE
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             auto fg = internal::open_all(fs, path);
             fg.get_as<RegularFile>()->truncate(size);
             fg->flush();
             return 0;
-        }
-        COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int ftruncate(const char* path, fuse_off_t size, struct fuse_file_info* info)
     {
-        COMMON_PROLOGUE
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EFAULT;
             fb->cast_as<RegularFile>()->truncate(size);
             fb->flush();
             return 0;
-        }
-        COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int unlink(const char* path)
     {
-        COMMON_PROLOGUE
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             if (internal::is_readonly(ctx))
                 return -EROFS;
             internal::remove(fs, path);
             return 0;
-        }
-        COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int mkdir(const char* path, fuse_mode_t mode)
     {
-        COMMON_PROLOGUE
-
-        mode &= ~static_cast<uint32_t>(S_IFMT);
-        mode |= S_IFDIR;
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
+
+            auto effective_mode = mode & ~static_cast<uint32_t>(S_IFMT);
+            effective_mode |= S_IFDIR;
+
             if (internal::is_readonly(ctx))
                 return -EROFS;
-            auto fg = internal::create(fs, path, FileBase::DIRECTORY, mode, ctx->uid, ctx->gid);
+            auto fg = internal::create(
+                fs, path, FileBase::DIRECTORY, effective_mode, ctx->uid, ctx->gid);
             fg->cast_as<Directory>();
             return 0;
-        }
-        COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int rmdir(const char* path) { return ::securefs::operations::unlink(path); }
 
     int chmod(const char* path, fuse_mode_t mode)
     {
-        COMMON_PROLOGUE
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             auto fg = internal::open_all(fs, path);
             auto original_mode = fg->get_mode();
-            mode &= 0777;
-            mode |= original_mode & S_IFMT;
-            fg->set_mode(mode);
+            auto effective_mode = mode & 0777;
+            effective_mode |= original_mode & S_IFMT;
+            fg->set_mode(effective_mode);
             fg->flush();
             return 0;
-        }
-        COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int chown(const char* path, fuse_uid_t uid, fuse_gid_t gid)
     {
-        COMMON_PROLOGUE
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             auto fg = internal::open_all(fs, path);
             fg->set_uid(uid);
             fg->set_gid(gid);
             fg->flush();
             return 0;
-        }
-        COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int symlink(const char* to, const char* from)
     {
-        auto ctx = fuse_get_context();
-        auto fs = internal::get_fs(ctx);
-        OPT_TRACE_WITH_TWO_PATHS(to, from);
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
+
             if (internal::is_readonly(ctx))
                 return -EROFS;
             auto fg
                 = internal::create(fs, from, FileBase::SYMLINK, S_IFLNK | 0755, ctx->uid, ctx->gid);
             fg.get_as<Symlink>()->set(to);
             return 0;
-        }
-        OPT_CATCH_WITH_TWO_PATHS(to, from)
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int readlink(const char* path, char* buf, size_t size)
     {
         if (size == 0)
             return -EINVAL;
-        COMMON_PROLOGUE
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             auto fg = internal::open_all(fs, path);
             auto destination = fg.get_as<Symlink>()->get();
             memset(buf, 0, size);
             memcpy(buf, destination.data(), std::min(destination.size(), size - 1));
             return 0;
-        }
-        COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int rename(const char* src, const char* dst)
     {
-        auto ctx = fuse_get_context();
-        auto fs = internal::get_fs(ctx);
-        OPT_TRACE_WITH_TWO_PATHS(src, dst);
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             std::string src_filename, dst_filename;
             auto src_dir_guard = internal::open_base_dir(fs, src, src_filename);
             auto dst_dir_guard = internal::open_base_dir(fs, dst, dst_filename);
@@ -608,18 +611,16 @@ namespace operations
             if (dst_exists)
                 internal::remove(fs, dst_id, dst_type);
             return 0;
-        }
-        OPT_CATCH_WITH_TWO_PATHS(src, dst)
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int link(const char* src, const char* dst)
     {
-        auto ctx = fuse_get_context();
-        auto fs = internal::get_fs(ctx);
-        OPT_TRACE_WITH_TWO_PATHS(src, dst);
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             std::string src_filename, dst_filename;
             auto src_dir_guard = internal::open_base_dir(fs, src, src_filename);
             auto dst_dir_guard = internal::open_base_dir(fs, dst, dst_filename);
@@ -645,24 +646,24 @@ namespace operations
             guard->set_nlink(guard->get_nlink() + 1);
             dst_dir->add_entry(dst_filename, src_id, src_type);
             return 0;
-        }
-        OPT_CATCH_WITH_TWO_PATHS(src, dst)
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int fsync(const char* path, int, struct fuse_file_info* fi)
     {
-        COMMON_PROLOGUE
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             auto fb = reinterpret_cast<FileBase*>(fi->fh);
             if (!fb)
                 return -EFAULT;
             fb->flush();
             fb->fsync();
             return 0;
-        }
-        COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int fsyncdir(const char* path, int isdatasync, struct fuse_file_info* fi)
@@ -672,70 +673,49 @@ namespace operations
 
     int utimens(const char* path, const struct fuse_timespec ts[2])
     {
-        COMMON_PROLOGUE
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             auto fg = internal::open_all(fs, path);
             fg->utimens(ts);
             return 0;
-        }
-        COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
 #ifdef __APPLE__
 
     int listxattr(const char* path, char* list, size_t size)
     {
-        COMMON_PROLOGUE
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
             auto fg = internal::open_all(fs, path);
             int rc = static_cast<int>(fg->listxattr(list, size));
             transform_listxattr_result(list, size);
             return rc;
-        }
-        COMMON_CATCH_BLOCK
-    }
-
-#define XATTR_COMMON_PROLOGUE                                                                      \
-    auto ctx = fuse_get_context();                                                                 \
-    auto fs = internal::get_fs(ctx);                                                               \
-    TRACE_LOG("%s (path=%s, name=%s)", __func__, path, name);
-
-#define XATTR_COMMON_CATCH_BLOCK                                                                   \
-    catch (const std::exception& e)                                                                \
-    {                                                                                              \
-        auto ebase = dynamic_cast<const ExceptionBase*>(&e);                                       \
-        int errc = ebase ? ebase->error_number() : EPERM;                                          \
-        if (errc != ENOATTR) /* Attribute not found is very common and normal; no need to log it   \
-                                as an error */                                                     \
-            ERROR_LOG("%s (path=%s, name=%s) encounters %s: %s",                                   \
-                      __FUNCTION__,                                                                \
-                      path,                                                                        \
-                      name,                                                                        \
-                      get_type_name(e).get(),                                                      \
-                      e.what());                                                                   \
-        return -errc;                                                                              \
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position)
     {
-        XATTR_COMMON_PROLOGUE
-
-        if (position != 0)
-            return -EINVAL;
-        int rc = precheck_getxattr(&name);
-        if (rc <= 0)
-            return rc;
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
+            if (position != 0)
+                return -EINVAL;
+            int rc = precheck_getxattr(&name);
+            if (rc <= 0)
+                return rc;
+
             auto fg = internal::open_all(fs, path);
             return static_cast<int>(fg->getxattr(name, value, size));
-        }
-        XATTR_COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int setxattr(const char* path,
@@ -745,38 +725,40 @@ namespace operations
                  int flags,
                  uint32_t position)
     {
-        XATTR_COMMON_PROLOGUE
-
-        if (position != 0)
-            return -EINVAL;
-        int rc = precheck_setxattr(&name, &flags);
-        if (rc <= 0)
-            return rc;
-
-        flags &= XATTR_CREATE | XATTR_REPLACE;
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
+            if (position != 0)
+                return -EINVAL;
+            int rc = precheck_setxattr(&name, &flags);
+            if (rc <= 0)
+                return rc;
+
+            flags &= XATTR_CREATE | XATTR_REPLACE;
+
             auto fg = internal::open_all(fs, path);
             fg->setxattr(name, value, size, flags);
             return 0;
-        }
-        XATTR_COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 
     int removexattr(const char* path, const char* name)
     {
-        XATTR_COMMON_PROLOGUE
-        int rc = precheck_removexattr(&name);
-        if (rc <= 0)
-            return rc;
-
-        try
+        auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
+            int rc = precheck_removexattr(&name);
+            if (rc <= 0)
+                return rc;
+
             auto fg = internal::open_all(fs, path);
             fg->removexattr(name);
             return 0;
-        }
-        XATTR_COMMON_CATCH_BLOCK
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
     }
 #endif
 
