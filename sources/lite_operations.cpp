@@ -106,7 +106,7 @@ namespace lite
             info->fh = reinterpret_cast<uintptr_t>(traverser.release());
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {info}});
     }
 
     int releasedir(const char* path, struct fuse_file_info* info)
@@ -116,13 +116,13 @@ namespace lite
             delete reinterpret_cast<DirectoryTraverser*>(info->fh);
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {info}});
     }
 
     int readdir(const char* path,
                 void* buf,
                 fuse_fill_dir_t filler,
-                fuse_off_t,
+                fuse_off_t off,
                 struct fuse_file_info* info)
     {
         auto func = [=]()
@@ -150,7 +150,8 @@ namespace lite
             }
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(
+            func, FULL_FUNCTION_NAME, __LINE__, {{path}, {buf}, {filler}, {&off}, {info}});
     }
 
     int create(const char* path, fuse_mode_t mode, struct fuse_file_info* info)
@@ -162,7 +163,8 @@ namespace lite
             info->fh = reinterpret_cast<uintptr_t>(file.release());
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(
+            func, FULL_FUNCTION_NAME, __LINE__, {{path}, {&mode}, {info}});
     }
 
     int open(const char* path, struct fuse_file_info* info)
@@ -174,7 +176,7 @@ namespace lite
             info->fh = reinterpret_cast<uintptr_t>(file.release());
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {info}});
     }
 
     int release(const char* path, struct fuse_file_info* info)
@@ -184,7 +186,7 @@ namespace lite
             delete reinterpret_cast<File*>(info->fh);
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {info}});
     }
 
     int
@@ -199,7 +201,10 @@ namespace lite
             LockGuard<File> lock_guard(*fp, false);
             return static_cast<int>(fp->read(buf, offset, size));
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(func,
+                                       FULL_FUNCTION_NAME,
+                                       __LINE__,
+                                       {{path}, {(const void*)buf}, {&size}, {&offset}, {info}});
     }
 
     int write(const char* path,
@@ -218,7 +223,10 @@ namespace lite
             fp->write(buf, offset, size);
             return static_cast<int>(size);
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(func,
+                                       FULL_FUNCTION_NAME,
+                                       __LINE__,
+                                       {{path}, {(const void*)buf}, {&size}, {&offset}, {info}});
     }
 
     int flush(const char* path, struct fuse_file_info* info)
@@ -233,7 +241,7 @@ namespace lite
             fp->flush();
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {info}});
     }
 
     int ftruncate(const char* path, fuse_off_t len, struct fuse_file_info* info)
@@ -248,7 +256,8 @@ namespace lite
             fp->resize(len);
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(
+            func, FULL_FUNCTION_NAME, __LINE__, {{path}, {&len}, {info}});
     }
 
     int unlink(const char* path)
@@ -259,7 +268,7 @@ namespace lite
             filesystem->unlink(path);
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}});
     }
 
     int mkdir(const char* path, fuse_mode_t mode)
@@ -270,7 +279,7 @@ namespace lite
             filesystem->mkdir(path, mode);
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {&mode}});
     }
 
     int rmdir(const char* path)
@@ -281,7 +290,7 @@ namespace lite
             filesystem->rmdir(path);
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}});
     }
 
     int chmod(const char* path, fuse_mode_t mode)
@@ -292,7 +301,7 @@ namespace lite
             filesystem->chmod(path, mode);
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {&mode}});
     }
 
     int chown(const char* path, fuse_uid_t uid, fuse_gid_t gid)
@@ -303,7 +312,8 @@ namespace lite
             filesystem->chown(path, uid, gid);
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(
+            func, FULL_FUNCTION_NAME, __LINE__, {{path}, {&uid}, {&gid}});
     }
 
     int symlink(const char* to, const char* from)
@@ -314,7 +324,7 @@ namespace lite
             filesystem->symlink(to, from);
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{to}, {from}});
     }
 
     int link(const char* src, const char* dest)
@@ -325,7 +335,7 @@ namespace lite
             filesystem->link(src, dest);
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{src}, {dest}});
     }
 
     int readlink(const char* path, char* buf, size_t size)
@@ -336,7 +346,8 @@ namespace lite
             (void)filesystem->readlink(path, buf, size);
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(
+            func, FULL_FUNCTION_NAME, __LINE__, {{path}, {(const void*)buf}, {&size}});
     }
 
     int rename(const char* from, const char* to)
@@ -347,10 +358,10 @@ namespace lite
             filesystem->rename(from, to);
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{from}, {to}});
     }
 
-    int fsync(const char* path, int, struct fuse_file_info* info)
+    int fsync(const char* path, int datasync, struct fuse_file_info* info)
     {
         auto func = [=]()
         {
@@ -363,7 +374,8 @@ namespace lite
             fp->fsync();
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(
+            func, FULL_FUNCTION_NAME, __LINE__, {{path}, {&datasync}, {info}});
     }
 
     int truncate(const char* path, fuse_off_t len)
@@ -379,7 +391,7 @@ namespace lite
             fp->resize(static_cast<size_t>(len));
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {&len}});
     }
 
     int utimens(const char* path, const struct fuse_timespec ts[2])
@@ -390,7 +402,8 @@ namespace lite
             filesystem->utimens(path, ts);
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(
+            func, FULL_FUNCTION_NAME, __LINE__, {{path}, {ts}, {ts ? ts + 1 : ts}});
     }
 
 #ifdef __APPLE__
@@ -403,7 +416,8 @@ namespace lite
             transform_listxattr_result(list, size);
             return rc;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(
+            func, FULL_FUNCTION_NAME, __LINE__, {{path}, {(const void*)list}, {&size}});
     }
 
     int getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position)
@@ -420,7 +434,11 @@ namespace lite
             rc = static_cast<int>(filesystem->getxattr(path, name, value, size));
             return rc;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(
+            func,
+            FULL_FUNCTION_NAME,
+            __LINE__,
+            {{path}, {name}, {(const void*)value}, {&size}, {&position}});
     }
 
     int setxattr(const char* path,
@@ -444,7 +462,11 @@ namespace lite
             rc = filesystem->setxattr(path, name, const_cast<char*>(value), size, flags);
             return rc;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(
+            func,
+            FULL_FUNCTION_NAME,
+            __LINE__,
+            {{path}, {name}, {(const void*)value}, {&size}, {&flags}, {&position}});
     }
     int removexattr(const char* path, const char* name)
     {
@@ -457,7 +479,7 @@ namespace lite
             rc = filesystem->removexattr(path, name);
             return rc;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {name}});
     }
 #endif
 
