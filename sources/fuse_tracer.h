@@ -51,9 +51,9 @@ public:
             if (logger->get_level() <= LoggingLevel::kLogTrace)
             {
                 logger->prelog(LoggingLevel::kLogTrace, funcsig, lineno);
-                fputs("Function with arguments ", logger->m_fp);
+                fputs("Function ends with arguments ", logger->m_fp);
                 print(logger->m_fp, args.begin(), args.size());
-                fprintf(logger->m_fp, " returns %lld", static_cast<long long>(rc));
+                fprintf(logger->m_fp, " and return code %lld", static_cast<long long>(rc));
                 logger->postlog(LoggingLevel::kLogTrace);
             }
             return rc;
@@ -65,10 +65,10 @@ public:
             if (logger->get_level() <= LoggingLevel::kLogError)
             {
                 logger->prelog(LoggingLevel::kLogError, funcsig, lineno);
-                fputs("Function with arguments ", logger->m_fp);
+                fputs("Function fails with arguments ", logger->m_fp);
                 print(logger->m_fp, args.begin(), args.size());
                 fprintf(logger->m_fp,
-                        " returns error code %d because it encounters exception %s: %s",
+                        " with return code %d because it encounters exception %s: %s",
                         -code,
                         get_type_name(e).get(),
                         e.what());

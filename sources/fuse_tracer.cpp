@@ -98,7 +98,7 @@ namespace details
             gmtime_r(&tm, &v->tv_sec);
 #endif
             char buffer[256] = {};
-            std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H-%M-%S", &tm);
+            std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &tm);
             fprintf(fp, "%s.%09d UTC", buffer, static_cast<int>(v->tv_nsec));
         }
 
@@ -187,7 +187,7 @@ namespace details
 
         void print(FILE* fp, const struct fuse_file_info* v)
         {
-            fprintf(fp, "{fh=%p, flags=%#o}", (const void*)(v->fh), v->flags);
+            fprintf(fp, "{fh=0x%p, flags=%#o}", (const void*)(v->fh), v->flags);
         }
 
         void print(FILE* fp, const struct fuse_statvfs* v)
@@ -237,7 +237,7 @@ void FuseTracer::print(FILE* fp, const WrappedFuseArg& arg)
     SECUREFS_DISPATCH(struct fuse_file_info)
     SECUREFS_DISPATCH(struct fuse_statvfs)
     SECUREFS_DISPATCH(struct fuse_timespec)
-    else { fprintf(fp, "%p", arg.value); }
+    else { fprintf(fp, "0x%p", arg.value); }
 #undef SECUREFS_DISPATCH
 }
 
