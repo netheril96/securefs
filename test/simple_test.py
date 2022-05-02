@@ -700,6 +700,8 @@ def make_concurrency_test(version: int):
             test_filename = os.path.join(mount_point, "a" * 10)
             p = securefs_mount(data_dir, mount_point, "xxxx")
             try:
+                with open(test_filename, "xb") as f:
+                    pass
                 count = multiprocessing.cpu_count()
                 barrier = multiprocessing.Barrier(count)
                 processes = [
@@ -712,6 +714,11 @@ def make_concurrency_test(version: int):
                     proc.start()
                 for proc in processes:
                     proc.join()
+                for proc in processes:
+                    if proc.exitcode != 0:
+                        raise ValueError(
+                            "A process that reads/writes test file has failed"
+                        )
             finally:
                 securefs_unmount(p, mount_point)
 
