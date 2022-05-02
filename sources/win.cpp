@@ -1143,6 +1143,8 @@ void windows_init(void)
     static auto original_cp = ::GetConsoleOutputCP();
     ::SetConsoleOutputCP(CP_UTF8);
     atexit([]() { ::SetConsoleOutputCP(original_cp); });
+    _set_invalid_parameter_handler(
+        [](wchar_t const*, wchar_t const*, wchar_t const*, unsigned int, uintptr_t) {});
 
     // Use a large buffer to prevent Windows from chopping valid UTF-8 sequences.
     setvbuf(stdout, nullptr, _IOFBF, 65535);
