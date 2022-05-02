@@ -2,6 +2,7 @@
 #include "lock_enabled.h"
 #include "logger.h"
 #include "platform.h"
+#include "win_get_proc.h"
 
 #include <winfsp/winfsp.h>
 
@@ -464,7 +465,6 @@ class WindowsFileStream final : public FileStream
 {
 private:
     HANDLE m_handle;
-    bool m_is_ntfs;
 
 private:
     void write32(const void* input, offset_type offset, DWORD length)
@@ -1157,8 +1157,9 @@ void windows_init(void)
     }
 
     HMODULE hd = GetModuleHandleW(L"kernel32.dll");
-    best_get_time_func = reinterpret_cast<decltype(best_get_time_func)>(
-        GetProcAddress(hd, "GetSystemTimePreciseAsFileTime"));
+
+    best_get_time_func
+        = get_proc_address<decltype(best_get_time_func)>(hd, "GetSystemTimePreciseAsFileTime");
     if (best_get_time_func == nullptr)
         best_get_time_func = &GetSystemTimeAsFileTime;
 }

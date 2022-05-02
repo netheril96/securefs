@@ -6,6 +6,7 @@
 #include "myutils.h"
 #include "operations.h"
 #include "platform.h"
+#include "win_get_proc.h"
 
 #include <argon2.h>
 #include <cryptopp/cpu.h>
@@ -1429,8 +1430,7 @@ public:
 #ifdef WIN32
         HMODULE hd = GetModuleHandleW((sizeof(void*) == 8) ? L"winfsp-x64.dll" : L"winfsp-x86.dll");
         NTSTATUS(*fsp_version_func)
-        (uint32_t*)
-            = reinterpret_cast<decltype(fsp_version_func)>(GetProcAddress(hd, "FspVersion"));
+        (uint32_t*) = get_proc_address<decltype(fsp_version_func)>(hd, "FspVersion");
         if (fsp_version_func)
         {
             uint32_t vn;
