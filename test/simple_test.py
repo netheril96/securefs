@@ -19,6 +19,9 @@ import uuid
 from typing import List, Optional, Sequence
 from typing import Set
 import enum
+import multiprocessing
+import random
+import io
 
 faulthandler.enable()
 
@@ -655,6 +658,64 @@ def make_chpass_test(
                 securefs_unmount(p, mount_point)
 
     return ChpassTestBase
+
+
+def randomly_act_on_file(filename: str, barrier) -> None:
+    rng = random.Random(os.urandom(16))
+
+    def run_once(f: io.FileIO):
+        action = rng.randrange(0, 5)
+        if action == 0:
+            f.read(rng.randrange(5000))
+        elif action == 1:
+            f.write(random.randbytes(rng.randrange(1, 5000)))
+        elif action == 2:
+            f.seek(rng.randrange(0, 1 << 20))
+        elif action == 3:
+            os.ftruncate(f.fileno(), rng.randrange(0, 1 << 20))
+            f.seek(0)
+        elif action == 4:
+            os.fsync(f.fileno())
+
+    barrier.wait()
+    for _ in range(3):
+        with open(filename, "r+b", buffering=0) as f:
+            for _ in range(rng.randrange(10, 30)):
+                run_once(f)
+
+
+@parametrize([[2], [4]])
+def make_concurrency_test(version: int):
+    class ConcurrencyTestBase(unittest.TestCase):
+        def test_concurrent_access(self):
+            data_dir = get_data_dir()
+            mount_point = get_mount_point()
+
+            securefs_create(
+                data_dir=data_dir,
+                password="xxxx",
+                version=version,
+                pbkdf=ALL_PBKDFS[-1],
+            )
+            test_filename = os.path.join(mount_point, "a" * 10)
+            p = securefs_mount(data_dir, mount_point, "xxxx")
+            try:
+                count = multiprocessing.cpu_count()
+                barrier = multiprocessing.Barrier(count)
+                processes = [
+                    multiprocessing.Process(
+                        target=randomly_act_on_file, args=(test_filename, barrier)
+                    )
+                    for _ in range(count)
+                ]
+                for proc in processes:
+                    proc.start()
+                for proc in processes:
+                    proc.join()
+            finally:
+                securefs_unmount(p, mount_point)
+
+    return ConcurrencyTestBase
 
 
 if __name__ == "__main__":
