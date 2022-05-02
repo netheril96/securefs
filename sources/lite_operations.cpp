@@ -127,7 +127,6 @@ namespace lite
     {
         auto func = [=]()
         {
-            auto filesystem = get_local_filesystem();
             auto traverser = reinterpret_cast<DirectoryTraverser*>(info->fh);
             if (!traverser)
                 return -EFAULT;
@@ -367,7 +366,6 @@ namespace lite
     {
         auto func = [=]()
         {
-            auto filesystem = get_local_filesystem();
             auto fp = reinterpret_cast<File*>(info->fh);
             if (!fp)
                 return -EFAULT;
@@ -424,7 +422,7 @@ namespace lite
 
     int getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position)
     {
-        auto func = [=]()
+        auto func = [&]()
         {
             if (position != 0)
                 return -EINVAL;
@@ -450,7 +448,7 @@ namespace lite
                  int flags,
                  uint32_t position)
     {
-        auto func = [=]()
+        auto func = [&]()
         {
             if (position != 0)
                 return -EINVAL;
@@ -472,7 +470,7 @@ namespace lite
     }
     int removexattr(const char* path, const char* name)
     {
-        auto func = [=]()
+        auto func = [&]()
         {
             int rc = precheck_removexattr(&name);
             if (rc <= 0)

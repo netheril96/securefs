@@ -245,7 +245,7 @@ namespace operations
             fs->table.statfs(fs_info);
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {fs_info}});
     }
 
     int getattr(const char* path, struct fuse_stat* st)
@@ -265,7 +265,7 @@ namespace operations
             st->st_gid = OSService::getgid();
             return 0;
         };
-        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {});
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {st}});
     }
 
     int opendir(const char* path, struct fuse_file_info* info)
@@ -297,8 +297,6 @@ namespace operations
     {
         auto func = [=]()
         {
-            auto ctx = fuse_get_context();
-            auto fs = internal::get_fs(ctx);
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EFAULT;
@@ -336,17 +334,16 @@ namespace operations
 
     int create(const char* path, fuse_mode_t mode, struct fuse_file_info* info)
     {
-        auto func = [=]()
+        auto func = [&]()
         {
             auto ctx = fuse_get_context();
             auto fs = internal::get_fs(ctx);
-            auto effective_mode = mode & ~static_cast<uint32_t>(S_IFMT);
-            effective_mode |= S_IFREG;
+            mode &= ~static_cast<uint32_t>(S_IFMT);
+            mode |= S_IFREG;
 
             if (internal::is_readonly(ctx))
                 return -EROFS;
-            auto fg = internal::create(
-                fs, path, FileBase::REGULAR_FILE, effective_mode, ctx->uid, ctx->gid);
+            auto fg = internal::create(fs, path, FileBase::REGULAR_FILE, mode, ctx->uid, ctx->gid);
             fg->cast_as<RegularFile>();
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
 
@@ -387,7 +384,6 @@ namespace operations
         auto func = [=]()
         {
             auto ctx = fuse_get_context();
-            auto fs = internal::get_fs(ctx);
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EINVAL;
@@ -404,8 +400,6 @@ namespace operations
     {
         auto func = [=]()
         {
-            auto ctx = fuse_get_context();
-            auto fs = internal::get_fs(ctx);
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EFAULT;
@@ -425,8 +419,6 @@ namespace operations
     {
         auto func = [=]()
         {
-            auto ctx = fuse_get_context();
-            auto fs = internal::get_fs(ctx);
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EFAULT;
@@ -443,8 +435,6 @@ namespace operations
     {
         auto func = [=]()
         {
-            auto ctx = fuse_get_context();
-            auto fs = internal::get_fs(ctx);
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EFAULT;
@@ -472,8 +462,6 @@ namespace operations
     {
         auto func = [=]()
         {
-            auto ctx = fuse_get_context();
-            auto fs = internal::get_fs(ctx);
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EFAULT;
@@ -501,18 +489,17 @@ namespace operations
 
     int mkdir(const char* path, fuse_mode_t mode)
     {
-        auto func = [=]()
+        auto func = [&]()
         {
             auto ctx = fuse_get_context();
             auto fs = internal::get_fs(ctx);
 
-            auto effective_mode = mode & ~static_cast<uint32_t>(S_IFMT);
-            effective_mode |= S_IFDIR;
+            mode &= ~static_cast<uint32_t>(S_IFMT);
+            mode |= S_IFDIR;
 
             if (internal::is_readonly(ctx))
                 return -EROFS;
-            auto fg = internal::create(
-                fs, path, FileBase::DIRECTORY, effective_mode, ctx->uid, ctx->gid);
+            auto fg = internal::create(fs, path, FileBase::DIRECTORY, mode, ctx->uid, ctx->gid);
             fg->cast_as<Directory>();
             return 0;
         };
@@ -523,15 +510,15 @@ namespace operations
 
     int chmod(const char* path, fuse_mode_t mode)
     {
-        auto func = [=]()
+        auto func = [&]()
         {
             auto ctx = fuse_get_context();
             auto fs = internal::get_fs(ctx);
             auto fg = internal::open_all(fs, path);
             auto original_mode = fg->get_mode();
-            auto effective_mode = mode & 0777;
-            effective_mode |= original_mode & S_IFMT;
-            fg->set_mode(effective_mode);
+            mode &= 0777;
+            mode |= original_mode & S_IFMT;
+            fg->set_mode(mode);
             fg->flush();
             return 0;
         };
@@ -667,8 +654,6 @@ namespace operations
     {
         auto func = [=]()
         {
-            auto ctx = fuse_get_context();
-            auto fs = internal::get_fs(ctx);
             auto fb = reinterpret_cast<FileBase*>(fi->fh);
             if (!fb)
                 return -EFAULT;
@@ -718,7 +703,7 @@ namespace operations
 
     int getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position)
     {
-        auto func = [=]()
+        auto func = [&]()
         {
             auto ctx = fuse_get_context();
             auto fs = internal::get_fs(ctx);
@@ -745,7 +730,7 @@ namespace operations
                  int flags,
                  uint32_t position)
     {
-        auto func = [=]()
+        auto func = [&]()
         {
             auto ctx = fuse_get_context();
             auto fs = internal::get_fs(ctx);
@@ -770,7 +755,7 @@ namespace operations
 
     int removexattr(const char* path, const char* name)
     {
-        auto func = [=]()
+        auto func = [&]()
         {
             auto ctx = fuse_get_context();
             auto fs = internal::get_fs(ctx);
