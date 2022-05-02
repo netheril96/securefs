@@ -545,6 +545,9 @@ public:
         {
             if (flags & O_EXCL)
                 create_flags = CREATE_NEW;
+            else if (flags & O_TRUNC)
+                throwInvalidArgumentException(
+                    "On Windows, O_TRUNC cannot be specified together with O_CREAT");
             else
                 create_flags = OPEN_ALWAYS;
         }
