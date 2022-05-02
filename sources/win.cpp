@@ -75,7 +75,6 @@ public:
     std::string message() const override
     {
         wchar_t system_buffer[2000];
-        wchar_t final_buffer[6000];
         if (!FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM,
                             nullptr,
                             err,
@@ -96,10 +95,12 @@ public:
                 break;
         }
 
+        std::vector<wchar_t> final_buffer(path1.size() + path2.size() + wcslen(system_buffer)
+                                          + wcslen(funcname) + 100);
         if (!path1.empty() && !path2.empty())
         {
-            StringCchPrintfW(final_buffer,
-                             array_length(final_buffer),
+            StringCchPrintfW(final_buffer.data(),
+                             final_buffer.size(),
                              L"error %lu %s (%s(path1=%s, path2=%s))",
                              err,
                              system_buffer,
@@ -109,8 +110,8 @@ public:
         }
         else if (!path1.empty())
         {
-            StringCchPrintfW(final_buffer,
-                             array_length(final_buffer),
+            StringCchPrintfW(final_buffer.data(),
+                             final_buffer.size(),
                              L"error %lu %s (%s(path=%s))",
                              err,
                              system_buffer,
@@ -119,14 +120,14 @@ public:
         }
         else
         {
-            StringCchPrintfW(final_buffer,
-                             array_length(final_buffer),
+            StringCchPrintfW(final_buffer.data(),
+                             final_buffer.size(),
                              L"error %lu %s (%s)",
                              err,
                              system_buffer,
                              funcname);
         }
-        return narrow_string(final_buffer);
+        return narrow_string(final_buffer.data());
     }
     DWORD win32_code() const noexcept { return err; }
     int error_number() const noexcept override
