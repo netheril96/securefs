@@ -9,6 +9,79 @@ namespace details
 {
     namespace
     {
+
+        template <typename StatClass>
+        auto get_atim_helper(const StatClass* st, int) -> decltype(&st->st_atim)
+        {
+            return &st->st_atim;
+        }
+
+        template <typename StatClass>
+        auto get_atim_helper(const StatClass* st, double) -> decltype(&st->st_atimespec)
+        {
+            return &st->st_atimespec;
+        }
+
+        template <typename StatClass>
+        const struct fuse_timespec* get_atim_helper(const StatClass* st, ...)
+        {
+            return nullptr;
+        }
+
+        template <typename StatClass>
+        auto get_mtim_helper(const StatClass* st, int) -> decltype(&st->st_mtim)
+        {
+            return &st->st_mtim;
+        }
+
+        template <typename StatClass>
+        auto get_mtim_helper(const StatClass* st, double) -> decltype(&st->st_mtimespec)
+        {
+            return &st->st_mtimespec;
+        }
+
+        template <typename StatClass>
+        const struct fuse_timespec* get_mtim_helper(const StatClass* st, ...)
+        {
+            return nullptr;
+        }
+
+        template <typename StatClass>
+        auto get_ctim_helper(const StatClass* st, int) -> decltype(&st->st_ctim)
+        {
+            return &st->st_ctim;
+        }
+
+        template <typename StatClass>
+        auto get_ctim_helper(const StatClass* st, double) -> decltype(&st->st_ctimespec)
+        {
+            return &st->st_ctimespec;
+        }
+
+        template <typename StatClass>
+        const struct fuse_timespec* get_ctim_helper(const StatClass* st, ...)
+        {
+            return nullptr;
+        }
+
+        template <typename StatClass>
+        auto get_birthtim_helper(const StatClass* st, int) -> decltype(&st->st_birthtim)
+        {
+            return &st->st_birthtim;
+        }
+
+        template <typename StatClass>
+        auto get_birthtim_helper(const StatClass* st, double) -> decltype(&st->st_birthtimespec)
+        {
+            return &st->st_birthtimespec;
+        }
+
+        template <typename StatClass>
+        const struct fuse_timespec* get_birthtim_helper(const StatClass* st, ...)
+        {
+            return nullptr;
+        }
+
         void print(FILE* fp, const int* v) { fprintf(fp, "%d", *v); }
         void print(FILE* fp, const unsigned* v) { fprintf(fp, "%u", *v); }
         void print(FILE* fp, const long* v) { fprintf(fp, "%ld", *v); }
@@ -76,7 +149,7 @@ namespace details
         {
             fprintf(fp,
                     "{st_size=%lld, st_mode=%#o, st_nlink=%lld, st_uid=%lld, st_gid=%lld, "
-                    "st_blksize=%lld, st_blocks=%lld}",
+                    "st_blksize=%lld, st_blocks=%lld",
                     static_cast<long long>(v->st_size),
                     static_cast<unsigned>(v->st_mode),
                     static_cast<long long>(v->st_nlink),
@@ -84,6 +157,32 @@ namespace details
                     static_cast<long long>(v->st_gid),
                     static_cast<long long>(v->st_blksize),
                     static_cast<long long>(v->st_blocks));
+
+            auto atim = get_atim_helper(v, 0);
+            if (atim)
+            {
+                fputs(", st_atim=", fp);
+                ::securefs::details::print(fp, atim);
+            }
+            auto mtim = get_mtim_helper(v, 0);
+            if (mtim)
+            {
+                fputs(", st_mtim=", fp);
+                ::securefs::details::print(fp, mtim);
+            }
+            auto ctim = get_ctim_helper(v, 0);
+            if (ctim)
+            {
+                fputs(", st_ctim=", fp);
+                ::securefs::details::print(fp, ctim);
+            }
+            auto birthtim = get_birthtim_helper(v, 0);
+            if (birthtim)
+            {
+                fputs(", st_birthtim=", fp);
+                ::securefs::details::print(fp, birthtim);
+            }
+            fputc('}', fp);
         }
 
         void print(FILE* fp, const struct fuse_file_info* v)
