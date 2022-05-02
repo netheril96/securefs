@@ -23,7 +23,7 @@ namespace details
         }
 
         template <typename StatClass>
-        const struct fuse_timespec* get_atim_helper(const StatClass* st, ...)
+        const struct fuse_timespec* get_atim_helper(const StatClass*, ...)
         {
             return nullptr;
         }
@@ -41,7 +41,7 @@ namespace details
         }
 
         template <typename StatClass>
-        const struct fuse_timespec* get_mtim_helper(const StatClass* st, ...)
+        const struct fuse_timespec* get_mtim_helper(const StatClass*, ...)
         {
             return nullptr;
         }
@@ -59,7 +59,7 @@ namespace details
         }
 
         template <typename StatClass>
-        const struct fuse_timespec* get_ctim_helper(const StatClass* st, ...)
+        const struct fuse_timespec* get_ctim_helper(const StatClass*, ...)
         {
             return nullptr;
         }
@@ -77,7 +77,7 @@ namespace details
         }
 
         template <typename StatClass>
-        const struct fuse_timespec* get_birthtim_helper(const StatClass* st, ...)
+        const struct fuse_timespec* get_birthtim_helper(const StatClass*, ...)
         {
             return nullptr;
         }
@@ -96,7 +96,7 @@ namespace details
             if (gmtime_s(&tm, &v->tv_sec))
                 return;
 #else
-            if (!gmtime_r(&tm, &v->tv_sec))
+            if (!gmtime_r(&v->tv_sec, &tm))
                 return;
 #endif
             char buffer[256] = {};
