@@ -93,9 +93,11 @@ namespace details
         {
             std::tm tm;
 #ifdef _WIN32
-            gmtime_s(&tm, &v->tv_sec);
+            if (gmtime_s(&tm, &v->tv_sec))
+                return;
 #else
-            gmtime_r(&tm, &v->tv_sec);
+            if (!gmtime_r(&tm, &v->tv_sec))
+                return;
 #endif
             char buffer[256] = {};
             std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &tm);
