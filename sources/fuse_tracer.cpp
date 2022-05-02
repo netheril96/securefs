@@ -1,6 +1,7 @@
 #include "fuse_tracer.h"
 
 #include <cctype>
+#include <ctime>
 
 namespace securefs
 {
@@ -14,6 +15,19 @@ namespace details
         void print(FILE* fp, const unsigned long* v) { fprintf(fp, "%lu", *v); }
         void print(FILE* fp, const long long* v) { fprintf(fp, "%lld", *v); }
         void print(FILE* fp, const unsigned long long* v) { fprintf(fp, "%llu", *v); }
+
+        void print(FILE* fp, const struct fuse_timespec* v)
+        {
+            std::tm tm;
+#ifdef _WIN32
+            gmtime_s(&tm, &v->tv_sec);
+#else
+            gmtime_r(&tm, &v->tv_sec);
+#endif
+            char buffer[256] = {};
+            std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H-%M-%S", &tm);
+            fprintf(fp, "%s.%09d UTC", buffer, static_cast<int>(v->tv_nsec));
+        }
 
         void print(FILE* fp, const char* v)
         {
@@ -123,6 +137,7 @@ void FuseTracer::print(FILE* fp, const WrappedFuseArg& arg)
     SECUREFS_DISPATCH(unsigned long long)
     SECUREFS_DISPATCH(struct fuse_file_info)
     SECUREFS_DISPATCH(struct fuse_statvfs)
+    SECUREFS_DISPATCH(struct fuse_timespec)
     else { fprintf(fp, "%p", arg.value); }
 #undef SECUREFS_DISPATCH
 }
