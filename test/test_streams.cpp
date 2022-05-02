@@ -52,7 +52,7 @@ static void test(securefs::StreamBase& stream, unsigned times)
             b = static_cast<byte>(dist(mt));
     }
 
-    std::uniform_int_distribution<int> flags_dist(0, 5);
+    std::uniform_int_distribution<int> flags_dist(0, 4);
     std::uniform_int_distribution<int> length_dist(0, 7 * 4096 + 1);
     for (size_t i = 0; i < times; ++i)
     {
@@ -91,12 +91,6 @@ static void test(securefs::StreamBase& stream, unsigned times)
         case 4:
             stream.flush();
             posix_stream.flush();
-            break;
-
-        case 5:
-            stream.resize(0);
-            posix_stream.resize(0);
-            break;
 
         default:
             break;
@@ -227,12 +221,12 @@ TEST_CASE("Test streams")
 
     {
         auto hmac_stream = securefs::make_stream_hmac(key, id, posix_stream, true);
-        test(*hmac_stream, 8000);
+        test(*hmac_stream, 5000);
     }
     {
         posix_stream->resize(0);
         securefs::dummy::DummpyCryptStream ds(posix_stream, 8000);
-        test(ds, 8000);
+        test(ds, 5000);
     }
     {
         auto meta_posix_stream = OSService::get_default().open_file_stream(
@@ -241,11 +235,11 @@ TEST_CASE("Test streams")
             posix_stream, meta_posix_stream, key, key, id, true, 4096, 12);
         std::vector<byte> header(aes_gcm_stream.second->max_header_length() - 1, 5);
         aes_gcm_stream.second->write_header(header.data(), header.size());
-        test(*aes_gcm_stream.first, 2000);
+        test(*aes_gcm_stream.first, 1000);
         aes_gcm_stream.second->flush_header();
         aes_gcm_stream.second->read_header(header.data(), header.size());
         REQUIRE(securefs::is_all_equal(header.begin(), header.end(), 5));
-        test(*aes_gcm_stream.first, 5000);
+        test(*aes_gcm_stream.first, 3000);
     }
     {
         securefs::dummy::DummyBlockStream dbs;
@@ -260,6 +254,6 @@ TEST_CASE("Test streams")
         lite_stream.write(test_data, 0, sizeof(test_data));
         REQUIRE(lite_stream.read(output, 0, sizeof(output)) == sizeof(test_data));
         REQUIRE(memcmp(test_data, output, sizeof(test_data)) == 0);
-        test(lite_stream, 5001);
+        test(lite_stream, 3001);
     }
 }
