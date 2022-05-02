@@ -36,10 +36,6 @@ if(UNIX)
     link_libraries(${FUSE_LIBRARIES})
     add_compile_options(-Wall -Wextra -Wno-unknown-pragmas)
 
-    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        add_compile_options(-Wthread-safety -Wthread-safety-negative)
-    endif()
-
     if(APPLE)
         link_libraries(-Wl,-dead_strip)
     else()
@@ -71,6 +67,10 @@ else()
     elseif(MINGW)
         link_libraries(-delayload=winfsp-${ARCH}.dll)
     endif()
+endif()
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options(-Wthread-safety -Wthread-safety-negative)
 endif()
 
 add_definitions(-D_REENTRANT -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=28
