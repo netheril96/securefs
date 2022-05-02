@@ -19,6 +19,7 @@ namespace lite
                                          unsigned iv_size,
                                          bool check)
         : BlockBasedStream(block_size)
+        , m_master_key(master_key)
         , m_stream(std::move(stream))
         , m_iv_size(iv_size)
         , m_check(check)
@@ -32,33 +33,8 @@ namespace lite
 
         warn_if_key_not_random(master_key, __FILE__, __LINE__);
 
-        CryptoPP::FixedSizeAlignedSecBlock<byte, get_header_size()> header, session_key;
-        auto rc = m_stream->read(header.data(), 0, header.size());
-
-        if (rc == 0)
-        {
-            generate_random(header.data(), header.size());
-            m_stream->write(header.data(), 0, header.size());
-        }
-        else if (rc != header.size())
-        {
-            throwInvalidArgumentException("Underlying stream has invalid header size");
-        }
-
-        CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption ecenc(master_key.data(), master_key.size());
-        ecenc.ProcessData(session_key.data(), header.data(), get_header_size());
-
         m_buffer.reset(new byte[get_underlying_block_size()]);
-
-        // The null iv is only a placeholder; it will replaced during encryption and decryption
-        const byte null_iv[12] = {0};
-        m_encryptor.SetKeyWithIV(
-            session_key.data(), session_key.size(), null_iv, array_length(null_iv));
-        m_decryptor.SetKeyWithIV(
-            session_key.data(), session_key.size(), null_iv, array_length(null_iv));
-
-        warn_if_key_not_random(header, __FILE__, __LINE__);
-        warn_if_key_not_random(session_key, __FILE__, __LINE__);
+        initialize_header_key(false);
     }
 
     AESGCMCryptStream::~AESGCMCryptStream() {}
@@ -66,6 +42,19 @@ namespace lite
     void AESGCMCryptStream::flush() { m_stream->flush(); }
 
     bool AESGCMCryptStream::is_sparse() const noexcept { return m_stream->is_sparse(); }
+
+    void AESGCMCryptStream::resize(length_type new_size)
+    {
+        if (new_size == 0)
+        {
+            m_stream->resize(get_header_size());
+            initialize_header_key(true);
+        }
+        else
+        {
+            BlockBasedStream::resize(new_size);
+        }
+    }
 
     length_type AESGCMCryptStream::read_block(offset_type block_number, void* output)
     {
@@ -159,6 +148,30 @@ namespace lite
         auto residue = length % get_block_size();
         m_stream->resize(get_header_size() + new_blocks * get_underlying_block_size()
                          + (residue > 0 ? residue + get_iv_size() + get_mac_size() : 0));
+    }
+
+    void AESGCMCryptStream::initialize_header_key(bool force_regenerate)
+    {
+        CryptoPP::FixedSizeAlignedSecBlock<byte, get_header_size()> header, session_key;
+        if (force_regenerate
+            || m_stream->read(header.data(), 0, header.size()) <= get_header_size())
+        {
+            generate_random(header.data(), header.size());
+            m_stream->write(header.data(), 0, header.size());
+        }
+
+        CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption ecenc(m_master_key.data(),
+                                                            m_master_key.size());
+        ecenc.ProcessData(session_key.data(), header.data(), get_header_size());
+        // The null iv is only a placeholder; it will replaced during encryption and decryption
+        const byte null_iv[12] = {0};
+        m_encryptor.SetKeyWithIV(
+            session_key.data(), session_key.size(), null_iv, array_length(null_iv));
+        m_decryptor.SetKeyWithIV(
+            session_key.data(), session_key.size(), null_iv, array_length(null_iv));
+
+        warn_if_key_not_random(header, __FILE__, __LINE__);
+        warn_if_key_not_random(session_key, __FILE__, __LINE__);
     }
 
     length_type AESGCMCryptStream::calculate_real_size(length_type underlying_size,
