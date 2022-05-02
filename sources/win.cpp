@@ -1138,32 +1138,6 @@ std::string OSService::stringify_system_error(int errcode)
     return buffer;
 }
 
-void windows_init(void)
-{
-    static auto original_cp = ::GetConsoleOutputCP();
-    ::SetConsoleOutputCP(CP_UTF8);
-    atexit([]() { ::SetConsoleOutputCP(original_cp); });
-    _set_invalid_parameter_handler(
-        [](wchar_t const*, wchar_t const*, wchar_t const*, unsigned int, uintptr_t) {});
-
-    // Use a large buffer to prevent Windows from chopping valid UTF-8 sequences.
-    setvbuf(stdout, nullptr, _IOFBF, 65535);
-    setvbuf(stderr, nullptr, _IOFBF, 65535);
-    if (::FspLoad(nullptr) != STATUS_SUCCESS)
-    {
-        fputs("SecureFS cannot load WinFsp. Please make sure you have WinFsp properly installed.\n",
-              stderr);
-        abort();
-    }
-
-    HMODULE hd = GetModuleHandleW(L"kernel32.dll");
-
-    best_get_time_func
-        = get_proc_address<decltype(best_get_time_func)>(hd, "GetSystemTimePreciseAsFileTime");
-    if (best_get_time_func == nullptr)
-        best_get_time_func = &GetSystemTimeAsFileTime;
-}
-
 std::wstring widen_string(StringRef str)
 {
     if (str.empty())
@@ -1258,16 +1232,35 @@ public:
     }
 };
 
+namespace
+{
+    std::pair<bool, HANDLE> is_console(FILE* fp)
+    {
+        if (!fp)
+        {
+            return {false, INVALID_HANDLE_VALUE};
+        }
+        int fd = _fileno(fp);
+        if (fd < 0)
+        {
+            return {false, INVALID_HANDLE_VALUE};
+        }
+        auto h = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
+        if (h == INVALID_HANDLE_VALUE)
+        {
+            return {false, INVALID_HANDLE_VALUE};
+        }
+        DWORD mode;
+        return {GetConsoleMode(h, &mode), h};
+    }
+}    // namespace
+
 std::unique_ptr<ConsoleColourSetter> ConsoleColourSetter::create_setter(FILE* fp)
 {
-    if (!fp)
+    auto pair = is_console(fp);
+    if (!pair.first)
         return {};
-
-    auto hd = reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(fp)));
-    DWORD mode;
-    if (!GetConsoleMode(hd, &mode))
-        return {};    // Not a console
-    return securefs::make_unique<WindowsColourSetter>(hd);
+    return securefs::make_unique<WindowsColourSetter>(pair.second);
 }
 
 std::unique_ptr<const char, void (*)(const char*)> get_type_name(const std::exception& e) noexcept
@@ -1277,6 +1270,38 @@ std::unique_ptr<const char, void (*)(const char*)> get_type_name(const std::exce
 
 const char* PATH_SEPARATOR_STRING = "\\";
 const char PATH_SEPARATOR_CHAR = '\\';
+
+void windows_init(void)
+{
+    static auto original_cp = ::GetConsoleOutputCP();
+    ::SetConsoleOutputCP(CP_UTF8);
+    atexit([]() { ::SetConsoleOutputCP(original_cp); });
+    _set_invalid_parameter_handler(
+        [](wchar_t const*, wchar_t const*, wchar_t const*, unsigned int, uintptr_t) {});
+
+    if (is_console(stdout).first)
+    {
+        setvbuf(stdout, nullptr, _IOLBF, 65536);
+    }
+    if (is_console(stderr).first)
+    {
+        setvbuf(stderr, nullptr, _IOLBF, 65536);
+    }
+    if (::FspLoad(nullptr) != STATUS_SUCCESS)
+    {
+        fputs("SecureFS cannot load WinFsp. Please make sure you have WinFsp properly installed.\n",
+              stderr);
+        abort();
+    }
+
+    HMODULE hd = GetModuleHandleW(L"kernel32.dll");
+
+    best_get_time_func
+        = get_proc_address<decltype(best_get_time_func)>(hd, "GetSystemTimePreciseAsFileTime");
+    if (best_get_time_func == nullptr)
+        best_get_time_func = &GetSystemTimeAsFileTime;
+}
+
 }    // namespace securefs
 
 #endif
