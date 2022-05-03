@@ -2,6 +2,7 @@
 
 #include "crypto.h"
 #include "lite_stream.h"
+#include "logger.h"
 #include "platform.h"
 #include "streams.h"
 
@@ -251,20 +252,35 @@ TEST_CASE("Test streams")
         CAPTURE(block_size);
         CAPTURE(iv_size);
         CAPTURE(padding_size);
-        auto underlying_stream = OSService::get_default().open_file_stream(
-            OSService::temp_name("tmp/", "litestream"), O_RDWR | O_CREAT | O_EXCL, 0644);
-        securefs::lite::AESGCMCryptStream lite_stream(
-            underlying_stream, key, block_size, iv_size, true, padding_size);
-        const byte test_data[] = "Hello, world";
-        byte output[4096];
-        lite_stream.write(test_data, 0, sizeof(test_data));
-        REQUIRE(lite_stream.read(output, 0, sizeof(output)) == sizeof(test_data));
-        REQUIRE(memcmp(test_data, output, sizeof(test_data)) == 0);
-        test(lite_stream, 3001);
+
+        auto filename = OSService::temp_name("tmp/", "litestream");
+        {
+            auto underlying_stream = OSService::get_default().open_file_stream(
+                filename, O_RDWR | O_CREAT | O_EXCL, 0644);
+            securefs::lite::AESGCMCryptStream lite_stream(
+                underlying_stream, key, block_size, iv_size, true, padding_size, &key);
+            INFO_LOG("Actual padding size: %u", lite_stream.get_padding_size());
+
+            const byte test_data[] = "Hello, world";
+            byte output[4096];
+            lite_stream.write(test_data, 0, sizeof(test_data));
+            REQUIRE(lite_stream.read(output, 0, sizeof(output)) == sizeof(test_data));
+            REQUIRE(memcmp(test_data, output, sizeof(test_data)) == 0);
+            test(lite_stream, 1001);
+        }
+        {
+            auto underlying_stream
+                = OSService::get_default().open_file_stream(filename, O_RDWR, 0644);
+            securefs::lite::AESGCMCryptStream lite_stream(
+                underlying_stream, key, block_size, iv_size, true, padding_size, &key);
+            INFO_LOG("Actual padding size: %u", lite_stream.get_padding_size());
+            test(lite_stream, 1001);
+        }
     };
 
     test_lite_stream(4096, 12, 0);
     test_lite_stream(333, 16, 0);
     test_lite_stream(333, 12, 14);
     test_lite_stream(4096, 12, 1);
+    test_lite_stream(4096, 12, 32);
 }

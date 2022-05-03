@@ -1,7 +1,9 @@
 #include "lite_stream.h"
 #include "crypto.h"
+#include "logger.h"
 
 #include <cryptopp/aes.h>
+#include <cryptopp/integer.h>
 #include <cryptopp/modes.h>
 #include <cryptopp/osrng.h>
 
@@ -9,21 +11,43 @@ namespace securefs
 {
 namespace lite
 {
+    namespace
+    {
+        const offset_type MAX_BLOCKS = (1ULL << 31) - 1;
+        unsigned compute_padding(unsigned max_padding,
+                                 const key_type* padding_computation_key,
+                                 const byte* id,
+                                 size_t id_size)
+        {
+            if (!max_padding || !padding_computation_key)
+            {
+                return 0;
+            }
+            CryptoPP::FixedSizeAlignedSecBlock<byte, 16> transformed;
+            CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption ecenc(padding_computation_key->data(),
+                                                                padding_computation_key->size());
+            ecenc.ProcessData(transformed.data(), id, id_size);
+            CryptoPP::Integer integer(transformed.data(),
+                                      transformed.size(),
+                                      CryptoPP::Integer::UNSIGNED,
+                                      CryptoPP::BIG_ENDIAN_ORDER);
+            return static_cast<unsigned>(integer.Modulo(max_padding));
+        }
+    }    // namespace
     std::string CorruptedStreamException::message() const { return "Stream is corrupted"; }
-
-    static const offset_type MAX_BLOCKS = (1ULL << 31) - 1;
 
     AESGCMCryptStream::AESGCMCryptStream(std::shared_ptr<StreamBase> stream,
                                          const key_type& master_key,
                                          unsigned block_size,
                                          unsigned iv_size,
                                          bool check,
-                                         unsigned padding_size)
+                                         unsigned max_padding_size,
+                                         const key_type* padding_computation_key)
         : BlockBasedStream(block_size)
         , m_stream(std::move(stream))
         , m_iv_size(iv_size)
         , m_check(check)
-        , m_padding_size(padding_size)
+        , m_padding_size(0)
     {
         if (m_iv_size < 12 || m_iv_size > 32)
             throwInvalidArgumentException("IV size too small or too large");
@@ -34,31 +58,48 @@ namespace lite
 
         warn_if_key_not_random(master_key, __FILE__, __LINE__);
 
-        CryptoPP::FixedSizeAlignedSecBlock<byte, get_id_size()> session_key;
-        CryptoPP::AlignedSecByteBlock header(get_header_size());
-        auto rc = m_stream->read(header.data(), 0, header.size());
+        CryptoPP::FixedSizeAlignedSecBlock<byte, get_id_size()> id, session_key;
+        auto rc = m_stream->read(id.data(), 0, id.size());
 
         if (rc == 0)
         {
-            generate_random(header.data(), header.size());
-            m_stream->write(header.data(), 0, header.size());
+            generate_random(id.data(), id.size());
+            m_stream->write(id.data(), 0, id.size());
+            m_padding_size
+                = compute_padding(max_padding_size, padding_computation_key, id.data(), id.size());
+            m_auxiliary.reset(new byte[sizeof(std::uint32_t) + m_padding_size]);
+            if (m_padding_size)
+            {
+                generate_random(m_auxiliary.get(), sizeof(std::uint32_t) + m_padding_size);
+                m_stream->write(
+                    m_auxiliary.get() + sizeof(std::uint32_t), id.size(), m_padding_size);
+            }
         }
-        else if (rc != header.size())
+        else if (rc != id.size())
         {
-            throwInvalidArgumentException("Underlying stream has invalid header size");
+            throwInvalidArgumentException("Underlying stream has invalid ID size");
+        }
+        else
+        {
+            m_padding_size
+                = compute_padding(max_padding_size, padding_computation_key, id.data(), id.size());
+            m_auxiliary.reset(new byte[sizeof(std::uint32_t) + m_padding_size]);
+            if (m_padding_size
+                && m_stream->read(
+                       m_auxiliary.get() + sizeof(std::uint32_t), id.size(), m_padding_size)
+                    != m_padding_size)
+                throwInvalidArgumentException("Invalid padding in the underlying file");
+        }
+
+        if (max_padding_size > 0)
+        {
+            TRACE_LOG("Stream padded with %u bytes", m_padding_size);
         }
 
         CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption ecenc(master_key.data(), master_key.size());
-        ecenc.ProcessData(session_key.data(), header.data(), get_id_size());
+        ecenc.ProcessData(session_key.data(), id.data(), id.size());
 
         m_buffer.reset(new byte[get_underlying_block_size()]);
-        m_auxiliary.reset(new byte[sizeof(std::uint32_t) + padding_size]);
-        if (padding_size > 0)
-        {
-            memcpy(m_auxiliary.get() + sizeof(std::uint32_t),
-                   header.data() + get_id_size(),
-                   padding_size);
-        }
 
         // The null iv is only a placeholder; it will replaced during encryption and decryption
         const byte null_iv[12] = {0};
@@ -66,9 +107,6 @@ namespace lite
             session_key.data(), session_key.size(), null_iv, array_length(null_iv));
         m_decryptor.SetKeyWithIV(
             session_key.data(), session_key.size(), null_iv, array_length(null_iv));
-
-        warn_if_key_not_random(header, __FILE__, __LINE__);
-        warn_if_key_not_random(session_key, __FILE__, __LINE__);
     }
 
     AESGCMCryptStream::~AESGCMCryptStream() {}
