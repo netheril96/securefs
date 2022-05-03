@@ -30,7 +30,7 @@ There are already many encrypting filesystem in widespread use. Some notable one
 Install with [Homebrew](https://brew.sh). [macFUSE](https://osxfuse.github.io) has to be installed beforehand.
 
 ```
-brew install securefs
+brew install netheril96/fuse/securefs
 ```
 
 ### Windows
