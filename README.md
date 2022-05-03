@@ -16,19 +16,19 @@ Security, however, is often at odds with convenience, and people easily grow tir
 
 There are already many encrypting filesystem in widespread use. Some notable ones are TrueCrypt, FileVault, BitLocker, eCryptFS, encfs and gocryptfs. `securefs` differs from them in that it is the only one with all of the following features:
 
-* [Authenticated encryption](https://en.wikipedia.org/wiki/Authenticated_encryption) (hence secure against chosen ciphertext attacks)
-* [Probabilistic encryption](https://en.wikipedia.org/wiki/Probabilistic_encryption) (hence provides semantical security)
-* Supported on all major platforms (Mac, Linux, BSDs and Windows)
-* Efficient cloud synchronization (not a single preallocated file as container)
+- [Authenticated encryption](https://en.wikipedia.org/wiki/Authenticated_encryption) (hence secure against chosen ciphertext attacks)
+- [Probabilistic encryption](https://en.wikipedia.org/wiki/Probabilistic_encryption) (hence provides semantical security)
+- Supported on all major platforms (Mac, Linux, BSDs and Windows)
+- Efficient cloud synchronization (not a single preallocated file as container)
 
 ## Install
 
 [![Actions Status](https://github.com/netheril96/securefs/workflows/C%2FC%2B%2B%20CI/badge.svg)](https://github.com/netheril96/securefs/actions)
 
-
 ### macOS
 
 Install with [Homebrew](https://brew.sh). [macFUSE](https://osxfuse.github.io) has to be installed beforehand.
+
 ```
 brew install securefs
 ```
@@ -45,24 +45,27 @@ Linux users have to build it from source.
 
 First `fuse` must be installed.
 
-* On Debian based Linux distro, `sudo apt-get install fuse libfuse-dev build-essential cmake python3`.
-* On RPM based Linux, `sudo yum install fuse fuse-devel python3`.
+- On Debian based Linux distro, `sudo apt-get install fuse libfuse-dev build-essential cmake python3`.
+- On RPM based Linux, `sudo yum install fuse fuse-devel python3`.
 
 Then clone the sources by `git clone --recursive`, and execute `linux-build.sh`.
 
 ### FreeBSD (unofficial)
 
 Install using packages (recommended):
+
 ```bash
 pkg install fusefs-securefs
 ```
 
 or ports:
+
 ```bash
 make -C /usr/ports/sysutils/fusefs-securefs install
 ```
 
 Make sure you load the fuse kernel module before using securefs:
+
 ```bash
 kldload fuse
 sysrc -f /boot/loader.conf fuse_load="YES"  # Load fuse automatically at boot
@@ -70,7 +73,7 @@ sysrc -f /boot/loader.conf fuse_load="YES"  # Load fuse automatically at boot
 
 ## Basic usage
 
-*It is recommended to disable or encrypt the swap and hibernation file. Otherwise plaintext and keys stored in the main memory may be written to disk by the OS at any time.*
+_It is recommended to disable or encrypt the swap and hibernation file. Otherwise plaintext and keys stored in the main memory may be written to disk by the OS at any time._
 
 Examples:
 
@@ -102,4 +105,4 @@ See [here](docs/design.md).
 
 If you store `securefs` encrypted files on iCloud Drive, it might cause Spotlight Search on iOS to stop working. It is a bug in iOS, not in `securefs`.
 
-To work around that bug, you can disable the indexing of *Files* app in Settings -> Siri & Suggestions.
+To work around that bug, you can disable the indexing of _Files_ app in Settings -> Siri & Suggestions.
