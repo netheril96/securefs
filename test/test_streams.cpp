@@ -245,15 +245,26 @@ TEST_CASE("Test streams")
         securefs::dummy::DummyBlockStream dbs;
         test(dbs, 3001);
     }
+
+    auto test_lite_stream = [&](unsigned block_size, unsigned iv_size, unsigned padding_size)
     {
+        CAPTURE(block_size);
+        CAPTURE(iv_size);
+        CAPTURE(padding_size);
         auto underlying_stream = OSService::get_default().open_file_stream(
             OSService::temp_name("tmp/", "litestream"), O_RDWR | O_CREAT | O_EXCL, 0644);
-        securefs::lite::AESGCMCryptStream lite_stream(underlying_stream, key);
+        securefs::lite::AESGCMCryptStream lite_stream(
+            underlying_stream, key, block_size, iv_size, true, padding_size);
         const byte test_data[] = "Hello, world";
         byte output[4096];
         lite_stream.write(test_data, 0, sizeof(test_data));
         REQUIRE(lite_stream.read(output, 0, sizeof(output)) == sizeof(test_data));
         REQUIRE(memcmp(test_data, output, sizeof(test_data)) == 0);
         test(lite_stream, 3001);
-    }
+    };
+
+    test_lite_stream(4096, 12, 0);
+    test_lite_stream(333, 16, 0);
+    test_lite_stream(333, 12, 14);
+    test_lite_stream(4096, 12, 1);
 }

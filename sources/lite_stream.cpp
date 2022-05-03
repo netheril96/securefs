@@ -15,13 +15,15 @@ namespace lite
 
     AESGCMCryptStream::AESGCMCryptStream(std::shared_ptr<StreamBase> stream,
                                          const key_type& master_key,
-                                         unsigned int block_size,
+                                         unsigned block_size,
                                          unsigned iv_size,
-                                         bool check)
+                                         bool check,
+                                         unsigned padding_size)
         : BlockBasedStream(block_size)
         , m_stream(std::move(stream))
         , m_iv_size(iv_size)
         , m_check(check)
+        , m_padding_size(padding_size)
     {
         if (m_iv_size < 12 || m_iv_size > 32)
             throwInvalidArgumentException("IV size too small or too large");
@@ -32,7 +34,8 @@ namespace lite
 
         warn_if_key_not_random(master_key, __FILE__, __LINE__);
 
-        CryptoPP::FixedSizeAlignedSecBlock<byte, get_header_size()> header, session_key;
+        CryptoPP::FixedSizeAlignedSecBlock<byte, get_id_size()> session_key;
+        CryptoPP::AlignedSecByteBlock header(get_header_size());
         auto rc = m_stream->read(header.data(), 0, header.size());
 
         if (rc == 0)
@@ -46,9 +49,16 @@ namespace lite
         }
 
         CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption ecenc(master_key.data(), master_key.size());
-        ecenc.ProcessData(session_key.data(), header.data(), get_header_size());
+        ecenc.ProcessData(session_key.data(), header.data(), get_id_size());
 
         m_buffer.reset(new byte[get_underlying_block_size()]);
+        m_auxiliary.reset(new byte[sizeof(std::uint32_t) + padding_size]);
+        if (padding_size > 0)
+        {
+            memcpy(m_auxiliary.get() + sizeof(std::uint32_t),
+                   header.data() + get_id_size(),
+                   padding_size);
+        }
 
         // The null iv is only a placeholder; it will replaced during encryption and decryption
         const byte null_iv[12] = {0};
@@ -91,16 +101,15 @@ namespace lite
             return out_size;
         }
 
-        byte auxiliary[sizeof(std::uint32_t)];
-        to_little_endian(static_cast<std::uint32_t>(block_number), auxiliary);
+        to_little_endian(static_cast<std::uint32_t>(block_number), m_auxiliary.get());
 
         bool success = m_decryptor.DecryptAndVerify(static_cast<byte*>(output),
                                                     m_buffer.get() + rc - get_mac_size(),
                                                     get_mac_size(),
                                                     m_buffer.get(),
                                                     static_cast<int>(get_iv_size()),
-                                                    auxiliary,
-                                                    sizeof(auxiliary),
+                                                    m_auxiliary.get(),
+                                                    sizeof(std::uint32_t) + m_padding_size,
                                                     m_buffer.get() + get_iv_size(),
                                                     out_size);
 
@@ -127,8 +136,7 @@ namespace lite
             return;
         }
 
-        byte auxiliary[sizeof(std::uint32_t)];
-        to_little_endian(static_cast<std::uint32_t>(block_number), auxiliary);
+        to_little_endian(static_cast<std::uint32_t>(block_number), m_auxiliary.get());
 
         do
         {
@@ -140,8 +148,8 @@ namespace lite
                                            get_mac_size(),
                                            m_buffer.get(),
                                            static_cast<int>(get_iv_size()),
-                                           auxiliary,
-                                           sizeof(auxiliary),
+                                           m_auxiliary.get(),
+                                           sizeof(std::uint32_t) + m_padding_size,
                                            static_cast<const byte*>(input),
                                            size);
 
@@ -150,7 +158,10 @@ namespace lite
 
     length_type AESGCMCryptStream::size() const
     {
-        return calculate_real_size(m_stream->size(), get_block_size(), get_iv_size());
+        auto underlying_size = m_stream->size();
+        return underlying_size <= get_header_size()
+            ? 0
+            : calculate_real_size(underlying_size - m_padding_size, m_block_size, m_iv_size);
     }
 
     void AESGCMCryptStream::adjust_logical_size(length_type length)
@@ -165,11 +176,11 @@ namespace lite
                                                        length_type block_size,
                                                        length_type iv_size) noexcept
     {
-        auto header_size = get_header_size();
+        auto id_size = get_id_size();
         auto underlying_block_size = block_size + iv_size + get_mac_size();
-        if (underlying_size <= header_size)
+        if (underlying_size <= id_size)
             return 0;
-        underlying_size -= header_size;
+        underlying_size -= id_size;
         auto num_blocks = underlying_size / underlying_block_size;
         auto residue = underlying_size % underlying_block_size;
         return num_blocks * block_size
