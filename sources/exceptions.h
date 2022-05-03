@@ -28,7 +28,7 @@ public:
     const char* what() const noexcept override;
 };
 
-class UnreachableCodeException : public ExceptionBase
+class UnreachableCodeException final : public ExceptionBase
 {
 private:
     const char* m_func;
@@ -50,7 +50,7 @@ public:
 
 #define UNREACHABLE() throw securefs::UnreachableCodeException(__FUNCTION__, __FILE__, __LINE__)
 
-class VFSException : public ExceptionBase
+class VFSException final : public ExceptionBase
 {
 private:
     int m_errno;
@@ -70,7 +70,7 @@ class SystemException : public ExceptionBase
 {
 };
 
-class POSIXException : public SystemException
+class POSIXException final : public SystemException
 {
 private:
     int m_errno;
@@ -210,7 +210,7 @@ public:
     int error_number() const noexcept override { return EFBIG; }
 };
 
-class InvalidCastException : public ExceptionBase
+class InvalidCastException final : public ExceptionBase
 {
 private:
     const char* from_name;

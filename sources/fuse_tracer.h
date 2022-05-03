@@ -26,6 +26,26 @@ private:
     static void print(FILE* fp, const WrappedFuseArg& arg);
     static void print(FILE* fp, const WrappedFuseArg* args, size_t arg_size);
 
+    static void print_function_starts(Logger* logger,
+                                      const char* funcsig,
+                                      int lineno,
+                                      const WrappedFuseArg* args,
+                                      size_t arg_size);
+
+    static void print_function_returns(Logger* logger,
+                                       const char* funcsig,
+                                       int lineno,
+                                       const WrappedFuseArg* args,
+                                       size_t arg_size,
+                                       long long rc);
+
+    static int print_function_exception(Logger* logger,
+                                        const char* funcsig,
+                                        int lineno,
+                                        const WrappedFuseArg* args,
+                                        size_t arg_size,
+                                        const std::exception& e);
+
 public:
     template <class ActualFunction>
     static inline auto traced_call(ActualFunction&& func,
@@ -34,47 +54,22 @@ public:
                                    const std::initializer_list<WrappedFuseArg>& args,
                                    Logger* logger = global_logger) -> decltype(func())
     {
-        if (!logger)
-        {
-            return func();
-        }
-        if (logger->get_level() <= LoggingLevel::kLogTrace)
-        {
-            logger->prelog(LoggingLevel::kLogTrace, funcsig, lineno);
-            fputs("Function starts with arguments ", logger->m_fp);
-            print(logger->m_fp, args.begin(), args.size());
-            logger->postlog(LoggingLevel::kLogTrace);
-        }
+        print_function_starts(logger, funcsig, lineno, args.begin(), args.size());
         try
         {
             auto rc = func();
-            if (logger->get_level() <= LoggingLevel::kLogTrace)
-            {
-                logger->prelog(LoggingLevel::kLogTrace, funcsig, lineno);
-                fputs("Function ends with arguments ", logger->m_fp);
-                print(logger->m_fp, args.begin(), args.size());
-                fprintf(logger->m_fp, " and return code %lld", static_cast<long long>(rc));
-                logger->postlog(LoggingLevel::kLogTrace);
-            }
+            print_function_returns(logger, funcsig, lineno, args.begin(), args.size(), rc);
+            return rc;
+        }
+        catch (const VFSException& e)
+        {
+            auto rc = -e.error_number();
+            print_function_returns(logger, funcsig, lineno, args.begin(), args.size(), rc);
             return rc;
         }
         catch (const std::exception& e)
         {
-            auto ebase = dynamic_cast<const ExceptionBase*>(&e);
-            auto code = ebase ? ebase->error_number() : EPERM;
-            if (logger->get_level() <= LoggingLevel::kLogError)
-            {
-                logger->prelog(LoggingLevel::kLogError, funcsig, lineno);
-                fputs("Function fails with arguments ", logger->m_fp);
-                print(logger->m_fp, args.begin(), args.size());
-                fprintf(logger->m_fp,
-                        " with return code %d because it encounters exception %s: %s",
-                        -code,
-                        get_type_name(e).get(),
-                        e.what());
-                logger->postlog(LoggingLevel::kLogError);
-            }
-            return -code;
+            return print_function_exception(logger, funcsig, lineno, args.begin(), args.size(), e);
         }
     }
 };

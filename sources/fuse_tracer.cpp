@@ -257,4 +257,57 @@ void FuseTracer::print(FILE* fp, const WrappedFuseArg* args, size_t arg_size)
     fputc(')', fp);
 }
 
+void FuseTracer::print_function_starts(
+    Logger* logger, const char* funcsig, int lineno, const WrappedFuseArg* args, size_t arg_size)
+{
+    if (logger && logger->get_level() <= LoggingLevel::kLogTrace)
+    {
+        logger->prelog(LoggingLevel::kLogTrace, funcsig, lineno);
+        fputs("Function starts with arguments ", logger->m_fp);
+        print(logger->m_fp, args, arg_size);
+        logger->postlog(LoggingLevel::kLogTrace);
+    }
+}
+
+void FuseTracer::print_function_returns(Logger* logger,
+                                        const char* funcsig,
+                                        int lineno,
+                                        const WrappedFuseArg* args,
+                                        size_t arg_size,
+                                        long long rc)
+{
+    if (logger && logger->get_level() <= LoggingLevel::kLogTrace)
+    {
+        logger->prelog(LoggingLevel::kLogTrace, funcsig, lineno);
+        fputs("Function ends with arguments ", logger->m_fp);
+        print(logger->m_fp, args, arg_size);
+        fprintf(logger->m_fp, " and return code %lld", rc);
+        logger->postlog(LoggingLevel::kLogTrace);
+    }
+}
+
+int FuseTracer::print_function_exception(Logger* logger,
+                                         const char* funcsig,
+                                         int lineno,
+                                         const WrappedFuseArg* args,
+                                         size_t arg_size,
+                                         const std::exception& e)
+{
+    auto ebase = dynamic_cast<const ExceptionBase*>(&e);
+    auto code = ebase ? ebase->error_number() : EPERM;
+    if (logger && logger->get_level() <= LoggingLevel::kLogError)
+    {
+        logger->prelog(LoggingLevel::kLogError, funcsig, lineno);
+        fputs("Function fails with arguments ", logger->m_fp);
+        print(logger->m_fp, args, arg_size);
+        fprintf(logger->m_fp,
+                " with return code %d because it encounters exception %s: %s",
+                -code,
+                get_type_name(e).get(),
+                e.what());
+        logger->postlog(LoggingLevel::kLogError);
+    }
+    return -code;
+}
+
 }    // namespace securefs
