@@ -60,7 +60,8 @@ namespace lite
                                    unsigned iv_size = 12,
                                    bool check = true,
                                    unsigned max_padding_size = 0,
-                                   const key_type* padding_computation_key = nullptr);
+                                   CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption* padding_aes
+                                   = nullptr);
 
         ~AESGCMCryptStream();
 

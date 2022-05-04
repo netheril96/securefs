@@ -246,7 +246,7 @@ TEST_CASE("Test streams")
         securefs::dummy::DummyBlockStream dbs;
         test(dbs, 3001);
     }
-
+    CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption padding_aes(key.data(), key.size());
     auto test_lite_stream = [&](unsigned block_size, unsigned iv_size, unsigned padding_size)
     {
         CAPTURE(block_size);
@@ -258,7 +258,7 @@ TEST_CASE("Test streams")
             auto underlying_stream = OSService::get_default().open_file_stream(
                 filename, O_RDWR | O_CREAT | O_EXCL, 0644);
             securefs::lite::AESGCMCryptStream lite_stream(
-                underlying_stream, key, block_size, iv_size, true, padding_size, &key);
+                underlying_stream, key, block_size, iv_size, true, padding_size, &padding_aes);
             INFO_LOG("Actual padding size: %u", lite_stream.get_padding_size());
 
             const byte test_data[] = "Hello, world";
@@ -272,7 +272,7 @@ TEST_CASE("Test streams")
             auto underlying_stream
                 = OSService::get_default().open_file_stream(filename, O_RDWR, 0644);
             securefs::lite::AESGCMCryptStream lite_stream(
-                underlying_stream, key, block_size, iv_size, true, padding_size, &key);
+                underlying_stream, key, block_size, iv_size, true, padding_size, &padding_aes);
             INFO_LOG("Actual padding size: %u", lite_stream.get_padding_size());
             test(lite_stream, 1001);
         }
@@ -283,4 +283,14 @@ TEST_CASE("Test streams")
     test_lite_stream(333, 12, 14);
     test_lite_stream(4096, 12, 1);
     test_lite_stream(4096, 12, 32);
+
+    {
+        // Test that the `padding_aes` is stateless
+        CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption second_padding_aes(key.data(), key.size());
+        byte plaintext[16], ciphertext[16], second_ciphertext[16];
+        securefs::generate_random(plaintext, sizeof(plaintext));
+        padding_aes.ProcessData(ciphertext, plaintext, sizeof(ciphertext));
+        second_padding_aes.ProcessData(second_ciphertext, plaintext, sizeof(second_ciphertext));
+        REQUIRE(memcmp(ciphertext, second_ciphertext, sizeof(ciphertext)) == 0);
+    }
 }

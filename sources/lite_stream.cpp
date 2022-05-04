@@ -15,18 +15,16 @@ namespace lite
     {
         const offset_type MAX_BLOCKS = (1ULL << 31) - 1;
         unsigned compute_padding(unsigned max_padding,
-                                 const key_type* padding_computation_key,
+                                 CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption* padding_aes,
                                  const byte* id,
                                  size_t id_size)
         {
-            if (!max_padding || !padding_computation_key)
+            if (!max_padding || !padding_aes)
             {
                 return 0;
             }
             CryptoPP::FixedSizeAlignedSecBlock<byte, 16> transformed;
-            CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption ecenc(padding_computation_key->data(),
-                                                                padding_computation_key->size());
-            ecenc.ProcessData(transformed.data(), id, id_size);
+            padding_aes->ProcessData(transformed.data(), id, id_size);
             CryptoPP::Integer integer(transformed.data(),
                                       transformed.size(),
                                       CryptoPP::Integer::UNSIGNED,
@@ -42,7 +40,7 @@ namespace lite
                                          unsigned iv_size,
                                          bool check,
                                          unsigned max_padding_size,
-                                         const key_type* padding_computation_key)
+                                         CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption* padding_aes)
         : BlockBasedStream(block_size)
         , m_stream(std::move(stream))
         , m_iv_size(iv_size)
@@ -65,8 +63,7 @@ namespace lite
         {
             generate_random(id.data(), id.size());
             m_stream->write(id.data(), 0, id.size());
-            m_padding_size
-                = compute_padding(max_padding_size, padding_computation_key, id.data(), id.size());
+            m_padding_size = compute_padding(max_padding_size, padding_aes, id.data(), id.size());
             m_auxiliary.reset(new byte[sizeof(std::uint32_t) + m_padding_size]);
             if (m_padding_size)
             {
@@ -81,8 +78,7 @@ namespace lite
         }
         else
         {
-            m_padding_size
-                = compute_padding(max_padding_size, padding_computation_key, id.data(), id.size());
+            m_padding_size = compute_padding(max_padding_size, padding_aes, id.data(), id.size());
             m_auxiliary.reset(new byte[sizeof(std::uint32_t) + m_padding_size]);
             if (m_padding_size
                 && m_stream->read(
