@@ -9,6 +9,7 @@ import os
 import inspect
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -129,6 +130,7 @@ def securefs_create(
     pbkdf: str,
     password: Optional[str],
     keyfile: Optional[str] = None,
+    max_padding: int = 0,
 ):
     command = [
         SECUREFS_BINARY,
@@ -140,6 +142,8 @@ def securefs_create(
         "2",
         "--pbkdf",
         pbkdf,
+        "--max-padding",
+        str(max_padding),
     ]
     if password:
         command.append("--pass")
@@ -260,10 +264,14 @@ ALL_PBKDFS = ("scrypt", "pkcs5-pbkdf2-hmac-sha256", "argon2id")
                 SecretInputMode.KEYFILE2,
                 SecretInputMode.PASSWORD_WITH_KEYFILE2,
             ],
+            [0, 5],
         )
     )
 )
-def make_test_case(version: int, pbkdf: str, mode: SecretInputMode):
+def make_test_case(version: int, pbkdf: str, mode: SecretInputMode, max_padding: int):
+    if version < 4 and max_padding > 0:
+        return
+
     class SimpleSecureFSTestBase(unittest.TestCase):
         data_dir: str
         password: Optional[str]
@@ -284,6 +292,7 @@ def make_test_case(version: int, pbkdf: str, mode: SecretInputMode):
                 version=version,
                 keyfile=cls.keyfile,
                 pbkdf=pbkdf,
+                max_padding=max_padding,
             )
             cls.mount()
 
@@ -394,7 +403,7 @@ def make_test_case(version: int, pbkdf: str, mode: SecretInputMode):
 
         else:
 
-            def test_long_path(self):
+            def test_win_long_path(self):
                 long_mount_point = rf"\\?\{os.path.abspath(self.mount_point)}"
                 long_dir = os.path.join(long_mount_point, *(["🐋🐳" * 10] * 40))
                 os.makedirs(long_dir)
@@ -457,8 +466,16 @@ def make_test_case(version: int, pbkdf: str, mode: SecretInputMode):
             self.unmount()
 
             self.mount()
+            st = os.lstat(rng_filename)
+            self.assertEqual(st.st_size, len(random_data))
+            self.assertEqual(stat.S_IFMT(st.st_mode), stat.S_IFREG)
+
             with open(rng_filename, "rb") as f:
                 self.assertEqual(f.read(), random_data)
+                fst = os.fstat(f.fileno())
+                self.assertEqual(st.st_ino, fst.st_ino)
+                self.assertEqual(st.st_size, fst.st_size)
+
             data = b"\0" * len(random_data) + b"0"
             with open(rng_filename, "wb") as f:
                 f.write(data)
@@ -467,6 +484,8 @@ def make_test_case(version: int, pbkdf: str, mode: SecretInputMode):
             os.remove(rng_filename)
             for n in dir_names:
                 os.mkdir(os.path.join(self.mount_point, n))
+                st = os.lstat(os.path.join(self.mount_point, n))
+                self.assertEqual(stat.S_IFMT(st.st_mode), stat.S_IFDIR)
             for n in dir_names:
                 os.mkdir(os.path.join(self.mount_point, "0", n))
             for n in dir_names:
@@ -606,15 +625,18 @@ def generate_keyfile():
             [True, False],
             range(1, 5),
             ALL_PBKDFS,
+            [0, 16],
         )
     )
 )
 def make_chpass_test(
-    old_pass, new_pass, old_keyfile, new_keyfile, use_stdin, version, pbkdf
+    old_pass, new_pass, old_keyfile, new_keyfile, use_stdin, version, pbkdf, max_padding
 ):
     if not old_pass and not old_keyfile:
         return
     if not new_pass and not new_keyfile:
+        return
+    if version < 4 and max_padding > 0:
         return
 
     class ChpassTestBase(unittest.TestCase):
@@ -622,6 +644,7 @@ def make_chpass_test(
             data_dir = get_data_dir()
             mount_point = get_mount_point()
             test_dir_path = os.path.join(mount_point, "test")
+            test_file_path = os.path.join(mount_point, "aaa")
 
             securefs_create(
                 data_dir=data_dir,
@@ -629,6 +652,7 @@ def make_chpass_test(
                 keyfile=old_keyfile,
                 version=version,
                 pbkdf=pbkdf,
+                max_padding=max_padding,
             )
 
             self.assertFalse(os.path.exists(test_dir_path))
@@ -636,6 +660,8 @@ def make_chpass_test(
             p = securefs_mount(data_dir, mount_point, old_pass, old_keyfile)
             try:
                 os.mkdir(test_dir_path)
+                with open(test_file_path, "xb") as f:
+                    f.write(b"x" * 10)
             finally:
                 securefs_unmount(p, mount_point)
 
@@ -654,6 +680,9 @@ def make_chpass_test(
             p = securefs_mount(data_dir, mount_point, new_pass, new_keyfile)
             try:
                 self.assertTrue(os.path.isdir(test_dir_path))
+                self.assertEqual(os.lstat(test_file_path).st_size, 10)
+                with open(test_file_path, "rb") as f:
+                    self.assertEqual(f.read(), b"x" * 10)
             finally:
                 securefs_unmount(p, mount_point)
 
