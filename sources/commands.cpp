@@ -789,7 +789,7 @@ public:
         OSService::get_default().ensure_directory(data_dir.getValue(), 0755);
 
         FSConfig config;
-        config.master_key.resize(format_version < 4 ? KEY_LENGTH : 3 * KEY_LENGTH);
+        config.master_key.resize(format_version < 4 ? KEY_LENGTH : 4 * KEY_LENGTH);
         CryptoPP::OS_GenerateRandomBlock(false, config.master_key.data(), config.master_key.size());
 
         config.iv_size = format_version == 1 ? 32 : iv_size.getValue();

@@ -46,6 +46,9 @@ namespace lite
         if (master_key.size() >= 4 * KEY_LENGTH)
         {
             memcpy(padding_key.data(), master_key.data() + 3 * KEY_LENGTH, KEY_LENGTH);
+        }
+        if (ctx->opt->max_padding_size > 0)
+        {
             warn_if_key_not_random(padding_key, __FILE__, __LINE__);
         }
 
