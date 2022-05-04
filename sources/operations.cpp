@@ -224,7 +224,6 @@ namespace operations
         auto args = static_cast<MountOptions*>(fuse_get_context()->private_data);
         auto fs = new FileSystemContext(*args);
         TRACE_LOG("%s", __FUNCTION__);
-        fputs("Filesystem mounted successfully\n", stderr);
         return fs;
     }
 
@@ -233,7 +232,6 @@ namespace operations
         auto fs = static_cast<FileSystemContext*>(data);
         TRACE_LOG("%s", __FUNCTION__);
         delete fs;
-        fputs("Filesystem unmounted successfully\n", stderr);
     }
 
     int statfs(const char* path, struct fuse_statvfs* fs_info)
