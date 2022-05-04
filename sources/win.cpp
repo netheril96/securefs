@@ -1176,95 +1176,40 @@ std::string narrow_string(WideStringRef str)
     return result;
 }
 
-class WindowsColourSetter : public ConsoleColourSetter
-{
-private:
-    HANDLE hd;
-    WORD originalForegroundAttributes;
-    WORD originalBackgroundAttributes;
-
-    void setTextAttribute(WORD _textAttribute) noexcept
-    {
-        SetConsoleTextAttribute(hd, _textAttribute | originalBackgroundAttributes);
-    }
-
-public:
-    explicit WindowsColourSetter(HANDLE hd) : hd(hd)
-    {
-        CONSOLE_SCREEN_BUFFER_INFO csbiInfo;
-        GetConsoleScreenBufferInfo(hd, &csbiInfo);
-        originalForegroundAttributes = csbiInfo.wAttributes
-            & ~(BACKGROUND_GREEN | BACKGROUND_RED | BACKGROUND_BLUE | BACKGROUND_INTENSITY);
-        originalBackgroundAttributes = csbiInfo.wAttributes
-            & ~(FOREGROUND_GREEN | FOREGROUND_RED | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
-    }
-
-    void use(Colour::Code _colourCode) noexcept override
-    {
-        switch (_colourCode)
-        {
-        case Colour::Default:
-            return setTextAttribute(originalForegroundAttributes);
-        case Colour::White:
-            return setTextAttribute(FOREGROUND_GREEN | FOREGROUND_RED | FOREGROUND_BLUE);
-        case Colour::Red:
-            return setTextAttribute(FOREGROUND_RED);
-        case Colour::Green:
-            return setTextAttribute(FOREGROUND_GREEN);
-        case Colour::Blue:
-            return setTextAttribute(FOREGROUND_BLUE);
-        case Colour::Cyan:
-            return setTextAttribute(FOREGROUND_BLUE | FOREGROUND_GREEN);
-        case Colour::Yellow:
-            return setTextAttribute(FOREGROUND_RED | FOREGROUND_GREEN);
-        case Colour::Grey:
-            return setTextAttribute(0);
-
-        case Colour::LightGrey:
-            return setTextAttribute(FOREGROUND_INTENSITY);
-        case Colour::BrightRed:
-            return setTextAttribute(FOREGROUND_INTENSITY | FOREGROUND_RED);
-        case Colour::BrightGreen:
-            return setTextAttribute(FOREGROUND_INTENSITY | FOREGROUND_GREEN);
-        case Colour::BrightWhite:
-            return setTextAttribute(FOREGROUND_INTENSITY | FOREGROUND_GREEN | FOREGROUND_RED
-                                    | FOREGROUND_BLUE);
-
-        default:
-            break;
-        }
-    }
-};
-
 namespace
 {
-    std::pair<bool, HANDLE> is_console(FILE* fp)
+    std::tuple<bool, HANDLE, DWORD> test_console(FILE* fp)
     {
         if (!fp)
         {
-            return {false, INVALID_HANDLE_VALUE};
+            return {false, INVALID_HANDLE_VALUE, 0};
         }
         int fd = _fileno(fp);
         if (fd < 0)
         {
-            return {false, INVALID_HANDLE_VALUE};
+            return {false, INVALID_HANDLE_VALUE, 0};
         }
         auto h = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
         if (h == INVALID_HANDLE_VALUE)
         {
-            return {false, INVALID_HANDLE_VALUE};
+            return {false, INVALID_HANDLE_VALUE, 0};
         }
         DWORD mode;
-        return {GetConsoleMode(h, &mode), h};
+        return {GetConsoleMode(h, &mode), h, mode};
     }
 }    // namespace
 
 std::unique_ptr<ConsoleColourSetter> ConsoleColourSetter::create_setter(FILE* fp)
 {
-    auto pair = is_console(fp);
-    if (!pair.first)
+    auto t = test_console(fp);
+    if (!std::get<bool>(t))
         return {};
-    return securefs::make_unique<WindowsColourSetter>(pair.second);
+    if (!SetConsoleMode(std::get<HANDLE>(t),
+                        std::get<DWORD>(t) | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
+    {
+        return {};
+    }
+    return securefs::make_unique<POSIXColourSetter>(fp);
 }
 
 std::unique_ptr<const char, void (*)(const char*)> get_type_name(const std::exception& e) noexcept
@@ -1283,11 +1228,11 @@ void windows_init(void)
     _set_invalid_parameter_handler(
         [](wchar_t const*, wchar_t const*, wchar_t const*, unsigned int, uintptr_t) {});
 
-    if (is_console(stdout).first)
+    if (std::get<bool>(test_console(stdout)))
     {
         setvbuf(stdout, nullptr, _IOLBF, 65536);
     }
-    if (is_console(stderr).first)
+    if (std::get<bool>(test_console(stderr)))
     {
         setvbuf(stderr, nullptr, _IOLBF, 65536);
     }

@@ -194,8 +194,8 @@ public:
     // <errno.h>
     ssize_t listxattr(const char* path, char* buf, size_t size) const noexcept;
     ssize_t getxattr(const char* path, const char* name, void* buf, size_t size) const noexcept;
-    int setxattr(const char* path, const char* name, void* buf, size_t size, int flags) const
-        noexcept;
+    int
+    setxattr(const char* path, const char* name, void* buf, size_t size, int flags) const noexcept;
     int removexattr(const char* path, const char* name) const noexcept;
 #endif
 public:
@@ -266,4 +266,17 @@ public:
     // Returns null if fp is not connected to console/tty
     static std::unique_ptr<ConsoleColourSetter> create_setter(FILE* fp);
 };
+
+class POSIXColourSetter final : public ConsoleColourSetter
+{
+public:
+    explicit POSIXColourSetter(FILE* fp) : m_fp(fp) {}
+
+    void use(Colour::Code _colourCode) noexcept override;
+
+private:
+    FILE* m_fp;
+    void setColour(const char* _escapeCode) noexcept;
+};
+
 }    // namespace securefs
