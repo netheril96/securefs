@@ -39,12 +39,13 @@ private:
                                        size_t arg_size,
                                        long long rc);
 
-    static int print_function_exception(Logger* logger,
-                                        const char* funcsig,
-                                        int lineno,
-                                        const WrappedFuseArg* args,
-                                        size_t arg_size,
-                                        const std::exception& e);
+    static void print_function_exception(Logger* logger,
+                                         const char* funcsig,
+                                         int lineno,
+                                         const WrappedFuseArg* args,
+                                         size_t arg_size,
+                                         const std::exception& e,
+                                         int rc);
 
 public:
     template <class ActualFunction>
@@ -63,13 +64,21 @@ public:
         }
         catch (const VFSException& e)
         {
-            auto rc = -e.error_number();
+            int rc = -e.error_number();
             print_function_returns(logger, funcsig, lineno, args.begin(), args.size(), rc);
+            return rc;
+        }
+        catch (const ExceptionBase& e)
+        {
+            int rc = -e.error_number();
+            print_function_exception(logger, funcsig, lineno, args.begin(), args.size(), e, rc);
             return rc;
         }
         catch (const std::exception& e)
         {
-            return print_function_exception(logger, funcsig, lineno, args.begin(), args.size(), e);
+            int rc = -EPERM;
+            print_function_exception(logger, funcsig, lineno, args.begin(), args.size(), e, rc);
+            return rc;
         }
     }
 };

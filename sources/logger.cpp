@@ -29,8 +29,9 @@ void Logger::vlog(
     if (!m_fp || level < this->get_level())
         return;
     prelog(level, funcsig, lineno);
+    DEFER(postlog(level));
+
     vfprintf(m_fp, format, args);
-    postlog(level);
 }
 
 void Logger::log(
@@ -40,8 +41,9 @@ void Logger::log(
         return;
     va_list args;
     va_start(args, format);
+    DEFER(va_end(args));
+
     vlog(level, funcsig, lineno, format, args);
-    va_end(args);
 }
 
 Logger::Logger(FILE* fp, bool close_on_exit)
