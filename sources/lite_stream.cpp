@@ -29,7 +29,7 @@ namespace lite
                                       transformed.size(),
                                       CryptoPP::Integer::UNSIGNED,
                                       CryptoPP::BIG_ENDIAN_ORDER);
-            return static_cast<unsigned>(integer.Modulo(max_padding));
+            return static_cast<unsigned>(integer.Modulo(max_padding + 1));
         }
     }    // namespace
     std::string CorruptedStreamException::message() const { return "Stream is corrupted"; }
