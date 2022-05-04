@@ -220,34 +220,38 @@ namespace lite
             break;
         }
         case S_IFDIR:
-        {
-            if (m_max_padding_size > 0)
+            break;
+        case S_IFREG:
+            if (buf->st_size > 0)
             {
-                try
+                if (m_max_padding_size <= 0)
                 {
-                    auto fs = m_root->open_file_stream(enc_path, O_RDONLY, 0);
-                    AESGCMCryptStream stream(std::move(fs),
-                                             m_content_key,
-                                             m_block_size,
-                                             m_iv_size,
-                                             (m_flags & kOptionNoAuthentication) == 0,
-                                             m_max_padding_size,
-                                             &m_padding_aes);
-                    buf->st_size = stream.size();
+                    buf->st_size = AESGCMCryptStream::calculate_real_size(
+                        buf->st_size, m_block_size, m_iv_size);
                 }
-                catch (const std::exception& e)
+                else
                 {
-                    ERROR_LOG("Encountered exception %s when opening file %s for read: %s",
-                              get_type_name(e).get(),
-                              enc_path.c_str(),
-                              e.what());
+                    try
+                    {
+                        auto fs = m_root->open_file_stream(enc_path, O_RDONLY, 0);
+                        AESGCMCryptStream stream(std::move(fs),
+                                                 m_content_key,
+                                                 m_block_size,
+                                                 m_iv_size,
+                                                 (m_flags & kOptionNoAuthentication) == 0,
+                                                 m_max_padding_size,
+                                                 &m_padding_aes);
+                        buf->st_size = stream.size();
+                    }
+                    catch (const std::exception& e)
+                    {
+                        ERROR_LOG("Encountered exception %s when opening file %s for read: %s",
+                                  get_type_name(e).get(),
+                                  path.c_str(),
+                                  e.what());
+                    }
                 }
             }
-        }
-        break;
-        case S_IFREG:
-            buf->st_size
-                = AESGCMCryptStream::calculate_real_size(buf->st_size, m_block_size, m_iv_size);
             break;
         default:
             throwVFSException(ENOTSUP);

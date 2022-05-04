@@ -44,7 +44,7 @@ namespace lite
             return get_block_size() + get_iv_size() + get_mac_size();
         }
 
-        length_type get_padding_size() const noexcept { return m_padding_size; }
+        unsigned get_padding_size() const noexcept { return m_padding_size; }
 
     protected:
         length_type read_block(offset_type block_number, void* output) override;
