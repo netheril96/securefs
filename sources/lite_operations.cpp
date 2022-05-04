@@ -21,15 +21,18 @@ namespace lite
     FileSystem* get_local_filesystem()
     {
         static thread_local optional<FileSystem> opt_fs;
-        if (opt_fs)
-            return &(*opt_fs);
+
+        auto& local_opt_fs = opt_fs;
+        if (local_opt_fs)
+            return &(*local_opt_fs);
         auto ctx = static_cast<BundledContext*>(fuse_get_context()->private_data);
 
         if (ctx->opt->version.value() != 4)
             throwInvalidArgumentException("This function only supports filesystem format 4");
 
-        key_type name_key, content_key, xattr_key;
-        if (ctx->opt->master_key.size() != 3 * KEY_LENGTH)
+        key_type name_key, content_key, xattr_key, padding_key;
+        if (ctx->opt->master_key.size() != 3 * KEY_LENGTH
+            && ctx->opt->master_key.size() != 4 * KEY_LENGTH)
             throwInvalidArgumentException("Master key has wrong length");
 
         memcpy(name_key.data(), ctx->opt->master_key.data(), KEY_LENGTH);
@@ -39,15 +42,22 @@ namespace lite
         warn_if_key_not_random(name_key, __FILE__, __LINE__);
         warn_if_key_not_random(content_key, __FILE__, __LINE__);
         warn_if_key_not_random(xattr_key, __FILE__, __LINE__);
+        if (ctx->opt->master_key.size() >= 4 * KEY_LENGTH)
+        {
+            memcpy(padding_key.data(), ctx->opt->master_key.data() + 3 * KEY_LENGTH, KEY_LENGTH);
+            warn_if_key_not_random(padding_key, __FILE__, __LINE__);
+        }
 
-        opt_fs.emplace(ctx->opt->root,
-                       name_key,
-                       content_key,
-                       xattr_key,
-                       ctx->opt->block_size.value(),
-                       ctx->opt->iv_size.value(),
-                       ctx->opt->flags.value());
-        return &(*opt_fs);
+        local_opt_fs.emplace(ctx->opt->root,
+                             name_key,
+                             content_key,
+                             xattr_key,
+                             padding_key,
+                             ctx->opt->block_size.value(),
+                             ctx->opt->iv_size.value(),
+                             ctx->opt->max_padding_size,
+                             ctx->opt->flags.value());
+        return &(*local_opt_fs);
     }
 
     void* init(struct fuse_conn_info* fsinfo)

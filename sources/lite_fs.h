@@ -2,6 +2,7 @@
 
 #include "crypto.h"
 #include "lite_stream.h"
+#include "lock_guard.h"
 #include "mystring.h"
 #include "myutils.h"
 #include "platform.h"
@@ -31,11 +32,14 @@ namespace lite
         std::mutex m_lock;
 
     public:
-        explicit File(std::shared_ptr<securefs::FileStream> file_stream,
-                      const key_type& master_key,
-                      unsigned block_size,
-                      unsigned iv_size,
-                      bool check);
+        template <typename... Args>
+        File(std::shared_ptr<securefs::FileStream> file_stream, Args&&... args)
+            : m_file_stream(file_stream)
+        {
+            LockGuard<FileStream> lock_guard(*m_file_stream, true);
+            m_crypt_stream.emplace(file_stream, std::forward<Args>(args)...);
+        }
+
         ~File();
 
         length_type size() const THREAD_ANNOTATION_REQUIRES(*this)
@@ -116,8 +120,9 @@ namespace lite
         key_type m_content_key;
         CryptoPP::GCM<CryptoPP::AES>::Encryption m_xattr_enc;
         CryptoPP::GCM<CryptoPP::AES>::Decryption m_xattr_dec;
+        CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption m_padding_aes;
         std::shared_ptr<const securefs::OSService> m_root;
-        unsigned m_block_size, m_iv_size;
+        unsigned m_block_size, m_iv_size, m_max_padding_size;
         unsigned m_flags;
 
     private:
@@ -128,8 +133,10 @@ namespace lite
                    const key_type& name_key,
                    const key_type& content_key,
                    const key_type& xattr_key,
+                   const key_type& padding_key,
                    unsigned block_size,
                    unsigned iv_size,
+                   unsigned max_padding_size,
                    unsigned flags);
 
         ~FileSystem();

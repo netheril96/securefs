@@ -21,6 +21,7 @@ namespace operations
         optional<uint32_t> flags;
         optional<unsigned> block_size;
         optional<unsigned> iv_size;
+        unsigned max_padding_size = 0;
         std::shared_ptr<FileStream> lock_stream;
 
         MountOptions();

@@ -12,16 +12,6 @@ namespace securefs
 {
 namespace lite
 {
-    File::File(std::shared_ptr<securefs::FileStream> file_stream,
-               const key_type& master_key,
-               unsigned block_size,
-               unsigned iv_size,
-               bool check)
-        : m_file_stream(file_stream)
-    {
-        LockGuard<FileStream> lock_guard(*m_file_stream, true);
-        m_crypt_stream.emplace(file_stream, master_key, block_size, iv_size, check);
-    }
 
     File::~File() {}
 
@@ -36,14 +26,18 @@ namespace lite
                            const key_type& name_key,
                            const key_type& content_key,
                            const key_type& xattr_key,
+                           const key_type& padding_key,
                            unsigned block_size,
                            unsigned iv_size,
+                           unsigned max_padding_size,
                            unsigned flags)
         : m_name_encryptor(name_key.data(), name_key.size())
         , m_content_key(content_key)
+        , m_padding_aes(padding_key.data(), padding_key.size())
         , m_root(std::move(root))
         , m_block_size(block_size)
         , m_iv_size(iv_size)
+        , m_max_padding_size(max_padding_size)
         , m_flags(flags)
     {
         byte null_iv[12] = {0};
@@ -186,7 +180,9 @@ namespace lite
                                    m_content_key,
                                    m_block_size,
                                    m_iv_size,
-                                   (m_flags & kOptionNoAuthentication) == 0));
+                                   (m_flags & kOptionNoAuthentication) == 0,
+                                   m_max_padding_size,
+                                   &m_padding_aes));
         if (flags & O_TRUNC)
         {
             LockGuard<File> lock_guard(*fp, true);
@@ -224,7 +220,31 @@ namespace lite
             break;
         }
         case S_IFDIR:
-            break;
+        {
+            if (m_max_padding_size > 0)
+            {
+                try
+                {
+                    auto fs = m_root->open_file_stream(enc_path, O_RDONLY, 0);
+                    AESGCMCryptStream stream(std::move(fs),
+                                             m_content_key,
+                                             m_block_size,
+                                             m_iv_size,
+                                             (m_flags & kOptionNoAuthentication) == 0,
+                                             m_max_padding_size,
+                                             &m_padding_aes);
+                    buf->st_size = stream.size();
+                }
+                catch (const std::exception& e)
+                {
+                    ERROR_LOG("Encountered exception %s when opening file %s for read: %s",
+                              get_type_name(e).get(),
+                              enc_path.c_str(),
+                              e.what());
+                }
+            }
+        }
+        break;
         case S_IFREG:
             buf->st_size
                 = AESGCMCryptStream::calculate_real_size(buf->st_size, m_block_size, m_iv_size);
