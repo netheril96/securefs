@@ -52,6 +52,12 @@ namespace lite
             warn_if_key_not_random(padding_key, __FILE__, __LINE__);
         }
 
+        TRACE_LOG("\nname_key: %s\ncontent_key: %s\nxattr_key: %s\npadding_key: %s",
+                  hexify(name_key).c_str(),
+                  hexify(content_key).c_str(),
+                  hexify(xattr_key).c_str(),
+                  hexify(padding_key).c_str());
+
         local_opt_fs.emplace(ctx->opt->root,
                              name_key,
                              content_key,
