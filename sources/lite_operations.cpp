@@ -138,6 +138,7 @@ namespace lite
     {
         auto func = [=]()
         {
+            auto fs = get_local_filesystem();
             auto traverser = reinterpret_cast<DirectoryTraverser*>(info->fh);
             if (!traverser)
                 return -EFAULT;
@@ -154,7 +155,10 @@ namespace lite
                     continue;
                 }
 #endif
-                int rc = filler(buf, name.c_str(), &stbuf, 0);
+                int rc =
+                    // When random padding is enabled, we cannot obtain accurate size information
+                    fs->has_padding() ? filler(buf, name.c_str(), nullptr, 0)
+                                      : filler(buf, name.c_str(), &stbuf, 0);
                 if (rc != 0)
                     return -abs(rc);
             }

@@ -156,6 +156,8 @@ namespace lite
         void statvfs(struct fuse_statvfs* buf);
         std::unique_ptr<DirectoryTraverser> create_traverser(StringRef path);
 
+        bool has_padding() const noexcept { return m_max_padding_size > 0; }
+
 #ifdef __APPLE__
         // These APIs, unlike all others, report errors through negative error numbers as defined in
         // <errno.h>
