@@ -293,7 +293,8 @@ Json::Value generate_config(unsigned int version,
                             size_t pass_len,
                             unsigned block_size,
                             unsigned iv_size,
-                            unsigned rounds = 0)
+                            unsigned rounds = 0,
+                            unsigned max_padding = 0)
 {
     securefs::key_type effective_salt;
     hmac_sha256(salt, maybe_key_file_path, effective_salt);
@@ -391,6 +392,10 @@ Json::Value generate_config(unsigned int version,
         config["block_size"] = block_size;
         config["iv_size"] = iv_size;
     }
+    if (version == 4 && max_padding > 0)
+    {
+        config["max_padding"] = max_padding;
+    }
     return config;
 }
 
@@ -460,7 +465,8 @@ bool parse_config(const Json::Value& config,
                   size_t pass_len,
                   CryptoPP::AlignedSecByteBlock& master_key,
                   unsigned& block_size,
-                  unsigned& iv_size)
+                  unsigned& iv_size,
+                  unsigned& max_padding)
 {
     using namespace securefs;
     unsigned version = config["version"].asUInt();
@@ -469,11 +475,13 @@ bool parse_config(const Json::Value& config,
     {
         block_size = 4096;
         iv_size = 32;
+        max_padding = 0;
     }
     else if (version == 2 || version == 3 || version == 4)
     {
         block_size = config["block_size"].asUInt();
         iv_size = config["iv_size"].asUInt();
+        max_padding = config.get("max_padding", 0u).asUInt();
     }
     else
     {
@@ -576,7 +584,8 @@ FSConfig CommandBase::read_config(FileStream* stream,
                       pass_len,
                       result.master_key,
                       result.block_size,
-                      result.iv_size))
+                      result.iv_size,
+                      result.max_padding))
         throw_runtime_error("Invalid password and/or keyfile");
     result.version = value["version"].asUInt();
     return result;
@@ -614,7 +623,8 @@ void CommandBase::write_config(FileStream* stream,
                                pass_len,
                                config.block_size,
                                config.iv_size,
-                               rounds)
+                               rounds,
+                               config.max_padding)
                    .toStyledString();
     stream->sequential_write(str.data(), str.size());
 }
@@ -727,6 +737,15 @@ private:
         "alias for \"--format 3\", enables the extension where timestamp are stored and encrypted"};
     TCLAP::ValueArg<std::string> pbkdf{
         "", "pbkdf", message_for_setting_pbkdf, false, PBKDF_ALGO_ARGON2ID, "string"};
+    TCLAP::ValueArg<unsigned> max_padding{
+        "",
+        "max-padding",
+        "Maximum number of padding to add to all files in order to obfuscate their sizes. Each "
+        "file has a different padding. Enabling this has a large performance cost. Only available "
+        "in format 4.",
+        false,
+        0,
+        "int"};
 
 public:
     void parse_cmdline(int argc, const char* const* argv) override
@@ -739,6 +758,7 @@ public:
         cmdline.add(&store_time);
         cmdline.add(&block_size);
         cmdline.add(&pbkdf);
+        cmdline.add(&max_padding);
         cmdline.parse(argc, argv);
         get_password(true);
     }
@@ -753,7 +773,14 @@ public:
 
         if (format.isSet() && format.getValue() == 1 && (iv_size.isSet() || block_size.isSet()))
         {
-            fprintf(stderr, "IV and block size options are not available for filesystem format 1");
+            fprintf(stderr,
+                    "IV and block size options are not available for filesystem format 1\n");
+            return 1;
+        }
+
+        if (format.getValue() != 4 && max_padding.getValue() > 0)
+        {
+            fprintf(stderr, "--max-padding is only usable when --format is 4\n");
             return 1;
         }
 
@@ -768,6 +795,7 @@ public:
         config.iv_size = format_version == 1 ? 32 : iv_size.getValue();
         config.version = format_version;
         config.block_size = block_size.getValue();
+        config.max_padding = max_padding.getValue();
 
         auto config_stream
             = open_config_stream(get_real_config_path(), O_WRONLY | O_CREAT | O_EXCL);
@@ -1252,6 +1280,7 @@ public:
         fsopt.version = config.version;
         fsopt.master_key = config.master_key;
         fsopt.flags = config.version != 3 ? 0 : kOptionStoreTime;
+        fsopt.max_padding_size = config.max_padding;
         if (insecure.getValue())
             fsopt.flags.value() |= kOptionNoAuthentication;
         bool case_insensitive = false;

@@ -16,6 +16,7 @@ struct FSConfig
     unsigned block_size;
     unsigned iv_size;
     unsigned version;
+    unsigned max_padding = 0;
 };
 
 class CommandBase
