@@ -30,21 +30,22 @@ namespace lite
         if (ctx->opt->version.value() != 4)
             throwInvalidArgumentException("This function only supports filesystem format 4");
 
+        const auto& master_key = ctx->opt->master_key;
+
         key_type name_key, content_key, xattr_key, padding_key;
-        if (ctx->opt->master_key.size() != 3 * KEY_LENGTH
-            && ctx->opt->master_key.size() != 4 * KEY_LENGTH)
+        if (master_key.size() != 3 * KEY_LENGTH && master_key.size() != 4 * KEY_LENGTH)
             throwInvalidArgumentException("Master key has wrong length");
 
-        memcpy(name_key.data(), ctx->opt->master_key.data(), KEY_LENGTH);
-        memcpy(content_key.data(), ctx->opt->master_key.data() + KEY_LENGTH, KEY_LENGTH);
-        memcpy(xattr_key.data(), ctx->opt->master_key.data() + 2 * KEY_LENGTH, KEY_LENGTH);
+        memcpy(name_key.data(), master_key.data(), KEY_LENGTH);
+        memcpy(content_key.data(), master_key.data() + KEY_LENGTH, KEY_LENGTH);
+        memcpy(xattr_key.data(), master_key.data() + 2 * KEY_LENGTH, KEY_LENGTH);
 
         warn_if_key_not_random(name_key, __FILE__, __LINE__);
         warn_if_key_not_random(content_key, __FILE__, __LINE__);
         warn_if_key_not_random(xattr_key, __FILE__, __LINE__);
-        if (ctx->opt->master_key.size() >= 4 * KEY_LENGTH)
+        if (master_key.size() >= 4 * KEY_LENGTH)
         {
-            memcpy(padding_key.data(), ctx->opt->master_key.data() + 3 * KEY_LENGTH, KEY_LENGTH);
+            memcpy(padding_key.data(), master_key.data() + 3 * KEY_LENGTH, KEY_LENGTH);
             warn_if_key_not_random(padding_key, __FILE__, __LINE__);
         }
 
