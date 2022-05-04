@@ -1178,34 +1178,42 @@ std::string narrow_string(WideStringRef str)
 
 namespace
 {
-    std::tuple<bool, HANDLE, DWORD> test_console(FILE* fp)
+    struct ConsoleTestResult
+    {
+        bool is_console = false;
+        HANDLE handle = INVALID_HANDLE_VALUE;
+        DWORD mode = 0;
+    };
+
+    ConsoleTestResult test_console(FILE* fp)
     {
         if (!fp)
         {
-            return {false, INVALID_HANDLE_VALUE, 0};
+            return {};
         }
         int fd = _fileno(fp);
         if (fd < 0)
         {
-            return {false, INVALID_HANDLE_VALUE, 0};
+            return {};
         }
         auto h = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
         if (h == INVALID_HANDLE_VALUE)
         {
-            return {false, INVALID_HANDLE_VALUE, 0};
+            return {};
         }
-        DWORD mode;
-        return {GetConsoleMode(h, &mode), h, mode};
+        ConsoleTestResult result;
+        result.handle = h;
+        result.is_console = GetConsoleMode(h, &result.mode);
+        return result;
     }
 }    // namespace
 
 std::unique_ptr<ConsoleColourSetter> ConsoleColourSetter::create_setter(FILE* fp)
 {
     auto t = test_console(fp);
-    if (!std::get<bool>(t))
+    if (!t.is_console)
         return {};
-    if (!SetConsoleMode(std::get<HANDLE>(t),
-                        std::get<DWORD>(t) | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
+    if (!SetConsoleMode(t.handle, t.mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
     {
         return {};
     }
@@ -1228,11 +1236,11 @@ void windows_init(void)
     _set_invalid_parameter_handler(
         [](wchar_t const*, wchar_t const*, wchar_t const*, unsigned int, uintptr_t) {});
 
-    if (std::get<bool>(test_console(stdout)))
+    if (test_console(stdout).is_console)
     {
         setvbuf(stdout, nullptr, _IOLBF, 65536);
     }
-    if (std::get<bool>(test_console(stderr)))
+    if (test_console(stderr).is_console)
     {
         setvbuf(stderr, nullptr, _IOLBF, 65536);
     }
