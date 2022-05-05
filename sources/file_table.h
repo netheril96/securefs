@@ -5,6 +5,7 @@
 #include "myutils.h"
 #include "platform.h"
 #include "streams.h"
+#include "thread_safety_annotations.hpp"
 
 #include <memory>
 #include <string.h>
@@ -28,10 +29,11 @@ private:
     static const int MAX_NUM_CLOSED = 101, NUM_EJECT = 8;
 
 private:
+    securefs::Mutex m_lock;
     key_type m_master_key;
-    table_type m_files;
-    std::vector<id_type> m_closed_ids;
-    std::unique_ptr<FileTableIO> m_fio;
+    table_type m_files THREAD_ANNOTATION_GUARDED_BY(m_lock);
+    std::vector<id_type> m_closed_ids THREAD_ANNOTATION_GUARDED_BY(m_lock);
+    std::unique_ptr<FileTableIO> m_fio THREAD_ANNOTATION_GUARDED_BY(m_lock);
     uint32_t m_flags;
     unsigned m_block_size, m_iv_size, m_max_padding_size;
     std::shared_ptr<const OSService> m_root;

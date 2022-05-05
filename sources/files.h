@@ -51,7 +51,7 @@ private:
     bool m_dirty THREAD_ANNOTATION_GUARDED_BY(*this), m_check, m_store_time;
 
 private:
-    void read_header();
+    void read_header() THREAD_ANNOTATION_REQUIRES(*this);
 
     [[noreturn]] void throw_invalid_cast(int to_type);
 
@@ -143,7 +143,8 @@ public:
     void lock() THREAD_ANNOTATION_ACQUIRE() { m_lock.lock(); }
     void unlock() THREAD_ANNOTATION_RELEASE() { m_lock.unlock(); }
 
-    void initialize_empty(uint32_t mode, uint32_t uid, uint32_t gid);
+    void initialize_empty(uint32_t mode, uint32_t uid, uint32_t gid)
+        THREAD_ANNOTATION_REQUIRES(*this);
 
     // --Begin of getters and setters for stats---
     uint32_t get_mode() const noexcept { return m_flags[0]; }
@@ -326,20 +327,22 @@ public:
     int type() const noexcept override { return class_type(); }
 
     length_type read(void* output, offset_type off, length_type len)
+        THREAD_ANNOTATION_REQUIRES(*this)
     {
         update_atime_helper();
         return this->m_stream->read(output, off, len);
     }
 
     void write(const void* input, offset_type off, length_type len)
+        THREAD_ANNOTATION_REQUIRES(*this)
     {
         update_mtime_helper();
         return this->m_stream->write(input, off, len);
     }
 
-    length_type size() const noexcept { return m_stream->size(); }
+    length_type size() const noexcept THREAD_ANNOTATION_REQUIRES(*this) { return m_stream->size(); }
 
-    void truncate(length_type new_size)
+    void truncate(length_type new_size) THREAD_ANNOTATION_REQUIRES(*this)
     {
         update_mtime_helper();
         return m_stream->resize(new_size);
@@ -358,7 +361,7 @@ public:
 
     int type() const noexcept override { return class_type(); }
 
-    std::string get()
+    std::string get() THREAD_ANNOTATION_REQUIRES(*this)
     {
         std::string result(m_stream->size(), 0);
         auto rc = m_stream->read(&result[0], 0, result.size());
@@ -367,7 +370,10 @@ public:
         return result;
     }
 
-    void set(const std::string& path) { m_stream->write(path.data(), 0, path.size()); }
+    void set(const std::string& path) THREAD_ANNOTATION_REQUIRES(*this)
+    {
+        m_stream->write(path.data(), 0, path.size());
+    }
 };
 
 class Directory : public FileBase
@@ -389,12 +395,14 @@ public:
     typedef std::function<bool(const std::string&, const id_type&, int)> callback;
 
     bool get_entry(const std::string& name, id_type& id, int& type)
+        THREAD_ANNOTATION_REQUIRES(*this)
     {
         update_atime_helper();
         return get_entry_impl(name, id, type);
     }
 
     bool add_entry(const std::string& name, const id_type& id, int type)
+        THREAD_ANNOTATION_REQUIRES(*this)
     {
         update_mtime_helper();
         return add_entry_impl(name, id, type);
@@ -405,6 +413,7 @@ public:
      * Returns false when the entry is not found.
      */
     bool remove_entry(const std::string& name, id_type& id, int& type)
+        THREAD_ANNOTATION_REQUIRES(*this)
     {
         update_mtime_helper();
         return remove_entry_impl(name, id, type);
@@ -413,13 +422,13 @@ public:
     /**
      * When callback returns false, the iteration will be terminated
      */
-    void iterate_over_entries(const callback& cb)
+    void iterate_over_entries(const callback& cb) THREAD_ANNOTATION_REQUIRES(*this)
     {
         update_atime_helper();
         return iterate_over_entries_impl(cb);
     }
 
-    virtual bool empty() = 0;
+    virtual bool empty() THREAD_ANNOTATION_REQUIRES(*this) = 0;
 
 protected:
     virtual bool get_entry_impl(const std::string& name, id_type& id, int& type) = 0;
@@ -445,7 +454,7 @@ private:
     bool m_dirty;
 
 private:
-    void initialize();
+    void initialize() THREAD_ANNOTATION_REQUIRES(*this);
 
 public:
     template <class... Args>
@@ -460,7 +469,7 @@ public:
 
     bool remove_entry_impl(const std::string& name, id_type& id, int& type) override;
 
-    void subflush() override;
+    void subflush() override THREAD_ANNOTATION_REQUIRES(*this);
 
     void iterate_over_entries_impl(const callback& cb) override
     {

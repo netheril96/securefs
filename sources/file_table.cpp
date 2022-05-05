@@ -179,6 +179,7 @@ FileTable::~FileTable()
 
 FileBase* FileTable::open_as(const id_type& id, int type)
 {
+    std::lock_guard<Mutex> lg(m_lock);
     auto it = m_files.find(id);
     if (it != m_files.end())
     {
