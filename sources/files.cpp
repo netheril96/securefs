@@ -173,7 +173,10 @@ FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
 
 void FileBase::read_header()
 {
-    memset(m_flags, 0xFF, sizeof(m_flags));
+    for (auto& f : m_flags)
+    {
+        f.store(-1);
+    }
     size_t header_size = m_store_time ? EXTENDED_HEADER_SIZE : HEADER_SIZE;
     auto header = make_unique_array<byte>(header_size);
     auto rc = m_header->read_header(header.get(), header_size);

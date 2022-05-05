@@ -3,6 +3,7 @@
 #include "myutils.h"
 #include "platform.h"
 #include "streams.h"
+#include "thread_safety_annotations.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -22,7 +23,7 @@ class RegularFile;
 class Directory;
 class Symlink;
 
-class FileBase
+class THREAD_ANNOTATION_CAPABILITY("mutex") FileBase
 {
 private:
     static const size_t NUM_FLAGS = 7, HEADER_SIZE = 32, EXTENDED_HEADER_SIZE = 80,
@@ -35,15 +36,19 @@ private:
                   "Constants are wrong!");
 
 private:
+    securefs::Mutex m_lock;
     ptrdiff_t m_refcount;
-    std::shared_ptr<HeaderBase> m_header;
+    std::shared_ptr<HeaderBase> m_header THREAD_ANNOTATION_GUARDED_BY(*this);
     id_type m_id;
-    uint32_t m_flags[NUM_FLAGS];
-    fuse_timespec m_atime, m_mtime, m_ctime, m_birthtime;
-    std::shared_ptr<FileStream> m_data_stream, m_meta_stream;
-    CryptoPP::GCM<CryptoPP::AES>::Encryption m_xattr_enc;
-    CryptoPP::GCM<CryptoPP::AES>::Decryption m_xattr_dec;
-    bool m_dirty, m_check, m_store_time;
+    std::atomic<uint32_t> m_flags[NUM_FLAGS];
+    fuse_timespec m_atime THREAD_ANNOTATION_GUARDED_BY(*this),
+        m_mtime THREAD_ANNOTATION_GUARDED_BY(*this), m_ctime THREAD_ANNOTATION_GUARDED_BY(*this),
+        m_birthtime THREAD_ANNOTATION_GUARDED_BY(*this);
+    std::shared_ptr<FileStream> m_data_stream THREAD_ANNOTATION_GUARDED_BY(*this),
+        m_meta_stream THREAD_ANNOTATION_GUARDED_BY(*this);
+    CryptoPP::GCM<CryptoPP::AES>::Encryption m_xattr_enc THREAD_ANNOTATION_GUARDED_BY(*this);
+    CryptoPP::GCM<CryptoPP::AES>::Decryption m_xattr_dec THREAD_ANNOTATION_GUARDED_BY(*this);
+    bool m_dirty THREAD_ANNOTATION_GUARDED_BY(*this), m_check, m_store_time;
 
 private:
     void read_header();
@@ -51,11 +56,11 @@ private:
     [[noreturn]] void throw_invalid_cast(int to_type);
 
 protected:
-    std::shared_ptr<StreamBase> m_stream;
+    std::shared_ptr<StreamBase> m_stream THREAD_ANNOTATION_GUARDED_BY(*this);
 
     uint32_t get_root_page() const noexcept { return m_flags[4]; }
 
-    void set_root_page(uint32_t value) noexcept
+    void set_root_page(uint32_t value) noexcept THREAD_ANNOTATION_REQUIRES(*this)
     {
         m_flags[4] = value;
         m_dirty = true;
@@ -63,7 +68,7 @@ protected:
 
     uint32_t get_start_free_page() const noexcept { return m_flags[5]; }
 
-    void set_start_free_page(uint32_t value) noexcept
+    void set_start_free_page(uint32_t value) noexcept THREAD_ANNOTATION_REQUIRES(*this)
     {
         m_flags[5] = value;
         m_dirty = true;
@@ -71,7 +76,7 @@ protected:
 
     uint32_t get_num_free_page() const noexcept { return m_flags[6]; }
 
-    void set_num_free_page(uint32_t value) noexcept
+    void set_num_free_page(uint32_t value) noexcept THREAD_ANNOTATION_REQUIRES(*this)
     {
         m_flags[6] = value;
         m_dirty = true;
@@ -80,7 +85,7 @@ protected:
     /**
      * Subclasss should override this if additional flush operations are needed
      */
-    virtual void subflush() {}
+    virtual void subflush() THREAD_ANNOTATION_REQUIRES(*this) {}
 
 public:
     static const byte REGULAR_FILE = S_IFREG >> 12, SYMLINK = S_IFLNK >> 12,
@@ -135,12 +140,15 @@ public:
     virtual ~FileBase();
     DISABLE_COPY_MOVE(FileBase)
 
+    void lock() THREAD_ANNOTATION_ACQUIRE() { m_lock.lock(); }
+    void unlock() THREAD_ANNOTATION_RELEASE() { m_lock.unlock(); }
+
     void initialize_empty(uint32_t mode, uint32_t uid, uint32_t gid);
 
     // --Begin of getters and setters for stats---
     uint32_t get_mode() const noexcept { return m_flags[0]; }
 
-    void set_mode(uint32_t value) noexcept
+    void set_mode(uint32_t value) noexcept THREAD_ANNOTATION_REQUIRES(*this)
     {
         if (get_mode() == value)
             return;
@@ -151,7 +159,7 @@ public:
 
     uint32_t get_uid() const noexcept { return m_flags[1]; }
 
-    void set_uid(uint32_t value) noexcept
+    void set_uid(uint32_t value) noexcept THREAD_ANNOTATION_REQUIRES(*this)
     {
         if (get_uid() == value)
             return;
@@ -162,7 +170,7 @@ public:
 
     uint32_t get_gid() const noexcept { return m_flags[2]; }
 
-    void set_gid(uint32_t value) noexcept
+    void set_gid(uint32_t value) noexcept THREAD_ANNOTATION_REQUIRES(*this)
     {
         if (get_gid() == value)
             return;
@@ -173,7 +181,7 @@ public:
 
     uint32_t get_nlink() const noexcept { return m_flags[3]; }
 
-    void set_nlink(uint32_t value) noexcept
+    void set_nlink(uint32_t value) noexcept THREAD_ANNOTATION_REQUIRES(*this)
     {
         if (get_nlink() == value)
             return;
@@ -182,33 +190,45 @@ public:
         m_dirty = true;
     }
 
-    void get_atime(fuse_timespec& out) const noexcept { out = m_atime; }
+    void get_atime(fuse_timespec& out) const noexcept THREAD_ANNOTATION_REQUIRES(*this)
+    {
+        out = m_atime;
+    }
 
-    void get_mtime(fuse_timespec& out) const noexcept { out = m_mtime; }
+    void get_mtime(fuse_timespec& out) const noexcept THREAD_ANNOTATION_REQUIRES(*this)
+    {
+        out = m_mtime;
+    }
 
-    void get_ctime(fuse_timespec& out) const noexcept { out = m_ctime; }
+    void get_ctime(fuse_timespec& out) const noexcept THREAD_ANNOTATION_REQUIRES(*this)
+    {
+        out = m_ctime;
+    }
 
-    void get_birthtime(fuse_timespec& out) const noexcept { out = m_birthtime; }
+    void get_birthtime(fuse_timespec& out) const noexcept THREAD_ANNOTATION_REQUIRES(*this)
+    {
+        out = m_birthtime;
+    }
 
-    void set_atime(const fuse_timespec& in) noexcept
+    void set_atime(const fuse_timespec& in) noexcept THREAD_ANNOTATION_REQUIRES(*this)
     {
         m_atime = in;
         m_dirty = true;
     }
 
-    void set_mtime(const fuse_timespec& in) noexcept
+    void set_mtime(const fuse_timespec& in) noexcept THREAD_ANNOTATION_REQUIRES(*this)
     {
         m_mtime = in;
         m_dirty = true;
     }
 
-    void set_ctime(const fuse_timespec& in) noexcept
+    void set_ctime(const fuse_timespec& in) noexcept THREAD_ANNOTATION_REQUIRES(*this)
     {
         m_ctime = in;
         m_dirty = true;
     }
 
-    void update_atime_helper()
+    void update_atime_helper() THREAD_ANNOTATION_REQUIRES(*this)
     {
         if (m_store_time && (m_atime.tv_sec < m_mtime.tv_sec || m_atime.tv_sec < m_ctime.tv_sec))
         {
@@ -217,7 +237,7 @@ public:
         }
     }
 
-    void update_mtime_helper()
+    void update_mtime_helper() THREAD_ANNOTATION_REQUIRES(*this)
     {
         if (m_store_time)
         {
@@ -227,7 +247,7 @@ public:
         }
     }
 
-    void update_ctime_helper()
+    void update_ctime_helper() THREAD_ANNOTATION_REQUIRES(*this)
     {
         if (m_store_time)
         {
@@ -254,32 +274,32 @@ public:
 
     bool is_unlinked() const noexcept { return get_nlink() <= 0; }
 
-    void unlink()
+    void unlink() THREAD_ANNOTATION_REQUIRES(*this)
     {
-        auto nlink = get_nlink();
-        --nlink;
-        set_nlink(nlink);
+        --m_flags[3];
+        m_dirty = true;
     }
 
-    void flush();
+    void flush() THREAD_ANNOTATION_REQUIRES(*this);
 
-    void fsync()
+    void fsync() THREAD_ANNOTATION_REQUIRES(*this)
     {
         m_data_stream->fsync();
         m_meta_stream->fsync();
     }
 
-    void utimens(const struct fuse_timespec ts[2]);
+    void utimens(const struct fuse_timespec ts[2]) THREAD_ANNOTATION_REQUIRES(*this);
 
-    void stat(struct fuse_stat* st);
+    void stat(struct fuse_stat* st) THREAD_ANNOTATION_REQUIRES(*this);
 
-    ssize_t listxattr(char* buffer, size_t size);
+    ssize_t listxattr(char* buffer, size_t size) THREAD_ANNOTATION_REQUIRES(*this);
 
-    ssize_t getxattr(const char* name, char* value, size_t size);
+    ssize_t getxattr(const char* name, char* value, size_t size) THREAD_ANNOTATION_REQUIRES(*this);
 
-    void setxattr(const char* name, const char* value, size_t size, int flags);
+    void setxattr(const char* name, const char* value, size_t size, int flags)
+        THREAD_ANNOTATION_REQUIRES(*this);
 
-    void removexattr(const char* name);
+    void removexattr(const char* name) THREAD_ANNOTATION_REQUIRES(*this);
 
     template <class T>
     T* cast_as()
