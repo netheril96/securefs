@@ -10,6 +10,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <thread>
 #include <unordered_map>
 
 #include <cryptopp/aes.h>

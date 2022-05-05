@@ -88,12 +88,15 @@ void fix_hardlink_count(operations::FileSystemContext* fs,
                         NLinkFixPhase phase)
 {
     std::vector<std::pair<id_type, int>> listings;
-    dir->iterate_over_entries(
-        [&listings](const std::string&, const id_type& id, int type)
-        {
-            listings.emplace_back(id, type);
-            return true;
-        });
+    {
+        FileLockGuard flg(*dir);
+        dir->iterate_over_entries(
+            [&listings](const std::string&, const id_type& id, int type)
+            {
+                listings.emplace_back(id, type);
+                return true;
+            });
+    }
 
     for (auto&& entry : listings)
     {
@@ -112,8 +115,12 @@ void fix_hardlink_count(operations::FileSystemContext* fs,
         switch (phase)
         {
         case NLinkFixPhase::FixingNLink:
-            base->set_nlink(nlink_map->at(id));
-            break;
+        {
+            auto& fp = *base;
+            FileLockGuard flg(fp);
+            fp.set_nlink(nlink_map->at(id));
+        }
+        break;
 
         case NLinkFixPhase::CollectingNLink:
             nlink_map->operator[](id)++;
@@ -137,12 +144,15 @@ void fix_helper(operations::FileSystemContext* fs,
                 std::unordered_set<id_type, id_hash>* all_ids)
 {
     std::vector<std::tuple<std::string, id_type, int>> listings;
-    dir->iterate_over_entries(
-        [&listings](const std::string& name, const id_type& id, int type)
-        {
-            listings.emplace_back(name, id, type);
-            return true;
-        });
+    {
+        FileLockGuard flg(*dir);
+        dir->iterate_over_entries(
+            [&listings](const std::string& name, const id_type& id, int type)
+            {
+                listings.emplace_back(name, id, type);
+                return true;
+            });
+    }
 
     for (auto&& entry : listings)
     {
@@ -162,7 +172,11 @@ void fix_helper(operations::FileSystemContext* fs,
                     "(Yes/No, default: no)\n",
                     (dir_name + '/' + name).c_str(),
                     e.what());
-            auto remove = [&]() { dir->remove_entry(name, id, type); };
+            auto remove = [&]()
+            {
+                FileLockGuard flg(*dir);
+                dir->remove_entry(name, id, type);
+            };
             auto ignore = []() {};
             respond_to_user_action({{"\n", ignore},
                                     {"y\n", remove},
@@ -184,6 +198,7 @@ void fix_helper(operations::FileSystemContext* fs,
 
             auto fix_type = [&]()
             {
+                FileLockGuard flg(*dir);
                 dir->remove_entry(name, id, type);
                 dir->add_entry(name, id, real_type);
             };
@@ -228,7 +243,9 @@ void fix(const std::string& basedir, operations::FileSystemContext* fs)
             auto recover = [&]()
             {
                 auto base = open_as(fs->table, id, FileBase::BASE);
-                root_dir.get_as<Directory>()->add_entry(hexify(id), id, base->get_real_type());
+                auto& root_dir_fp = *root_dir;
+                FileLockGuard flg(root_dir_fp);
+                root_dir_fp.cast_as<Directory>()->add_entry(hexify(id), id, base->get_real_type());
             };
 
             auto remove = [&]()
@@ -237,7 +254,9 @@ void fix(const std::string& basedir, operations::FileSystemContext* fs)
                 int real_type = base->get_real_type();
                 fs->table.close(base);
                 auto real_file_handle = open_as(fs->table, id, real_type);
-                real_file_handle->unlink();
+                auto& fp = *real_file_handle;
+                FileLockGuard flg(fp);
+                fp.unlink();
             };
 
             auto ignore = []() {};
@@ -815,11 +834,13 @@ public:
 
             operations::FileSystemContext fs(opt);
             auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
-            root->set_uid(securefs::OSService::getuid());
-            root->set_gid(securefs::OSService::getgid());
-            root->set_mode(S_IFDIR | 0755);
-            root->set_nlink(1);
-            root->flush();
+            auto& root_fp = *root;
+            FileLockGuard flg(root_fp);
+            root_fp.set_uid(securefs::OSService::getuid());
+            root_fp.set_gid(securefs::OSService::getgid());
+            root_fp.set_mode(S_IFDIR | 0755);
+            root_fp.set_nlink(1);
+            root_fp.flush();
         }
         return 0;
     }
