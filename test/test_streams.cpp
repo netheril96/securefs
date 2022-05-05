@@ -246,6 +246,15 @@ TEST_CASE("Test streams")
         securefs::dummy::DummyBlockStream dbs;
         test(dbs, 3001);
     }
+    {
+        posix_stream->resize(0);
+        securefs::PaddedStream ps(posix_stream, 16);
+        test(ps, 1000);
+    }
+    {
+        securefs::PaddedStream ps(posix_stream, 16);
+        test(ps, 1000);
+    }
     CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption padding_aes(key.data(), key.size());
     auto test_lite_stream = [&](unsigned block_size, unsigned iv_size, unsigned padding_size)
     {

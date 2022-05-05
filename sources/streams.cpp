@@ -563,4 +563,17 @@ make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
                                                                 header_size);
     return {stream, stream};
 }
+
+PaddedStream::PaddedStream(std::shared_ptr<StreamBase> delegate, unsigned padding_size)
+    : m_delegate(std::move(delegate)), m_padding_size(padding_size)
+{
+    if (m_delegate->size() < padding_size)
+    {
+        auto buffer = make_unique_array<byte>(padding_size);
+        generate_random(buffer.get(), padding_size);
+        m_delegate->write(buffer.get(), 0, padding_size);
+    }
+}
+
+PaddedStream::~PaddedStream() {}
 }    // namespace securefs

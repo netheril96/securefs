@@ -32,13 +32,15 @@ static void test(securefs::BtreeDirectory& dir,
     std::vector<std::string> filenames, filenames_prime;
 
     securefs::Directory::callback inserter
-        = [&](const std::string& name, const securefs::id_type&, int) -> bool {
+        = [&](const std::string& name, const securefs::id_type&, int) -> bool
+    {
         filenames.push_back(name);
         return true;
     };
 
     securefs::Directory::callback inserter_prime
-        = [&](const std::string& name, const securefs::id_type&, int) -> bool {
+        = [&](const std::string& name, const securefs::id_type&, int) -> bool
+    {
         filenames_prime.push_back(name);
         return true;
     };
@@ -99,7 +101,7 @@ static void test(securefs::BtreeDirectory& dir,
     }
 }
 
-TEST_CASE("Test BtreeDirectory")
+static void test_btree_dir(unsigned max_padding_size)
 {
     const size_t NUM_ENTRIES = 1000;
 
@@ -123,14 +125,18 @@ TEST_CASE("Test BtreeDirectory")
                                      null_id,
                                      true,
                                      8000,
-                                     12);
+                                     12,
+                                     max_padding_size,
+                                     false);
         securefs::SimpleDirectory ref_dir(service.open_file_stream(tmp3, flags, 0644),
                                           service.open_file_stream(tmp4, flags, 0644),
                                           key,
                                           null_id,
                                           true,
                                           8000,
-                                          12);
+                                          12,
+                                          max_padding_size,
+                                          false);
 
         test(dir, ref_dir, 1000, 0.3, 0.5, 0.1, 1);
         test(dir, ref_dir, 1000, 0.3, 0.1, 0.5, 2);
@@ -146,16 +152,26 @@ TEST_CASE("Test BtreeDirectory")
                                      null_id,
                                      true,
                                      8000,
-                                     12);
+                                     12,
+                                     max_padding_size,
+                                     false);
         securefs::SimpleDirectory ref_dir(service.open_file_stream(tmp3, O_RDWR, 0),
                                           service.open_file_stream(tmp4, O_RDWR, 0),
                                           key,
                                           null_id,
                                           true,
                                           8000,
-                                          12);
+                                          12,
+                                          max_padding_size,
+                                          false);
         test(dir, ref_dir, 1000, 0.3, 0.3, 0.3, 4);
         dir.flush();
         ref_dir.flush();
     }
+}
+
+TEST_CASE("Test BtreeDirectory")
+{
+    test_btree_dir(0);
+    test_btree_dir(128);
 }

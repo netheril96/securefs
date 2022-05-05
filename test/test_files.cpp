@@ -10,7 +10,7 @@
 #include <string.h>
 #include <vector>
 
-TEST_CASE("File table")
+static void test_file_table(unsigned max_padding_size)
 {
     using namespace securefs;
     auto base_dir = OSService::temp_name("tmp/file_table", ".dir");
@@ -24,7 +24,7 @@ TEST_CASE("File table")
 
     {
         auto root = std::make_shared<OSService>(base_dir);
-        FileTable table(2, root, master_key, 0, 3000, 16);
+        FileTable table(2, root, master_key, 0, 3000, 16, max_padding_size);
         auto dir = dynamic_cast<Directory*>(table.create_as(null_id, FileBase::DIRECTORY));
         table.create_as(file_id, FileBase::REGULAR_FILE);
         dir->add_entry(".", null_id, FileBase::DIRECTORY);
@@ -50,7 +50,7 @@ TEST_CASE("File table")
 
     {
         auto root = std::make_shared<OSService>(base_dir);
-        FileTable table(2, root, master_key, 0, 3000, 16);
+        FileTable table(2, root, master_key, 0, 3000, 16, max_padding_size);
         auto dir = dynamic_cast<Directory*>(table.open_as(null_id, FileBase::DIRECTORY));
         securefs::PODArray<char, 32> xattr_test_value(0);
         try
@@ -64,10 +64,12 @@ TEST_CASE("File table")
         }
 
         std::set<std::string> filenames;
-        dir->iterate_over_entries([&](const std::string& fn, const id_type&, int) {
-            filenames.insert(fn);
-            return true;
-        });
+        dir->iterate_over_entries(
+            [&](const std::string& fn, const id_type&, int)
+            {
+                filenames.insert(fn);
+                return true;
+            });
         REQUIRE((filenames == decltype(filenames){".", "..", "hello"}));
         id_type id;
         int type;
@@ -77,4 +79,10 @@ TEST_CASE("File table")
         REQUIRE(is_regular_file);
         table.close(dir);
     }
+}
+
+TEST_CASE("File table")
+{
+    test_file_table(0);
+    test_file_table(255);
 }

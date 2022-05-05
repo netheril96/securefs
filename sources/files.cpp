@@ -2,11 +2,13 @@
 #include "crypto.h"
 #include "myutils.h"
 
+#include <cryptopp/integer.h>
+#include <cryptopp/secblock.h>
+
 #include <algorithm>
 #include <unordered_map>
 #include <utility>
 
-#include <cryptopp/secblock.h>
 #include <sys/types.h>
 
 /**
@@ -110,6 +112,7 @@ FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
                    bool check,
                    unsigned block_size,
                    unsigned iv_size,
+                   unsigned max_padding_size,
                    bool store_time)
     : m_refcount(1)
     , m_header()
@@ -123,7 +126,7 @@ FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
 {
     warn_if_key_not_random(key_, __FILE__, __LINE__);
     key_type data_key, meta_key;
-    byte generated_keys[KEY_LENGTH * 3];
+    byte generated_keys[KEY_LENGTH * 4] = {};
     hkdf(key_.data(),
          key_.size(),
          nullptr,
@@ -131,7 +134,7 @@ FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
          id_.data(),
          id_.size(),
          generated_keys,
-         array_length(generated_keys));
+         max_padding_size > 0 ? 4 * KEY_LENGTH : 3 * KEY_LENGTH);
     memcpy(data_key.data(), generated_keys, KEY_LENGTH);
     memcpy(meta_key.data(), generated_keys + KEY_LENGTH, KEY_LENGTH);
     auto crypt = make_cryptstream_aes_gcm(std::static_pointer_cast<StreamBase>(data_stream),
@@ -155,6 +158,17 @@ FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
         generated_keys + 2 * KEY_LENGTH, KEY_LENGTH, null_iv, array_length(null_iv));
     m_xattr_dec.SetKeyWithIV(
         generated_keys + 2 * KEY_LENGTH, KEY_LENGTH, null_iv, array_length(null_iv));
+
+    if (max_padding_size > 0)
+    {
+        warn_if_key_not_random(generated_keys, sizeof(generated_keys), __FILE__, __LINE__);
+        CryptoPP::Integer integer(generated_keys + 3 * KEY_LENGTH,
+                                  KEY_LENGTH,
+                                  CryptoPP::Integer::UNSIGNED,
+                                  CryptoPP::BIG_ENDIAN_ORDER);
+        auto padding_size = static_cast<unsigned>(integer.Modulo(max_padding_size + 1));
+        m_stream = std::make_shared<PaddedStream>(std::move(m_stream), padding_size);
+    }
 }
 
 void FileBase::read_header()

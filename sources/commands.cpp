@@ -293,8 +293,8 @@ Json::Value generate_config(unsigned int version,
                             size_t pass_len,
                             unsigned block_size,
                             unsigned iv_size,
-                            unsigned rounds = 0,
-                            unsigned max_padding = 0)
+                            unsigned max_padding,
+                            unsigned rounds)
 {
     securefs::key_type effective_salt;
     hmac_sha256(salt, maybe_key_file_path, effective_salt);
@@ -392,7 +392,7 @@ Json::Value generate_config(unsigned int version,
         config["block_size"] = block_size;
         config["iv_size"] = iv_size;
     }
-    if (version == 4 && max_padding > 0)
+    if (max_padding > 0)
     {
         config["max_padding"] = max_padding;
     }
@@ -470,18 +470,17 @@ bool parse_config(const Json::Value& config,
 {
     using namespace securefs;
     unsigned version = config["version"].asUInt();
+    max_padding = config.get("max_padding", 0u).asUInt();
 
     if (version == 1)
     {
         block_size = 4096;
         iv_size = 32;
-        max_padding = 0;
     }
     else if (version == 2 || version == 3 || version == 4)
     {
         block_size = config["block_size"].asUInt();
         iv_size = config["iv_size"].asUInt();
-        max_padding = config.get("max_padding", 0u).asUInt();
     }
     else
     {
@@ -623,8 +622,8 @@ void CommandBase::write_config(FileStream* stream,
                                pass_len,
                                config.block_size,
                                config.iv_size,
-                               rounds,
-                               config.max_padding)
+                               config.max_padding,
+                               rounds)
                    .toStyledString();
     stream->sequential_write(str.data(), str.size());
 }
@@ -741,8 +740,7 @@ private:
         "",
         "max-padding",
         "Maximum number of padding to add to all files in order to obfuscate their sizes. Each "
-        "file has a different padding. Enabling this has a large performance cost. Only available "
-        "in format 4.",
+        "file has a different padding. Enabling this has a large performance cost.",
         false,
         0,
         "int"};
@@ -775,12 +773,6 @@ public:
         {
             fprintf(stderr,
                     "IV and block size options are not available for filesystem format 1\n");
-            return 1;
-        }
-
-        if (format.getValue() != 4 && max_padding.getValue() > 0)
-        {
-            fprintf(stderr, "--max-padding is only usable when --format is 4\n");
             return 1;
         }
 

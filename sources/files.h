@@ -129,7 +129,8 @@ public:
                       bool check,
                       unsigned block_size,
                       unsigned iv_size,
-                      bool store_time = false);
+                      unsigned max_padding_size,
+                      bool store_time);
 
     virtual ~FileBase();
     DISABLE_COPY_MOVE(FileBase)

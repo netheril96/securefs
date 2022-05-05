@@ -175,4 +175,44 @@ make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
                          unsigned block_size,
                          unsigned iv_size,
                          unsigned header_size = 32);
+
+class PaddedStream final: public StreamBase
+{
+public:
+    explicit PaddedStream(std::shared_ptr<StreamBase> delegate, unsigned padding_size);
+    ~PaddedStream();
+
+    length_type read(void* output, offset_type offset, length_type length) override
+    {
+        return m_delegate->read(output, offset + m_padding_size, length);
+    }
+
+    void write(const void* input, offset_type offset, length_type length) override
+    {
+        return m_delegate->write(input, offset + m_padding_size, length);
+    }
+
+    length_type size() const override
+    {
+        auto dsize = m_delegate->size();
+        return dsize > m_padding_size ? dsize - m_padding_size : 0;
+    }
+
+    void flush() override { return m_delegate->flush(); }
+
+    void resize(length_type size) override { return m_delegate->resize(size + m_padding_size); }
+
+    bool is_sparse() const noexcept override { return m_delegate->is_sparse(); }
+
+    length_type optimal_block_size() const noexcept override
+    {
+        return m_delegate->optimal_block_size();
+    }
+
+    unsigned padding_size() const noexcept { return m_padding_size; }
+
+private:
+    std::shared_ptr<StreamBase> m_delegate;
+    unsigned m_padding_size;
+};
 }    // namespace securefs

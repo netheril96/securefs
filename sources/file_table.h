@@ -33,7 +33,7 @@ private:
     std::vector<id_type> m_closed_ids;
     std::unique_ptr<FileTableIO> m_fio;
     uint32_t m_flags;
-    unsigned m_block_size, m_iv_size;
+    unsigned m_block_size, m_iv_size, m_max_padding_size;
     std::shared_ptr<const OSService> m_root;
 
 private:
@@ -46,7 +46,8 @@ public:
                        const key_type& master_key,
                        uint32_t flags,
                        unsigned block_size,
-                       unsigned iv_size);
+                       unsigned iv_size,
+                       unsigned max_padding_size);
     ~FileTable();
     FileBase* open_as(const id_type& id, int type);
     FileBase* create_as(const id_type& id, int type);

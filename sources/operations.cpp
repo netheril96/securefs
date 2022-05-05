@@ -33,7 +33,8 @@ namespace operations
                 from_cryptopp_key(opt.master_key),
                 opt.flags.value(),
                 opt.block_size.value(),
-                opt.iv_size.value())
+                opt.iv_size.value(),
+                opt.max_padding_size)
         , root(opt.root)
         , root_id()
         , flags(opt.flags.value())

@@ -148,8 +148,13 @@ FileTable::FileTable(int version,
                      const key_type& master_key,
                      uint32_t flags,
                      unsigned block_size,
-                     unsigned iv_size)
-    : m_flags(flags), m_block_size(block_size), m_iv_size(iv_size), m_root(root)
+                     unsigned iv_size,
+                     unsigned max_padding_size)
+    : m_flags(flags)
+    , m_block_size(block_size)
+    , m_iv_size(iv_size)
+    , m_max_padding_size(max_padding_size)
+    , m_root(root)
 {
     memcpy(m_master_key.data(), master_key.data(), master_key.size());
     switch (version)
@@ -201,6 +206,7 @@ FileBase* FileTable::open_as(const id_type& id, int type)
                                         is_auth_enabled(),
                                         m_block_size,
                                         m_iv_size,
+                                        m_max_padding_size,
                                         is_time_stored());
     fb->setref(1);
     auto result = fb.get();
@@ -225,6 +231,7 @@ FileBase* FileTable::create_as(const id_type& id, int type)
                                         is_auth_enabled(),
                                         m_block_size,
                                         m_iv_size,
+                                        m_max_padding_size,
                                         is_time_stored());
     fb->setref(1);
     auto result = fb.get();
