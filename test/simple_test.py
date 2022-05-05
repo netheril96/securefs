@@ -23,6 +23,7 @@ import enum
 import multiprocessing
 import random
 import io
+from collections import namedtuple
 
 faulthandler.enable()
 
@@ -616,6 +617,55 @@ def generate_keyfile():
     ) as f:
         f.write(os.urandom(9))
         return f.name
+
+
+@parametrize([[1], [2], [3], [4]])
+def make_size_test(version):
+    """Ensures that padding actually increases the underlying file sizes."""
+
+    class SizeTestBase(unittest.TestCase):
+        def test_size(self):
+            nonpadded_data_dir = os.path.join(reference_data_dir, str(version))
+            padded_data_dir = os.path.join(reference_data_dir, f"{version}-padded")
+            nonpadded_fs = compute_file_statistics(
+                nonpadded_data_dir, exclude_securefs_json=True
+            )
+            padded_fs = compute_file_statistics(
+                padded_data_dir, exclude_securefs_json=True
+            )
+            self.assertEqual(nonpadded_fs.count, padded_fs.count)
+            self.assertGreater(
+                padded_fs.total_size - nonpadded_fs.total_size, padded_fs.count * 32
+            )
+
+    return SizeTestBase
+
+
+FileStatistics = namedtuple("FileStatistics", ("total_size", "count"))
+
+
+def compute_file_statistics(
+    base_dir: str, exclude_securefs_json: bool
+) -> FileStatistics:
+    size = 0
+    count = 0
+    with os.scandir(base_dir) as it:
+        for entry in it:
+            name: str = entry.name
+            if entry.is_dir():
+                fs = compute_file_statistics(
+                    os.path.join(base_dir, name), exclude_securefs_json
+                )
+                size += fs.total_size
+                count += fs.count
+            elif (
+                entry.is_file()
+                and not name.startswith(".securefs")
+                and not name.endswith(".json")
+            ):
+                size += entry.stat().st_size
+                count += 1
+    return FileStatistics(total_size=size, count=count)
 
 
 @parametrize(
