@@ -1219,7 +1219,7 @@ public:
             "atomic_o_trunc",
 #endif
         };
-        if (config.version < 4 || single_threaded.getValue())
+        if (single_threaded.getValue())
         {
             fuse_args.emplace_back("-s");
         }
