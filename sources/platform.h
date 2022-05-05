@@ -288,6 +288,7 @@ public:
     ~Mutex();
     void lock() THREAD_ANNOTATION_ACQUIRE();
     void unlock() noexcept THREAD_ANNOTATION_RELEASE();
+    bool try_lock() THREAD_ANNOTATION_TRY_ACQUIRE(true);
 
 private:
 #ifdef _WIN32

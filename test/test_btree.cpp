@@ -19,7 +19,8 @@ static void test(securefs::BtreeDirectory& dir,
                  double prob_get,
                  double prob_add,
                  double prob_del,
-                 unsigned sequence)
+                 unsigned sequence) THREAD_ANNOTATION_REQUIRES(dir)
+    THREAD_ANNOTATION_REQUIRES(reference)
 {
     (void)sequence;    // May be used later
     bool is_prob_valid = (prob_get >= 0 && prob_add >= 0 && prob_del >= 0
@@ -137,7 +138,7 @@ static void test_btree_dir(unsigned max_padding_size)
                                           12,
                                           max_padding_size,
                                           false);
-
+        securefs::DoubleFileLockGuard dflg(dir, ref_dir);
         test(dir, ref_dir, 1000, 0.3, 0.5, 0.1, 1);
         test(dir, ref_dir, 1000, 0.3, 0.1, 0.5, 2);
         test(dir, ref_dir, 1000, 0.3, 0.3, 0.3, 3);
@@ -164,6 +165,7 @@ static void test_btree_dir(unsigned max_padding_size)
                                           12,
                                           max_padding_size,
                                           false);
+        securefs::DoubleFileLockGuard dflg(dir, ref_dir);
         test(dir, ref_dir, 1000, 0.3, 0.3, 0.3, 4);
         dir.flush();
         ref_dir.flush();

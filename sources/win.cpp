@@ -1265,6 +1265,8 @@ Mutex::~Mutex() { ::DeleteCriticalSection(&m_cs); }
 void Mutex::lock() { ::EnterCriticalSection(&m_cs); }
 
 void Mutex::unlock() noexcept { ::LeaveCriticalSection(&m_cs); }
+
+bool Mutex::try_lock() { return ::TryEnterCriticalSection(&m_cs); }
 }    // namespace securefs
 
 #endif

@@ -88,11 +88,15 @@ namespace internal
 
         for (size_t i = 0; i + 1 < components.size(); ++i)
         {
-            bool exists = result.get_as<Directory>()->get_entry(components[i], id, type);
-            if (!exists)
-                throwVFSException(ENOENT);
-            if (type != FileBase::DIRECTORY)
-                throwVFSException(ENOTDIR);
+            auto& dir = *result;
+            {
+                FileLockGuard lg(dir);
+                bool exists = dir.cast_as<Directory>()->get_entry(components[i], id, type);
+                if (!exists)
+                    throwVFSException(ENOENT);
+                if (type != FileBase::DIRECTORY)
+                    throwVFSException(ENOTDIR);
+            }
             result.reset(fs->table.open_as(id, type));
         }
         last_component = components.back();
@@ -107,9 +111,13 @@ namespace internal
             return fg;
         id_type id;
         int type;
-        bool exists = fg.get_as<Directory>()->get_entry(last_component, id, type);
-        if (!exists)
-            throwVFSException(ENOENT);
+        {
+            auto& dir = *fg;
+            FileLockGuard flg(dir);
+            bool exists = dir.cast_as<Directory>()->get_entry(last_component, id, type);
+            if (!exists)
+                throwVFSException(ENOENT);
+        }
         fg.reset(fs->table.open_as(id, type));
         return fg;
     }
@@ -123,10 +131,14 @@ namespace internal
             return true;
         id_type id;
         int type;
-        bool exists = fg.get_as<Directory>()->get_entry(last_component, id, type);
-        if (!exists)
         {
-            return false;
+            auto& dir = *fg;
+            FileLockGuard flg(dir);
+            bool exists = dir.cast_as<Directory>()->get_entry(last_component, id, type);
+            if (!exists)
+            {
+                return false;
+            }
         }
         fg.reset(fs->table.open_as(id, type));
         return true;
@@ -145,17 +157,26 @@ namespace internal
         generate_random(id.data(), id.size());
 
         FileGuard result(&fs->table, fs->table.create_as(id, type));
-        result->initialize_empty(mode, uid, gid);
+
+        {
+            auto& fp = *result;
+            FileLockGuard flg(fp);
+            fp.initialize_empty(mode, uid, gid);
+        }
 
         try
         {
-            bool success = dir.get_as<Directory>()->add_entry(last_component, id, type);
+            auto& dirfp = *dir;
+            FileLockGuard flg(dirfp);
+            bool success = dirfp.cast_as<Directory>()->add_entry(last_component, id, type);
             if (!success)
                 throwVFSException(EEXIST);
         }
         catch (...)
         {
-            result->unlink();
+            auto& fp = *result;
+            FileLockGuard flg(fp);
+            fp.unlink();
             throw;
         }
         return result;
@@ -166,7 +187,9 @@ namespace internal
         try
         {
             FileGuard to_be_removed(&fs->table, fs->table.open_as(id, type));
-            to_be_removed->unlink();
+            auto& fp = *to_be_removed;
+            FileLockGuard flg(fp);
+            fp.unlink();
         }
         catch (...)
         {
@@ -184,11 +207,16 @@ namespace internal
             throwVFSException(EPERM);
         id_type id;
         int type;
-        if (!dir->get_entry(last_component, id, type))
-            throwVFSException(ENOENT);
+
+        {
+            FileLockGuard flg(*dir);
+            if (!dir->get_entry(last_component, id, type))
+                throwVFSException(ENOENT);
+        }
 
         FileGuard inner_guard = open_as(fs->table, id, type);
         auto inner_fb = inner_guard.get();
+        DoubleFileLockGuard dflg(*dir, *inner_fb);
         if (inner_fb->type() == FileBase::DIRECTORY && !static_cast<Directory*>(inner_fb)->empty())
         {
             std::string contents;
@@ -259,7 +287,9 @@ namespace operations
             internal::FileGuard fg(nullptr, nullptr);
             if (!internal::open_all(fs, path, fg))
                 return -ENOENT;
-            fg->stat(st);
+            auto& fp = *fg;
+            FileLockGuard flg(fp);
+            fp.stat(st);
             st->st_uid = OSService::getuid();
             st->st_gid = OSService::getgid();
             return 0;
@@ -308,6 +338,7 @@ namespace operations
             struct fuse_stat st;
             memset(&st, 0, sizeof(st));
 
+            FileLockGuard flg(*fb);
 #ifdef _WIN32
             // We have to fill in "." and ".." entries ourselves due to WinFsp limitations.
             fb->stat(&st);
@@ -378,6 +409,7 @@ namespace operations
             RegularFile* file = fg->cast_as<RegularFile>();
             if (info->flags & O_TRUNC)
             {
+                FileLockGuard flg(*file);
                 file->truncate(0);
             }
             info->fh = reinterpret_cast<uintptr_t>(fg.release());
@@ -395,7 +427,10 @@ namespace operations
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EINVAL;
-            fb->flush();
+            {
+                FileLockGuard flg(*fb);
+                fb->flush();
+            }
             internal::FileGuard fg(&internal::get_fs(ctx)->table, fb);
             fg.reset(nullptr);
             return 0;
@@ -411,6 +446,7 @@ namespace operations
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EFAULT;
+            FileLockGuard flg(*fb);
             return static_cast<int>(fb->cast_as<RegularFile>()->read(buffer, off, len));
         };
         return FuseTracer::traced_call(func,
@@ -430,6 +466,7 @@ namespace operations
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EFAULT;
+            FileLockGuard flg(*fb);
             fb->cast_as<RegularFile>()->write(buffer, off, len);
             return static_cast<int>(len);
         };
@@ -446,6 +483,7 @@ namespace operations
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EFAULT;
+            FileLockGuard flg(*fb);
             fb->cast_as<RegularFile>()->flush();
             return 0;
         };
@@ -459,8 +497,10 @@ namespace operations
             auto ctx = fuse_get_context();
             auto fs = internal::get_fs(ctx);
             auto fg = internal::open_all(fs, path);
-            fg.get_as<RegularFile>()->truncate(size);
-            fg->flush();
+            auto& fp = *fg;
+            FileLockGuard flg(fp);
+            fp.cast_as<RegularFile>()->truncate(size);
+            fp.flush();
             return 0;
         };
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {&size}});
@@ -473,6 +513,7 @@ namespace operations
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EFAULT;
+            FileLockGuard flg(*fb);
             fb->cast_as<RegularFile>()->truncate(size);
             fb->flush();
             return 0;
@@ -523,11 +564,13 @@ namespace operations
             auto ctx = fuse_get_context();
             auto fs = internal::get_fs(ctx);
             auto fg = internal::open_all(fs, path);
-            auto original_mode = fg->get_mode();
+            auto& fp = *fg;
+            FileLockGuard flg(fp);
+            auto original_mode = fp.get_mode();
             mode &= 0777;
             mode |= original_mode & S_IFMT;
-            fg->set_mode(mode);
-            fg->flush();
+            fp.set_mode(mode);
+            fp.flush();
             return 0;
         };
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {&mode}});
@@ -540,9 +583,12 @@ namespace operations
             auto ctx = fuse_get_context();
             auto fs = internal::get_fs(ctx);
             auto fg = internal::open_all(fs, path);
-            fg->set_uid(uid);
-            fg->set_gid(gid);
-            fg->flush();
+            auto& fp = *fg;
+            FileLockGuard flg(fp);
+
+            fp.set_uid(uid);
+            fp.set_gid(gid);
+            fp.flush();
             return 0;
         };
         return FuseTracer::traced_call(
@@ -560,7 +606,9 @@ namespace operations
                 return -EROFS;
             auto fg
                 = internal::create(fs, from, FileBase::SYMLINK, S_IFLNK | 0755, ctx->uid, ctx->gid);
-            fg.get_as<Symlink>()->set(to);
+            auto& fp = *fg;
+            FileLockGuard flg(fp);
+            fp.cast_as<Symlink>()->set(to);
             return 0;
         };
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{to}, {from}});
@@ -575,7 +623,9 @@ namespace operations
             auto ctx = fuse_get_context();
             auto fs = internal::get_fs(ctx);
             auto fg = internal::open_all(fs, path);
-            auto destination = fg.get_as<Symlink>()->get();
+            auto& fp = *fg;
+            FileLockGuard flg(fp);
+            auto destination = fp.cast_as<Symlink>()->get();
             memset(buf, 0, size);
             memcpy(buf, destination.data(), std::min(destination.size(), size - 1));
             return 0;
@@ -595,6 +645,8 @@ namespace operations
             auto dst_dir_guard = internal::open_base_dir(fs, dst, dst_filename);
             auto src_dir = src_dir_guard.get_as<Directory>();
             auto dst_dir = dst_dir_guard.get_as<Directory>();
+
+            DoubleFileLockGuard dflg(*src_dir, *dst_dir);
 
             id_type src_id, dst_id;
             int src_type, dst_type;
@@ -638,6 +690,8 @@ namespace operations
             id_type src_id, dst_id;
             int src_type, dst_type;
 
+            DoubleFileLockGuard dflg(*src_dir, *dst_dir);
+
             bool src_exists = src_dir->get_entry(src_filename, src_id, src_type);
             if (!src_exists)
                 return -ENOENT;
@@ -650,6 +704,8 @@ namespace operations
 
             if (guard->type() != FileBase::REGULAR_FILE)
                 return -EPERM;
+
+            auto& fp = *guard;
 
             guard->set_nlink(guard->get_nlink() + 1);
             dst_dir->add_entry(dst_filename, src_id, src_type);
@@ -665,6 +721,7 @@ namespace operations
             auto fb = reinterpret_cast<FileBase*>(fi->fh);
             if (!fb)
                 return -EFAULT;
+            FileLockGuard flg(*fb);
             fb->flush();
             fb->fsync();
             return 0;
@@ -685,7 +742,9 @@ namespace operations
             auto ctx = fuse_get_context();
             auto fs = internal::get_fs(ctx);
             auto fg = internal::open_all(fs, path);
-            fg->utimens(ts);
+            auto& fp = *fg;
+            FileLockGuard flg(fp);
+            fp.utimens(ts);
             return 0;
         };
         return FuseTracer::traced_call(
@@ -701,7 +760,11 @@ namespace operations
             auto ctx = fuse_get_context();
             auto fs = internal::get_fs(ctx);
             auto fg = internal::open_all(fs, path);
-            int rc = static_cast<int>(fg->listxattr(list, size));
+            auto& fp = *fg;
+            {
+                FileLockGuard flg(fp);
+                int rc = static_cast<int>(fp.listxattr(list, size));
+            }
             transform_listxattr_result(list, size);
             return rc;
         };
@@ -722,7 +785,9 @@ namespace operations
                 return rc;
 
             auto fg = internal::open_all(fs, path);
-            return static_cast<int>(fg->getxattr(name, value, size));
+            auto& fp = *fg;
+            FileLockGuard flg(fp);
+            return static_cast<int>(fp.getxattr(name, value, size));
         };
         return FuseTracer::traced_call(
             func,
@@ -751,7 +816,9 @@ namespace operations
             flags &= XATTR_CREATE | XATTR_REPLACE;
 
             auto fg = internal::open_all(fs, path);
-            fg->setxattr(name, value, size, flags);
+            auto& fp = *fg;
+            FileLockGuard flg(fp);
+            fp.setxattr(name, value, size, flags);
             return 0;
         };
         return FuseTracer::traced_call(
@@ -772,7 +839,9 @@ namespace operations
                 return rc;
 
             auto fg = internal::open_all(fs, path);
-            fg->removexattr(name);
+            auto& fp = *fg;
+            FileLockGuard flg(fp);
+            fp.removexattr(name);
             return 0;
         };
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {name}});

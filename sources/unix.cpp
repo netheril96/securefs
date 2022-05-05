@@ -605,5 +605,7 @@ void Mutex::unlock() noexcept
         ERROR_LOG("std::mutex::unlock() throws %s: %s", get_type_name(e).get(), e.what());
     }
 }
+bool Mutex::try_lock() { return m_std.try_lock(); }
+
 }    // namespace securefs
 #endif

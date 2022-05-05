@@ -142,6 +142,7 @@ public:
 
     void lock() THREAD_ANNOTATION_ACQUIRE() { m_lock.lock(); }
     void unlock() THREAD_ANNOTATION_RELEASE() { m_lock.unlock(); }
+    bool try_lock() THREAD_ANNOTATION_TRY_ACQUIRE(true) { return m_lock.try_lock(); }
 
     void initialize_empty(uint32_t mode, uint32_t uid, uint32_t gid)
         THREAD_ANNOTATION_REQUIRES(*this);
@@ -483,5 +484,42 @@ public:
     bool empty() noexcept override { return m_table.empty(); }
 
     ~SimpleDirectory();
+};
+
+class THREAD_ANNOTATION_SCOPED_CAPABILITY FileLockGuard
+{
+private:
+    std::lock_guard<FileBase> m_lg;
+
+public:
+    explicit FileLockGuard(FileBase& fb) THREAD_ANNOTATION_ACQUIRE(fb)
+        THREAD_ANNOTATION_ACQUIRE(fb.cast_as<RegularFile>())
+            THREAD_ANNOTATION_ACQUIRE(fb.cast_as<Directory>())
+                THREAD_ANNOTATION_ACQUIRE(fb.cast_as<Symlink>())
+        : m_lg(fb)
+    {
+    }
+    ~FileLockGuard() THREAD_ANNOTATION_RELEASE() {}
+};
+
+class THREAD_ANNOTATION_SCOPED_CAPABILITY DoubleFileLockGuard
+{
+private:
+    std::unique_lock<FileBase> m1, m2;
+
+public:
+    explicit DoubleFileLockGuard(FileBase& f1, FileBase& f2) THREAD_ANNOTATION_ACQUIRE(f1)
+        THREAD_ANNOTATION_ACQUIRE(f1.cast_as<RegularFile>())
+            THREAD_ANNOTATION_ACQUIRE(f1.cast_as<Directory>())
+                THREAD_ANNOTATION_ACQUIRE(f1.cast_as<Symlink>()) THREAD_ANNOTATION_ACQUIRE(f2)
+                    THREAD_ANNOTATION_ACQUIRE(f2.cast_as<RegularFile>())
+                        THREAD_ANNOTATION_ACQUIRE(f2.cast_as<Directory>())
+                            THREAD_ANNOTATION_ACQUIRE(f2.cast_as<Symlink>())
+    {
+        std::lock(f1, f2);
+        m1 = {f1, std::adopt_lock};
+        m2 = {f2, std::adopt_lock};
+    }
+    ~DoubleFileLockGuard() THREAD_ANNOTATION_RELEASE() {}
 };
 }    // namespace securefs
