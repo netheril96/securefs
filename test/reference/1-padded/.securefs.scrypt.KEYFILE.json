@@ -1,0 +1,15 @@
+{
+	"encrypted_key" : 
+	{
+		"IV" : "303c833dfd7a18c7c70c2fff2db7be2a9735d78b1ef0b08e7d2d6ebe7a9141f4",
+		"MAC" : "ad5231e0a196c190c9948a397196463e",
+		"key" : "3417891a74d134ecd607a2271cb3bcb1ccf36f8b1e38215672d9447109fa9428"
+	},
+	"iterations" : 2,
+	"max_padding" : 256,
+	"pbkdf" : "scrypt",
+	"salt" : "61c37c40e4a70ad391f09efcb3b31f6b31463ed21914381b8cf89816df2e72f5",
+	"scrypt_p" : 1,
+	"scrypt_r" : 8,
+	"version" : 1
+}

@@ -1,0 +1,13 @@
+{
+	"encrypted_key" : 
+	{
+		"IV" : "0cb5c704b7cb0a6dd81ad4d50f3525f0fd9e87f768aa9c9a633f603c908776bf",
+		"MAC" : "13726bb53b4356dafb0f5dc35a901bc8",
+		"key" : "63ffaaa935b7f0e310f6214d058b00a795b8cc834983b7210e68186309c3c658"
+	},
+	"iterations" : 2,
+	"max_padding" : 256,
+	"pbkdf" : "pkcs5-pbkdf2-hmac-sha256",
+	"salt" : "064f8926a561767bbfc7c85afc8dba03bf6b6bac7b19dd0acc4fe0b04b71e815",
+	"version" : 1
+}

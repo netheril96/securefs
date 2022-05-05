@@ -1,0 +1,15 @@
+{
+	"block_size" : 4096,
+	"encrypted_key" : 
+	{
+		"IV" : "ec74b517eea06bf5fc04931d97f00fcd8291cd2dbff88aa084068bb421221541",
+		"MAC" : "bab72e7630dff5958e599906702c1ee9",
+		"key" : "fc863397367ac767638cb21dd10f26b6efe6deb3a5514ab385919d812a410171b7859b87e35b3771b56f1466af95ff8b3385d2ac6bc55c340f6fbf6e0725e87da5c1d212252fc0d384bd3398e7042bdf3be0635800f0cf80da80fd9457fcfdd3aef968f8fa0080f84e7f12528c6e7e849e25c4b1f279fb9d52b7d08c1a8920f4"
+	},
+	"iterations" : 2,
+	"iv_size" : 12,
+	"max_padding" : 256,
+	"pbkdf" : "pkcs5-pbkdf2-hmac-sha256",
+	"salt" : "95c8fd68e458e14e0681bb52d93a8c2a8592d2ae4b2d562ba2d0da7eb58362c1",
+	"version" : 4
+}

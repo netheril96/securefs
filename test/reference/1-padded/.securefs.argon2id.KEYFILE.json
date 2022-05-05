@@ -1,0 +1,15 @@
+{
+	"argon2_m_cost" : 16,
+	"argon2_p" : 2,
+	"encrypted_key" : 
+	{
+		"IV" : "da7ee57b1ee598be2931d2c21739b975a270548a51f203e1bf275d3a50f8a487",
+		"MAC" : "14299e59f4e875448ab63e2e88c94584",
+		"key" : "af12e40594fc42582c45028df45e66c73feafed74effec7f2d056707503ab55f"
+	},
+	"iterations" : 2,
+	"max_padding" : 256,
+	"pbkdf" : "argon2id",
+	"salt" : "0c54fe6442f623c3bb4382394a544dc4f8e93f1dc152cd9514971dc6768a97e5",
+	"version" : 1
+}

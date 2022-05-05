@@ -21,12 +21,20 @@ class SecretInputMode(enum.IntEnum):
     PASSWORD_WITH_KEYFILE2 = PASSWORD | KEYFILE2
 
 
-def create(securefs_binary: str, version: int, pbkdf: str, mode: SecretInputMode):
-    new_config_filename = f"{version}/.securefs.{pbkdf}.{mode.name}.json"
+def create(
+    securefs_binary: str, version: int, pbkdf: str, mode: SecretInputMode, padded: bool
+):
+    if padded:
+        data_dir = f"{version}-padded"
+    else:
+        data_dir = str(version)
+    new_config_filename = os.path.join(data_dir, f".securefs.{pbkdf}.{mode.name}.json")
     if os.path.exists(new_config_filename):
         print(new_config_filename, "already exists", file=sys.stderr)
         return
-    original_config_filename = next(glob.iglob(f"{version}/.securefs.*.PASSWORD.json"))
+    original_config_filename = next(
+        glob.iglob(os.path.join(data_dir, ".securefs.*.PASSWORD.json"))
+    )
     shutil.copy(original_config_filename, new_config_filename)
     args = [
         securefs_binary,
@@ -56,7 +64,10 @@ def main():
     for version in range(1, 5):
         for pbkdf in ("scrypt", "pkcs5-pbkdf2-hmac-sha256", "argon2id"):
             for mode in SecretInputMode:
-                create(binary, version=version, pbkdf=pbkdf, mode=mode)
+                for padded in [False, True]:
+                    create(
+                        binary, version=version, pbkdf=pbkdf, mode=mode, padded=padded
+                    )
 
 
 if __name__ == "__main__":

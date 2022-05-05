@@ -933,7 +933,9 @@ public:
             stream.get(), old_password.data(), old_password.size(), old_key_file.getValue());
         stream = OSService::get_default().open_file_stream(
             tmp_path, O_WRONLY | O_CREAT | O_EXCL, 0644);
-        DEFER(if (std::uncaught_exception()) { OSService::get_default().remove_file(tmp_path); });
+        DEFER(if (std::uncaught_exception()) {
+            OSService::get_default().remove_file_nothrow(tmp_path);
+        });
         write_config(stream.get(),
                      new_key_file.getValue(),
                      pbkdf.getValue(),

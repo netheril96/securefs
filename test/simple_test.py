@@ -264,14 +264,11 @@ ALL_PBKDFS = ("scrypt", "pkcs5-pbkdf2-hmac-sha256", "argon2id")
                 SecretInputMode.KEYFILE2,
                 SecretInputMode.PASSWORD_WITH_KEYFILE2,
             ],
-            [0, 5],
+            [0, 15],
         )
     )
 )
 def make_test_case(version: int, pbkdf: str, mode: SecretInputMode, max_padding: int):
-    if version < 4 and max_padding > 0:
-        return
-
     class SimpleSecureFSTestBase(unittest.TestCase):
         data_dir: str
         password: Optional[str]
@@ -536,8 +533,10 @@ reference_data_dir = shutil.copytree(
 )
 
 
-@parametrize(tuple(itertools.product(range(1, 5), ALL_PBKDFS, SecretInputMode)))
-def make_regression_test(version: int, pbkdf: str, mode: SecretInputMode):
+@parametrize(
+    tuple(itertools.product(range(1, 5), ALL_PBKDFS, SecretInputMode, [False, True]))
+)
+def make_regression_test(version: int, pbkdf: str, mode: SecretInputMode, padded: bool):
     class RegressionTestBase(unittest.TestCase):
         """
         Ensures that future versions of securefs can read old versions just fine.
@@ -545,11 +544,15 @@ def make_regression_test(version: int, pbkdf: str, mode: SecretInputMode):
 
         def test_regression(self):
             mount_point = get_mount_point()
+            if padded:
+                data_dir = f"{version}-padded"
+            else:
+                data_dir = str(version)
             config_filename = os.path.join(
-                reference_data_dir, str(version), f".securefs.{pbkdf}.{mode.name}.json"
+                reference_data_dir, data_dir, f".securefs.{pbkdf}.{mode.name}.json"
             )
             p = securefs_mount(
-                os.path.join(reference_data_dir, str(version)),
+                os.path.join(reference_data_dir, data_dir),
                 mount_point,
                 password="abc" if mode & SecretInputMode.PASSWORD else None,
                 keyfile=os.path.join(reference_data_dir, "keyfile")
@@ -625,7 +628,7 @@ def generate_keyfile():
             [True, False],
             range(1, 5),
             ALL_PBKDFS,
-            [0, 16],
+            [0, 32],
         )
     )
 )
@@ -635,8 +638,6 @@ def make_chpass_test(
     if not old_pass and not old_keyfile:
         return
     if not new_pass and not new_keyfile:
-        return
-    if version < 4 and max_padding > 0:
         return
 
     class ChpassTestBase(unittest.TestCase):
