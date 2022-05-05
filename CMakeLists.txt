@@ -70,7 +70,7 @@ else()
 endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    add_compile_options(-Wthread-safety -Wthread-safety-negative)
+    add_compile_options(-Wthread-safety)
 endif()
 
 add_definitions(-D_REENTRANT -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=28
