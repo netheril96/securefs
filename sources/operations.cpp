@@ -706,8 +706,8 @@ namespace operations
                 return -EPERM;
 
             auto& fp = *guard;
-
-            guard->set_nlink(guard->get_nlink() + 1);
+            SpinFileLockGuard sflg(fp);
+            fp.set_nlink(fp.get_nlink() + 1);
             dst_dir->add_entry(dst_filename, src_id, src_type);
             return 0;
         };

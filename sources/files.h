@@ -502,6 +502,31 @@ public:
     ~FileLockGuard() THREAD_ANNOTATION_RELEASE() {}
 };
 
+class THREAD_ANNOTATION_SCOPED_CAPABILITY SpinFileLockGuard
+{
+private:
+    std::unique_lock<FileBase> m_ul;
+
+public:
+    explicit SpinFileLockGuard(FileBase& fb) THREAD_ANNOTATION_ACQUIRE(fb)
+        THREAD_ANNOTATION_ACQUIRE(fb.cast_as<RegularFile>())
+            THREAD_ANNOTATION_ACQUIRE(fb.cast_as<Directory>())
+                THREAD_ANNOTATION_ACQUIRE(fb.cast_as<Symlink>())
+        : m_ul(fb, std::defer_lock)
+    {
+        for (int i = 0; i < 100; ++i)
+        {
+            if (m_ul.try_lock())
+            {
+                return;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        throwVFSException(EBUSY);
+    }
+    ~SpinFileLockGuard() THREAD_ANNOTATION_RELEASE() {}
+};
+
 class THREAD_ANNOTATION_SCOPED_CAPABILITY DoubleFileLockGuard
 {
 private:
