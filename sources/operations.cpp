@@ -296,6 +296,9 @@ namespace operations
     {
         auto func = [=]()
         {
+            auto ctx = fuse_get_context();
+            auto fs = internal::get_fs(ctx);
+            bool has_padding = fs->table.has_padding();
             auto fb = reinterpret_cast<FileBase*>(info->fh);
             if (!fb)
                 return -EFAULT;
@@ -311,11 +314,17 @@ namespace operations
             filler(buffer, ".", &st, 0);
             filler(buffer, "..", nullptr, 0);
 #endif
-            auto actions
-                = [&st, filler, buffer](const std::string& name, const id_type&, int type) -> bool
+            auto actions = [&st, filler, buffer, has_padding](
+                               const std::string& name, const id_type&, int type) -> bool
             {
                 st.st_mode = FileBase::mode_for_type(type);
-                bool success = filler(buffer, name.c_str(), &st, 0) == 0;
+                bool success = filler(buffer,
+                                      name.c_str(),
+                                      // When random padding is enabled, we cannot obtain accurate
+                                      // size information
+                                      has_padding && type == FileBase::REGULAR_FILE ? nullptr : &st,
+                                      0)
+                    == 0;
                 if (!success)
                 {
                     WARN_LOG("Filling directory buffer failed");

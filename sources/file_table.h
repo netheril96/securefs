@@ -57,6 +57,7 @@ public:
     bool is_time_stored() const noexcept { return (m_flags & kOptionStoreTime) != 0; }
     void gc();
     void statfs(struct fuse_statvfs* fs_info) { m_root->statfs(fs_info); }
+    bool has_padding() const noexcept { return m_max_padding_size > 0; }
 };
 
 class AutoClosedFileBase

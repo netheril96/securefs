@@ -166,8 +166,9 @@ namespace lite
 #endif
                 int rc =
                     // When random padding is enabled, we cannot obtain accurate size information
-                    fs->has_padding() ? filler(buf, name.c_str(), nullptr, 0)
-                                      : filler(buf, name.c_str(), &stbuf, 0);
+                    fs->has_padding() && (stbuf.st_mode & S_IFMT) == S_IFREG
+                    ? filler(buf, name.c_str(), nullptr, 0)
+                    : filler(buf, name.c_str(), &stbuf, 0);
                 if (rc != 0)
                     return -abs(rc);
             }
