@@ -1259,7 +1259,7 @@ void windows_init(void)
         best_get_time_func = &GetSystemTimeAsFileTime;
 }
 
-Mutex::Mutex() { ::InitializeCriticalSection(&m_cs); }
+Mutex::Mutex() { ::InitializeCriticalSectionAndSpinCount(&m_cs, 4000); }
 Mutex::~Mutex() { ::DeleteCriticalSection(&m_cs); }
 
 void Mutex::lock() { ::EnterCriticalSection(&m_cs); }

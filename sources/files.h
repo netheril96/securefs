@@ -516,9 +516,16 @@ public:
                         THREAD_ANNOTATION_ACQUIRE(f2.cast_as<Directory>())
                             THREAD_ANNOTATION_ACQUIRE(f2.cast_as<Symlink>())
     {
-        std::lock(f1, f2);
-        m1 = {f1, std::adopt_lock};
-        m2 = {f2, std::adopt_lock};
+        if (&f1 == &f2)
+        {
+            m1 = std::unique_lock<FileBase>{f1};
+        }
+        else
+        {
+            std::lock(f1, f2);
+            m1 = {f1, std::adopt_lock};
+            m2 = {f2, std::adopt_lock};
+        }
     }
     ~DoubleFileLockGuard() THREAD_ANNOTATION_RELEASE() {}
 };
