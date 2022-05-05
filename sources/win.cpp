@@ -1259,6 +1259,12 @@ void windows_init(void)
         best_get_time_func = &GetSystemTimeAsFileTime;
 }
 
+Mutex::Mutex() { ::InitializeCriticalSection(&m_cs); }
+Mutex::~Mutex() { ::DeleteCriticalSection(&m_cs); }
+
+void Mutex::lock() { ::EnterCriticalSection(&m_cs); }
+
+void Mutex::unlock() noexcept { ::LeaveCriticalSection(&m_cs); }
 }    // namespace securefs
 
 #endif

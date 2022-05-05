@@ -4,9 +4,11 @@
 #include "mystring.h"
 #include "myutils.h"
 #include "streams.h"
+#include "thread_safety_annotations.hpp"
 
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <stddef.h>
 #include <stdint.h>
 #include <string>
@@ -277,6 +279,24 @@ public:
 private:
     FILE* m_fp;
     void setColour(const char* _escapeCode) noexcept;
+};
+
+class THREAD_ANNOTATION_CAPABILITY("mutex") Mutex
+{
+public:
+    Mutex();
+    ~Mutex();
+    void lock() THREAD_ANNOTATION_ACQUIRE();
+    void unlock() noexcept THREAD_ANNOTATION_RELEASE();
+
+private:
+#ifdef _WIN32
+    // MSVC implementation of std::mutex is too slow.
+    // So we reimplment it.
+    CRITICAL_SECTION m_cs;
+#else
+    std::mutex m_std;
+#endif
 };
 
 }    // namespace securefs

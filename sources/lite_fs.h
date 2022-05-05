@@ -29,7 +29,7 @@ namespace lite
         securefs::optional<lite::AESGCMCryptStream>
             m_crypt_stream THREAD_ANNOTATION_GUARDED_BY(*this);
         std::shared_ptr<securefs::FileStream> m_file_stream THREAD_ANNOTATION_GUARDED_BY(*this);
-        std::mutex m_lock;
+        securefs::Mutex m_lock;
 
     public:
         template <typename... Args>
