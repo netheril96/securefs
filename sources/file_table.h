@@ -39,8 +39,9 @@ private:
     std::shared_ptr<const OSService> m_root;
 
 private:
-    void eject();
-    void finalize(std::unique_ptr<FileBase>&);
+    void eject() THREAD_ANNOTATION_REQUIRES(m_lock);
+    void finalize(std::unique_ptr<FileBase>&) THREAD_ANNOTATION_REQUIRES(m_lock);
+    void gc() THREAD_ANNOTATION_REQUIRES(m_lock);
 
 public:
     explicit FileTable(int version,
@@ -57,7 +58,6 @@ public:
     bool is_readonly() const noexcept { return (m_flags & kOptionReadOnly) != 0; }
     bool is_auth_enabled() const noexcept { return (m_flags & kOptionNoAuthentication) == 0; }
     bool is_time_stored() const noexcept { return (m_flags & kOptionStoreTime) != 0; }
-    void gc();
     void statfs(struct fuse_statvfs* fs_info) { m_root->statfs(fs_info); }
     bool has_padding() const noexcept { return m_max_padding_size > 0; }
 };

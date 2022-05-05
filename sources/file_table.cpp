@@ -1,6 +1,7 @@
 #include "file_table.h"
 #include "btree_dir.h"
 #include "exceptions.h"
+#include "lock_guard.h"
 #include "logger.h"
 #include "myutils.h"
 #include "platform.h"
@@ -179,7 +180,7 @@ FileTable::~FileTable()
 
 FileBase* FileTable::open_as(const id_type& id, int type)
 {
-    std::lock_guard<Mutex> lg(m_lock);
+    LockGuard<Mutex> lg(m_lock);
     auto it = m_files.find(id);
     if (it != m_files.end())
     {
@@ -219,6 +220,8 @@ FileBase* FileTable::create_as(const id_type& id, int type)
 {
     if (is_readonly())
         throwVFSException(EROFS);
+
+    LockGuard<Mutex> lg(m_lock);
     if (m_files.find(id) != m_files.end())
         throwVFSException(EEXIST);
 
@@ -245,6 +248,7 @@ void FileTable::close(FileBase* fb)
     if (!fb)
         throwVFSException(EFAULT);
 
+    LockGuard<Mutex> lg(m_lock);
     auto iter = m_files.find(fb->get_id());
     if (iter == m_files.end() || iter->second.get() != fb)
         throwInvalidArgumentException("ID does not match the table");
@@ -293,6 +297,7 @@ void FileTable::finalize(std::unique_ptr<FileBase>& fb)
     }
     else
     {
+        LockGuard<FileBase> lg(*fb);
         fb->flush();
     }
 }

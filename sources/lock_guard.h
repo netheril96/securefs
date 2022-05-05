@@ -15,6 +15,10 @@ public:
     {
         lock.lock(exclusive);
     }
+    explicit LockGuard(Lockable& lock) THREAD_ANNOTATION_ACQUIRE(lock) : m_lock(&lock)
+    {
+        lock.lock();
+    }
     ~LockGuard() THREAD_ANNOTATION_RELEASE() { m_lock->unlock(); }
     LockGuard(LockGuard&&) = delete;
     LockGuard(const LockGuard&) = delete;
