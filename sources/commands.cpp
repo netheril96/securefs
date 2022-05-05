@@ -89,7 +89,7 @@ void fix_hardlink_count(operations::FileSystemContext* fs,
 {
     std::vector<std::pair<id_type, int>> listings;
     {
-        FileLockGuard flg(*dir);
+        FileLockGuard file_lock_guard(*dir);
         dir->iterate_over_entries(
             [&listings](const std::string&, const id_type& id, int type)
             {
@@ -117,7 +117,7 @@ void fix_hardlink_count(operations::FileSystemContext* fs,
         case NLinkFixPhase::FixingNLink:
         {
             auto& fp = *base;
-            FileLockGuard flg(fp);
+            FileLockGuard file_lock_guard(fp);
             fp.set_nlink(nlink_map->at(id));
         }
         break;
@@ -145,7 +145,7 @@ void fix_helper(operations::FileSystemContext* fs,
 {
     std::vector<std::tuple<std::string, id_type, int>> listings;
     {
-        FileLockGuard flg(*dir);
+        FileLockGuard file_lock_guard(*dir);
         dir->iterate_over_entries(
             [&listings](const std::string& name, const id_type& id, int type)
             {
@@ -174,7 +174,7 @@ void fix_helper(operations::FileSystemContext* fs,
                     e.what());
             auto remove = [&]()
             {
-                FileLockGuard flg(*dir);
+                FileLockGuard file_lock_guard(*dir);
                 dir->remove_entry(name, id, type);
             };
             auto ignore = []() {};
@@ -198,7 +198,7 @@ void fix_helper(operations::FileSystemContext* fs,
 
             auto fix_type = [&]()
             {
-                FileLockGuard flg(*dir);
+                FileLockGuard file_lock_guard(*dir);
                 dir->remove_entry(name, id, type);
                 dir->add_entry(name, id, real_type);
             };
@@ -244,7 +244,7 @@ void fix(const std::string& basedir, operations::FileSystemContext* fs)
             {
                 auto base = open_as(fs->table, id, FileBase::BASE);
                 auto& root_dir_fp = *root_dir;
-                FileLockGuard flg(root_dir_fp);
+                FileLockGuard file_lock_guard(root_dir_fp);
                 root_dir_fp.cast_as<Directory>()->add_entry(hexify(id), id, base->get_real_type());
             };
 
@@ -255,7 +255,7 @@ void fix(const std::string& basedir, operations::FileSystemContext* fs)
                 fs->table.close(base);
                 auto real_file_handle = open_as(fs->table, id, real_type);
                 auto& fp = *real_file_handle;
-                FileLockGuard flg(fp);
+                FileLockGuard file_lock_guard(fp);
                 fp.unlink();
             };
 
@@ -835,7 +835,7 @@ public:
             operations::FileSystemContext fs(opt);
             auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
             auto& root_fp = *root;
-            FileLockGuard flg(root_fp);
+            FileLockGuard file_lock_guard(root_fp);
             root_fp.set_uid(securefs::OSService::getuid());
             root_fp.set_gid(securefs::OSService::getgid());
             root_fp.set_mode(S_IFDIR | 0755);
