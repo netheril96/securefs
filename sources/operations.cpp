@@ -763,9 +763,10 @@ namespace operations
             auto fs = internal::get_fs(ctx);
             auto auto_closed_file = internal::open_all(fs, path);
             auto& fp = *auto_closed_file;
+            int rc = -1;
             {
                 FileLockGuard file_lock_guard(fp);
-                int rc = static_cast<int>(fp.listxattr(list, size));
+                rc = static_cast<int>(fp.listxattr(list, size));
             }
             transform_listxattr_result(list, size);
             return rc;
