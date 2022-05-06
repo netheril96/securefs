@@ -415,31 +415,25 @@ std::unique_ptr<DirectoryTraverser> OSService::create_traverser(StringRef dir) c
 uint32_t OSService::getuid() noexcept { return ::getuid(); }
 uint32_t OSService::getgid() noexcept { return ::getgid(); }
 
-int OSService::raise_fd_limit()
+int64_t OSService::raise_fd_limit() noexcept
 {
     struct rlimit rl;
     int rc = ::getrlimit(RLIMIT_NOFILE, &rl);
     if (rc < 0)
-        THROW_POSIX_EXCEPTION(errno, "getrlimit");
-
-    rl.rlim_cur = 10240 * 16;
-    do
     {
-        rl.rlim_cur /= 2;
-        rc = ::setrlimit(RLIMIT_NOFILE, &rl);
-    } while (rc < 0 && rl.rlim_cur >= 1024);
-
-    if (rc < 0)
-        THROW_POSIX_EXCEPTION(errno, "setrlimit");
-
-    for (auto lim = rl.rlim_cur * 2 - 1, bound = rl.rlim_cur; lim >= bound; --lim)
-    {
-        rl.rlim_cur = lim;
-        rc = ::setrlimit(RLIMIT_NOFILE, &rl);
-        if (rc == 0)
-            return static_cast<int>(lim);
+        WARN_LOG("Failed to query limit of file descriptors. Error code: %d.", errno);
+        return 1024;
     }
-    THROW_POSIX_EXCEPTION(errno, "setrlimit");
+
+    auto current_limit = rl.rlim_cur;
+    rl.rlim_cur = rl.rlim_max;
+    rc = ::setrlimit(RLIMIT_NOFILE, &rl);
+    if (rc < 0)
+    {
+        WARN_LOG("Failed to set limit of file descriptors. Error code: %d.", errno);
+        return current_limit;
+    }
+    return rl.rlim_cur;
 }
 
 void OSService::get_current_time(fuse_timespec& current_time)

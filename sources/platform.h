@@ -203,7 +203,7 @@ public:
 public:
     static uint32_t getuid() noexcept;
     static uint32_t getgid() noexcept;
-    static int raise_fd_limit();
+    static int64_t raise_fd_limit() noexcept;
 
     static std::string temp_name(StringRef prefix, StringRef suffix);
     static const OSService& get_default();

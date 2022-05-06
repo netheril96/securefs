@@ -980,10 +980,10 @@ void OSService::rename(StringRef a, StringRef b) const
         THROW_WINDOWS_EXCEPTION_WITH_TWO_PATHS(GetLastError(), L"MoveFileExW", wa, wb);
 }
 
-int OSService::raise_fd_limit()
+int64_t OSService::raise_fd_limit() noexcept
 {
-    return 65535;
     // The handle limit on Windows is high enough that no adjustments are necessary
+    return std::numeric_limits<int32_t>::max();
 }
 
 class WindowsDirectoryTraverser final : public DirectoryTraverser
