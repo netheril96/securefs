@@ -144,13 +144,13 @@ public:
     }
 };
 
-FileTable::FileTable(int version,
-                     std::shared_ptr<const OSService> root,
-                     const key_type& master_key,
-                     uint32_t flags,
-                     unsigned block_size,
-                     unsigned iv_size,
-                     unsigned max_padding_size)
+FileTableImpl::FileTableImpl(int version,
+                             std::shared_ptr<const OSService> root,
+                             const key_type& master_key,
+                             uint32_t flags,
+                             unsigned block_size,
+                             unsigned iv_size,
+                             unsigned max_padding_size)
     : m_flags(flags)
     , m_block_size(block_size)
     , m_iv_size(iv_size)
@@ -172,13 +172,13 @@ FileTable::FileTable(int version,
     }
 }
 
-FileTable::~FileTable()
+FileTableImpl::~FileTableImpl()
 {
     for (auto&& pair : m_files)
         finalize(pair.second);
 }
 
-FileBase* FileTable::open_as(const id_type& id, int type)
+FileBase* FileTableImpl::open_as(const id_type& id, int type)
 {
     LockGuard<Mutex> lg(m_lock);
     auto it = m_files.find(id);
@@ -216,7 +216,7 @@ FileBase* FileTable::open_as(const id_type& id, int type)
     return result;
 }
 
-FileBase* FileTable::create_as(const id_type& id, int type)
+FileBase* FileTableImpl::create_as(const id_type& id, int type)
 {
     if (is_readonly())
         throwVFSException(EROFS);
@@ -243,7 +243,7 @@ FileBase* FileTable::create_as(const id_type& id, int type)
     return result;
 }
 
-void FileTable::close(FileBase* fb)
+void FileTableImpl::close(FileBase* fb)
 {
     if (!fb)
         throwVFSException(EFAULT);
@@ -273,7 +273,7 @@ void FileTable::close(FileBase* fb)
     }
 }
 
-void FileTable::eject()
+void FileTableImpl::eject()
 {
     auto num_eject = std::min<size_t>(NUM_EJECT, m_closed_ids.size());
     for (size_t i = 0; i < num_eject; ++i)
@@ -284,7 +284,7 @@ void FileTable::eject()
     m_closed_ids.erase(m_closed_ids.begin(), m_closed_ids.begin() + num_eject);
 }
 
-void FileTable::finalize(std::unique_ptr<FileBase>& fb)
+void FileTableImpl::finalize(std::unique_ptr<FileBase>& fb)
 {
     if (!fb)
         return;
@@ -302,9 +302,11 @@ void FileTable::finalize(std::unique_ptr<FileBase>& fb)
     }
 }
 
-void FileTable::gc()
+void FileTableImpl::gc()
 {
     if (m_closed_ids.size() >= MAX_NUM_CLOSED)
         eject();
 }
+
+FileTable::~FileTable() {}
 }    // namespace securefs

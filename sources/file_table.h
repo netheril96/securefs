@@ -20,8 +20,22 @@ class AutoClosedFileBase;
 
 class FileTable
 {
-    DISABLE_COPY_MOVE(FileTable)
+public:
+    FileTable() {}
+    virtual ~FileTable();
 
+    virtual FileBase* open_as(const id_type& id, int type) = 0;
+    virtual FileBase* create_as(const id_type& id, int type) = 0;
+    virtual void close(FileBase*) = 0;
+    virtual bool is_readonly() const noexcept = 0;
+    virtual bool is_auth_enabled() const noexcept = 0;
+    virtual bool is_time_stored() const noexcept = 0;
+    virtual void statfs(struct fuse_statvfs* fs_info) = 0;
+    virtual bool has_padding() const noexcept = 0;
+};
+
+class FileTableImpl : public FileTable
+{
 private:
     typedef std::unordered_map<id_type, std::unique_ptr<FileBase>, id_hash> table_type;
 
@@ -44,22 +58,25 @@ private:
     void gc() THREAD_ANNOTATION_REQUIRES(m_lock);
 
 public:
-    explicit FileTable(int version,
-                       std::shared_ptr<const OSService> root,
-                       const key_type& master_key,
-                       uint32_t flags,
-                       unsigned block_size,
-                       unsigned iv_size,
-                       unsigned max_padding_size);
-    ~FileTable();
-    FileBase* open_as(const id_type& id, int type);
-    FileBase* create_as(const id_type& id, int type);
-    void close(FileBase*);
-    bool is_readonly() const noexcept { return (m_flags & kOptionReadOnly) != 0; }
-    bool is_auth_enabled() const noexcept { return (m_flags & kOptionNoAuthentication) == 0; }
-    bool is_time_stored() const noexcept { return (m_flags & kOptionStoreTime) != 0; }
-    void statfs(struct fuse_statvfs* fs_info) { m_root->statfs(fs_info); }
-    bool has_padding() const noexcept { return m_max_padding_size > 0; }
+    explicit FileTableImpl(int version,
+                           std::shared_ptr<const OSService> root,
+                           const key_type& master_key,
+                           uint32_t flags,
+                           unsigned block_size,
+                           unsigned iv_size,
+                           unsigned max_padding_size);
+    ~FileTableImpl();
+    FileBase* open_as(const id_type& id, int type) override;
+    FileBase* create_as(const id_type& id, int type) override;
+    void close(FileBase*) override;
+    bool is_readonly() const noexcept override { return (m_flags & kOptionReadOnly) != 0; }
+    bool is_auth_enabled() const noexcept override
+    {
+        return (m_flags & kOptionNoAuthentication) == 0;
+    }
+    bool is_time_stored() const noexcept override { return (m_flags & kOptionStoreTime) != 0; }
+    void statfs(struct fuse_statvfs* fs_info) override { m_root->statfs(fs_info); }
+    bool has_padding() const noexcept override { return m_max_padding_size > 0; }
 };
 
 class AutoClosedFileBase
