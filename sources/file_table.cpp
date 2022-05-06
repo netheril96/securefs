@@ -330,7 +330,7 @@ ShardedFileTableImpl::ShardedFileTableImpl(int version,
     {
         num_shards = std::min(64u, 1u << static_cast<unsigned>(std::ceil(std::log2(cpu_count))));
     }
-    TRACE_LOG("Use %u shards of FileTable", num_shards);
+    TRACE_LOG("Use %u shards of FileTableImpls.", num_shards);
 
     m_shards.resize(num_shards);
     for (unsigned i = 0; i < num_shards; ++i)
