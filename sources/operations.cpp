@@ -297,7 +297,7 @@ namespace operations
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {st}});
     }
 
-    int fgeattr(const char* path, struct fuse_stat* st, struct fuse_file_info* info)
+    int fgetattr(const char* path, struct fuse_stat* st, struct fuse_file_info* info)
     {
         auto func = [=]()
         {
@@ -874,7 +874,7 @@ namespace operations
         opt->flag_utime_omit_ok = true;
 
         opt->getattr = &securefs::operations::getattr;
-        opt->fgetattr = &securefs::operations::fgeattr;
+        opt->fgetattr = &securefs::operations::fgetattr;
         opt->init = &securefs::operations::init;
         opt->destroy = &securefs::operations::destroy;
         opt->opendir = &securefs::operations::opendir;
