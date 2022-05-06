@@ -327,25 +327,29 @@ namespace lite
 
     void FileSystem::statvfs(struct fuse_statvfs* buf) { m_root->statfs(buf); }
 
-    class LiteDirectoryTraverser : public DirectoryTraverser
+    class LiteDirectory : public Directory
     {
     private:
+        std::string m_path;
         std::unique_ptr<DirectoryTraverser> m_underlying_traverser;
         AES_SIV m_name_encryptor;
         unsigned m_block_size, m_iv_size;
 
     public:
-        explicit LiteDirectoryTraverser(std::unique_ptr<DirectoryTraverser> underlying_traverser,
-                                        const AES_SIV& name_encryptor,
-                                        unsigned block_size,
-                                        unsigned iv_size)
-            : m_underlying_traverser(std::move(underlying_traverser))
+        explicit LiteDirectory(std::string path,
+                               std::unique_ptr<DirectoryTraverser> underlying_traverser,
+                               const AES_SIV& name_encryptor,
+                               unsigned block_size,
+                               unsigned iv_size)
+            : m_path(std::move(path))
+            , m_underlying_traverser(std::move(underlying_traverser))
             , m_name_encryptor(name_encryptor)
             , m_block_size(block_size)
             , m_iv_size(iv_size)
         {
         }
-        ~LiteDirectoryTraverser() {}
+
+        StringRef path() const override { return m_path; }
 
         void rewind() override { m_underlying_traverser->rewind(); }
 
@@ -410,16 +414,19 @@ namespace lite
         }
     };
 
-    std::unique_ptr<DirectoryTraverser> FileSystem::create_traverser(StringRef path)
+    std::unique_ptr<Directory> FileSystem::opendir(StringRef path)
     {
         if (path.empty())
             throwVFSException(EINVAL);
-        return securefs::make_unique<LiteDirectoryTraverser>(
+        return securefs::make_unique<LiteDirectory>(
+            path.to_string(),
             m_root->create_traverser(translate_path(path, false)),
             this->m_name_encryptor,
             m_block_size,
             m_iv_size);
     }
+
+    Base::~Base() {}
 
 #ifdef __APPLE__
     ssize_t
@@ -515,6 +522,7 @@ namespace lite
             return -EIO;
         }
     }
+
 #endif
 }    // namespace lite
 }    // namespace securefs

@@ -13,63 +13,100 @@ namespace securefs
 {
 namespace lite
 {
-    struct BundledContext
+    namespace
     {
-        ::securefs::operations::MountOptions* opt;
-    };
+        struct BundledContext
+        {
+            ::securefs::operations::MountOptions* opt;
+        };
 
-    FileSystem* get_local_filesystem()
-    {
-        static thread_local optional<FileSystem> opt_fs;
+        FileSystem* get_local_filesystem()
+        {
+            static thread_local optional<FileSystem> opt_fs;
 
-        auto& local_opt_fs = opt_fs;
-        if (local_opt_fs)
+            auto& local_opt_fs = opt_fs;
+            if (local_opt_fs)
+                return &(*local_opt_fs);
+            auto ctx = static_cast<BundledContext*>(fuse_get_context()->private_data);
+
+            if (ctx->opt->version.value() != 4)
+                throwInvalidArgumentException("This function only supports filesystem format 4");
+
+            const auto& master_key = ctx->opt->master_key;
+
+            key_type name_key, content_key, xattr_key, padding_key;
+            if (master_key.size() != 3 * KEY_LENGTH && master_key.size() != 4 * KEY_LENGTH)
+                throwInvalidArgumentException("Master key has wrong length");
+
+            memcpy(name_key.data(), master_key.data(), KEY_LENGTH);
+            memcpy(content_key.data(), master_key.data() + KEY_LENGTH, KEY_LENGTH);
+            memcpy(xattr_key.data(), master_key.data() + 2 * KEY_LENGTH, KEY_LENGTH);
+
+            warn_if_key_not_random(name_key, __FILE__, __LINE__);
+            warn_if_key_not_random(content_key, __FILE__, __LINE__);
+            warn_if_key_not_random(xattr_key, __FILE__, __LINE__);
+            if (master_key.size() >= 4 * KEY_LENGTH)
+            {
+                memcpy(padding_key.data(), master_key.data() + 3 * KEY_LENGTH, KEY_LENGTH);
+            }
+            if (ctx->opt->max_padding_size > 0)
+            {
+                warn_if_key_not_random(padding_key, __FILE__, __LINE__);
+            }
+
+            TRACE_LOG("\nname_key: %s\ncontent_key: %s\nxattr_key: %s\npadding_key: %s",
+                      hexify(name_key).c_str(),
+                      hexify(content_key).c_str(),
+                      hexify(xattr_key).c_str(),
+                      hexify(padding_key).c_str());
+
+            local_opt_fs.emplace(ctx->opt->root,
+                                 name_key,
+                                 content_key,
+                                 xattr_key,
+                                 padding_key,
+                                 ctx->opt->block_size.value(),
+                                 ctx->opt->iv_size.value(),
+                                 ctx->opt->max_padding_size,
+                                 ctx->opt->flags.value());
             return &(*local_opt_fs);
-        auto ctx = static_cast<BundledContext*>(fuse_get_context()->private_data);
-
-        if (ctx->opt->version.value() != 4)
-            throwInvalidArgumentException("This function only supports filesystem format 4");
-
-        const auto& master_key = ctx->opt->master_key;
-
-        key_type name_key, content_key, xattr_key, padding_key;
-        if (master_key.size() != 3 * KEY_LENGTH && master_key.size() != 4 * KEY_LENGTH)
-            throwInvalidArgumentException("Master key has wrong length");
-
-        memcpy(name_key.data(), master_key.data(), KEY_LENGTH);
-        memcpy(content_key.data(), master_key.data() + KEY_LENGTH, KEY_LENGTH);
-        memcpy(xattr_key.data(), master_key.data() + 2 * KEY_LENGTH, KEY_LENGTH);
-
-        warn_if_key_not_random(name_key, __FILE__, __LINE__);
-        warn_if_key_not_random(content_key, __FILE__, __LINE__);
-        warn_if_key_not_random(xattr_key, __FILE__, __LINE__);
-        if (master_key.size() >= 4 * KEY_LENGTH)
-        {
-            memcpy(padding_key.data(), master_key.data() + 3 * KEY_LENGTH, KEY_LENGTH);
-        }
-        if (ctx->opt->max_padding_size > 0)
-        {
-            warn_if_key_not_random(padding_key, __FILE__, __LINE__);
         }
 
-        TRACE_LOG("\nname_key: %s\ncontent_key: %s\nxattr_key: %s\npadding_key: %s",
-                  hexify(name_key).c_str(),
-                  hexify(content_key).c_str(),
-                  hexify(xattr_key).c_str(),
-                  hexify(padding_key).c_str());
+        void set_file_handle(struct fuse_file_info* info, securefs::lite::Base* base)
+        {
+            info->fh = reinterpret_cast<uintptr_t>(base);
+        }
 
-        local_opt_fs.emplace(ctx->opt->root,
-                             name_key,
-                             content_key,
-                             xattr_key,
-                             padding_key,
-                             ctx->opt->block_size.value(),
-                             ctx->opt->iv_size.value(),
-                             ctx->opt->max_padding_size,
-                             ctx->opt->flags.value());
-        return &(*local_opt_fs);
-    }
+        Base* get_base_handle(const struct fuse_file_info* info)
+        {
+            if (!info->fh)
+            {
+                throwVFSException(EFAULT);
+            }
+            return reinterpret_cast<Base*>(static_cast<uintptr_t>(info->fh));
+        }
 
+        File* get_handle_as_file_checked(const struct fuse_file_info* info)
+        {
+            auto fp = get_base_handle(info)->as_file();
+            if (!fp)
+            {
+                throwVFSException(EISDIR);
+            }
+            return fp;
+        }
+
+        Directory* get_handle_as_dir_checked(const struct fuse_file_info* info)
+        {
+            auto fp = get_base_handle(info)->as_dir();
+            if (!fp)
+            {
+                throwVFSException(ENOTDIR);
+            }
+            return fp;
+        }
+
+    }    // namespace
     void* init(struct fuse_conn_info* fsinfo)
     {
         (void)fsinfo;
@@ -121,13 +158,23 @@ namespace lite
     {
         auto func = [=]()
         {
-            auto fp = reinterpret_cast<File*>(info->fh);
-            if (!fp)
-                return -EFAULT;
-
-            LockGuard<File> lock_guard(*fp, false);
-            fp->fstat(st);
-            return 0;
+            auto base = get_base_handle(info);
+            auto file = base->as_file();
+            if (file)
+            {
+                LockGuard<File> lock_guard(*file, false);
+                file->fstat(st);
+                return 0;
+            }
+            auto dir = base->as_dir();
+            if (dir)
+            {
+                auto filesystem = get_local_filesystem();
+                if (!filesystem->stat(dir->path(), st))
+                    return -ENOENT;
+                return 0;
+            }
+            throwInvalidArgumentException("Neither file nor dir");
         };
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {st}, {info}});
     }
@@ -137,8 +184,8 @@ namespace lite
         auto func = [=]()
         {
             auto filesystem = get_local_filesystem();
-            auto traverser = filesystem->create_traverser(path);
-            info->fh = reinterpret_cast<uintptr_t>(traverser.release());
+            auto traverser = filesystem->opendir(path);
+            set_file_handle(info, traverser.release());
             return 0;
         };
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {info}});
@@ -148,7 +195,7 @@ namespace lite
     {
         auto func = [=]()
         {
-            delete reinterpret_cast<DirectoryTraverser*>(info->fh);
+            delete get_base_handle(info);
             return 0;
         };
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {info}});
@@ -163,7 +210,7 @@ namespace lite
         auto func = [=]()
         {
             auto fs = get_local_filesystem();
-            auto traverser = reinterpret_cast<DirectoryTraverser*>(info->fh);
+            auto traverser = get_handle_as_dir_checked(info);
             if (!traverser)
                 return -EFAULT;
             traverser->rewind();
@@ -201,7 +248,7 @@ namespace lite
         {
             auto filesystem = get_local_filesystem();
             AutoClosedFile file = filesystem->open(path, O_RDWR | O_CREAT | O_EXCL, mode);
-            info->fh = reinterpret_cast<uintptr_t>(file.release());
+            set_file_handle(info, file.release());
             return 0;
         };
         return FuseTracer::traced_call(
@@ -214,7 +261,7 @@ namespace lite
         {
             auto filesystem = get_local_filesystem();
             AutoClosedFile file = filesystem->open(path, info->flags, 0644);
-            info->fh = reinterpret_cast<uintptr_t>(file.release());
+            set_file_handle(info, file.release());
             return 0;
         };
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {info}});
@@ -224,7 +271,7 @@ namespace lite
     {
         auto func = [=]()
         {
-            delete reinterpret_cast<File*>(info->fh);
+            delete get_base_handle(info);
             return 0;
         };
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {info}});
@@ -235,10 +282,7 @@ namespace lite
     {
         auto func = [=]()
         {
-            auto fp = reinterpret_cast<File*>(info->fh);
-            if (!fp)
-                return -EFAULT;
-
+            auto fp = get_handle_as_file_checked(info);
             LockGuard<File> lock_guard(*fp, false);
             return static_cast<int>(fp->read(buf, offset, size));
         };
@@ -256,10 +300,7 @@ namespace lite
     {
         auto func = [=]()
         {
-            auto fp = reinterpret_cast<File*>(info->fh);
-            if (!fp)
-                return -EFAULT;
-
+            auto fp = get_handle_as_file_checked(info);
             LockGuard<File> lock_guard(*fp, true);
             fp->write(buf, offset, size);
             return static_cast<int>(size);
@@ -274,10 +315,7 @@ namespace lite
     {
         auto func = [=]()
         {
-            auto fp = reinterpret_cast<File*>(info->fh);
-            if (!fp)
-                return -EFAULT;
-
+            auto fp = get_handle_as_file_checked(info);
             LockGuard<File> lock_guard(*fp, true);
             fp->flush();
             return 0;
@@ -289,10 +327,7 @@ namespace lite
     {
         auto func = [=]()
         {
-            auto fp = reinterpret_cast<File*>(info->fh);
-            if (!fp)
-                return -EFAULT;
-
+            auto fp = get_handle_as_file_checked(info);
             LockGuard<File> lock_guard(*fp, true);
             fp->resize(len);
             return 0;
@@ -406,10 +441,7 @@ namespace lite
     {
         auto func = [=]()
         {
-            auto fp = reinterpret_cast<File*>(info->fh);
-            if (!fp)
-                return -EFAULT;
-
+            auto fp = get_handle_as_file_checked(info);
             LockGuard<File> lock_guard(*fp, true);
             fp->fsync();
             return 0;

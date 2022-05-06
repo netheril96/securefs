@@ -21,7 +21,33 @@ namespace securefs
 {
 namespace lite
 {
-    class THREAD_ANNOTATION_CAPABILITY("mutex") File
+    class File;
+    class Directory;
+
+    class Base
+    {
+    public:
+        Base() {}
+        virtual ~Base() = 0;
+        virtual File* as_file() noexcept { return nullptr; }
+        virtual Directory* as_dir() noexcept { return nullptr; }
+    };
+
+    class THREAD_ANNOTATION_CAPABILITY("mutex") Directory : public Base, public DirectoryTraverser
+    {
+    private:
+        securefs::Mutex m_lock;
+
+    public:
+        void lock() THREAD_ANNOTATION_ACQUIRE() { m_lock.lock(); }
+        void unlock() noexcept THREAD_ANNOTATION_RELEASE() { m_lock.unlock(); }
+        Directory* as_dir() noexcept { return this; }
+
+        // Obtains the (virtual) path of the directory.
+        virtual StringRef path() const = 0;
+    };
+
+    class THREAD_ANNOTATION_CAPABILITY("mutex") File : public Base
     {
         DISABLE_COPY_MOVE(File)
 
@@ -89,6 +115,7 @@ namespace lite
             m_file_stream->unlock();
             m_lock.unlock();
         }
+        File* as_file() noexcept override { return this; }
     };
 
     class FileSystem;
@@ -154,7 +181,7 @@ namespace lite
         size_t readlink(StringRef path, char* buf, size_t size);
         void utimens(StringRef path, const fuse_timespec tm[2]);
         void statvfs(struct fuse_statvfs* buf);
-        std::unique_ptr<DirectoryTraverser> create_traverser(StringRef path);
+        std::unique_ptr<Directory> opendir(StringRef path);
 
         bool has_padding() const noexcept { return m_max_padding_size > 0; }
 
