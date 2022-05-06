@@ -327,12 +327,13 @@ namespace lite
 
     void FileSystem::statvfs(struct fuse_statvfs* buf) { m_root->statfs(buf); }
 
-    class LiteDirectory : public Directory
+    class THREAD_ANNOTATION_CAPABILITY("mutex") LiteDirectory final : public Directory
     {
     private:
         std::string m_path;
-        std::unique_ptr<DirectoryTraverser> m_underlying_traverser;
-        AES_SIV m_name_encryptor;
+        std::unique_ptr<DirectoryTraverser>
+            m_underlying_traverser THREAD_ANNOTATION_GUARDED_BY(*this);
+        AES_SIV m_name_encryptor THREAD_ANNOTATION_GUARDED_BY(*this);
         unsigned m_block_size, m_iv_size;
 
     public:
@@ -351,9 +352,13 @@ namespace lite
 
         StringRef path() const override { return m_path; }
 
-        void rewind() override { m_underlying_traverser->rewind(); }
+        void rewind() override THREAD_ANNOTATION_REQUIRES(*this)
+        {
+            m_underlying_traverser->rewind();
+        }
 
         bool next(std::string* name, struct fuse_stat* stbuf) override
+            THREAD_ANNOTATION_REQUIRES(*this)
         {
             std::string under_name, decoded_bytes;
 

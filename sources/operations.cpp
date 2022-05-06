@@ -297,9 +297,7 @@ namespace operations
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {st}});
     }
 
-    int securefs::operations::fgeattr(const char* path,
-                                      struct fuse_stat* st,
-                                      struct fuse_file_info* info)
+    int fgeattr(const char* path, struct fuse_stat* st, struct fuse_file_info* info)
     {
         auto func = [=]()
         {

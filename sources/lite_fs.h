@@ -45,9 +45,14 @@ namespace lite
 
         // Obtains the (virtual) path of the directory.
         virtual StringRef path() const = 0;
+
+        // Redeclare the methods in `DirectoryTraverser` to add thread safe annotations.
+        virtual bool next(std::string* name, struct fuse_stat* st) THREAD_ANNOTATION_REQUIRES(*this)
+            = 0;
+        virtual void rewind() THREAD_ANNOTATION_REQUIRES(*this) = 0;
     };
 
-    class THREAD_ANNOTATION_CAPABILITY("mutex") File : public Base
+    class THREAD_ANNOTATION_CAPABILITY("mutex") File final: public Base
     {
         DISABLE_COPY_MOVE(File)
 

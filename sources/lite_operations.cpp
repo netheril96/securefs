@@ -213,6 +213,7 @@ namespace lite
             auto traverser = get_handle_as_dir_checked(info);
             if (!traverser)
                 return -EFAULT;
+            LockGuard<Directory> lock_guard(*traverser);
             traverser->rewind();
             std::string name;
             struct fuse_stat stbuf;
