@@ -71,6 +71,9 @@ endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(-Wthread-safety)
+    if(MINGW)
+        add_compile_options(-fansi-escape-codes -fcolor-diagnostics)
+    endif()
 endif()
 
 add_definitions(-D_REENTRANT -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=28
