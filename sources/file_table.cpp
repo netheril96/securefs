@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <queue>
 #include <string.h>
@@ -320,15 +321,11 @@ ShardedFileTableImpl::ShardedFileTableImpl(int version,
                                            unsigned iv_size,
                                            unsigned max_padding_size)
 {
-    unsigned num_shards = 8;
-    auto cpu_count = std::thread::hardware_concurrency();
-    if (cpu_count <= 2)
+    unsigned num_shards = 4;
+    const char* env_shards = std::getenv("SECUREFS_NUM_FILE_TABLE_SHARDS");
+    if (env_shards)
     {
-        num_shards = 2;
-    }
-    else
-    {
-        num_shards = std::min(64u, 1u << static_cast<unsigned>(std::ceil(std::log2(cpu_count))));
+        num_shards = std::max(2ul, std::strtoul(env_shards, nullptr, 0));
     }
     TRACE_LOG("Use %u shards of FileTableImpls.", num_shards);
 
