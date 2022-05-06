@@ -5,6 +5,7 @@
 #include "logger.h"
 #include "platform.h"
 #include "streams.h"
+#include "test_common.h"
 
 #include <algorithm>
 #include <array>
@@ -14,25 +15,6 @@
 #include <vector>
 
 using securefs::OSService;
-
-static std::mt19937& get_random_number_engine()
-{
-    struct Initializer
-    {
-        std::mt19937 mt;
-
-        Initializer()
-        {
-            uint32_t data[64];
-            ::securefs::generate_random(data, sizeof(data));
-            std::seed_seq seq(std::begin(data), std::end(data));
-            mt.seed(seq);
-        }
-    };
-
-    static Initializer initializer;
-    return initializer.mt;
-}
 
 static void test(securefs::StreamBase& stream, unsigned times)
 {

@@ -1,6 +1,7 @@
 #include "btree_dir.h"
 #include "crypto.h"
 #include "myutils.h"
+#include "test_common.h"
 
 #include <catch.hpp>
 
@@ -27,7 +28,6 @@ static void test(securefs::BtreeDirectory& dir,
                           && prob_get + prob_add + prob_del <= 1.0);
     REQUIRE(is_prob_valid);
 
-    std::mt19937 engine{std::random_device{}()};
     std::uniform_real_distribution<> prob_dist(0, 1);
     std::uniform_int_distribution<int> name_dist(0, 65535);
     std::vector<std::string> filenames, filenames_prime;
@@ -58,7 +58,7 @@ static void test(securefs::BtreeDirectory& dir,
     int type, type_prime;
     for (unsigned i = 0; i < rounds; ++i)
     {
-        auto p = prob_dist(engine);
+        auto p = prob_dist(get_random_number_engine());
         if (p < prob_get)
         {
             filenames.clear();
@@ -75,7 +75,7 @@ static void test(securefs::BtreeDirectory& dir,
         }
         else if (p < prob_get + prob_add)
         {
-            auto name = securefs::strprintf("%12d", name_dist(engine));
+            auto name = securefs::strprintf("%12d", name_dist(get_random_number_engine()));
             securefs::generate_random(id.data(), id.size());
             type = S_IFREG;
             bool added = dir.add_entry(name, id, type);
@@ -88,7 +88,7 @@ static void test(securefs::BtreeDirectory& dir,
             if (filenames.empty())
                 continue;
             std::uniform_int_distribution<size_t> index_dist(0, filenames.size() - 1);
-            size_t idx = index_dist(engine);
+            size_t idx = index_dist(get_random_number_engine());
             bool removed = dir.remove_entry(filenames[idx], id, type);
             bool removed_prime = reference.remove_entry(filenames[idx], id_prime, type_prime);
             REQUIRE(removed == removed_prime);
@@ -105,8 +105,6 @@ static void test(securefs::BtreeDirectory& dir,
 static void test_btree_dir(unsigned max_padding_size)
 {
     const size_t NUM_ENTRIES = 1000;
-
-    std::mt19937 engine{std::random_device{}()};
 
     securefs::key_type key(0x3e);
     securefs::id_type null_id{};

@@ -106,7 +106,7 @@ file(
     ${CMAKE_BINARY_DIR}/git-version.cpp
     ${EXTERNAL_DIR}/utf8proc/utf8proc.h
     ${EXTERNAL_DIR}/utf8proc/utf8proc.c)
-file(GLOB TEST_SOURCES test/*.cpp)
+file(GLOB TEST_SOURCES test/*.h test/*.cpp)
 add_library(securefs-static STATIC ${SOURCES})
 link_libraries(securefs-static)
 
