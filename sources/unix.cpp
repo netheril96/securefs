@@ -425,6 +425,11 @@ int64_t OSService::raise_fd_limit() noexcept
         return 1024;
     }
 
+    if (rl.rlim_cur >= rl.rlim_max)
+    {
+        return rl.rlim_cur;
+    }
+
     auto current_limit = rl.rlim_cur;
     rl.rlim_cur = rl.rlim_max;
     rc = ::setrlimit(RLIMIT_NOFILE, &rl);
