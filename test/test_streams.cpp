@@ -16,17 +16,60 @@
 
 using securefs::OSService;
 
+namespace securefs
+{
+namespace
+{
+    class MemoryStream : public StreamBase
+    {
+    private:
+        std::vector<unsigned char> m_buffer;
+
+    public:
+        explicit MemoryStream() { m_buffer.reserve(1u << 20); }
+
+        length_type read(void* output, offset_type offset, length_type length) override
+        {
+            if (offset >= m_buffer.size() || length <= 0)
+            {
+                return 0;
+            }
+            auto read_sz = std::min<length_type>(length, m_buffer.size() - offset);
+            memcpy(output, m_buffer.data() + offset, read_sz);
+            return read_sz;
+        }
+
+        void write(const void* input, offset_type offset, length_type length) override
+        {
+            if (length <= 0)
+            {
+                return;
+            }
+            if (offset + length > m_buffer.size())
+            {
+                m_buffer.resize(offset + length);
+            }
+            memcpy(m_buffer.data() + offset, input, length);
+        }
+
+        length_type size() const override { return m_buffer.size(); }
+
+        void flush() override {}
+
+        void resize(length_type size) override { m_buffer.resize(size); }
+        bool is_sparse() const noexcept { return true; }
+    };
+}    // namespace
+}    // namespace securefs
+
 static void test(securefs::StreamBase& stream, unsigned times)
 {
-    auto posix_stream_impl = OSService::get_default().open_file_stream(
-        OSService::temp_name("tmp/", "stream"), O_RDWR | O_CREAT | O_EXCL, 0644);
-    auto&& posix_stream = *posix_stream_impl;
-
-    posix_stream.resize(0);
+    CAPTURE(typeid(stream).name());
+    securefs::MemoryStream memory_stream;
     stream.resize(0);
 
     std::vector<byte> data(4096 * 5);
-    std::vector<byte> buffer(data), posix_buffer(data);
+    std::vector<byte> buffer(data), memory_buffer(data);
     auto& mt = get_random_number_engine();
 
     {
@@ -46,34 +89,35 @@ static void test(securefs::StreamBase& stream, unsigned times)
         {
         case 0:
             stream.write(data.data(), a, std::min<size_t>(b, data.size()));
-            posix_stream.write(data.data(), a, std::min<size_t>(b, data.size()));
+            memory_stream.write(data.data(), a, std::min<size_t>(b, data.size()));
             break;
 
         case 1:
         {
-            posix_buffer = buffer;
+            memory_buffer = buffer;
             auto read_sz = stream.read(buffer.data(), a, std::min<size_t>(b, buffer.size()));
-            auto posix_read_sz = posix_stream.read(
-                posix_buffer.data(), a, std::min<size_t>(b, posix_buffer.size()));
-            REQUIRE(read_sz == posix_read_sz);
-            REQUIRE(memcmp(buffer.data(), posix_buffer.data(), read_sz) == 0);
+            auto memory_read_sz = memory_stream.read(
+                memory_buffer.data(), a, std::min<size_t>(b, memory_buffer.size()));
+            CHECK(read_sz == memory_read_sz);
+            if (read_sz == memory_read_sz)
+                CHECK(memcmp(buffer.data(), memory_buffer.data(), read_sz) == 0);
             break;
         }
 
         case 2:
-            REQUIRE(stream.size() == posix_stream.size());
+            CHECK(stream.size() == memory_stream.size());
             break;
 
         case 3:
             stream.resize(a);
-            posix_stream.resize(a);
-            REQUIRE(stream.size() == a);
-            REQUIRE(posix_stream.size() == a);
+            memory_stream.resize(a);
+            CHECK(stream.size() == a);
+            CHECK(memory_stream.size() == a);
             break;
 
         case 4:
             stream.flush();
-            posix_stream.flush();
+            memory_stream.flush();
 
         default:
             break;
@@ -195,27 +239,33 @@ void dump_contents(const std::vector<byte>& bytes, const char* filename, size_t 
 
 TEST_CASE("Test streams")
 {
-    auto filename = OSService::temp_name("tmp/", ".stream");
-
     securefs::key_type key(0xf4);
     securefs::id_type id(0xee);
-    auto posix_stream
-        = OSService::get_default().open_file_stream(filename, O_RDWR | O_CREAT | O_EXCL, 0644);
-
     {
-        auto hmac_stream = securefs::make_stream_hmac(key, id, posix_stream, true);
+        auto filename = OSService::temp_name("tmp/", ".stream");
+        auto posix_stream
+            = OSService::get_default().open_file_stream(filename, O_RDWR | O_CREAT | O_EXCL, 0644);
+        test(*posix_stream, 4000);
+    }
+    {
+        auto hmac_stream
+            = securefs::make_stream_hmac(key, id, std::make_shared<securefs::MemoryStream>(), true);
         test(*hmac_stream, 5000);
     }
     {
-        posix_stream->resize(0);
-        securefs::dummy::DummpyCryptStream ds(posix_stream, 8000);
+        securefs::dummy::DummpyCryptStream ds(std::make_shared<securefs::MemoryStream>(), 8000);
         test(ds, 5000);
     }
     {
-        auto meta_posix_stream = OSService::get_default().open_file_stream(
-            OSService::temp_name("tmp/", "metastream"), O_RDWR | O_CREAT | O_EXCL, 0644);
-        auto aes_gcm_stream = securefs::make_cryptstream_aes_gcm(
-            posix_stream, meta_posix_stream, key, key, id, true, 4096, 12);
+        auto aes_gcm_stream
+            = securefs::make_cryptstream_aes_gcm(std::make_shared<securefs::MemoryStream>(),
+                                                 std::make_shared<securefs::MemoryStream>(),
+                                                 key,
+                                                 key,
+                                                 id,
+                                                 true,
+                                                 4096,
+                                                 12);
         std::vector<byte> header(aes_gcm_stream.second->max_header_length() - 1, 5);
         aes_gcm_stream.second->write_header(header.data(), header.size());
         test(*aes_gcm_stream.first, 1000);
@@ -229,12 +279,7 @@ TEST_CASE("Test streams")
         test(dbs, 3001);
     }
     {
-        posix_stream->resize(0);
-        securefs::PaddedStream ps(posix_stream, 16);
-        test(ps, 1000);
-    }
-    {
-        securefs::PaddedStream ps(posix_stream, 16);
+        securefs::PaddedStream ps(std::make_shared<securefs::MemoryStream>(), 16);
         test(ps, 1000);
     }
     CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption padding_aes(key.data(), key.size());
@@ -244,12 +289,10 @@ TEST_CASE("Test streams")
         CAPTURE(iv_size);
         CAPTURE(padding_size);
 
-        auto filename = OSService::temp_name("tmp/", "litestream");
+        auto memory_stream = std::make_shared<securefs::MemoryStream>();
         {
-            auto underlying_stream = OSService::get_default().open_file_stream(
-                filename, O_RDWR | O_CREAT | O_EXCL, 0644);
             securefs::lite::AESGCMCryptStream lite_stream(
-                underlying_stream, key, block_size, iv_size, true, padding_size, &padding_aes);
+                memory_stream, key, block_size, iv_size, true, padding_size, &padding_aes);
             INFO_LOG("Actual padding size: %u", lite_stream.get_padding_size());
 
             const byte test_data[] = "Hello, world";
@@ -260,10 +303,8 @@ TEST_CASE("Test streams")
             test(lite_stream, 1001);
         }
         {
-            auto underlying_stream
-                = OSService::get_default().open_file_stream(filename, O_RDWR, 0644);
             securefs::lite::AESGCMCryptStream lite_stream(
-                underlying_stream, key, block_size, iv_size, true, padding_size, &padding_aes);
+                memory_stream, key, block_size, iv_size, true, padding_size, &padding_aes);
             INFO_LOG("Actual padding size: %u", lite_stream.get_padding_size());
             test(lite_stream, 1001);
         }
