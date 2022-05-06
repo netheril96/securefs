@@ -41,7 +41,7 @@ namespace operations
         }
 
     public:
-        FileTableImpl table;
+        ShardedFileTableImpl table;
         std::shared_ptr<const OSService> root;
         id_type root_id;
         unsigned block_size;

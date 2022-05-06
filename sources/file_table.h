@@ -34,7 +34,7 @@ public:
     virtual bool has_padding() const noexcept = 0;
 };
 
-class FileTableImpl : public FileTable
+class FileTableImpl final : public FileTable
 {
 private:
     typedef std::unordered_map<id_type, std::unique_ptr<FileBase>, id_hash> table_type;
@@ -77,6 +77,32 @@ public:
     bool is_time_stored() const noexcept override { return (m_flags & kOptionStoreTime) != 0; }
     void statfs(struct fuse_statvfs* fs_info) override { m_root->statfs(fs_info); }
     bool has_padding() const noexcept override { return m_max_padding_size > 0; }
+};
+
+class ShardedFileTableImpl final : public FileTable
+{
+private:
+    std::vector<std::unique_ptr<FileTableImpl>> m_shards;
+
+    FileTableImpl* get_shard_by_id(const id_type& id) noexcept;
+
+public:
+    explicit ShardedFileTableImpl(int version,
+                                  std::shared_ptr<const OSService> root,
+                                  const key_type& master_key,
+                                  uint32_t flags,
+                                  unsigned block_size,
+                                  unsigned iv_size,
+                                  unsigned max_padding_size);
+    ~ShardedFileTableImpl();
+    FileBase* open_as(const id_type& id, int type) override;
+    FileBase* create_as(const id_type& id, int type) override;
+    void close(FileBase* fb) override;
+    bool is_readonly() const noexcept override { return m_shards.back()->is_readonly(); }
+    bool is_auth_enabled() const noexcept override { return m_shards.back()->is_auth_enabled(); }
+    bool is_time_stored() const noexcept override { return m_shards.back()->is_time_stored(); }
+    void statfs(struct fuse_statvfs* fs_info) { return m_shards.back()->statfs(fs_info); }
+    bool has_padding() const noexcept override { return m_shards.back()->has_padding(); }
 };
 
 class AutoClosedFileBase

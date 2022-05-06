@@ -7,10 +7,12 @@
 #include "platform.h"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <queue>
 #include <string.h>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -309,4 +311,58 @@ void FileTableImpl::gc()
 }
 
 FileTable::~FileTable() {}
+
+ShardedFileTableImpl::ShardedFileTableImpl(int version,
+                                           std::shared_ptr<const OSService> root,
+                                           const key_type& master_key,
+                                           uint32_t flags,
+                                           unsigned block_size,
+                                           unsigned iv_size,
+                                           unsigned max_padding_size)
+{
+    unsigned num_shards = 8;
+    auto cpu_count = std::thread::hardware_concurrency();
+    if (cpu_count <= 2)
+    {
+        num_shards = 2;
+    }
+    else
+    {
+        num_shards = std::min(64u, 1u << static_cast<unsigned>(std::ceil(std::log2(cpu_count))));
+    }
+    TRACE_LOG("Use %u shards of FileTable", num_shards);
+
+    m_shards.resize(num_shards);
+    for (unsigned i = 0; i < num_shards; ++i)
+    {
+        m_shards[i].reset(new FileTableImpl(
+            version, root, master_key, flags, block_size, iv_size, max_padding_size));
+    }
+}
+
+ShardedFileTableImpl::~ShardedFileTableImpl() {}
+
+FileBase* ShardedFileTableImpl::open_as(const id_type& id, int type)
+{
+    return get_shard_by_id(id)->open_as(id, type);
+}
+
+FileBase* ShardedFileTableImpl::create_as(const id_type& id, int type)
+{
+    return get_shard_by_id(id)->create_as(id, type);
+}
+
+void ShardedFileTableImpl::close(FileBase* fb)
+{
+    if (!fb)
+    {
+        return;
+    }
+    get_shard_by_id(fb->get_id())->close(fb);
+}
+
+FileTableImpl* ShardedFileTableImpl::get_shard_by_id(const id_type& id) noexcept
+{
+    return m_shards[static_cast<size_t>(id.data()[0]) % m_shards.size()].get();
+}
 }    // namespace securefs

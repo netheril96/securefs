@@ -24,7 +24,7 @@ static void test_file_table(unsigned max_padding_size)
 
     {
         auto root = std::make_shared<OSService>(base_dir);
-        FileTableImpl table(2, root, master_key, 0, 3000, 16, max_padding_size);
+        ShardedFileTableImpl table(2, root, master_key, 0, 3000, 16, max_padding_size);
         auto dir = dynamic_cast<Directory*>(table.create_as(null_id, FileBase::DIRECTORY));
         DEFER(table.close(dir));
 
