@@ -40,7 +40,7 @@ private:
     securefs::Mutex m_lock;
     ptrdiff_t m_refcount;
     std::shared_ptr<HeaderBase> m_header THREAD_ANNOTATION_GUARDED_BY(*this);
-    id_type m_id;
+    const id_type m_id;
     std::atomic<uint32_t> m_flags[NUM_FLAGS];
     fuse_timespec m_atime THREAD_ANNOTATION_GUARDED_BY(*this),
         m_mtime THREAD_ANNOTATION_GUARDED_BY(*this), m_ctime THREAD_ANNOTATION_GUARDED_BY(*this),
@@ -49,7 +49,8 @@ private:
         m_meta_stream THREAD_ANNOTATION_GUARDED_BY(*this);
     CryptoPP::GCM<CryptoPP::AES>::Encryption m_xattr_enc THREAD_ANNOTATION_GUARDED_BY(*this);
     CryptoPP::GCM<CryptoPP::AES>::Decryption m_xattr_dec THREAD_ANNOTATION_GUARDED_BY(*this);
-    bool m_dirty THREAD_ANNOTATION_GUARDED_BY(*this), m_check, m_store_time;
+    bool m_dirty THREAD_ANNOTATION_GUARDED_BY(*this);
+    const bool m_check, m_store_time;
 
 private:
     void read_header() THREAD_ANNOTATION_REQUIRES(*this);
