@@ -65,6 +65,8 @@ namespace operations
 
     int getattr(const char*, struct fuse_stat*);
 
+    int fgeattr(const char*, struct fuse_stat*, struct fuse_file_info*);
+
     int opendir(const char*, struct fuse_file_info*);
 
     int releasedir(const char*, struct fuse_file_info*);

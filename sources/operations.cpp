@@ -297,6 +297,22 @@ namespace operations
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {st}});
     }
 
+    int securefs::operations::fgeattr(const char* path,
+                                      struct fuse_stat* st,
+                                      struct fuse_file_info* info)
+    {
+        auto func = [=]()
+        {
+            auto fb = reinterpret_cast<FileBase*>(info->fh);
+            if (!fb)
+                return -EFAULT;
+            FileLockGuard file_lock_guard(*fb);
+            fb->stat(st);
+            return 0;
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {st}, {info}});
+    }
+
     int opendir(const char* path, struct fuse_file_info* info)
     {
         auto func = [=]()
@@ -860,6 +876,7 @@ namespace operations
         opt->flag_utime_omit_ok = true;
 
         opt->getattr = &securefs::operations::getattr;
+        opt->fgetattr = &securefs::operations::fgeattr;
         opt->init = &securefs::operations::init;
         opt->destroy = &securefs::operations::destroy;
         opt->opendir = &securefs::operations::opendir;

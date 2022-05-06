@@ -117,6 +117,21 @@ namespace lite
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {st}});
     }
 
+    int fgeattr(const char* path, struct fuse_stat* st, struct fuse_file_info* info)
+    {
+        auto func = [=]()
+        {
+            auto fp = reinterpret_cast<File*>(info->fh);
+            if (!fp)
+                return -EFAULT;
+
+            LockGuard<File> lock_guard(*fp, false);
+            fp->fstat(st);
+            return 0;
+        };
+        return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {st}, {info}});
+    }
+
     int opendir(const char* path, struct fuse_file_info* info)
     {
         auto func = [=]()
@@ -519,6 +534,7 @@ namespace lite
         opt->destroy = &::securefs::lite::destroy;
         opt->statfs = &::securefs::lite::statfs;
         opt->getattr = &::securefs::lite::getattr;
+        opt->fgetattr = &::securefs::lite::fgeattr;
         opt->opendir = &::securefs::lite::opendir;
         opt->releasedir = &::securefs::lite::releasedir;
         opt->readdir = &::securefs::lite::readdir;
