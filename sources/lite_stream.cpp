@@ -44,8 +44,8 @@ namespace lite
         : BlockBasedStream(block_size)
         , m_stream(std::move(stream))
         , m_iv_size(iv_size)
-        , m_check(check)
         , m_padding_size(0)
+        , m_check(check)
     {
         if (m_iv_size < 12 || m_iv_size > 32)
             throwInvalidArgumentException("IV size too small or too large");
