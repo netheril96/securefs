@@ -239,6 +239,10 @@ length_type BlockBasedStream::read(void* output, offset_type offset, length_type
 
 void BlockBasedStream::write(const void* input, offset_type offset, length_type length)
 {
+    if (length <= 0)
+    {
+        return;
+    }
     auto current_size = this->size();
     if (offset > current_size)
         unchecked_resize(current_size, offset);
