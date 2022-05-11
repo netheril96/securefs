@@ -352,9 +352,21 @@ namespace lite
     {
         auto func = [=]()
         {
-            auto filesystem = get_local_filesystem();
-            filesystem->mkdir(path, mode);
-            return 0;
+            try
+            {
+                auto filesystem = get_local_filesystem();
+                filesystem->mkdir(path, mode);
+                return 0;
+            }
+            catch (const ExceptionBase& e)
+            {
+                if (e.error_number() == EEXIST)
+                {
+                    // This occurs frequently and is not worth logging.
+                    return -EEXIST;
+                }
+                throw;
+            }
         };
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {&mode}});
     }
