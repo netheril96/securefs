@@ -1593,6 +1593,8 @@ public:
         printf("Per file key generation algorithm: %s\n",
                format_version < 4 ? "HMAC-SHA256" : "AES");
         printf("Content cipher: %s\n", format_version < 4 ? "AES-256-GCM" : "AES-128-GCM");
+        printf("Maximum padding to obfuscate file sizes: %u byte(s)\n",
+               config_json.get("max_padding", 0u).asUInt());
         return 0;
     }
 };
