@@ -758,7 +758,8 @@ private:
     TCLAP::ValueArg<unsigned> max_padding{
         "",
         "max-padding",
-        "Maximum number of padding to add to all files in order to obfuscate their sizes. Each "
+        "Maximum number of padding (the unit is byte) to add to all files in order to obfuscate "
+        "their sizes. Each "
         "file has a different padding. Enabling this has a large performance cost.",
         false,
         0,
