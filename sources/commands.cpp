@@ -1135,12 +1135,6 @@ public:
 
 #ifdef WIN32
         bool network_mount = is_network_mount(mount_point.getValue());
-        if (!network_mount && !is_drive_mount(mount_point.getValue()))
-        {
-            WARN_LOG("The mount point on Windows should be a drive path, such as Z:, or a network "
-                     "mount like \\\\securefs\\abcde. Otherwise some "
-                     "programs will get confused due to case sensitivity");
-        }
 #else
         try
         {
