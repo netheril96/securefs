@@ -20,6 +20,7 @@ There are already many encrypting filesystem in widespread use. Some notable one
 - [Probabilistic encryption](https://en.wikipedia.org/wiki/Probabilistic_encryption) (hence provides semantical security)
 - Supported on all major platforms (Mac, Linux, BSDs and Windows)
 - Efficient cloud synchronization (not a single preallocated file as container)
+- (Optional) File size obfuscation by random padding.
 
 ## Install
 
