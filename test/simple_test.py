@@ -22,6 +22,7 @@ from typing import Set
 import enum
 import multiprocessing
 import random
+import secrets
 import io
 from collections import namedtuple
 
@@ -748,7 +749,7 @@ def randomly_act_on_file(filename: str, barrier) -> None:
         if action == 0:
             f.read(rng.randrange(5000))
         elif action == 1:
-            f.write(random.randbytes(rng.randrange(1, 5000)))
+            f.write(secrets.token_bytes(rng.randrange(1, 5000)))
         elif action == 2:
             f.seek(rng.randrange(0, 1 << 20))
         elif action == 3:
