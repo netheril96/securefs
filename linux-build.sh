@@ -1,5 +1,6 @@
 #!/bin/bash
 set -x;
+set -e;
 SOURCE_DIR=$(dirname $(realpath "$0"));
 cd "${SOURCE_DIR}" && git submodule update --init;
 export TMPDIR=/dev/shm;

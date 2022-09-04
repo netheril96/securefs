@@ -1028,6 +1028,11 @@ private:
                                       false,
                                       30,
                                       "int"};
+    TCLAP::SwitchArg skip_dot_dot{"",
+                                  "skip-dot-dot",
+                                  "When enabled, securefs will not return . and .. in `readdir` "
+                                  "calls. You should normally not need this.",
+                                  false};
 
 private:
     std::vector<const char*> to_c_style_args(const std::vector<std::string>& args)
@@ -1088,6 +1093,7 @@ public:
         cmdline.add(&fssubtype);
         cmdline.add(&noflock);
         cmdline.add(&attr_timeout);
+        cmdline.add(&skip_dot_dot);
         cmdline.parse(argc, argv);
 
         get_password(false);
@@ -1321,6 +1327,10 @@ public:
         {
             INFO_LOG("Mounting as a Unicode normalized filesystem");
             fsopt.flags.value() |= kOptionNFCFileName;
+        }
+        if (skip_dot_dot.getValue())
+        {
+            fsopt.flags.value() |= kOptionSkipDotDot;
         }
 
         if (config.version < 4)

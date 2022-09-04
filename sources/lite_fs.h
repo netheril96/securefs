@@ -1,5 +1,6 @@
 #pragma once
 
+#include "constants.h"
 #include "crypto.h"
 #include "lite_stream.h"
 #include "lock_guard.h"
@@ -52,7 +53,7 @@ namespace lite
         virtual void rewind() THREAD_ANNOTATION_REQUIRES(*this) = 0;
     };
 
-    class THREAD_ANNOTATION_CAPABILITY("mutex") File final: public Base
+    class THREAD_ANNOTATION_CAPABILITY("mutex") File final : public Base
     {
         DISABLE_COPY_MOVE(File)
 
@@ -189,6 +190,7 @@ namespace lite
         std::unique_ptr<Directory> opendir(StringRef path);
 
         bool has_padding() const noexcept { return m_max_padding_size > 0; }
+        bool skip_dot_dot() const noexcept { return m_flags & kOptionSkipDotDot; }
 
 #ifdef __APPLE__
         // These APIs, unlike all others, report errors through negative error numbers as defined in

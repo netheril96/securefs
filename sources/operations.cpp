@@ -353,12 +353,21 @@ namespace operations
             memset(&st, 0, sizeof(st));
 
             FileLockGuard file_lock_guard(*fb);
+            if (!(fs->flags & kOptionSkipDotDot))
+            {
 #ifdef _WIN32
-            // We have to fill in "." and ".." entries ourselves due to WinFsp limitations.
-            fb->stat(&st);
-            filler(buffer, ".", &st, 0);
-            filler(buffer, "..", nullptr, 0);
+                // Only Windows, `st` contains the full information, so we need to call `stat` here.
+                fb->stat(&st);
+                filler(buffer, ".", &st, 0);
+                filler(buffer, "..", nullptr, 0);
+#else
+                // On Unix, only information stored in `st` is the file mode. So we do not need to
+                // stat "." and "..".
+                st.st_mode = S_IFDIR;
+                filler(buffer, ".", &st, 0);
+                filler(buffer, "..", &st, 0);
 #endif
+            }
             auto actions = [&st, filler, buffer, has_padding](
                                const std::string& name, const id_type&, int type) -> bool
             {
