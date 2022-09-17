@@ -450,7 +450,7 @@ protected:
     virtual void iterate_over_entries_impl(const callback& cb) = 0;
 };
 
-class SimpleDirectory : public Directory
+class SimpleDirectory final : public Directory
 {
 private:
     std::unordered_map<std::string, std::pair<id_type, int>> m_table;

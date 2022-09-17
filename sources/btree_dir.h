@@ -113,7 +113,7 @@ public:
     void to_buffer(byte* buffer, size_t size) const;
 };
 
-class BtreeDirectory : public Directory
+class BtreeDirectory final : public Directory
 {
 private:
     typedef BtreeNode Node;
