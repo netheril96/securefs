@@ -31,7 +31,7 @@ namespace lite
                            unsigned iv_size,
                            unsigned max_padding_size,
                            unsigned flags)
-        : m_name_encryptor(name_key.data(), name_key.size())
+        : m_name_encryptor(std::make_shared<AES_SIV>(name_key.data(), name_key.size()))
         , m_content_key(content_key)
         , m_padding_aes(padding_key.data(), padding_key.size())
         , m_root(std::move(root))
@@ -144,7 +144,7 @@ namespace lite
         else
         {
             std::string str = lite::encrypt_path(
-                m_name_encryptor,
+                *m_name_encryptor,
                 transform(path, m_flags & kOptionCaseFoldFileName, m_flags & kOptionNFCFileName)
                     .get());
             if (!preserve_leading_slash && !str.empty() && str[0] == '/')
@@ -215,7 +215,7 @@ namespace lite
             // Resize to actual size
             buffer.resize(static_cast<size_t>(link_size));
 
-            auto resolved = decrypt_path(m_name_encryptor, buffer);
+            auto resolved = decrypt_path(*m_name_encryptor, buffer);
             buf->st_size = resolved.size();
             break;
         }
@@ -300,7 +300,7 @@ namespace lite
         auto underbuf = securefs::make_unique_array<char>(max_size);
         memset(underbuf.get(), 0, max_size);
         m_root->readlink(translate_path(path, false), underbuf.get(), max_size - 1);
-        std::string resolved = decrypt_path(m_name_encryptor, underbuf.get());
+        std::string resolved = decrypt_path(*m_name_encryptor, underbuf.get());
         size_t copy_size = std::min(resolved.size(), size - 1);
         memcpy(buf, resolved.data(), copy_size);
         buf[copy_size] = '\0';
@@ -333,18 +333,18 @@ namespace lite
         std::string m_path;
         std::unique_ptr<DirectoryTraverser>
             m_underlying_traverser THREAD_ANNOTATION_GUARDED_BY(*this);
-        AES_SIV m_name_encryptor THREAD_ANNOTATION_GUARDED_BY(*this);
+        std::shared_ptr<AES_SIV> m_name_encryptor;
         unsigned m_block_size, m_iv_size;
 
     public:
         explicit LiteDirectory(std::string path,
                                std::unique_ptr<DirectoryTraverser> underlying_traverser,
-                               const AES_SIV& name_encryptor,
+                               std::shared_ptr<AES_SIV> name_encryptor,
                                unsigned block_size,
                                unsigned iv_size)
             : m_path(std::move(path))
             , m_underlying_traverser(std::move(underlying_traverser))
-            , m_name_encryptor(name_encryptor)
+            , m_name_encryptor(std::move(name_encryptor))
             , m_block_size(block_size)
             , m_iv_size(iv_size)
         {
@@ -389,12 +389,12 @@ namespace lite
                     }
                     name->assign(decoded_bytes.size() - AES_SIV::IV_SIZE, '\0');
                     bool success
-                        = m_name_encryptor.decrypt_and_verify(&decoded_bytes[AES_SIV::IV_SIZE],
-                                                              name->size(),
-                                                              nullptr,
-                                                              0,
-                                                              &(*name)[0],
-                                                              &decoded_bytes[0]);
+                        = m_name_encryptor->decrypt_and_verify(&decoded_bytes[AES_SIV::IV_SIZE],
+                                                               name->size(),
+                                                               nullptr,
+                                                               0,
+                                                               &(*name)[0],
+                                                               &decoded_bytes[0]);
                     if (!success)
                     {
                         WARN_LOG("Skipping filename %s (decrypted to %s) since it fails "

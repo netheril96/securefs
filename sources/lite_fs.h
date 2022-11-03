@@ -149,7 +149,7 @@ namespace lite
         DISABLE_COPY_MOVE(FileSystem)
 
     private:
-        AES_SIV m_name_encryptor;
+        std::shared_ptr<AES_SIV> m_name_encryptor;
         key_type m_content_key;
         CryptoPP::GCM<CryptoPP::AES>::Encryption m_xattr_enc;
         CryptoPP::GCM<CryptoPP::AES>::Decryption m_xattr_dec;

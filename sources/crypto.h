@@ -1,5 +1,7 @@
 #pragma once
 
+#include "platform.h"
+
 #include <cryptopp/aes.h>
 #include <cryptopp/cmac.h>
 #include <cryptopp/modes.h>
@@ -13,8 +15,16 @@ namespace securefs
 class AES_SIV
 {
 private:
-    CryptoPP::CMAC<CryptoPP::AES> m_cmac;
-    CryptoPP::CTR_Mode<CryptoPP::AES>::Encryption m_ctr;
+    Mutex m_mutex;
+    CryptoPP::CMAC<CryptoPP::AES> m_cmac THREAD_ANNOTATION_GUARDED_BY(m_mutex);
+    CryptoPP::CTR_Mode<CryptoPP::AES>::Encryption m_ctr THREAD_ANNOTATION_GUARDED_BY(m_mutex);
+
+private:
+    void s2v(const void* plaintext,
+             size_t text_len,
+             const void* additional_data,
+             size_t additional_len,
+             void* iv);
 
 public:
     static constexpr size_t IV_SIZE = 16;
@@ -23,11 +33,7 @@ public:
     explicit AES_SIV(const void* key, size_t size);
     ~AES_SIV();
 
-    void s2v(const void* plaintext,
-             size_t text_len,
-             const void* additional_data,
-             size_t additional_len,
-             void* iv);
+    DISABLE_COPY_MOVE(AES_SIV);
 
     void encrypt_and_authenticate(const void* plaintext,
                                   size_t text_len,
