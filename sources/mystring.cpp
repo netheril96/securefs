@@ -3,7 +3,7 @@
 #include "logger.h"
 #include "myutils.h"
 
-#include <utf8proc/utf8proc.h>
+#include <utf8proc.h>
 
 #include <ctype.h>
 #include <errno.h>

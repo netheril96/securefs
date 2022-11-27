@@ -17,7 +17,7 @@
 #include <fuse.h>
 #include <json/json.h>
 #include <tclap/CmdLine.h>
-#include <utf8proc/utf8proc.h>
+#include <utf8proc.h>
 
 #include <algorithm>
 #include <iostream>

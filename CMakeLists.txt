@@ -26,9 +26,6 @@ git_describe(GIT_VERSION --tags)
 configure_file(${CMAKE_SOURCE_DIR}/sources/git-version.cpp.in
                ${CMAKE_BINARY_DIR}/git-version.cpp)
 
-file(COPY ${CMAKE_SOURCE_DIR}/external/cmake-cryptopp/CMakeLists.txt
-     DESTINATION ${CMAKE_SOURCE_DIR}/external/cryptopp)
-
 if(UNIX)
     find_path(FUSE_INCLUDE_DIR fuse.h PATHS /usr/local/include)
     find_library(FUSE_LIBRARIES fuse PATHS /usr/local/lib)
@@ -87,14 +84,6 @@ include_directories(sources)
 set(EXTERNAL_DIR external)
 include_directories(${EXTERNAL_DIR})
 
-set(CRYPTOPP_DIR ${EXTERNAL_DIR}/cryptopp)
-add_subdirectory(${CRYPTOPP_DIR})
-link_libraries(cryptopp-static)
-
-add_subdirectory(${EXTERNAL_DIR}/argon2)
-include_directories(${EXTERNAL_DIR}/argon2/include)
-link_libraries(argon2_static)
-
 file(
     GLOB
     SOURCES
@@ -103,9 +92,7 @@ file(
     ${EXTERNAL_DIR}/*.h
     ${EXTERNAL_DIR}/*.hpp
     ${EXTERNAL_DIR}/*.cpp
-    ${CMAKE_BINARY_DIR}/git-version.cpp
-    ${EXTERNAL_DIR}/utf8proc/utf8proc.h
-    ${EXTERNAL_DIR}/utf8proc/utf8proc.c)
+    ${CMAKE_BINARY_DIR}/git-version.cpp)
 file(GLOB TEST_SOURCES test/*.h test/*.cpp)
 add_library(securefs-static STATIC ${SOURCES})
 link_libraries(securefs-static)
@@ -116,7 +103,22 @@ else()
     add_executable(securefs main.cpp)
 endif()
 
+find_package(Threads REQUIRED)
+find_package(cryptopp CONFIG REQUIRED)
+target_link_libraries(securefs-static PUBLIC cryptopp::cryptopp)
+find_path(TCLAP_INCLUDE_DIRS "tclap/Arg.h")
+target_include_directories(securefs-static PUBLIC ${TCLAP_INCLUDE_DIRS})
+find_package(unofficial-utf8proc CONFIG REQUIRED)
+target_link_libraries(securefs-static PUBLIC utf8proc)
+find_package(unofficial-libargon2 CONFIG REQUIRED)
+target_link_libraries(securefs-static PUBLIC unofficial::argon2::libargon2)
+find_package(jsoncpp CONFIG REQUIRED)
+target_link_libraries(securefs-static PUBLIC jsoncpp_object jsoncpp_static
+                                             JsonCpp::JsonCpp)
+
 add_executable(securefs_test ${TEST_SOURCES})
+find_package(Catch2 CONFIG REQUIRED)
+target_link_libraries(securefs_test PRIVATE Catch2::Catch2)
 
 add_test(NAME sec_test COMMAND securefs_test)
 find_package(Python3 COMPONENTS Interpreter)
