@@ -18,8 +18,13 @@ jobs:
           python-version: "3.6"
       - name: install
         run: sudo apt-get install fuse libfuse-dev
+      - name: vcpkg build
+        uses: johnwason/vcpkg-action@v3
+        with:
+          pkgs: argon2 cryptopp tclap utf8proc catch2 jsoncpp
+          triplet: x64-linux
       - name: configure
-        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release ..
+        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-linux ..
       - name: build
         run: cmake --build build --config Release
       - name: test
@@ -43,8 +48,13 @@ jobs:
         run: pip install xattr
       - name: install
         run: brew install macfuse
+      - name: vcpkg build
+        uses: johnwason/vcpkg-action@v3
+        with:
+          pkgs: argon2 cryptopp tclap utf8proc catch2 jsoncpp
+          triplet: x64-osx
       - name: configure
-        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release ..
+        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-osx ..
       - name: build
         run: cmake --build build --config Release
       - name: test
@@ -66,8 +76,13 @@ jobs:
           python-version: "3.7"
       - name: install
         run: choco install winfsp
+      - name: vcpkg build
+        uses: johnwason/vcpkg-action@v3
+        with:
+          pkgs: argon2 cryptopp tclap utf8proc catch2 jsoncpp
+          triplet: x64-windows-static-md
       - name: configure
-        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release ..
+        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static-md ..
       - name: build
         run: cmake --build build --config Release
       - name: test
