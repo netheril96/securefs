@@ -11,8 +11,8 @@
 #include <memory>
 #include <string>
 #include <thread>
-#include <unordered_map>
 
+#include <absl/container/flat_hash_map.h>
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
 #include <cryptopp/osrng.h>
@@ -453,7 +453,7 @@ protected:
 class SimpleDirectory final : public Directory
 {
 private:
-    std::unordered_map<std::string, std::pair<id_type, int>> m_table;
+    absl::flat_hash_map<std::string, std::pair<id_type, int>> m_table;
     bool m_dirty;
 
 private:

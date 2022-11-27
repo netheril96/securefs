@@ -9,8 +9,9 @@
 
 #include <memory>
 #include <string.h>
-#include <unordered_map>
 #include <utility>
+
+#include <absl/container/flat_hash_map.h>
 
 namespace securefs
 {
@@ -37,7 +38,7 @@ public:
 class FileTableImpl final : public FileTable
 {
 private:
-    typedef std::unordered_map<id_type, std::unique_ptr<FileBase>, id_hash> table_type;
+    typedef absl::flat_hash_map<id_type, std::unique_ptr<FileBase>, id_hash> table_type;
 
 private:
     static const int MAX_NUM_CLOSED = 101, NUM_EJECT = 8;

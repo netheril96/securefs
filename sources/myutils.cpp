@@ -19,7 +19,8 @@ static void find_ids_helper(const std::string& current_dir,
     id_type id;
     std::string hex(id_type::size() * 2, 0);
     OSService::recursive_traverse_callback callback
-        = [&id, &result, &hex](StringRef dir, StringRef name) -> bool {
+        = [&id, &result, &hex](StringRef dir, StringRef name) -> bool
+    {
         if (name == "." || name == "..")
             return true;
         if (name.ends_with(".meta"))
@@ -86,7 +87,7 @@ std::string get_user_input_until_enter()
 }
 
 void respond_to_user_action(
-    const std::unordered_map<std::string, std::function<void(void)>>& actionMap)
+    const absl::flat_hash_map<std::string, std::function<void(void)>>& actionMap)
 {
     while (true)
     {
