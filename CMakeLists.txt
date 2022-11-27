@@ -115,6 +115,9 @@ target_link_libraries(securefs-static PUBLIC unofficial::argon2::libargon2)
 find_package(jsoncpp CONFIG REQUIRED)
 target_link_libraries(securefs-static PUBLIC jsoncpp_object jsoncpp_static
                                              JsonCpp::JsonCpp)
+find_package(absl CONFIG REQUIRED)
+target_link_libraries(securefs-static PUBLIC absl::base absl::inlined_vector
+                                             absl::strings absl::optional)
 
 add_executable(securefs_test ${TEST_SOURCES})
 find_package(Catch2 CONFIG REQUIRED)

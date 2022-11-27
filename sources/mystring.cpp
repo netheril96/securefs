@@ -176,29 +176,6 @@ bool starts_with(const char* str, size_t size, const char* prefix, size_t prefix
     return size >= prefix_len && memcmp(str, prefix, prefix_len) == 0;
 }
 
-std::vector<std::string> split(StringRef str_, char separator)
-{
-    const char* start = str_.begin();
-    const char* str = start;
-    std::vector<std::string> result;
-    result.reserve(15);
-
-    while (*str)
-    {
-        if (*str == separator)
-        {
-            if (start < str)
-                result.emplace_back(start, str);
-            start = str + 1;
-        }
-        ++str;
-    }
-
-    if (start < str)
-        result.emplace_back(start, str);
-    return result;
-}
-
 std::string hexify(const byte* data, size_t length)
 {
     const char* table = "0123456789abcdef";

@@ -4,6 +4,8 @@
 #include "platform.h"
 #include "win_get_proc.h"
 
+#include <absl/container/inlined_vector.h>
+#include <absl/strings/str_split.h>
 #include <winfsp/winfsp.h>
 
 #include <cerrno>
@@ -765,7 +767,8 @@ namespace
         {
             return;
         }
-        std::vector<std::string> components = split(prepath, '\\');
+        absl::InlinedVector<std::string, 32> components
+            = absl::StrSplit(prepath, absl::ByAnyChar("/\\"), absl::SkipEmpty());
         std::vector<const std::string*> norm_components;
         norm_components.reserve(components.size());
         for (const std::string& name : components)

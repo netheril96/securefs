@@ -14,6 +14,9 @@
 #include <typeinfo>
 #include <utility>
 
+#include <absl/container/inlined_vector.h>
+#include <absl/strings/str_split.h>
+
 #ifdef __APPLE__
 #include <sys/xattr.h>
 #endif
@@ -72,10 +75,11 @@ namespace internal
 
     FileGuard open_base_dir(FileSystemContext* fs, const char* path, std::string& last_component)
     {
-        std::vector<std::string> components = split(
+        absl::InlinedVector<std::string, 32> components = absl::StrSplit(
             transform(path, fs->flags & kOptionCaseFoldFileName, fs->flags & kOptionNFCFileName)
                 .get(),
-            '/');
+            absl::ByChar('/'),
+            absl::SkipEmpty());
 
         FileGuard result(&fs->table, fs->table.open_as(fs->root_id, FileBase::DIRECTORY));
         if (components.empty())
