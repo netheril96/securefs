@@ -808,7 +808,15 @@ native_string_type OSService::concat_and_norm(StringRef base_dir, StringRef path
 OSService::OSService(StringRef path)
 {
     auto wide_path = widen_string(path);
-    m_root_handle = CreateFileW(wide_path.c_str(),
+    std::wstring fullname(33000, 0);
+    DWORD size = GetFullPathNameW(
+        wide_path.c_str(), static_cast<DWORD>(fullname.size()), &fullname[0], nullptr);
+    if (size <= 0)
+    {
+        THROW_WINDOWS_EXCEPTION_WITH_PATH(GetLastError(), L"GetFullPathNameW", wide_path);
+    }
+    fullname.resize(size);
+    m_root_handle = CreateFileW(fullname.c_str(),
                                 GENERIC_READ,
                                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                                 nullptr,
@@ -816,14 +824,7 @@ OSService::OSService(StringRef path)
                                 FILE_FLAG_BACKUP_SEMANTICS,
                                 nullptr);
     if (m_root_handle == INVALID_HANDLE_VALUE)
-        THROW_WINDOWS_EXCEPTION_WITH_PATH(GetLastError(), L"CreateFileW", wide_path);
-    std::wstring fullname(33000, 0);
-    DWORD size = GetFinalPathNameByHandleW(m_root_handle, &fullname[0], fullname.size(), 0);
-    if (size <= 0)
-    {
-        THROW_WINDOWS_EXCEPTION(GetLastError(), L"GetFinalPathNameByHandleW");
-    }
-    fullname.resize(size);
+        THROW_WINDOWS_EXCEPTION_WITH_PATH(GetLastError(), L"CreateFileW", fullname);
     m_dir_name = narrow_string(fullname);
 }
 
