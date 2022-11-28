@@ -711,122 +711,98 @@ OSService::OSService() : m_root_handle(INVALID_HANDLE_VALUE) {}
 
 OSService::~OSService() { CloseHandle(m_root_handle); }
 
-bool OSService::is_absolute(StringRef path)
+static bool is_absolute_path(absl::string_view path)
 {
     return path.empty() || path[0] == '/' || path[0] == '\\'
         || (path.size() >= 2 && path[1] == ':');
 }
 
+bool OSService::is_absolute(StringRef path)
+{
+    return is_absolute_path(absl::string_view(path.data(), path.size()));
+}
+
 namespace
 {
-    const StringRef LONG_PATH_PREFIX = R"(\\?\)";
-
-    bool is_canonical(StringRef path)
+    std::wstring widen_string(absl::string_view str)
     {
-        if (path.empty())
+        if (str.empty())
         {
-            return true;
+            return {};
         }
-        if (!path.starts_with(LONG_PATH_PREFIX))
-            return false;
-        size_t last_boundary = LONG_PATH_PREFIX.size();
-        for (size_t i = last_boundary; i <= path.size(); ++i)
-        {
-            bool is_boundary = i >= path.size() || path[i] == '\\';
-            if (!is_boundary)
-            {
-                continue;
-            }
-            if (i == last_boundary || i == last_boundary + 1)
-            {
-                return false;
-            }
-            if (i == last_boundary + 2 && path[last_boundary + 1] == '.')
-            {
-                return false;
-            }
-            if (i == last_boundary + 3 && path[last_boundary + 1] == '.'
-                && path[last_boundary + 2] == '.')
-            {
-                return false;
-            }
-            last_boundary = i;
-        }
-        return true;
+        if (str.size() >= std::numeric_limits<int>::max())
+            throwInvalidArgumentException("String too long");
+        int sz
+            = MultiByteToWideChar(CP_UTF8, 0, str.data(), static_cast<int>(str.size()), nullptr, 0);
+        if (sz <= 0)
+            THROW_WINDOWS_EXCEPTION(GetLastError(), L"MultiByteToWideChar");
+        std::wstring result(sz, 0);
+        MultiByteToWideChar(CP_UTF8, 0, str.data(), static_cast<int>(str.size()), &result[0], sz);
+        return result;
     }
 
-    // Convert forward slashes to back slashes, and remove "." and ".." from path components
-    void canonicalize(std::string& prepath)
+    native_string_type concat_and_norm_path(absl::string_view base_dir, absl::string_view path)
     {
-        for (char& c : prepath)
+        if (base_dir.empty() || is_absolute_path(path))
         {
-            if (c == '/')
-                c = '\\';
+            return widen_string(path);
         }
-        if (is_canonical(prepath))
+        if (!is_absolute_path(base_dir))
         {
-            return;
+            throwInvalidArgumentException(
+                absl::StrCat("base_dir must be an absolute path, yet we received ", base_dir));
         }
-        absl::InlinedVector<std::string, 32> components
-            = absl::StrSplit(prepath, absl::ByAnyChar("/\\"), absl::SkipEmpty());
-        std::vector<const std::string*> norm_components;
-        norm_components.reserve(components.size());
-        for (const std::string& name : components)
-        {
-            if (name.empty() || name == ".")
-                continue;
-            if (name == "..")
-            {
-                if (norm_components.size() > 0)
-                    norm_components.pop_back();
-                continue;
-            }
-            norm_components.push_back(&name);
-        }
-        bool is_already_universal = prepath.size() >= 2 && prepath[0] == '\\' && prepath[1] == '\\';
+        std::vector<char> buffer;
+        buffer.reserve(2 * (base_dir.size() + path.size()) + 15);
+        buffer.insert(buffer.end(), base_dir.begin(), base_dir.end());
+        buffer.push_back('\\');
+        buffer.insert(buffer.end(), path.begin(), path.end());
 
-        prepath.clear();
-        if (is_already_universal)
+        absl::InlinedVector<absl::string_view, 32> pieces;
+        for (absl::string_view p :
+             absl::StrSplit(absl::string_view(buffer.data(), buffer.size()),
+                            absl::ByAnyChar("/\\"),
+                            [](absl::string_view p) { return !p.empty() && p != "."; }))
         {
-            prepath.push_back('\\');
+            if (p == "..")
+            {
+                if (!pieces.empty())
+                {
+                    pieces.pop_back();
+                }
+            }
+            else
+            {
+                pieces.push_back(p);
+            }
+        }
+        size_t offset = buffer.size();
+
+        static constexpr absl::string_view LONG_PATH_PREFIX = R"(\\)";
+
+        if (!absl::StartsWith(base_dir, LONG_PATH_PREFIX))
+        {
+            buffer.push_back('\\');
+            buffer.push_back('\\');
+            buffer.push_back('?');
         }
         else
         {
-            prepath.assign(("\\\\?"));
+            buffer.push_back('\\');
         }
-        for (const std::string* name : norm_components)
+        for (absl::string_view p : pieces)
         {
-            prepath.push_back('\\');
-            prepath.append(*name);
+            buffer.push_back('\\');
+            buffer.insert(buffer.end(), p.begin(), p.end());
         }
+        return widen_string(absl::string_view(buffer.data() + offset, buffer.size() - offset));
     }
 }    // namespace
 
 native_string_type OSService::concat_and_norm(StringRef base_dir, StringRef path)
 {
-    if (base_dir.empty() || is_absolute(path))
-    {
-        return widen_string(path);
-    }
-    if (!is_absolute(base_dir))
-    {
-        throwInvalidArgumentException("base_dir must be an absolute path, yet we received "
-                                      + base_dir);
-    }
-    std::string prepath;
-    if (path == ".")
-    {
-        prepath = base_dir.to_string();
-    }
-    else
-    {
-        prepath.reserve(prepath.size() + 1 + path.size());
-        prepath.append(base_dir.c_str(), base_dir.size());
-        prepath.push_back('\\');
-        prepath.append(path.data(), path.size());
-    }
-    canonicalize(prepath);
-    return widen_string(prepath);
+    return concat_and_norm_path(absl::string_view(base_dir.data(), base_dir.size()),
+                                absl::string_view(path.data(), path.size()));
 }
 
 OSService::OSService(StringRef path)
@@ -1147,18 +1123,7 @@ std::string OSService::stringify_system_error(int errcode)
 
 std::wstring widen_string(StringRef str)
 {
-    if (str.empty())
-    {
-        return {};
-    }
-    if (str.size() >= std::numeric_limits<int>::max())
-        throwInvalidArgumentException("String too long");
-    int sz = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), nullptr, 0);
-    if (sz <= 0)
-        THROW_WINDOWS_EXCEPTION(GetLastError(), L"MultiByteToWideChar");
-    std::wstring result(sz, 0);
-    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), &result[0], sz);
-    return result;
+    return widen_string(absl::string_view{str.data(), str.size()});
 }
 
 std::string narrow_string(WideStringRef str)

@@ -9,10 +9,13 @@
 #include <string>
 #include <vector>
 
+#include <absl/strings/string_view.h>
+
 typedef unsigned char byte;
 
 namespace securefs
 {
+// A similar class to absl::string_view, except that this string is always null-terminated.
 template <class CharT>
 class BasicStringRef
 {
