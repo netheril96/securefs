@@ -21,7 +21,7 @@ jobs:
       - name: vcpkg build
         uses: johnwason/vcpkg-action@v3
         with:
-          pkgs: argon2 cryptopp tclap utf8proc catch2 jsoncpp
+          pkgs: abseil argon2 cryptopp tclap utf8proc catch2 jsoncpp
           triplet: x64-linux
       - name: configure
         run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-linux ..
@@ -51,7 +51,7 @@ jobs:
       - name: vcpkg build
         uses: johnwason/vcpkg-action@v3
         with:
-          pkgs: argon2 cryptopp tclap utf8proc catch2 jsoncpp
+          pkgs: abseil argon2 cryptopp tclap utf8proc catch2 jsoncpp
           triplet: x64-osx
       - name: configure
         run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-osx ..
@@ -79,7 +79,7 @@ jobs:
       - name: vcpkg build
         uses: johnwason/vcpkg-action@v3
         with:
-          pkgs: argon2 cryptopp tclap utf8proc catch2 jsoncpp
+          pkgs: abseil argon2 cryptopp tclap utf8proc catch2 jsoncpp
           triplet: x64-windows-static-md
       - name: configure
         run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static-md ..
