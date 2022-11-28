@@ -1,8 +1,6 @@
 #pragma once
 #include "mystring.h"
 
-#include "optional.hpp"
-
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -18,6 +16,7 @@
 #include <vector>
 
 #include <absl/container/flat_hash_map.h>
+#include <absl/types/optional.h>
 
 #define DISABLE_COPY_MOVE(cls)                                                                     \
     cls(const cls&) = delete;                                                                      \
@@ -116,7 +115,7 @@ inline constexpr bool is_windows(void)
     return false;
 #endif
 }
-using std::experimental::optional;
+using absl::optional;
 
 typedef uint64_t length_type;
 typedef uint64_t offset_type;
