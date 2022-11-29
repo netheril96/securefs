@@ -102,7 +102,7 @@ public:
     bool is_readonly() const noexcept override { return m_shards.back()->is_readonly(); }
     bool is_auth_enabled() const noexcept override { return m_shards.back()->is_auth_enabled(); }
     bool is_time_stored() const noexcept override { return m_shards.back()->is_time_stored(); }
-    void statfs(struct fuse_statvfs* fs_info) { return m_shards.back()->statfs(fs_info); }
+    void statfs(struct fuse_statvfs* fs_info) override { return m_shards.back()->statfs(fs_info); }
     bool has_padding() const noexcept override { return m_shards.back()->has_padding(); }
 };
 

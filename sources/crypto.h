@@ -24,7 +24,7 @@ private:
              size_t text_len,
              const void* additional_data,
              size_t additional_len,
-             void* iv);
+             void* iv) THREAD_ANNOTATION_REQUIRES(m_mutex);
 
 public:
     static constexpr size_t IV_SIZE = 16;

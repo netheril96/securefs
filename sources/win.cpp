@@ -5,6 +5,7 @@
 #include "win_get_proc.h"
 
 #include <absl/container/inlined_vector.h>
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_split.h>
 #include <winfsp/winfsp.h>
 
