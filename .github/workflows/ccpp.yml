@@ -10,10 +10,10 @@ jobs:
     runs-on: ubuntu-20.04
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
         with:
           submodules: true
-      - uses: actions/setup-python@v1
+      - uses: actions/setup-python@v4
         with:
           python-version: "3.6"
       - name: install
@@ -39,10 +39,10 @@ jobs:
     runs-on: macos-10.15
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
         with:
           submodules: true
-      - uses: actions/setup-python@v1
+      - uses: actions/setup-python@v4
         with:
           python-version: "3.6"
       - name: pip
@@ -70,12 +70,12 @@ jobs:
     runs-on: macos-11
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
         with:
           submodules: true
-      - uses: actions/setup-python@v1
+      - uses: actions/setup-python@v4
         with:
-          python-version: "3.6"
+          python-version: "3.7"
       - name: pip
         run: pip install xattr
       - name: install
@@ -101,10 +101,10 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
         with:
           submodules: true
-      - uses: actions/setup-python@v1
+      - uses: actions/setup-python@v4
         with:
           python-version: "3.7"
       - name: install
