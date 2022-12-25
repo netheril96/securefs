@@ -31,7 +31,8 @@ configure_file(${CMAKE_SOURCE_DIR}/sources/git-version.cpp.in
                ${CMAKE_BINARY_DIR}/git-version.cpp)
 
 if(UNIX)
-    find_path(FUSE_INCLUDE_DIR fuse.h PATHS /usr/local/include)
+    find_path(FUSE_INCLUDE_DIR fuse.h PATHS /usr/local/include/fuse
+                                            /usr/local/include)
     if(SECUREFS_USE_FUSET)
         find_library(FUSE_LIBRARIES fuse-t PATHS /usr/local/lib)
     else()
