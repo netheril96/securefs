@@ -3,6 +3,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 11)
 
 option(SECUREFS_USE_VCPKG "Whether to use vcpkg for the dependencies" ON)
+option(SECUREFS_USE_FUSET
+       "Use FUSE-T instead of MacFUSE (only makes sense on macOS)" OFF)
 
 project(securefs)
 enable_testing()
@@ -30,7 +32,12 @@ configure_file(${CMAKE_SOURCE_DIR}/sources/git-version.cpp.in
 
 if(UNIX)
     find_path(FUSE_INCLUDE_DIR fuse.h PATHS /usr/local/include)
-    find_library(FUSE_LIBRARIES fuse PATHS /usr/local/lib)
+    if(SECUREFS_USE_FUSET)
+        find_library(FUSE_LIBRARIES fuse-t PATHS /usr/local/lib)
+    else()
+        find_library(FUSE_LIBRARIES fuse PATHS /usr/local/lib)
+    endif()
+
     include_directories(${FUSE_INCLUDE_DIR})
     link_libraries(${FUSE_LIBRARIES})
     add_compile_options(-Wall -Wextra -Wno-unknown-pragmas)
