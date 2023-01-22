@@ -20,7 +20,7 @@ The two level scheme ensures integrity as well as fast access. A single HMAC ove
 
 ### Key derivation
 
-The master key of the whole system is derived from user password. Because passwords usually contain low entropy, they must be randomized and stretched before being used as key. Currently the algorithm is PBKDF2-HMAC-SHA256 with configurable rounds. If the user does not specify the rounds, it will be 200,000 or 1 second delay on the current machine, whichever is larger.
+The master key of the whole system is derived from user password. Because passwords usually contain low entropy, they must be randomized and stretched before being used as key. Currently the default algorithm is argon2id. It is also possible to specify scrypt or pbkdf2-hmac instead.
 
 The master key is not directly used to encrypt data. Instead, each file will have three separate keys derived from the master key with HKDF, one for encryption of main data, one for mac of the metadata, and one for encryption of extended attributes.
 
