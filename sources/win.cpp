@@ -441,6 +441,9 @@ public:
 
 static void stat_file_handle(HANDLE hd, struct fuse_stat* st)
 {
+    if (hd == INVALID_HANDLE_VALUE)
+        return ;
+
     memset(st, 0, sizeof(*st));
     BY_HANDLE_FILE_INFORMATION info;
     CHECK_CALL(GetFileInformationByHandle(hd, &info));
@@ -470,6 +473,9 @@ private:
 private:
     void write32(const void* input, offset_type offset, DWORD length)
     {
+        if (m_handle == INVALID_HANDLE_VALUE)
+            return ;
+
         OVERLAPPED ol;
         memset(&ol, 0, sizeof(ol));
         ol.Offset = static_cast<DWORD>(offset);
@@ -491,6 +497,9 @@ private:
 
     length_type read32(void* output, offset_type offset, DWORD length)
     {
+        if (m_handle == INVALID_HANDLE_VALUE)
+            return 0;
+
         OVERLAPPED ol;
         memset(&ol, 0, sizeof(ol));
         ol.Offset = static_cast<DWORD>(offset);
@@ -570,6 +579,9 @@ public:
         if (m_handle == INVALID_HANDLE_VALUE)
         {
             DWORD err = GetLastError();
+            if (err == ERROR_FILE_EXISTS)
+                return ;
+
             throw WindowsException(err, L"CreateFileW", path.to_string());
         }
     }
@@ -578,6 +590,9 @@ public:
 
     void lock(bool exclusive) override
     {
+        if (m_handle == INVALID_HANDLE_VALUE)
+            return ;
+
         if (!securefs::is_lock_enabled())
         {
             return;
@@ -881,6 +896,9 @@ void OSService::mkdir(StringRef path, unsigned mode) const
     if (CreateDirectoryW(npath.c_str(), nullptr) == 0)
     {
         DWORD err = GetLastError();
+        if (err == ERROR_ALREADY_EXISTS)
+            return ;
+
         THROW_WINDOWS_EXCEPTION_WITH_PATH(err, L"CreateDirectory", npath);
     }
 }
