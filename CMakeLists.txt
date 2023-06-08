@@ -8,18 +8,7 @@ option(SECUREFS_USE_FUSET
 
 project(securefs)
 enable_testing()
-cmake_policy(SET CMP0048 NEW)
-cmake_policy(SET CMP0069 NEW)
-set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
 
-include(CheckIPOSupported)
-check_ipo_supported(RESULT IPO_SUPPORTED OUTPUT error)
-
-if(IPO_SUPPORTED)
-    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
-    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON)
-    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL ON)
-endif()
 set(CMAKE_FIND_FRAMEWORK NEVER)
 
 execute_process(COMMAND bash -c "uname -m" OUTPUT_VARIABLE architecture)
