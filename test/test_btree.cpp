@@ -103,8 +103,6 @@ static void test(securefs::BtreeDirectory& dir,
 
 static void test_btree_dir(unsigned max_padding_size)
 {
-    const size_t NUM_ENTRIES = 1000;
-
     securefs::key_type key(0x3e);
     securefs::id_type null_id{};
 

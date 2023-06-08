@@ -57,7 +57,7 @@ namespace
         void flush() override {}
 
         void resize(length_type size) override { m_buffer.resize(size); }
-        bool is_sparse() const noexcept { return true; }
+        bool is_sparse() const noexcept override { return true; }
     };
 }    // namespace
 }    // namespace securefs
@@ -111,8 +111,8 @@ static void test(securefs::StreamBase& stream, unsigned times)
         case 3:
             stream.resize(a);
             memory_stream.resize(a);
-            CHECK(stream.size() == a);
-            CHECK(memory_stream.size() == a);
+            CHECK(stream.size() == size_t(a));
+            CHECK(memory_stream.size() == size_t(a));
             break;
 
         case 4:
