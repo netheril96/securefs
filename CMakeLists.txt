@@ -3,6 +3,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 11)
 
 option(SECUREFS_USE_VCPKG "Whether to use vcpkg for the dependencies" ON)
+option(SECUREFS_ENABLE_BUILD_TEST "Whether to build dedicated test binary" ON)
 option(SECUREFS_USE_FUSET
        "Use FUSE-T instead of MacFUSE (only makes sense on macOS)" OFF)
 
@@ -106,13 +107,13 @@ endif()
 find_package(Threads REQUIRED)
 find_path(TCLAP_INCLUDE_DIRS "tclap/Arg.h")
 target_include_directories(securefs-static PUBLIC ${TCLAP_INCLUDE_DIRS})
-find_package(jsoncpp CONFIG REQUIRED)
-target_link_libraries(securefs-static PUBLIC jsoncpp_object jsoncpp_static
-                                             JsonCpp::JsonCpp)
 find_package(absl CONFIG REQUIRED)
 target_link_libraries(
     securefs-static PUBLIC absl::base absl::inlined_vector absl::flat_hash_map
                            absl::strings absl::optional)
+find_package(jsoncpp CONFIG REQUIRED)
+target_link_libraries(securefs-static PUBLIC JsonCpp::JsonCpp)
+
 if(SECUREFS_USE_VCPKG)
     find_package(cryptopp CONFIG REQUIRED)
     target_link_libraries(securefs-static PUBLIC cryptopp::cryptopp)
@@ -124,11 +125,13 @@ else()
     target_link_libraries(securefs-static PUBLIC -lutf8proc -largon2 -lcryptopp)
 endif()
 
-add_executable(securefs_test ${TEST_SOURCES})
-find_package(Catch2 CONFIG REQUIRED)
-target_link_libraries(securefs_test PRIVATE Catch2::Catch2)
+if(SECUREFS_ENABLE_BUILD_TEST)
+    add_executable(securefs_test ${TEST_SOURCES})
+    find_package(Catch2 CONFIG REQUIRED)
+    target_link_libraries(securefs_test PRIVATE Catch2::Catch2)
+    add_test(NAME sec_test COMMAND securefs_test)
+endif()
 
-add_test(NAME sec_test COMMAND securefs_test)
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_FOUND)
     add_test(
