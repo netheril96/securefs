@@ -19,6 +19,7 @@ jobs:
       - name: install
         run: sudo apt-get install fuse libfuse-dev
       - name: vcpkg build
+        id: vcpkg
         uses: johnwason/vcpkg-action@v4
         with:
           manifest-dir: ${{ github.workspace }}
@@ -67,6 +68,7 @@ jobs:
         run: brew install macfuse
       - name: vcpkg build
         uses: johnwason/vcpkg-action@v4
+        id: vcpkg
         with:
           manifest-dir: ${{ github.workspace }}
           triplet: x64-osx
@@ -95,6 +97,7 @@ jobs:
         run: brew install macfuse
       - name: vcpkg build
         uses: johnwason/vcpkg-action@v4
+        id: vcpkg
         with:
           manifest-dir: ${{ github.workspace }}
           triplet: arm64-osx
@@ -121,6 +124,7 @@ jobs:
         run: choco install winfsp
       - name: vcpkg build
         uses: johnwason/vcpkg-action@v4
+        id: vcpkg
         with:
           manifest-dir: ${{ github.workspace }}
           triplet: x64-windows-static-md
