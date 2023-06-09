@@ -100,7 +100,7 @@ jobs:
           triplet: arm64-osx
           token: ${{ github.token }}
       - name: build
-        run: python3 build.py --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build
+        run: python3 build.py --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build --cmake_defines CMAKE_OSX_ARCHITECTURES=arm64
       - name: upload
         uses: actions/upload-artifact@v1
         with:

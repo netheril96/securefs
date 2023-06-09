@@ -43,6 +43,12 @@ def main():
         default="" if os.name != "nt" else "x64-windows-static-md",
         help="Override the default vcpkg triplet",
     )
+    parser.add_argument(
+        "--cmake_defines",
+        default=[],
+        nargs="*",
+        help="Additional CMake definitions. Example: FOO=BAR",
+    )
     args = parser.parse_args()
     if not os.path.isdir(args.vcpkg_root):
         raise ValueError(
@@ -55,10 +61,13 @@ def main():
         "cmake",
         "-DCMAKE_BUILD_TYPE=Release",
         f"-DCMAKE_TOOLCHAIN_FILE={args.vcpkg_root}/scripts/buildsystems/vcpkg.cmake",
-        source_dir,
     ]
     if args.triplet:
-        configure_args.insert(2, "-DVCPKG_TARGET_TRIPLET=" + args.triplet)
+        configure_args.append("-DVCPKG_TARGET_TRIPLET=" + args.triplet)
+    for pair in args.cmake_defines:
+        configure_args.append("-D" + pair)
+    configure_args.append(source_dir)
+
     check_call(*configure_args)
     check_call("cmake", "--build", ".", "--config", "Release")
     if args.enable_test:
