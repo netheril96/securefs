@@ -1,0 +1,12 @@
+{
+    "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+    "dependencies": [
+        "abseil",
+        "argon2",
+        "cryptopp",
+        "tclap",
+        "utf8proc",
+        "catch2",
+        "jsoncpp"
+    ]
+}

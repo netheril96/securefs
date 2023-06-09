@@ -21,10 +21,9 @@ jobs:
       - name: vcpkg build
         uses: johnwason/vcpkg-action@v4
         with:
-          pkgs: abseil argon2 cryptopp tclap utf8proc catch2 jsoncpp
+          manifest-dir: ${{ github.workspace }}
           triplet: x64-linux
           token: ${{ github.token }}
-          cache-key: ubuntu-20.04
       - name: configure
         run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-linux ..
       - name: build
@@ -55,68 +54,70 @@ jobs:
       - name: test
         run: cd build && ctest -V -C Release
 
-  # build-mac:
-  #   runs-on: macos-10.15
-  #   timeout-minutes: 35
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #       with:
-  #         submodules: true
-  #     - uses: actions/setup-python@v4
-  #       with:
-  #         python-version: "3.6"
-  #     - name: pip
-  #       run: pip install xattr
-  #     - name: install
-  #       run: brew install macfuse
-  #     - name: vcpkg build
-  #       uses: johnwason/vcpkg-action@v4
-  #       with:
-  #         pkgs: abseil argon2 cryptopp tclap utf8proc catch2 jsoncpp
-  #         triplet: x64-osx
-  #         token: ${{ github.token }}
-  #     - name: configure
-  #       run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-osx ..
-  #     - name: build
-  #       run: cmake --build build --config Release
-  #     - name: test
-  #       run: cd build && ctest -V -C Release
-  #     - name: upload
-  #       uses: actions/upload-artifact@v1
-  #       with:
-  #         path: build/securefs
-  #         name: securefs-macos-amd64
-  # build-mac-fuse-t:
-  #   runs-on: macos-11
-  #   timeout-minutes: 35
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #       with:
-  #         submodules: true
-  #     - uses: actions/setup-python@v4
-  #       with:
-  #         python-version: "3.7"
-  #     - name: pip
-  #       run: pip install xattr
-  #     - name: install
-  #       run: brew tap macos-fuse-t/homebrew-cask && brew install fuse-t
-  #     - name: vcpkg build
-  #       uses: johnwason/vcpkg-action@v4
-  #       with:
-  #         pkgs: abseil argon2 cryptopp tclap utf8proc catch2 jsoncpp
-  #         triplet: x64-osx
-  #         token: ${{ github.token }}
-  #     - name: configure
-  #       run: mkdir build && cd build && cmake -DSECUREFS_USE_FUSET=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-osx ..
-  #     - name: build
-  #       run: cmake --build build --config Release
-  #     - name: test
-  #       run: cd build && ctest -V -C Release
-  #     - name: upload
-  #       uses: actions/upload-artifact@v1
-  #       with:
-  #         path: build/securefs
-  #         name: securefs-macos-fuse-t-amd64
+  build-mac:
+    runs-on: macos-11
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+      - name: pip
+        run: pip install xattr
+      - name: install
+        run: brew install macfuse
+      - name: vcpkg build
+        uses: johnwason/vcpkg-action@v4
+        with:
+          manifest-dir: ${{ github.workspace }}
+          triplet: x64-osx
+          token: ${{ github.token }}
+      - name: configure
+        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-osx ..
+      - name: build
+        run: cmake --build build --config Release
+      # - name: test
+      #   run: cd build && ctest -V -C Release
+      - name: upload
+        uses: actions/upload-artifact@v1
+        with:
+          path: build/securefs
+          name: securefs-macos-amd64
+
+  build-mac-arm64:
+    runs-on: macos-11
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+      - name: pip
+        run: pip install xattr
+      - name: install
+        run: brew install macfuse
+      - name: vcpkg build
+        uses: johnwason/vcpkg-action@v4
+        with:
+          manifest-dir: ${{ github.workspace }}
+          triplet: arm64-osx
+          token: ${{ github.token }}
+      - name: configure
+        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=arm64-osx ..
+      - name: build
+        run: cmake --build build --config Release
+      # - name: test
+      #   run: cd build && ctest -V -C Release
+      - name: upload
+        uses: actions/upload-artifact@v1
+        with:
+          path: build/securefs
+          name: securefs-macos-amd64
+
   build-windows:
     runs-on: windows-latest
     timeout-minutes: 35
@@ -132,7 +133,7 @@ jobs:
       - name: vcpkg build
         uses: johnwason/vcpkg-action@v4
         with:
-          pkgs: abseil argon2 cryptopp tclap utf8proc catch2 jsoncpp
+          manifest-dir: ${{ github.workspace }}
           triplet: x64-windows-static-md
           token: ${{ github.token }}
           cache-key: windows
