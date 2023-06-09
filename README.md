@@ -26,32 +26,21 @@ There are already many encrypting filesystem in widespread use. Some notable one
 
 [![Actions Status](https://github.com/netheril96/securefs/workflows/C%2FC%2B%2B%20CI/badge.svg)](https://github.com/netheril96/securefs/actions)
 
-### macOS
+### Binary packages
 
-Install with [Homebrew](https://brew.sh). [macFUSE](https://osxfuse.github.io) has to be installed beforehand.
+Download from the Release page.
+
+### Build from source
+
+First you need to install [vcpkg](vcpkg.io). Then install the following dependencies
 
 ```
-brew install netheril96/fuse/securefs
+abseil argon2 cryptopp tclap utf8proc catch2 jsoncpp
 ```
 
-### Windows
+Then use the regular `CMake` command to build. See also the [vcpkg documentation](https://learn.microsoft.com/en-us/vcpkg/examples/installing-and-using-packages#cmake).
 
-Windows users can download prebuilt package from the releases section. It depends on [WinFsp](https://github.com/billziss-gh/winfsp/releases) and [VC++ 2017 redistribution package](https://support.microsoft.com/en-us/help/2977003/the-latest-supported-visual-c-downloads).
-
-On Windows, you should encrypt the pagefile to avoid leaking sensitive data on disk. Run with admin privileges with the command `fsutil behavior set EncryptPagingFile 1` before mounting a volume with `securefs`.
-
-### Linux
-
-Linux users have to build it from source.
-
-First `fuse` must be installed.
-
-- On Debian based Linux distro, `sudo apt-get install fuse libfuse-dev build-essential cmake python3`.
-- On RPM based Linux, `sudo yum install fuse fuse-devel python3`.
-
-Then clone the sources by `git clone --recursive`, and execute `linux-build.sh`.
-
-### FreeBSD (unofficial)
+### FreeBSD (unofficial and maybe outdated)
 
 Install using packages (recommended):
 

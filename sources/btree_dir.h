@@ -6,9 +6,10 @@
 #include <stdio.h>
 #include <string>
 #include <tuple>
-#include <unordered_map>
 #include <utility>
 #include <vector>
+
+#include <absl/container/flat_hash_map.h>
 
 namespace securefs
 {
@@ -121,7 +122,7 @@ private:
     class FreePage;
 
 private:
-    std::unordered_map<uint32_t, std::unique_ptr<Node>> m_node_cache;
+    absl::flat_hash_map<uint32_t, std::unique_ptr<Node>> m_node_cache;
 
 private:
     bool read_node(uint32_t, Node&) THREAD_ANNOTATION_REQUIRES(*this);

@@ -6,7 +6,6 @@
 #include <cryptopp/secblock.h>
 
 #include <algorithm>
-#include <unordered_map>
 #include <utility>
 
 #include <sys/types.h>

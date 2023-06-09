@@ -1,6 +1,6 @@
 #ifdef _WIN32
-#include "catch.hpp"
 #include "platform.h"
+#include <catch2/catch_all.hpp>
 
 using ::securefs::OSService;
 

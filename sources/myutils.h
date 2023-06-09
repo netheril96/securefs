@@ -1,8 +1,6 @@
 #pragma once
 #include "mystring.h"
 
-#include "optional.hpp"
-
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -14,9 +12,11 @@
 #include <string.h>
 #include <string>
 #include <type_traits>
-#include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+#include <absl/container/flat_hash_map.h>
+#include <absl/types/optional.h>
 
 #define DISABLE_COPY_MOVE(cls)                                                                     \
     cls(const cls&) = delete;                                                                      \
@@ -115,7 +115,7 @@ inline constexpr bool is_windows(void)
     return false;
 #endif
 }
-using std::experimental::optional;
+using absl::optional;
 
 typedef uint64_t length_type;
 typedef uint64_t offset_type;
@@ -255,7 +255,7 @@ std::unordered_set<id_type, id_hash> find_all_ids(const std::string& basedir);
 std::string get_user_input_until_enter();
 
 void respond_to_user_action(
-    const std::unordered_map<std::string, std::function<void(void)>>& actionMap);
+    const absl::flat_hash_map<std::string, std::function<void(void)>>& actionMap);
 
 size_t popcount(const byte* data, size_t size) noexcept;
 

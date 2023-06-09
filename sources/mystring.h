@@ -9,10 +9,13 @@
 #include <string>
 #include <vector>
 
+#include <absl/strings/string_view.h>
+
 typedef unsigned char byte;
 
 namespace securefs
 {
+// A similar class to absl::string_view, except that this string is always null-terminated.
 template <class CharT>
 class BasicStringRef
 {
@@ -129,8 +132,6 @@ std::string strprintf(const char* format, ...)
 #endif
     ;
 std::string vstrprintf(const char* format, va_list args);
-
-std::vector<std::string> split(StringRef str, char separator);
 
 std::string hexify(const byte* data, size_t length);
 void parse_hex(StringRef hex, byte* output, size_t len);

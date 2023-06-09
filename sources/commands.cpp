@@ -17,7 +17,7 @@
 #include <fuse.h>
 #include <json/json.h>
 #include <tclap/CmdLine.h>
-#include <utf8proc/utf8proc.h>
+#include <utf8proc.h>
 
 #include <algorithm>
 #include <iostream>
@@ -84,7 +84,7 @@ enum class NLinkFixPhase
 
 void fix_hardlink_count(operations::FileSystemContext* fs,
                         Directory* dir,
-                        std::unordered_map<id_type, int, id_hash>* nlink_map,
+                        absl::flat_hash_map<id_type, int, id_hash>* nlink_map,
                         NLinkFixPhase phase)
 {
     std::vector<std::pair<id_type, int>> listings;
@@ -271,7 +271,7 @@ void fix(const std::string& basedir, operations::FileSystemContext* fs)
         }
     }
 
-    std::unordered_map<id_type, int, id_hash> nlink_map;
+    absl::flat_hash_map<id_type, int, id_hash> nlink_map;
     puts("Fixing hardlink count ...");
     fix_hardlink_count(
         fs, root_dir.get_as<Directory>(), &nlink_map, NLinkFixPhase::CollectingNLink);
