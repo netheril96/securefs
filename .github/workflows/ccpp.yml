@@ -15,7 +15,7 @@ jobs:
           submodules: true
       - uses: actions/setup-python@v4
         with:
-          python-version: "3.6"
+          python-version: "3.x"
       - name: install
         run: sudo apt-get install fuse libfuse-dev
       - name: vcpkg build
@@ -24,17 +24,14 @@ jobs:
           manifest-dir: ${{ github.workspace }}
           triplet: x64-linux
           token: ${{ github.token }}
-      - name: configure
-        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-linux ..
-      - name: build
-        run: cmake --build build --config Release
-      - name: test
-        run: cd build && ctest -V -C Release
+      - name: build-test
+        run: python3 build.py --enable_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build
       - name: upload
         uses: actions/upload-artifact@v1
         with:
           path: build/securefs
           name: securefs-linux-amd64
+  
   build-ubuntu-without-vcpkg:
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -74,12 +71,8 @@ jobs:
           manifest-dir: ${{ github.workspace }}
           triplet: x64-osx
           token: ${{ github.token }}
-      - name: configure
-        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-osx ..
       - name: build
-        run: cmake --build build --config Release
-      # - name: test
-      #   run: cd build && ctest -V -C Release
+        run: python3 build.py --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build
       - name: upload
         uses: actions/upload-artifact@v1
         with:
@@ -106,17 +99,13 @@ jobs:
           manifest-dir: ${{ github.workspace }}
           triplet: arm64-osx
           token: ${{ github.token }}
-      - name: configure
-        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=arm64-osx ..
       - name: build
-        run: cmake --build build --config Release
-      # - name: test
-      #   run: cd build && ctest -V -C Release
+        run: python3 build.py --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build
       - name: upload
         uses: actions/upload-artifact@v1
         with:
           path: build/securefs
-          name: securefs-macos-amd64
+          name: securefs-macos-arm64
 
   build-windows:
     runs-on: windows-latest
@@ -127,7 +116,7 @@ jobs:
           submodules: true
       - uses: actions/setup-python@v4
         with:
-          python-version: "3.7"
+          python-version: "3.x"
       - name: install
         run: choco install winfsp
       - name: vcpkg build
@@ -137,12 +126,8 @@ jobs:
           triplet: x64-windows-static-md
           token: ${{ github.token }}
           cache-key: windows
-      - name: configure
-        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static-md ..
-      - name: build
-        run: cmake --build build --config Release
-      - name: test
-        run: cd build && ctest -V -C Release
+      - name: build-test
+        run: python3 build.py --enable_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build
       - name: upload
         uses: actions/upload-artifact@v1
         with:
