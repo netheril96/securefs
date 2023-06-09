@@ -26,6 +26,8 @@ jobs:
           triplet: x64-linux
           token: ${{ github.token }}
       - name: build-test
+        env:
+          VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg_cache
         run: python3 build.py --enable_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build
       - name: upload
         uses: actions/upload-artifact@v1
@@ -74,6 +76,8 @@ jobs:
           triplet: x64-osx
           token: ${{ github.token }}
       - name: build
+        env:
+          VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg_cache
         run: python3 build.py --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build
       - name: upload
         uses: actions/upload-artifact@v1
@@ -103,6 +107,8 @@ jobs:
           triplet: arm64-osx
           token: ${{ github.token }}
       - name: build
+        env:
+          VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg_cache
         run: python3 build.py --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build --cmake_defines CMAKE_OSX_ARCHITECTURES=arm64
       - name: upload
         uses: actions/upload-artifact@v1
@@ -131,6 +137,8 @@ jobs:
           token: ${{ github.token }}
           cache-key: windows
       - name: build-test
+        env:
+          VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg_cache
         run: python3 build.py --enable_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build
       - name: upload
         uses: actions/upload-artifact@v1
