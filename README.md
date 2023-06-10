@@ -26,19 +26,23 @@ There are already many encrypting filesystem in widespread use. Some notable one
 
 [![Actions Status](https://github.com/netheril96/securefs/workflows/C%2FC%2B%2B%20CI/badge.svg)](https://github.com/netheril96/securefs/actions)
 
+**Homebrew is no longer supported.**
+
+### Dependencies
+
+On Windows, we need to separately install [WinFsp](https://winfsp.dev/) and [VC++ redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170#visual-studio-2015-2017-2019-and-2022).
+
+On Linux/BSD, we need to install `fuse` package.
+
+On macOS, we need to install [MacFUSE](https://osxfuse.github.io/).
+
 ### Binary packages
 
 Download from the Release page.
 
 ### Build from source
 
-First you need to install [vcpkg](vcpkg.io). Then install the following dependencies
-
-```
-abseil argon2 cryptopp tclap utf8proc catch2 jsoncpp
-```
-
-Then use the regular `CMake` command to build. See also the [vcpkg documentation](https://learn.microsoft.com/en-us/vcpkg/examples/installing-and-using-packages#cmake).
+First you need to install [vcpkg](vcpkg.io). Then run `python3 build.py --enable_test`.
 
 ### FreeBSD (unofficial and maybe outdated)
 
