@@ -26,8 +26,6 @@ There are already many encrypting filesystem in widespread use. Some notable one
 
 [![Actions Status](https://github.com/netheril96/securefs/workflows/C%2FC%2B%2B%20CI/badge.svg)](https://github.com/netheril96/securefs/actions)
 
-**Homebrew is no longer supported.**
-
 ### Dependencies
 
 On Windows, we need to separately install [WinFsp](https://winfsp.dev/) and [VC++ redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170#visual-studio-2015-2017-2019-and-2022).

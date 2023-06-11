@@ -2,7 +2,10 @@ cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 11)
 
-option(SECUREFS_USE_VCPKG "Whether to use vcpkg for the dependencies" ON)
+option(
+    SECUREFS_USE_VCPKG
+    "Whether to use vcpkg for the dependencies. When off, pkg-config is used instead."
+    ON)
 option(SECUREFS_ENABLE_BUILD_TEST "Whether to build dedicated test binary" ON)
 option(SECUREFS_USE_FUSET
        "Use FUSE-T instead of MacFUSE (only makes sense on macOS)" OFF)
@@ -111,8 +114,6 @@ find_package(absl CONFIG REQUIRED)
 target_link_libraries(
     securefs-static PUBLIC absl::base absl::inlined_vector absl::flat_hash_map
                            absl::strings absl::optional)
-find_package(jsoncpp CONFIG REQUIRED)
-target_link_libraries(securefs-static PUBLIC JsonCpp::JsonCpp)
 
 if(SECUREFS_USE_VCPKG)
     find_package(cryptopp CONFIG REQUIRED)
@@ -121,8 +122,22 @@ if(SECUREFS_USE_VCPKG)
     target_link_libraries(securefs-static PUBLIC utf8proc)
     find_package(unofficial-libargon2 CONFIG REQUIRED)
     target_link_libraries(securefs-static PUBLIC unofficial::argon2::libargon2)
+    find_package(jsoncpp CONFIG REQUIRED)
+    target_link_libraries(securefs-static PUBLIC JsonCpp::JsonCpp)
 else()
-    target_link_libraries(securefs-static PUBLIC -lutf8proc -largon2 -lcryptopp)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(UTF8PROC REQUIRED libutf8proc)
+    pkg_check_modules(ARGON2 REQUIRED libargon2)
+    pkg_check_modules(JSONCPP REQUIRED jsoncpp)
+    target_include_directories(
+        securefs-static PUBLIC ${UTF8PROC_INCLUDE_DIRS} ${ARGON2_INCLUDE_DIRS}
+                               ${JSONCPP_INCLUDE_DIRS})
+    target_link_libraries(
+        securefs-static PUBLIC ${CRYPTOPP_LDFLAGS} ${UTF8PROC_LDFLAGS}
+                               ${ARGON2_LDFLAGS} ${JSONCPP_LDFLAGS})
+
+    find_library(CRYPTOPP_FLAGS NAMES cryptopp crypto++)
+    target_link_libraries(securefs-static PUBLIC ${CRYPTOPP_FLAGS})
 endif()
 
 if(SECUREFS_ENABLE_BUILD_TEST)
