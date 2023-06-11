@@ -239,7 +239,10 @@ void FuseTracer::print(FILE* fp, const WrappedFuseArg& arg)
     SECUREFS_DISPATCH(struct fuse_file_info)
     SECUREFS_DISPATCH(struct fuse_statvfs)
     SECUREFS_DISPATCH(struct fuse_timespec)
-    else { fprintf(fp, "0x%p", arg.value); }
+    else
+    {
+        fprintf(fp, "0x%p", arg.value);
+    }
 #undef SECUREFS_DISPATCH
 }
 
@@ -296,7 +299,21 @@ void FuseTracer::print_function_exception(Logger* logger,
                                           const std::exception& e,
                                           int rc)
 {
-    if (logger && logger->get_level() <= LoggingLevel::kLogError)
+    if (!logger)
+    {
+        return;
+    }
+    if (logger->get_level() > LoggingLevel::kLogVerbose)
+    {
+        auto ee = dynamic_cast<const ExceptionBase*>(&e);
+        if (ee && ee->error_number() == EEXIST)
+        {
+            // "Already exists" is a common error not worth logging.
+            // Only logs it if logging level is verbose enough.
+            return;
+        }
+    }
+    if (logger->get_level() <= LoggingLevel::kLogError)
     {
         logger->prelog(LoggingLevel::kLogError, funcsig, lineno);
         DEFER(logger->postlog(LoggingLevel::kLogError));
