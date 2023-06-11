@@ -44,7 +44,10 @@ First you need to install [vcpkg](vcpkg.io). Then run `python3 build.py --enable
 
 ### Package managers
 
-Currently no package managers are supported. Their version may be outdated. This may change in the future.
+#### macOS
+Use homebrew.
+
+`brew install netheril96/fuse/securefs-mac`
 
 ## Basic usage
 
