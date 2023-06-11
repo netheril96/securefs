@@ -42,26 +42,9 @@ Download from the Release page.
 
 First you need to install [vcpkg](vcpkg.io). Then run `python3 build.py --enable_test`.
 
-### FreeBSD (unofficial and maybe outdated)
+### Package managers
 
-Install using packages (recommended):
-
-```bash
-pkg install fusefs-securefs
-```
-
-or ports:
-
-```bash
-make -C /usr/ports/sysutils/fusefs-securefs install
-```
-
-Make sure you load the fuse kernel module before using securefs:
-
-```bash
-kldload fuse
-sysrc -f /boot/loader.conf fuse_load="YES"  # Load fuse automatically at boot
-```
+Currently no package managers are supported. Their version may be outdated. This may change in the future.
 
 ## Basic usage
 
