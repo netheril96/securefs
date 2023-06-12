@@ -67,6 +67,7 @@ def securefs_mount(
     password: Optional[str],
     keyfile: Optional[str] = None,
     config_filename: Optional[str] = None,
+    plain_text_names: bool = False,
 ) -> subprocess.Popen:
     command = [
         SECUREFS_BINARY,
@@ -85,6 +86,8 @@ def securefs_mount(
     if config_filename:
         command.append("--config")
         command.append(config_filename)
+    if plain_text_names:
+        command.append("--plain-text-names")
     logging.info("Start mounting, command:\n%s", " ".join(command))
     p = subprocess.Popen(
         command,
@@ -133,6 +136,7 @@ def securefs_create(
     password: Optional[str],
     keyfile: Optional[str] = None,
     max_padding: int = 0,
+    json_config_destination: Optional[str] = None,
 ):
     command = [
         SECUREFS_BINARY,
@@ -155,6 +159,8 @@ def securefs_create(
         command.append(keyfile)
     logging.info("Creating securefs repo with command %s", command)
     subprocess.check_call(command)
+    if json_config_destination:
+        os.replace(os.path.join(data_dir, ".securefs.json"), json_config_destination)
 
 
 def securefs_chpass(
@@ -257,7 +263,7 @@ ALL_PBKDFS = ("scrypt", "pkcs5-pbkdf2-hmac-sha256", "argon2id")
 
 
 @parametrize(
-    tuple(
+    list(
         itertools.product(
             range(1, 5),
             ALL_PBKDFS,
@@ -267,16 +273,33 @@ ALL_PBKDFS = ("scrypt", "pkcs5-pbkdf2-hmac-sha256", "argon2id")
                 SecretInputMode.PASSWORD_WITH_KEYFILE2,
             ],
             [0, 15],
+            [False],
         )
     )
+    + [
+        (
+            4,
+            "argon2id",
+            SecretInputMode.KEYFILE2,
+            3,
+            True,
+        )
+    ]
 )
-def make_test_case(version: int, pbkdf: str, mode: SecretInputMode, max_padding: int):
+def make_test_case(
+    version: int,
+    pbkdf: str,
+    mode: SecretInputMode,
+    max_padding: int,
+    plain_text_names: bool,
+):
     class SimpleSecureFSTestBase(unittest.TestCase):
         data_dir: str
         password: Optional[str]
         keyfile: Optional[str]
         mount_point: str
         securefs_process: Optional[subprocess.Popen]
+        config_file: Optional[str]
 
         @classmethod
         def setUpClass(cls):
@@ -285,6 +308,7 @@ def make_test_case(version: int, pbkdf: str, mode: SecretInputMode, max_padding:
             cls.mount_point = get_mount_point()
             cls.password = "pvj8lRgrrsqzlr" if mode & SecretInputMode.PASSWORD else None
             cls.keyfile = generate_keyfile() if mode & SecretInputMode.KEYFILE else None
+            cls.config_file = generate_keyfile() if plain_text_names else None
             securefs_create(
                 data_dir=cls.data_dir,
                 password=cls.password,
@@ -292,6 +316,7 @@ def make_test_case(version: int, pbkdf: str, mode: SecretInputMode, max_padding:
                 keyfile=cls.keyfile,
                 pbkdf=pbkdf,
                 max_padding=max_padding,
+                json_config_destination=cls.config_file,
             )
             cls.mount()
 
@@ -306,6 +331,8 @@ def make_test_case(version: int, pbkdf: str, mode: SecretInputMode, max_padding:
                 cls.mount_point,
                 password=cls.password,
                 keyfile=cls.keyfile,
+                config_filename=cls.config_file,
+                plain_text_names=plain_text_names,
             )
 
         @classmethod
