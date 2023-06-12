@@ -563,6 +563,30 @@ reference_data_dir = shutil.copytree(
 )
 
 
+def _compare_directory(self: unittest.TestCase, dir1: str, dir2: str):
+    listing1 = list_dir_recursive(dir1, relpath=True)
+    listing2 = list_dir_recursive(dir2, relpath=True)
+
+    self.assertEqual(
+        listing1,
+        listing2,
+        f"{dir1} and {dir2} differ in file names",
+    )
+
+    for fn in listing1:
+        fn1 = os.path.join(dir1, fn)
+        fn2 = os.path.join(dir2, fn)
+
+        if os.path.isdir(fn1) and os.path.isdir(fn2):
+            continue
+
+        with open(fn1, "rb") as f:
+            data1 = f.read()
+        with open(fn2, "rb") as f:
+            data2 = f.read()
+        self.assertEqual(data1, data2, f"{fn1} and {fn2} differ in contents")
+
+
 @parametrize(
     tuple(itertools.product(range(1, 5), ALL_PBKDFS, SecretInputMode, [False, True]))
 )
@@ -591,36 +615,35 @@ def make_regression_test(version: int, pbkdf: str, mode: SecretInputMode, padded
                 config_filename=config_filename,
             )
             try:
-                self.compare_directory(
-                    os.path.join(reference_data_dir, "plain"), mount_point
+                _compare_directory(
+                    self, os.path.join(reference_data_dir, "plain"), mount_point
                 )
             finally:
                 securefs_unmount(p, mount_point)
 
-        def compare_directory(self, dir1, dir2):
-            listing1 = list_dir_recursive(dir1, relpath=True)
-            listing2 = list_dir_recursive(dir2, relpath=True)
-
-            self.assertEqual(
-                listing1,
-                listing2,
-                f"{dir1} and {dir2} differ in file names",
-            )
-
-            for fn in listing1:
-                fn1 = os.path.join(dir1, fn)
-                fn2 = os.path.join(dir2, fn)
-
-                if os.path.isdir(fn1) and os.path.isdir(fn2):
-                    continue
-
-                with open(fn1, "rb") as f:
-                    data1 = f.read()
-                with open(fn2, "rb") as f:
-                    data2 = f.read()
-                self.assertEqual(data1, data2, f"{fn1} and {fn2} differ in contents")
-
     return RegressionTestBase
+
+
+class PlainTextNamesRegressionTestCase(unittest.TestCase):
+    def test_regression(self):
+        mount_point = get_mount_point()
+        config_filename = os.path.join(
+            reference_data_dir, "4", ".securefs.argon2id.KEYFILE2.json"
+        )
+        p = securefs_mount(
+            os.path.join(reference_data_dir, "4-plain-text-names"),
+            mount_point,
+            password=None,
+            keyfile=os.path.join(reference_data_dir, "keyfile"),
+            config_filename=config_filename,
+            plain_text_names=True,
+        )
+        try:
+            _compare_directory(
+                self, os.path.join(reference_data_dir, "plain"), mount_point
+            )
+        finally:
+            securefs_unmount(p, mount_point)
 
 
 def list_dir_recursive(dirname: str, relpath=False) -> Set[str]:
