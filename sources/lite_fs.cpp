@@ -31,7 +31,7 @@ namespace lite
                            unsigned iv_size,
                            unsigned max_padding_size,
                            unsigned flags)
-        : m_name_encryptor(std::make_shared<AES_SIV>(name_key.data(), name_key.size()))
+        : m_name_encryptor()
         , m_content_key(content_key)
         , m_padding_aes(padding_key.data(), padding_key.size())
         , m_root(std::move(root))
@@ -43,6 +43,10 @@ namespace lite
         byte null_iv[12] = {0};
         m_xattr_enc.SetKeyWithIV(xattr_key.data(), xattr_key.size(), null_iv, sizeof(null_iv));
         m_xattr_dec.SetKeyWithIV(xattr_key.data(), xattr_key.size(), null_iv, sizeof(null_iv));
+        if (!(m_flags & kOptionNoNameTranslation))
+        {
+            m_name_encryptor = std::make_shared<AES_SIV>(name_key.data(), name_key.size());
+        }
     }
 
     FileSystem::~FileSystem() {}
@@ -143,10 +147,12 @@ namespace lite
         }
         else
         {
-            std::string str = lite::encrypt_path(
-                *m_name_encryptor,
-                transform(path, m_flags & kOptionCaseFoldFileName, m_flags & kOptionNFCFileName)
-                    .get());
+            std::string str = !m_name_encryptor
+                ? path.to_string()
+                : lite::encrypt_path(
+                    *m_name_encryptor,
+                    transform(path, m_flags & kOptionCaseFoldFileName, m_flags & kOptionNFCFileName)
+                        .get());
             if (!preserve_leading_slash && !str.empty() && str[0] == '/')
             {
                 str.erase(str.begin());
@@ -212,11 +218,17 @@ namespace lite
             if (link_size != buf->st_size && link_size != (buf->st_size - 8) / 2)
                 throwVFSException(EIO);
 
-            // Resize to actual size
-            buffer.resize(static_cast<size_t>(link_size));
-
-            auto resolved = decrypt_path(*m_name_encryptor, buffer);
-            buf->st_size = resolved.size();
+            if (m_name_encryptor)
+            {
+                // Resize to actual size
+                buffer.resize(static_cast<size_t>(link_size));
+                auto resolved = decrypt_path(*m_name_encryptor, buffer);
+                buf->st_size = resolved.size();
+            }
+            else
+            {
+                buf->st_size = link_size;
+            }
             break;
         }
         case S_IFDIR:
@@ -300,7 +312,8 @@ namespace lite
         auto underbuf = securefs::make_unique_array<char>(max_size);
         memset(underbuf.get(), 0, max_size);
         m_root->readlink(translate_path(path, false), underbuf.get(), max_size - 1);
-        std::string resolved = decrypt_path(*m_name_encryptor, underbuf.get());
+        std::string resolved
+            = m_name_encryptor ? decrypt_path(*m_name_encryptor, underbuf.get()) : underbuf.get();
         size_t copy_size = std::min(resolved.size(), size - 1);
         memcpy(buf, resolved.data(), copy_size);
         buf[copy_size] = '\0';
@@ -333,15 +346,19 @@ namespace lite
         std::string m_path;
         std::unique_ptr<DirectoryTraverser>
             m_underlying_traverser THREAD_ANNOTATION_GUARDED_BY(*this);
+
+        // Nullable. When null, the name isn't translated.
         std::shared_ptr<AES_SIV> m_name_encryptor;
         unsigned m_block_size, m_iv_size;
 
     public:
-        explicit LiteDirectory(std::string path,
-                               std::unique_ptr<DirectoryTraverser> underlying_traverser,
-                               std::shared_ptr<AES_SIV> name_encryptor,
-                               unsigned block_size,
-                               unsigned iv_size)
+        explicit LiteDirectory(
+            std::string path,
+            std::unique_ptr<DirectoryTraverser> underlying_traverser,
+            std::shared_ptr<AES_SIV>
+                name_encryptor,    // Nullable. When null, the name isn't translated.
+            unsigned block_size,
+            unsigned iv_size)
             : m_path(std::move(path))
             , m_underlying_traverser(std::move(underlying_traverser))
             , m_name_encryptor(std::move(name_encryptor))
@@ -375,6 +392,16 @@ namespace lite
                 {
                     if (name)
                         name->swap(under_name);
+                    return true;
+                }
+                if (!m_name_encryptor)
+                {
+                    // Plain text name mode
+                    if (name)
+                        name->swap(under_name);
+                    if (stbuf)
+                        stbuf->st_size = AESGCMCryptStream::calculate_real_size(
+                            stbuf->st_size, m_block_size, m_iv_size);
                     return true;
                 }
                 if (under_name[0] == '.')

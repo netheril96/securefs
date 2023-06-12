@@ -664,8 +664,9 @@ protected:
 protected:
     std::string get_real_config_path()
     {
-        return config_path.isSet() ? config_path.getValue()
-                                   : data_dir.getValue() + PATH_SEPARATOR_CHAR + CONFIG_FILE_NAME;
+        return !config_path.getValue().empty()
+            ? config_path.getValue()
+            : data_dir.getValue() + PATH_SEPARATOR_CHAR + CONFIG_FILE_NAME;
     }
 };
 
@@ -1033,6 +1034,11 @@ private:
                                   "When enabled, securefs will not return . and .. in `readdir` "
                                   "calls. You should normally not need this.",
                                   false};
+    TCLAP::SwitchArg plain_text_names{"",
+                                      "plain-text-names",
+                                      "When enabled, securefs does not encrypt or decrypt file "
+                                      "names. Use it at your own risk. No effect on full format.",
+                                      false};
 
 private:
     std::vector<const char*> to_c_style_args(const std::vector<std::string>& args)
@@ -1094,6 +1100,7 @@ public:
         cmdline.add(&noflock);
         cmdline.add(&attr_timeout);
         cmdline.add(&skip_dot_dot);
+        cmdline.add(&plain_text_names);
         cmdline.parse(argc, argv);
 
         get_password(false);
@@ -1331,6 +1338,15 @@ public:
         if (skip_dot_dot.getValue())
         {
             fsopt.flags.value() |= kOptionSkipDotDot;
+        }
+        if (plain_text_names.getValue())
+        {
+            if (config_path.getValue().empty())
+            {
+                WARN_LOG("--plain-text-names should be used with out of tree JSON config. Please "
+                         "specify --config-path explicitly.");
+            }
+            fsopt.flags.value() |= kOptionNoNameTranslation;
         }
 
         if (config.version < 4)
