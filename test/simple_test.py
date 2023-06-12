@@ -385,6 +385,7 @@ def make_test_case(version: int, pbkdf: str, mode: SecretInputMode, max_padding:
                     with open(source, "wb") as f:
                         f.write(data)
                     os.symlink(source, dest)
+                    self.assertIn(os.path.basename(dest), os.listdir(self.mount_point))
                     self.assertEqual(os.readlink(dest), source)
                     os.remove(source)
                     with self.assertRaises(EnvironmentError):
