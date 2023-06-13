@@ -30,7 +30,9 @@ There are already many encrypting filesystem in widespread use. Some notable one
 
 On Windows, we need to separately install [WinFsp](https://winfsp.dev/) and [VC++ redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170#visual-studio-2015-2017-2019-and-2022).
 
-On Linux/BSD, we need to install `fuse` package.
+On Linux, we need to install `fuse-dev` package.
+
+On FreeBSD, we need to run `pkg install fusefs-libs`.
 
 On macOS, we need to install [MacFUSE](https://osxfuse.github.io/).
 
