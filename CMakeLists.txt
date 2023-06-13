@@ -15,6 +15,10 @@ enable_testing()
 
 set(CMAKE_FIND_FRAMEWORK NEVER)
 
+if(APPLE)
+    add_link_options(-Wl,-dead_strip)
+endif()
+
 execute_process(COMMAND bash -c "uname -m" OUTPUT_VARIABLE architecture)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake-modules/")
@@ -22,53 +26,6 @@ include(GetGitRevisionDescription)
 git_describe(GIT_VERSION --tags)
 configure_file(${CMAKE_SOURCE_DIR}/sources/git-version.cpp.in
                ${CMAKE_BINARY_DIR}/git-version.cpp)
-
-if(UNIX)
-    find_path(FUSE_INCLUDE_DIR fuse.h PATHS /usr/local/include/fuse
-                                            /usr/local/include)
-    if(SECUREFS_USE_FUSET)
-        find_library(FUSE_LIBRARIES fuse-t PATHS /usr/local/lib)
-    else()
-        find_library(FUSE_LIBRARIES fuse PATHS /usr/local/lib)
-    endif()
-
-    include_directories(${FUSE_INCLUDE_DIR})
-    link_libraries(${FUSE_LIBRARIES})
-    add_compile_options(-Wall -Wextra -Wno-unknown-pragmas)
-
-    if(APPLE)
-        link_libraries(-Wl,-dead_strip)
-    else()
-        add_compile_options(-pthread)
-        link_libraries(-pthread)
-    endif()
-    link_libraries(${CMAKE_DL_LIBS})
-else()
-    add_definitions(-DNOMINMAX=1)
-    add_definitions(-D_CRT_SECURE_NO_WARNINGS=1)
-    add_definitions(-D__STDC__=1)
-    add_definitions(-DSTRSAFE_NO_DEPRECATE=1)
-    if(NOT WINFSP_PREFIX)
-        message("WINFSP_PREFIX not set, fallback to default value")
-        set(WINFSP_PREFIX "C:/Program Files (x86)/WinFsp")
-    endif()
-    if(${CMAKE_SIZEOF_VOID_P} EQUAL 8)
-        set(ARCH x64)
-    else()
-        set(ARCH x86)
-    endif()
-    set(FUSE_INCLUDE_DIR ${WINFSP_PREFIX}/inc/fuse)
-    include_directories(${WINFSP_PREFIX}/inc)
-    include_directories(${FUSE_INCLUDE_DIR})
-    link_libraries(${WINFSP_PREFIX}/lib/winfsp-${ARCH}.lib)
-    link_libraries(delayimp.lib)
-    if(MSVC)
-        link_libraries(-DELAYLOAD:winfsp-${ARCH}.dll)
-        add_compile_options(/utf-8)
-    elseif(MINGW)
-        link_libraries(-delayload=winfsp-${ARCH}.dll)
-    endif()
-endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(-Wthread-safety)
@@ -84,7 +41,7 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-include_directories(sources)
+include_directories(BEFORE sources)
 set(EXTERNAL_DIR external)
 include_directories(${EXTERNAL_DIR})
 
@@ -108,6 +65,7 @@ else()
 endif()
 
 find_package(Threads REQUIRED)
+target_link_libraries(securefs-static PUBLIC Threads::Threads)
 find_path(TCLAP_INCLUDE_DIRS "tclap/Arg.h")
 target_include_directories(securefs-static PUBLIC ${TCLAP_INCLUDE_DIRS})
 find_package(absl CONFIG REQUIRED)
@@ -138,6 +96,51 @@ else()
 
     find_library(CRYPTOPP_FLAGS NAMES cryptopp crypto++)
     target_link_libraries(securefs-static PUBLIC ${CRYPTOPP_FLAGS})
+endif()
+
+if(CMAKE_DL_LIBS)
+    target_link_libraries(securefs-static PUBLIC ${CMAKE_DL_LIBS})
+endif()
+
+if(UNIX)
+    find_path(FUSE_INCLUDE_DIR fuse.h PATHS /usr/local/include/fuse
+                                            /usr/local/include)
+    if(SECUREFS_USE_FUSET)
+        find_library(FUSE_LIBRARIES fuse-t PATHS /usr/local/lib)
+    else()
+        find_library(FUSE_LIBRARIES fuse PATHS /usr/local/lib)
+    endif()
+
+    target_include_directories(securefs-static SYSTEM AFTER
+                               PUBLIC ${FUSE_INCLUDE_DIR})
+    target_link_libraries(securefs-static PUBLIC ${FUSE_LIBRARIES})
+else()
+    target_compile_options(
+        securefs-static PUBLIC -DNOMINMAX=1 -D_CRT_SECURE_NO_WARNINGS=1
+                               -D__STDC__=1 -DSTRSAFE_NO_DEPRECATE=1)
+    if(NOT WINFSP_PREFIX)
+        message("WINFSP_PREFIX not set, fallback to default value")
+        set(WINFSP_PREFIX "C:/Program Files (x86)/WinFsp")
+    endif()
+    if(${CMAKE_SIZEOF_VOID_P} EQUAL 8)
+        set(ARCH x64)
+    else()
+        set(ARCH x86)
+    endif()
+    set(FUSE_INCLUDE_DIR ${WINFSP_PREFIX}/inc/fuse)
+    target_include_directories(securefs-static SYSTEM AFTER
+                               PUBLIC ${WINFSP_PREFIX}/inc ${FUSE_INCLUDE_DIR})
+    target_link_libraries(securefs-static
+                          PUBLIC ${WINFSP_PREFIX}/lib/winfsp-${ARCH}.lib)
+    target_link_libraries(securefs-static PUBLIC delayimp.lib)
+    if(MSVC)
+        target_link_libraries(securefs-static
+                              PUBLIC -DELAYLOAD:winfsp-${ARCH}.dll)
+        target_compile_options(securefs-static PUBLIC /utf-8)
+    elseif(MINGW)
+        target_link_libraries(securefs-static
+                              PUBLIC -delayload=winfsp-${ARCH}.dll)
+    endif()
 endif()
 
 if(SECUREFS_ENABLE_BUILD_TEST)
