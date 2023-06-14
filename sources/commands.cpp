@@ -670,6 +670,16 @@ protected:
     }
 };
 
+static void secure_wipe(const char* buffer, size_t size)
+{
+    // On FreeBSD, this may be called. It is a no-op because we cannot write const region.
+}
+
+static void secure_wipe(char* buffer, size_t size)
+{
+    CryptoPP::SecureWipeBuffer(reinterpret_cast<byte*>(buffer), size);
+}
+
 class _SinglePasswordCommandBase : public _DataDirCommandBase
 {
 protected:
@@ -701,8 +711,7 @@ protected:
         {
             password.Assign(reinterpret_cast<const byte*>(pass.getValue().data()),
                             pass.getValue().size());
-            CryptoPP::SecureWipeBuffer(reinterpret_cast<byte*>(&pass.getValue()[0]),
-                                       pass.getValue().size());
+            secure_wipe(&pass.getValue()[0], pass.getValue().size());
             return;
         }
         if (keyfile.isSet() && !keyfile.getValue().empty() && !askpass.getValue())
