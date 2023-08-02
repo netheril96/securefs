@@ -10,8 +10,8 @@
 #include <unordered_set>
 #include <vector>
 
-#include <catch2/catch_all.hpp>
 #include <cryptopp/rng.h>
+#include <doctest/doctest.h>
 
 static void test(securefs::BtreeDirectory& dir,
                  securefs::Directory& reference,

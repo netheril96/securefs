@@ -2,7 +2,7 @@
 #include "exceptions.h"
 #include "file_table.h"
 #include "files.h"
-#include <catch2/catch_all.hpp>
+#include <doctest/doctest.h>
 
 #include <algorithm>
 #include <errno.h>

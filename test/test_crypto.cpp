@@ -1,5 +1,5 @@
-#include <catch2/catch_all.hpp>
 #include <cryptopp/scrypt.h>
+#include <doctest/doctest.h>
 
 #include "crypto.h"
 #include "lite_fs.h"

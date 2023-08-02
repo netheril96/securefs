@@ -1,6 +1,6 @@
-#define CATCH_CONFIG_RUNNER 1
+#define DOCTEST_CONFIG_IMPLEMENT
 #include "platform.h"
-#include <catch2/catch_all.hpp>
+#include <doctest/doctest.h>
 
 int main(int argc, char** argv)
 {
@@ -8,6 +8,8 @@ int main(int argc, char** argv)
     securefs::windows_init();
 #endif
     securefs::OSService::get_default().ensure_directory("tmp", 0755);
-    Catch::Session s;
-    return s.run(argc, argv);
+
+    doctest::Context context;
+    context.applyCommandLine(argc, argv);
+    return context.run();
 }

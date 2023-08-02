@@ -6,7 +6,7 @@
         "cryptopp",
         "tclap",
         "utf8proc",
-        "catch2",
+        "doctest",
         "jsoncpp"
     ]
 }

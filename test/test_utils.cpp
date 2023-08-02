@@ -1,7 +1,7 @@
 #include "crypto.h"
 #include "myutils.h"
 #include "platform.h"
-#include <catch2/catch_all.hpp>
+#include <doctest/doctest.h>
 
 #include <cryptopp/base32.h>
 

@@ -1,6 +1,6 @@
 #ifdef _WIN32
 #include "platform.h"
-#include <catch2/catch_all.hpp>
+#include <doctest/doctest.h>
 
 using ::securefs::OSService;
 

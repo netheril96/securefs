@@ -1,6 +1,6 @@
 #ifdef __APPLE__
 #include "apple_xattr_workaround.h"
-#include <catch2/catch_all.hpp>
+#include <doctest/doctest.h>
 
 #include <string>
 

@@ -148,8 +148,8 @@ endif()
 
 if(SECUREFS_ENABLE_BUILD_TEST)
     add_executable(securefs_test ${TEST_SOURCES})
-    find_package(Catch2 CONFIG REQUIRED)
-    target_link_libraries(securefs_test PRIVATE Catch2::Catch2)
+    find_package(doctest CONFIG REQUIRED)
+    target_link_libraries(securefs_test PRIVATE doctest::doctest)
     add_test(NAME sec_test COMMAND securefs_test)
 endif()
 

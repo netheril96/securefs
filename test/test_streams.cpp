@@ -1,4 +1,4 @@
-#include <catch2/catch_all.hpp>
+#include <doctest/doctest.h>
 
 #include "crypto.h"
 #include "lite_stream.h"
@@ -64,7 +64,8 @@ namespace
 
 static void test(securefs::StreamBase& stream, unsigned times)
 {
-    CAPTURE(typeid(stream).name());
+    const char* stream_type_name = typeid(stream).name();
+    CAPTURE(stream_type_name);
     securefs::MemoryStream memory_stream;
     stream.resize(0);
 

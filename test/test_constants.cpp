@@ -1,4 +1,4 @@
-#include <catch2/catch_all.hpp>
+#include <doctest/doctest.h>
 
 #include "constants.h"
 
