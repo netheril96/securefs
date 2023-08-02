@@ -33,9 +33,15 @@ def main():
         default="",
     )
     parser.add_argument(
-        "--enable_test",
+        "--enable_unit_test",
         default=False,
-        help="Run test after building to ensure correctness",
+        help="Run unit test after building to ensure correctness",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--enable_integration_test",
+        default=False,
+        help="Run integration test after building to ensure correctness",
         action="store_true",
     )
     parser.add_argument(
@@ -64,13 +70,17 @@ def main():
     ]
     if args.triplet:
         configure_args.append("-DVCPKG_TARGET_TRIPLET=" + args.triplet)
+    if not args.enable_unit_test:
+        configure_args.append("-DSECUREFS_ENABLE_UNIT_TEST=OFF")
+    if not args.enable_integration_test:
+        configure_args.append("-DSECUREFS_ENABLE_INTEGRATION_TEST=OFF")
     for pair in args.cmake_defines:
         configure_args.append("-D" + pair)
     configure_args.append(source_dir)
 
     check_call(*configure_args)
     check_call("cmake", "--build", ".", "--config", "Release")
-    if args.enable_test:
+    if args.enable_unit_test or args.enable_integration_test:
         check_call("ctest", "-V", "-C", "Release")
     print(
         "Build succeeds. Please copy the binary somewhere in your PATH:",

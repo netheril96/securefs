@@ -28,7 +28,7 @@ jobs:
       - name: build-test
         env:
           VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg_cache
-        run: python3 build.py --enable_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build
+        run: python3 build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build
       - name: upload
         uses: actions/upload-artifact@v1
         with:
@@ -78,7 +78,7 @@ jobs:
       - name: build
         env:
           VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg_cache
-        run: python3 build.py --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build
+        run: python3 build.py --enable_unit_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build
       - name: upload
         uses: actions/upload-artifact@v1
         with:
@@ -139,7 +139,7 @@ jobs:
       - name: build-test
         env:
           VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg_cache
-        run: python3 build.py --enable_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build
+        run: python3 build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build
       - name: upload
         uses: actions/upload-artifact@v1
         with:

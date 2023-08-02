@@ -9,7 +9,10 @@ option(
     SECUREFS_USE_VCPKG
     "Whether to use vcpkg for the dependencies. When off, pkg-config is used instead."
     ON)
-option(SECUREFS_ENABLE_BUILD_TEST "Whether to build dedicated test binary" ON)
+option(SECUREFS_ENABLE_UNIT_TEST
+       "Whether to build dedicated test binary and test it" ON)
+option(SECUREFS_ENABLE_INTEGRATION_TEST
+       "Whether to run integration test over real FUSE mounts" ON)
 option(SECUREFS_USE_FUSET
        "Use FUSE-T instead of MacFUSE (only makes sense on macOS)" OFF)
 
@@ -146,7 +149,7 @@ else()
     endif()
 endif()
 
-if(SECUREFS_ENABLE_BUILD_TEST)
+if(SECUREFS_ENABLE_UNIT_TEST)
     add_executable(securefs_test ${TEST_SOURCES})
     find_package(doctest CONFIG REQUIRED)
     target_link_libraries(securefs_test PRIVATE doctest::doctest)
@@ -154,7 +157,7 @@ if(SECUREFS_ENABLE_BUILD_TEST)
 endif()
 
 find_package(Python3 COMPONENTS Interpreter)
-if(Python3_FOUND)
+if(Python3_FOUND AND SECUREFS_ENABLE_INTEGRATION_TEST)
     add_test(
         NAME simple_test
         COMMAND ${CMAKE_COMMAND} -E env SECUREFS_BINARY=$<TARGET_FILE:securefs>
