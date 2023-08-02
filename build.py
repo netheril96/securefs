@@ -33,6 +33,9 @@ def main():
         default="",
     )
     parser.add_argument(
+        "--enable_test", default=False, help="Enable all tests", action="store_true"
+    )
+    parser.add_argument(
         "--enable_unit_test",
         default=False,
         help="Run unit test after building to ensure correctness",
@@ -60,6 +63,10 @@ def main():
         raise ValueError(
             "--vcpkg_root must point to a directory. Install from https://vcpkg.io if necessary."
         )
+
+    if args.enable_test:  # For backwards compat
+        args.enable_unit_test = True
+        args.enable_integration_test = True
 
     source_dir = os.path.dirname(os.path.realpath(__file__))
     os.chdir(get_build_root(args.build_root))
