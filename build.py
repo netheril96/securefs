@@ -3,6 +3,7 @@ import subprocess
 import os
 import tempfile
 import argparse
+import shutil
 
 
 def check_call(*args):
@@ -20,12 +21,34 @@ def get_build_root(build_root: str) -> str:
     return tempfile.mkdtemp(prefix="securefs", dir=base_tmp_dir)
 
 
+def _unchecked_get_vcpkg_cmake_file(vcpkg_root: str | None) -> str:
+    subpath = "scripts/buildsystems/vcpkg.cmake"
+    vcpkg_root = vcpkg_root or os.environ.get("VCPKG_ROOT")
+    if vcpkg_root:
+        return os.path.join(vcpkg_root, subpath)
+    exe_path = shutil.which("vcpkg")
+    if exe_path:
+        vcpkg_root = os.path.dirname(exe_path)
+        return os.path.join(vcpkg_root, subpath)
+    vcpkg_root = os.path.expanduser("~/vcpkg")
+    return os.path.join(vcpkg_root, subpath)
+
+
+def get_vcpkg_cmake_file(vcpkg_root: str | None) -> str:
+    result = _unchecked_get_vcpkg_cmake_file(vcpkg_root)
+    if not os.path.isfile(result):
+        raise ValueError(
+            "Cannot find vcpkg installation by heuristic. Please specify --vcpkg_root explicitly."
+        )
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--vcpkg_root",
         help="The root of vcpkg repository",
-        default=os.path.join(os.environ.get("HOME", "/"), "vcpkg"),
+        default=None,
     )
     parser.add_argument(
         "--build_root",
@@ -59,10 +82,6 @@ def main():
         help="Additional CMake definitions. Example: FOO=BAR",
     )
     args = parser.parse_args()
-    if not os.path.isdir(args.vcpkg_root):
-        raise ValueError(
-            "--vcpkg_root must point to a directory. Install from https://vcpkg.io if necessary."
-        )
 
     if args.enable_test:  # For backwards compat
         args.enable_unit_test = True
@@ -73,7 +92,7 @@ def main():
     configure_args = [
         "cmake",
         "-DCMAKE_BUILD_TYPE=Release",
-        f"-DCMAKE_TOOLCHAIN_FILE={args.vcpkg_root}/scripts/buildsystems/vcpkg.cmake",
+        f"-DCMAKE_TOOLCHAIN_FILE={get_vcpkg_cmake_file(args.vcpkg_root)}",
     ]
     if args.triplet:
         configure_args.append("-DVCPKG_TARGET_TRIPLET=" + args.triplet)
