@@ -315,34 +315,6 @@ std::string escape_nonprintable(const char* str, size_t size)
     return result;
 }
 
-class UTF8ProcException final : ExceptionBase
-{
-private:
-    utf8proc_ssize_t code_from_utf8proc;
-
-public:
-    explicit UTF8ProcException(utf8proc_ssize_t code_from_utf8proc)
-        : code_from_utf8proc(code_from_utf8proc)
-    {
-    }
-
-    std::string message() const override { return utf8proc_errmsg(code_from_utf8proc); }
-
-    const char* what() const noexcept override { return utf8proc_errmsg(code_from_utf8proc); }
-
-    int error_number() const noexcept override
-    {
-        switch (code_from_utf8proc)
-        {
-        case UTF8PROC_ERROR_NOMEM:
-            return ENOMEM;
-        case UTF8PROC_ERROR_OVERFLOW:
-            return ERANGE;
-        }
-        return EINVAL;
-    }
-};
-
 bool is_ascii(StringRef str)
 {
     for (char c : str)
@@ -377,7 +349,10 @@ ManagedCharPointer transform(StringRef str, bool case_fold, bool nfc)
                            static_cast<utf8proc_option_t>(options));
     if (rc < 0 || !result)
     {
-        throw UTF8ProcException(rc);
+        ERROR_LOG("Failed to transform string \"%s\": %s",
+                  escape_nonprintable(str.data(), str.size()).c_str(),
+                  utf8proc_errmsg(rc));
+        return ManagedCharPointer(str.c_str(), [](const char*) {});
     }
     return ManagedCharPointer(reinterpret_cast<char*>(result),
                               [](const char* str) { free(const_cast<char*>(str)); });
