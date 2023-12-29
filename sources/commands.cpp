@@ -1696,11 +1696,16 @@ public:
                         continue;
                     }
                 }
+                if (arg->getName() == "ignore_rest" || arg->getName() == "version"
+                    || arg->getName() == "help")
+                {
+                    continue;
+                }
                 fputs("- ", stdout);
                 auto flag = arg->getFlag();
                 if (!flag.empty())
                 {
-                    printf("**%c%s** ", arg->flagStartChar(), flag.c_str());
+                    printf("**%c%s** or ", arg->flagStartChar(), flag.c_str());
                 }
                 printf("**%s%s**", arg->nameStartString().c_str(), arg->getName().c_str());
                 printf(": %s. ", arg->getDescription().c_str());
