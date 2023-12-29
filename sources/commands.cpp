@@ -1723,7 +1723,14 @@ public:
                     auto a = dynamic_cast<TCLAP::ValueArg<std::string>*>(arg);
                     if (a)
                     {
-                        printf("*Default: %s.*\n", a->getValue().c_str());
+                        if (a->getValue().empty())
+                        {
+                            fputs("*Unset by default.*\n", stdout);
+                        }
+                        else
+                        {
+                            printf("*Default: %s.*\n", a->getValue().c_str());
+                        }
                         continue;
                     }
                 }
