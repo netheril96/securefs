@@ -1659,7 +1659,7 @@ public:
     DocCommand() = default;
     ~DocCommand() = default;
     const char* long_name() const noexcept override { return "doc"; }
-    char short_name() const noexcept override { return 'd'; }
+    char short_name() const noexcept override { return 0; }
     const char* help_message() const noexcept override
     {
         return "Display the full help message of all commands in markdown format";
@@ -1677,13 +1677,22 @@ public:
               stdout);
         for (auto c : commands)
         {
-            printf("## %s (short name: %c)\n", c->long_name(), c->short_name());
+            if (c->short_name())
+                printf("## %s (short name: %c)\n", c->long_name(), c->short_name());
+            else
+                printf("## %s\n", c->long_name());
             printf("%s\n\n", c->help_message());
             auto cmdline = c->cmdline();
 
             for (TCLAP::Arg* arg : cmdline->getArgList())
             {
-                printf("**%s**: %s\n", arg->getFlag().c_str(), arg->getDescription().c_str());
+                auto flag = arg->getFlag();
+                if (!flag.empty())
+                {
+                    printf("**%c%s** ", arg->flagStartChar(), flag.c_str());
+                }
+                printf("**%s%s**", arg->nameStartString().c_str(), arg->getName().c_str());
+                printf(": %s\n", arg->getDescription().c_str());
             }
         }
         return 0;
