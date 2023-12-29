@@ -680,6 +680,8 @@ static void secure_wipe(char* buffer, size_t size)
     CryptoPP::SecureWipeBuffer(reinterpret_cast<byte*>(buffer), size);
 }
 
+void CommandBase::parse_cmdline(int argc, const char* const* argv) { cmdline()->parse(argc, argv); }
+
 class _SinglePasswordCommandBase : public _DataDirCommandBase
 {
 protected:
@@ -776,18 +778,23 @@ private:
         "int"};
 
 public:
+    std::unique_ptr<TCLAP::CmdLine> cmdline() override
+    {
+        auto result = std::make_unique<TCLAP::CmdLine>(help_message());
+        add_all_args_from_base(*result);
+        result->add(&iv_size);
+        result->add(&rounds);
+        result->add(&format);
+        result->add(&store_time);
+        result->add(&block_size);
+        result->add(&pbkdf);
+        result->add(&max_padding);
+        return result;
+    }
+
     void parse_cmdline(int argc, const char* const* argv) override
     {
-        TCLAP::CmdLine cmdline(help_message());
-        add_all_args_from_base(cmdline);
-        cmdline.add(&iv_size);
-        cmdline.add(&rounds);
-        cmdline.add(&format);
-        cmdline.add(&store_time);
-        cmdline.add(&block_size);
-        cmdline.add(&pbkdf);
-        cmdline.add(&max_padding);
-        cmdline.parse(argc, argv);
+        _SinglePasswordCommandBase::parse_cmdline(argc, argv);
         get_password(true);
     }
 
@@ -913,20 +920,26 @@ private:
     }
 
 public:
+    std::unique_ptr<TCLAP::CmdLine> cmdline() override
+    {
+        auto result = std::make_unique<TCLAP::CmdLine>(help_message());
+        result->add(&data_dir);
+        result->add(&rounds);
+        result->add(&config_path);
+        result->add(&old_key_file);
+        result->add(&new_key_file);
+        result->add(&askoldpass);
+        result->add(&asknewpass);
+        result->add(&oldpass);
+        result->add(&newpass);
+        result->add(&pbkdf);
+        return result;
+    }
+
     void parse_cmdline(int argc, const char* const* argv) override
     {
-        TCLAP::CmdLine cmdline(help_message());
-        cmdline.add(&data_dir);
-        cmdline.add(&rounds);
-        cmdline.add(&config_path);
-        cmdline.add(&old_key_file);
-        cmdline.add(&new_key_file);
-        cmdline.add(&askoldpass);
-        cmdline.add(&asknewpass);
-        cmdline.add(&oldpass);
-        cmdline.add(&newpass);
-        cmdline.add(&pbkdf);
-        cmdline.parse(argc, argv);
+        _DataDirCommandBase::parse_cmdline(argc, argv);
+
         if (oldpass.isSet())
         {
             assign(oldpass.getValue(), old_password);
@@ -1087,30 +1100,34 @@ private:
     }
 
 public:
+    std::unique_ptr<TCLAP::CmdLine> cmdline() override
+    {
+        auto result = std::make_unique<TCLAP::CmdLine>(help_message());
+        add_all_args_from_base(*result);
+        result->add(&background);
+        // result->add(&insecure);
+        result->add(&verbose);
+        result->add(&trace);
+        result->add(&log);
+        result->add(&mount_point);
+        result->add(&fuse_options);
+        result->add(&single_threaded);
+        result->add(&normalization);
+        result->add(&fsname);
+        result->add(&fssubtype);
+        result->add(&noflock);
+        result->add(&attr_timeout);
+        result->add(&skip_dot_dot);
+        result->add(&plain_text_names);
+#ifdef __APPLE__
+        result->add(&noxattr);
+#endif
+        return result;
+    }
+
     void parse_cmdline(int argc, const char* const* argv) override
     {
-        TCLAP::CmdLine cmdline(help_message());
-
-#ifdef __APPLE__
-        cmdline.add(&noxattr);
-#endif
-        add_all_args_from_base(cmdline);
-        cmdline.add(&background);
-        // cmdline.add(&insecure);
-        cmdline.add(&verbose);
-        cmdline.add(&trace);
-        cmdline.add(&log);
-        cmdline.add(&mount_point);
-        cmdline.add(&fuse_options);
-        cmdline.add(&single_threaded);
-        cmdline.add(&normalization);
-        cmdline.add(&fsname);
-        cmdline.add(&fssubtype);
-        cmdline.add(&noflock);
-        cmdline.add(&attr_timeout);
-        cmdline.add(&skip_dot_dot);
-        cmdline.add(&plain_text_names);
-        cmdline.parse(argc, argv);
+        _SinglePasswordCommandBase::parse_cmdline(argc, argv);
 
         get_password(false);
 
@@ -1422,11 +1439,16 @@ public:
 class FixCommand : public _SinglePasswordCommandBase
 {
 public:
+    std::unique_ptr<TCLAP::CmdLine> cmdline() override
+    {
+        auto result = std::make_unique<TCLAP::CmdLine>(help_message());
+        add_all_args_from_base(*result);
+        return result;
+    }
+
     void parse_cmdline(int argc, const char* const* argv) override
     {
-        TCLAP::CmdLine cmdline(help_message());
-        add_all_args_from_base(cmdline);
-        cmdline.parse(argc, argv);
+        _SinglePasswordCommandBase::parse_cmdline(argc, argv);
 
         fflush(stdout);
         fflush(stderr);
@@ -1490,10 +1512,10 @@ static inline const char* true_or_false(bool v) { return v ? "true" : "false"; }
 class VersionCommand : public CommandBase
 {
 public:
-    void parse_cmdline(int argc, const char* const* argv) override
+    std::unique_ptr<TCLAP::CmdLine> cmdline() override
     {
-        (void)argc;
-        (void)argv;
+        auto result = std::make_unique<TCLAP::CmdLine>(help_message());
+        return result;
     }
 
     int execute() override
@@ -1554,11 +1576,11 @@ private:
         "path", "Directory or the filename of the config file", true, "", "path"};
 
 public:
-    void parse_cmdline(int argc, const char* const* argv) override
+    std::unique_ptr<TCLAP::CmdLine> cmdline() override
     {
-        TCLAP::CmdLine cmdline(help_message());
-        cmdline.add(&path);
-        cmdline.parse(argc, argv);
+        auto result = std::make_unique<TCLAP::CmdLine>(help_message());
+        result->add(&path);
+        return result;
     }
 
     const char* long_name() const noexcept override { return "info"; }
