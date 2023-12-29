@@ -780,7 +780,7 @@ private:
 public:
     std::unique_ptr<TCLAP::CmdLine> cmdline() override
     {
-        auto result = std::make_unique<TCLAP::CmdLine>(help_message());
+        auto result = make_unique<TCLAP::CmdLine>(help_message());
         add_all_args_from_base(*result);
         result->add(&iv_size);
         result->add(&rounds);
@@ -922,7 +922,7 @@ private:
 public:
     std::unique_ptr<TCLAP::CmdLine> cmdline() override
     {
-        auto result = std::make_unique<TCLAP::CmdLine>(help_message());
+        auto result = make_unique<TCLAP::CmdLine>(help_message());
         result->add(&data_dir);
         result->add(&rounds);
         result->add(&config_path);
@@ -1102,7 +1102,7 @@ private:
 public:
     std::unique_ptr<TCLAP::CmdLine> cmdline() override
     {
-        auto result = std::make_unique<TCLAP::CmdLine>(help_message());
+        auto result = make_unique<TCLAP::CmdLine>(help_message());
         add_all_args_from_base(*result);
         result->add(&background);
         // result->add(&insecure);
@@ -1441,7 +1441,7 @@ class FixCommand : public _SinglePasswordCommandBase
 public:
     std::unique_ptr<TCLAP::CmdLine> cmdline() override
     {
-        auto result = std::make_unique<TCLAP::CmdLine>(help_message());
+        auto result = make_unique<TCLAP::CmdLine>(help_message());
         add_all_args_from_base(*result);
         return result;
     }
@@ -1514,7 +1514,7 @@ class VersionCommand : public CommandBase
 public:
     std::unique_ptr<TCLAP::CmdLine> cmdline() override
     {
-        auto result = std::make_unique<TCLAP::CmdLine>(help_message());
+        auto result = make_unique<TCLAP::CmdLine>(help_message());
         return result;
     }
 
@@ -1578,7 +1578,7 @@ private:
 public:
     std::unique_ptr<TCLAP::CmdLine> cmdline() override
     {
-        auto result = std::make_unique<TCLAP::CmdLine>(help_message());
+        auto result = make_unique<TCLAP::CmdLine>(help_message());
         result->add(&path);
         return result;
     }
@@ -1650,6 +1650,46 @@ public:
     }
 };
 
+class DocCommand : public CommandBase
+{
+private:
+    std::vector<CommandBase*> commands{};
+
+public:
+    DocCommand() = default;
+    ~DocCommand() = default;
+    const char* long_name() const noexcept override { return "doc"; }
+    char short_name() const noexcept override { return 'd'; }
+    const char* help_message() const noexcept override
+    {
+        return "Display the full help message of all commands in markdown format";
+    }
+    std::unique_ptr<TCLAP::CmdLine> cmdline() override
+    {
+        return make_unique<TCLAP::CmdLine>(help_message());
+    }
+    void add_command(CommandBase* c) { commands.push_back(c); }
+    int execute()
+    {
+        fputs("# securefs\n", stdout);
+        fputs("The command strucuture is `securefs ${SUBCOMMAND} ${SUBOPTIONS}`.\nSee below for "
+              "available subcommands and relevant options\n\n",
+              stdout);
+        for (auto c : commands)
+        {
+            printf("## %s (short name: %c)\n", c->long_name(), c->short_name());
+            printf("%s\n\n", c->help_message());
+            auto cmdline = c->cmdline();
+
+            for (TCLAP::Arg* arg : cmdline->getArgList())
+            {
+                printf("**%s**: %s\n", arg->getFlag().c_str(), arg->getDescription().c_str());
+            }
+        }
+        return 0;
+    }
+};
+
 int commands_main(int argc, const char* const* argv)
 {
     try
@@ -1660,8 +1700,15 @@ int commands_main(int argc, const char* const* argv)
                                                make_unique<ChangePasswordCommand>(),
                                                make_unique<FixCommand>(),
                                                make_unique<VersionCommand>(),
-                                               make_unique<InfoCommand>()};
+                                               make_unique<InfoCommand>(),
+                                               make_unique<DocCommand>()};
+
         const char* const program_name = argv[0];
+        auto doc_command = dynamic_cast<DocCommand*>(cmds[array_length(cmds) - 1].get());
+        for (auto&& c : cmds)
+        {
+            doc_command->add_command(c.get());
+        }
 
         auto print_usage = [&]()
         {
@@ -1692,7 +1739,7 @@ int commands_main(int argc, const char* const* argv)
         argc--;
         argv++;
 
-        for (std::unique_ptr<CommandBase>& command : cmds)
+        for (auto&& command : cmds)
         {
             if (strcmp(argv[0], command->long_name()) == 0
                 || (argv[0] != nullptr && argv[0][0] == command->short_name() && argv[0][1] == 0))
