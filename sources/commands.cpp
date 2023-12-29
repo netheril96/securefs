@@ -1686,13 +1686,72 @@ public:
 
             for (TCLAP::Arg* arg : cmdline->getArgList())
             {
+                {
+                    auto a = dynamic_cast<TCLAP::UnlabeledValueArg<std::string>*>(arg);
+                    if (a)
+                    {
+                        printf("- **%s**: (*positional*) %s\n",
+                               a->getName().c_str(),
+                               a->getDescription().c_str());
+                        continue;
+                    }
+                }
+                fputs("- ", stdout);
                 auto flag = arg->getFlag();
                 if (!flag.empty())
                 {
                     printf("**%c%s** ", arg->flagStartChar(), flag.c_str());
                 }
                 printf("**%s%s**", arg->nameStartString().c_str(), arg->getName().c_str());
-                printf(": %s\n", arg->getDescription().c_str());
+                printf(": %s. ", arg->getDescription().c_str());
+                {
+                    auto a = dynamic_cast<TCLAP::SwitchArg*>(arg);
+                    if (a)
+                    {
+                        if (a->getValue())
+                        {
+                            fputs("*This is a switch arg. Default: true.*\n", stdout);
+                        }
+                        else
+                        {
+                            fputs("*This is a switch arg. Default: false.*\n", stdout);
+                        }
+                        continue;
+                    }
+                }
+                {
+                    auto a = dynamic_cast<TCLAP::ValueArg<std::string>*>(arg);
+                    if (a)
+                    {
+                        printf("*Default: %s.*\n", a->getValue().c_str());
+                        continue;
+                    }
+                }
+                {
+                    auto a = dynamic_cast<TCLAP::ValueArg<unsigned>*>(arg);
+                    if (a)
+                    {
+                        printf("*Default: %u.*\n", a->getValue());
+                        continue;
+                    }
+                }
+                {
+                    auto a = dynamic_cast<TCLAP::ValueArg<int>*>(arg);
+                    if (a)
+                    {
+                        printf("*Default: %d.*\n", a->getValue());
+                        continue;
+                    }
+                }
+                {
+                    auto a = dynamic_cast<TCLAP::MultiArg<std::string>*>(arg);
+                    if (a)
+                    {
+                        fputs("*This option can be specified multiple times.*\n", stdout);
+                        continue;
+                    }
+                }
+                throw_runtime_error(std::string("Unknown type of arg ") + typeid(*arg).name());
             }
         }
         return 0;
