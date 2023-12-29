@@ -65,6 +65,8 @@ securefs mount ~/Secret ~/Mount # press Ctrl-C to unmount
 securefs m -h # m is an alias for mount, -h tell you all the flags
 ```
 
+See the [full command line options](docs/usage.md).
+
 ## Lite and full mode
 
 There are two categories of filesystem format.
