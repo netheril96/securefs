@@ -10,13 +10,13 @@ At this time SecureFS does not work with GVFS (GNOME Virtual File System), which
 
 ### Remote mounting MacOS
 
-MacOS has a low number of available file descriptors by default. When running SecureFS on Mac, this number is automatically raised, however when remote mounting there is no way to automatically raise it, so it must be raised manually. 
+MacOS has a low number of available file descriptors by default. When running SecureFS on Mac, this number is automatically raised. However, when remote mounting there is no way to automatically raise this, so it must be raised manually. 
 
 On your mac, run `launchctl limit maxfiles 8192 unlimited` (it doesn't persist across reboot) before you mount the sshfs volume. Or you can run this with ssh, exit it, and then mount sshfs.
 
 ### Other issues
 
-In lite mode file may appear to upload correctly, however an error spam of "Operation not permitted" may be printed to the console. This is because FUSE and SSHFS in particular all have problems mapping user ids. If it doesn't affect your usage, you can ignore these logs.
+In lite mode, files may appear to upload correctly, however an error spam of "Operation not permitted" may be printed to the console. This is because FUSE and SSHFS in particular all have problems mapping user ids. If it doesn't affect your usage, you can ignore these logs.
 
 ### Renaming the SecureFS meta file
 
