@@ -1684,8 +1684,25 @@ public:
             printf("%s\n\n", c->help_message());
             auto cmdline = c->cmdline();
 
+            std::vector<std::pair<size_t, TCLAP::Arg*>> prioritizedArgs;
+            size_t index = 0;
             for (TCLAP::Arg* arg : cmdline->getArgList())
             {
+                ++index;
+                if (dynamic_cast<TCLAP::UnlabeledValueArg<std::string>*>(arg))
+                {
+                    prioritizedArgs.emplace_back(index, arg);
+                }
+                else
+                {
+                    prioritizedArgs.emplace_back(2 * cmdline->getArgList().size() - index, arg);
+                }
+            }
+            std::sort(prioritizedArgs.begin(), prioritizedArgs.end());
+
+            for (auto&& pair : prioritizedArgs)
+            {
+                TCLAP::Arg* arg = pair.second;
                 {
                     auto a = dynamic_cast<TCLAP::UnlabeledValueArg<std::string>*>(arg);
                     if (a)

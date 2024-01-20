@@ -5,6 +5,8 @@ See below for available subcommands and relevant options
 ## mount (short name: m)
 Mount an existing filesystem
 
+- **dir**: (*positional*) (required)  Directory where the data are stored
+- **mount_point**: (*positional*) (required)  Mount point
 - **--plain-text-names**: When enabled, securefs does not encrypt or decrypt file names. Use it at your own risk. No effect on full format.. *This is a switch arg. Default: false.*
 - **--skip-dot-dot**: When enabled, securefs will not return . and .. in `readdir` calls. You should normally not need this.. *This is a switch arg. Default: false.*
 - **--attr-timeout**: Number of seconds to cache file attributes. Default is 30.. *Default: 30.*
@@ -22,11 +24,10 @@ Mount an existing filesystem
 - **--keyfile**: An optional path to a key file to use in addition to or in place of password. *Unset by default.*
 - **--pass**: Password (prefer manually typing or piping since those methods are more secure). *Unset by default.*
 - **--config**: Full path name of the config file. ${data_dir}/.securefs.json by default. *Unset by default.*
-- **dir**: (*positional*) (required)  Directory where the data are stored
-- **mount_point**: (*positional*) (required)  Mount point
 ## create (short name: c)
 Create a new filesystem
 
+- **dir**: (*positional*) (required)  Directory where the data are stored
 - **--max-padding**: Maximum number of padding (the unit is byte) to add to all files in order to obfuscate their sizes. Each file has a different padding. Enabling this has a large performance cost.. *Default: 0.*
 - **--pbkdf**: The algorithm to stretch passwords. Use argon2id for maximum protection (default), or pkcs5-pbkdf2-hmac-sha256 for compatibility with old versions of securefs. *Default: argon2id.*
 - **--block-size**: Block size for files (ignored for fs format 1). *Default: 4096.*
@@ -38,10 +39,10 @@ Create a new filesystem
 - **--keyfile**: An optional path to a key file to use in addition to or in place of password. *Unset by default.*
 - **--pass**: Password (prefer manually typing or piping since those methods are more secure). *Unset by default.*
 - **--config**: Full path name of the config file. ${data_dir}/.securefs.json by default. *Unset by default.*
-- **dir**: (*positional*) (required)  Directory where the data are stored
 ## chpass
 Change password/keyfile of existing filesystem
 
+- **dir**: (*positional*) (required)  Directory where the data are stored
 - **--pbkdf**: The algorithm to stretch passwords. Use argon2id for maximum protection (default), or pkcs5-pbkdf2-hmac-sha256 for compatibility with old versions of securefs. *Default: argon2id.*
 - **--newpass**: The new password (prefer manually typing or piping since those methods are more secure). *Unset by default.*
 - **--oldpass**: The old password (prefer manually typing or piping since those methods are more secure). *Unset by default.*
@@ -51,15 +52,14 @@ Change password/keyfile of existing filesystem
 - **--oldkeyfile**: Path to original key file. *Unset by default.*
 - **--config**: Full path name of the config file. ${data_dir}/.securefs.json by default. *Unset by default.*
 - **-r** or **--rounds**: Specify how many rounds of key derivation are applied (0 for automatic). *Default: 0.*
-- **dir**: (*positional*) (required)  Directory where the data are stored
 ## fix
 Try to fix errors in an existing filesystem
 
+- **dir**: (*positional*) (required)  Directory where the data are stored
 - **--askpass**: When set to true, ask for password even if a key file is used. password+keyfile provides even stronger security than one of them alone.. *This is a switch arg. Default: false.*
 - **--keyfile**: An optional path to a key file to use in addition to or in place of password. *Unset by default.*
 - **--pass**: Password (prefer manually typing or piping since those methods are more secure). *Unset by default.*
 - **--config**: Full path name of the config file. ${data_dir}/.securefs.json by default. *Unset by default.*
-- **dir**: (*positional*) (required)  Directory where the data are stored
 ## version (short name: v)
 Show version of the program
 
