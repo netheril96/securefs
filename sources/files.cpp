@@ -212,7 +212,7 @@ int FileBase::get_real_type() { return type_for_mode(get_mode() & S_IFMT); }
 void FileBase::stat(struct fuse_stat* st)
 {
     m_data_stream->fstat(st);
-
+    st->st_ino = to_inode_number(get_id());
     st->st_uid = get_uid();
     st->st_gid = get_gid();
     st->st_nlink = get_nlink();

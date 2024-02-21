@@ -362,20 +362,20 @@ namespace operations
 #ifdef _WIN32
                 // Only Windows, `st` contains the full information, so we need to call `stat` here.
                 fb->stat(&st);
-                filler(buffer, ".", &st, 0);
-                filler(buffer, "..", nullptr, 0);
 #else
                 // On Unix, only information stored in `st` is the file mode. So we do not need to
                 // stat "." and "..".
                 st.st_mode = S_IFDIR;
+                st.st_ino = to_inode_number(fb->get_id());
+#endif
                 filler(buffer, ".", &st, 0);
                 filler(buffer, "..", &st, 0);
-#endif
             }
             auto actions = [&st, filler, buffer, has_padding](
-                               const std::string& name, const id_type&, int type) -> bool
+                               const std::string& name, const id_type& id, int type) -> bool
             {
                 st.st_mode = FileBase::mode_for_type(type);
+                st.st_ino = to_inode_number(id);
                 bool success = filler(buffer,
                                       name.c_str(),
                                       // When random padding is enabled, we cannot obtain accurate
