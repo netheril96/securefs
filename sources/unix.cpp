@@ -212,6 +212,8 @@ public:
         }
         if (st)
         {
+            memset(st, 0, sizeof(*st));
+            st->st_ino = entry->d_ino;
             switch (entry->d_type)
             {
             case DT_DIR:
