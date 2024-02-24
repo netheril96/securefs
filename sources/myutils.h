@@ -242,7 +242,7 @@ inline typename std::remove_reference<T>::type from_little_endian(const void* in
 
 inline uint64_t to_inode_number(const id_type& id)
 {
-    static_assert(sizeof(uint64_t) < id_type::size());
+    static_assert(sizeof(uint64_t) < id_type::size(), "ID size too small");
     // Bitwise flip because we use zero id for root, but FUSE expect non-zero inode numbers.
     return ~from_little_endian<uint64_t>(id.data());
 }

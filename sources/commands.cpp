@@ -1669,7 +1669,7 @@ public:
         return make_unique<TCLAP::CmdLine>(help_message());
     }
     void add_command(CommandBase* c) { commands.push_back(c); }
-    int execute()
+    int execute() override
     {
         fputs("# securefs\n", stdout);
         fputs("The command strucuture is `securefs ${SUBCOMMAND} ${SUBOPTIONS}`.\nSee below for "
