@@ -76,9 +76,30 @@ namespace lite
         return strprintf("Invalid filename \"%s\"", m_filename.c_str());
     }
 
-    std::string encrypt_path(AES_SIV& encryptor, StringRef path)
+    // Longer file names would be encrypted and base32 to > 255 bytes, and that exceeds most
+    // filesystem's limits.
+    constexpr size_t max_normal_filename_component_size = 143;
+
+    static std::string encrypt_long_name_component(AES_SIV& encryptor,
+                                                   absl::string_view long_name,
+                                                   LongNameLookupTable* maybe_table)
     {
-        byte buffer[2032];
+        unsigned char sha256[32];
+        CryptoPP::SHA256 calc;
+        calc.Update(reinterpret_cast<const byte*>(long_name.data()), long_name.size());
+        calc.TruncatedFinal(sha256, sizeof(sha256));
+        std::vector<unsigned char> buffer(sizeof(sha256) + AES_SIV::IV_SIZE + long_name.size()
+                                          + AES_SIV::IV_SIZE);
+        encryptor.encrypt_and_authenticate(
+            sha256, sizeof(sha256), nullptr, 0, buffer.data() + AES_SIV::IV_SIZE, buffer.data());
+        if (maybe_table)
+        {
+        }
+    }
+
+    std::string encrypt_path(AES_SIV& encryptor, StringRef path, LongNameLookupTable* maybe_table)
+    {
+        byte buffer[max_normal_filename_component_size * 2 + 32];
         std::string result;
         result.reserve((path.size() * 8 + 4) / 5);
         size_t last_nonseparator_index = 0;
@@ -92,12 +113,16 @@ namespace lite
                 {
                     const char* slice = path.data() + last_nonseparator_index;
                     size_t slice_size = i - last_nonseparator_index;
-                    if (slice_size > 2000)
-                        throwVFSException(ENAMETOOLONG);
-                    encryptor.encrypt_and_authenticate(
-                        slice, slice_size, nullptr, 0, buffer + AES_SIV::IV_SIZE, buffer);
-                    base32_encode(buffer, slice_size + AES_SIV::IV_SIZE, encoded_part);
-                    result.append(encoded_part);
+                    if (slice_size <= max_normal_filename_component_size)
+                    {
+                        encryptor.encrypt_and_authenticate(
+                            slice, slice_size, nullptr, 0, buffer + AES_SIV::IV_SIZE, buffer);
+                        base32_encode(buffer, slice_size + AES_SIV::IV_SIZE, encoded_part);
+                        result.append(encoded_part);
+                    }
+                    else
+                    {
+                    }
                 }
                 if (i < path.size())
                     result.push_back('/');
@@ -107,7 +132,7 @@ namespace lite
         return result;
     }
 
-    std::string decrypt_path(AES_SIV& decryptor, StringRef path)
+    std::string decrypt_path(AES_SIV& decryptor, StringRef path, LongNameLookupTable* maybe_table)
     {
         byte string_buffer[2032];
         std::string result, decoded_part;
@@ -492,16 +517,30 @@ namespace lite
                 pragma journal_mode = "TRUNCATE";
                 create table if not exists encrypted_mappings (
                     encrypted_hash blob not null primary key,
-                    encrypted_name blob not null
+                    encrypted_name blob not null,
+                    ref_count int default 1 not null
                 );
+                create trigger if not exists cleanup_on_ref_count_drop_to_zero
+                    after update of ref_count on encrypted_mappings 
+                    when ref_count <= 0
+                    begin
+                        delete from encrypted_mappings
+                            where row_id = new.row_id
+                    end;
             )");
         }
         query_ = SQLiteStatement(
             db_, "select encrypted_name from encrypted_mappings where encrypted_hash = ?;");
         updater_ = SQLiteStatement(db_, R"(
-            insert or replace into encrypted_mappings 
+            insert into encrypted_mappings 
                 (encrypted_hash, encrypted_name) 
-                values (?, ?);
+                values (?, ?)
+                on conflict (encrypted_hash)
+                do update set ref_count = ref_count + 1;
+        )");
+        deleter_ = SQLiteStatement(db_, R"(
+            update encrypted_mappings set ref_count = ref_count -1
+                where encrypted_hash = ?;
         )");
     }
 
@@ -529,6 +568,14 @@ namespace lite
         updater_.bind_blob(1, encrypted_hash);
         updater_.bind_blob(2, encrypted_long_name);
         updater_.step();
+    }
+
+    void LongNameLookupTable::delete_once(absl::Span<const unsigned char> encrypted_hash)
+    {
+        LockGuard<Mutex> lg(mu_);
+        deleter_.reset();
+        deleter_.bind_blob(1, encrypted_hash);
+        deleter_.step();
     }
 
 #ifdef __APPLE__

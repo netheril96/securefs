@@ -139,16 +139,19 @@ namespace lite
         std::vector<unsigned char> lookup(absl::Span<const unsigned char> encrypted_hash);
         void insert_or_update(absl::Span<const unsigned char> encrypted_hash,
                               absl::Span<const unsigned char> encrypted_long_name);
+        void delete_once(absl::Span<const unsigned char> encrypted_hash);
 
     private:
         Mutex mu_;
         SQLiteDB db_ THREAD_ANNOTATION_GUARDED_BY(mu_);
         SQLiteStatement query_ THREAD_ANNOTATION_GUARDED_BY(mu_),
-            updater_ THREAD_ANNOTATION_GUARDED_BY(mu_);
+            updater_ THREAD_ANNOTATION_GUARDED_BY(mu_), deleter_ THREAD_ANNOTATION_GUARDED_BY(mu_);
     };
 
-    std::string encrypt_path(AES_SIV& encryptor, StringRef path);
-    std::string decrypt_path(AES_SIV& decryptor, StringRef path);
+    std::string
+    encrypt_path(AES_SIV& encryptor, StringRef path, LongNameLookupTable* maybe_table = nullptr);
+    std::string
+    decrypt_path(AES_SIV& decryptor, StringRef path, LongNameLookupTable* maybe_table = nullptr);
 
     class InvalidFilenameException : public VerificationException
     {
