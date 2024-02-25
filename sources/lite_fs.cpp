@@ -47,6 +47,15 @@ namespace lite
         {
             m_name_encryptor = std::make_shared<AES_SIV>(name_key.data(), name_key.size());
         }
+        auto db_path = root->norm_path(".long_names.db");
+        m_name_lookup_ = std::make_shared<LongNameLookupTable>(
+#ifdef _WIN32
+            narrow_string(db_path)
+#else
+            db_path
+#endif
+                ,
+            flags & kOptionReadOnly);
     }
 
     FileSystem::~FileSystem() {}
@@ -459,6 +468,55 @@ namespace lite
     }
 
     Base::~Base() {}
+
+    LongNameLookupTable::LongNameLookupTable(StringRef filename, bool readonly)
+    {
+        db_ = SQLiteDB(
+            filename.c_str(),
+            SQLITE_OPEN_NOMUTEX
+                | (readonly ? SQLITE_OPEN_READONLY : (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)),
+            nullptr);
+        db_.exec(R"(
+            pragma journal_mode = "TRUNCATE";
+            create table if not exists encrypted_mappings (
+                encrypted_hash blob not null primary key,
+                encrypted_name blob not null
+            );
+        )");
+        query_ = SQLiteStatement(
+            db_, "select encrypted_name from encrypted_mappings where encrypted_hash = ?;");
+        updater_ = SQLiteStatement(db_, R"(
+            insert or replace into encrypted_mappings 
+                (encrypted_hash, encrypted_name) 
+                values (?, ?);
+        )");
+    }
+
+    LongNameLookupTable::~LongNameLookupTable() {}
+
+    std::vector<unsigned char>
+    LongNameLookupTable::lookup(absl::Span<const unsigned char> encrypted_hash)
+    {
+        LockGuard<Mutex> lg(mu_);
+        query_.reset();
+        query_.bind_blob(1, encrypted_hash);
+        if (!query_.step())
+        {
+            return {};
+        }
+        auto span = query_.get_blob(0);
+        return std::vector<unsigned char>(span.begin(), span.end());
+    }
+
+    void LongNameLookupTable::insert_or_update(absl::Span<const unsigned char> encrypted_hash,
+                                               absl::Span<const unsigned char> encrypted_long_name)
+    {
+        LockGuard<Mutex> lg(mu_);
+        updater_.reset();
+        updater_.bind_blob(1, encrypted_hash);
+        updater_.bind_blob(2, encrypted_long_name);
+        updater_.step();
+    }
 
 #ifdef __APPLE__
     ssize_t
