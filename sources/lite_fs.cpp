@@ -48,14 +48,24 @@ namespace lite
             m_name_encryptor = std::make_shared<AES_SIV>(name_key.data(), name_key.size());
         }
         auto db_path = root->norm_path(".long_names.db");
-        m_name_lookup_ = std::make_shared<LongNameLookupTable>(
+        try
+        {
+            m_name_lookup_ = std::make_shared<LongNameLookupTable>(
 #ifdef _WIN32
-            narrow_string(db_path)
+                narrow_string(db_path)
 #else
-            db_path
+                db_path
 #endif
-                ,
-            flags & kOptionReadOnly);
+                    ,
+                flags & kOptionReadOnly);
+        }
+        catch (const std::exception& e)
+        {
+            ERROR_LOG("Failed to open database for long name lookup, so long filenames will not be "
+                      "supported: %s",
+                      e.what());
+            m_name_lookup_ = {};
+        }
     }
 
     FileSystem::~FileSystem() {}
@@ -476,13 +486,16 @@ namespace lite
             SQLITE_OPEN_NOMUTEX
                 | (readonly ? SQLITE_OPEN_READONLY : (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)),
             nullptr);
-        db_.exec(R"(
-            pragma journal_mode = "TRUNCATE";
-            create table if not exists encrypted_mappings (
-                encrypted_hash blob not null primary key,
-                encrypted_name blob not null
-            );
-        )");
+        if (!readonly)
+        {
+            db_.exec(R"(
+                pragma journal_mode = "TRUNCATE";
+                create table if not exists encrypted_mappings (
+                    encrypted_hash blob not null primary key,
+                    encrypted_name blob not null
+                );
+            )");
+        }
         query_ = SQLiteStatement(
             db_, "select encrypted_name from encrypted_mappings where encrypted_hash = ?;");
         updater_ = SQLiteStatement(db_, R"(
