@@ -5,13 +5,13 @@
 #include "myutils.h"
 #include "platform.h"
 #include "streams.h"
-#include "thread_safety_annotations.hpp"
+
+#include <absl/base/thread_annotations.h>
+#include <absl/container/flat_hash_map.h>
 
 #include <memory>
 #include <string.h>
 #include <utility>
-
-#include <absl/container/flat_hash_map.h>
 
 namespace securefs
 {
@@ -46,17 +46,17 @@ private:
 private:
     securefs::Mutex m_lock;
     key_type m_master_key;
-    table_type m_files THREAD_ANNOTATION_GUARDED_BY(m_lock);
-    std::vector<id_type> m_closed_ids THREAD_ANNOTATION_GUARDED_BY(m_lock);
-    std::unique_ptr<FileTableIO> m_fio THREAD_ANNOTATION_GUARDED_BY(m_lock);
+    table_type m_files ABSL_GUARDED_BY(m_lock);
+    std::vector<id_type> m_closed_ids ABSL_GUARDED_BY(m_lock);
+    std::unique_ptr<FileTableIO> m_fio ABSL_GUARDED_BY(m_lock);
     uint32_t m_flags;
     unsigned m_block_size, m_iv_size, m_max_padding_size;
     std::shared_ptr<const OSService> m_root;
 
 private:
-    void eject() THREAD_ANNOTATION_REQUIRES(m_lock);
-    void finalize(std::unique_ptr<FileBase>&) THREAD_ANNOTATION_REQUIRES(m_lock);
-    void gc() THREAD_ANNOTATION_REQUIRES(m_lock);
+    void eject() ABSL_EXCLUSIVE_LOCKS_REQUIRED(m_lock);
+    void finalize(std::unique_ptr<FileBase>&) ABSL_EXCLUSIVE_LOCKS_REQUIRED(m_lock);
+    void gc() ABSL_EXCLUSIVE_LOCKS_REQUIRED(m_lock);
 
 public:
     explicit FileTableImpl(int version,

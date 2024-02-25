@@ -8,8 +8,8 @@
 #include "myutils.h"
 #include "platform.h"
 #include "sqlite_helper.h"
-#include "thread_safety_annotations.hpp"
 
+#include <absl/base/thread_annotations.h>
 #include <absl/types/span.h>
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
@@ -36,33 +36,33 @@ namespace lite
         virtual Directory* as_dir() noexcept { return nullptr; }
     };
 
-    class THREAD_ANNOTATION_CAPABILITY("mutex") Directory : public Base, public DirectoryTraverser
+    class ABSL_LOCKABLE Directory : public Base, public DirectoryTraverser
     {
     private:
         securefs::Mutex m_lock;
 
     public:
-        void lock() THREAD_ANNOTATION_ACQUIRE() { m_lock.lock(); }
-        void unlock() noexcept THREAD_ANNOTATION_RELEASE() { m_lock.unlock(); }
+        void lock() ABSL_EXCLUSIVE_LOCK_FUNCTION() { m_lock.lock(); }
+        void unlock() noexcept ABSL_UNLOCK_FUNCTION() { m_lock.unlock(); }
         Directory* as_dir() noexcept { return this; }
 
         // Obtains the (virtual) path of the directory.
         virtual StringRef path() const = 0;
 
         // Redeclare the methods in `DirectoryTraverser` to add thread safe annotations.
-        virtual bool next(std::string* name, struct fuse_stat* st) THREAD_ANNOTATION_REQUIRES(*this)
+        virtual bool next(std::string* name, struct fuse_stat* st)
+            ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
             = 0;
-        virtual void rewind() THREAD_ANNOTATION_REQUIRES(*this) = 0;
+        virtual void rewind() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) = 0;
     };
 
-    class THREAD_ANNOTATION_CAPABILITY("mutex") File final : public Base
+    class ABSL_LOCKABLE File final : public Base
     {
         DISABLE_COPY_MOVE(File)
 
     private:
-        securefs::optional<lite::AESGCMCryptStream>
-            m_crypt_stream THREAD_ANNOTATION_GUARDED_BY(*this);
-        std::shared_ptr<securefs::FileStream> m_file_stream THREAD_ANNOTATION_GUARDED_BY(*this);
+        securefs::optional<lite::AESGCMCryptStream> m_crypt_stream ABSL_GUARDED_BY(*this);
+        std::shared_ptr<securefs::FileStream> m_file_stream ABSL_GUARDED_BY(*this);
         securefs::Mutex m_lock;
 
     public:
@@ -76,36 +76,36 @@ namespace lite
 
         ~File();
 
-        length_type size() const THREAD_ANNOTATION_REQUIRES(*this)
+        length_type size() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
         {
             return m_crypt_stream->size();
         }
-        void flush() THREAD_ANNOTATION_REQUIRES(*this) { m_crypt_stream->flush(); }
-        bool is_sparse() const noexcept THREAD_ANNOTATION_REQUIRES(*this)
+        void flush() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) { m_crypt_stream->flush(); }
+        bool is_sparse() const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
         {
             return m_crypt_stream->is_sparse();
         }
-        void resize(length_type len) THREAD_ANNOTATION_REQUIRES(*this)
+        void resize(length_type len) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
         {
             m_crypt_stream->resize(len);
         }
         length_type read(void* output, offset_type off, length_type len)
-            THREAD_ANNOTATION_REQUIRES(*this)
+            ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
         {
             return m_crypt_stream->read(output, off, len);
         }
         void write(const void* input, offset_type off, length_type len)
-            THREAD_ANNOTATION_REQUIRES(*this)
+            ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
         {
             return m_crypt_stream->write(input, off, len);
         }
-        void fstat(struct fuse_stat* stat) THREAD_ANNOTATION_REQUIRES(*this);
-        void fsync() THREAD_ANNOTATION_REQUIRES(*this) { m_file_stream->fsync(); }
-        void utimens(const fuse_timespec ts[2]) THREAD_ANNOTATION_REQUIRES(*this)
+        void fstat(struct fuse_stat* stat) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+        void fsync() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) { m_file_stream->fsync(); }
+        void utimens(const fuse_timespec ts[2]) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
         {
             m_file_stream->utimens(ts);
         }
-        void lock(bool exclusive = true) THREAD_ANNOTATION_ACQUIRE()
+        void lock(bool exclusive = true) ABSL_EXCLUSIVE_LOCK_FUNCTION()
         {
             m_lock.lock();
             try
@@ -118,7 +118,7 @@ namespace lite
                 throw;
             }
         }
-        void unlock() noexcept THREAD_ANNOTATION_RELEASE()
+        void unlock() noexcept ABSL_UNLOCK_FUNCTION()
         {
             m_file_stream->unlock();
             m_lock.unlock();
@@ -145,11 +145,11 @@ namespace lite
 
     private:
         Mutex mu_;
-        SQLiteDB db_ THREAD_ANNOTATION_GUARDED_BY(mu_);
+        SQLiteDB db_ ABSL_GUARDED_BY(mu_);
 
     private:
-        void begin_exclusive() THREAD_ANNOTATION_REQUIRES(mu_);
-        void finish() noexcept THREAD_ANNOTATION_REQUIRES(mu_);
+        void begin_exclusive() ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+        void finish() noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
     };
 
     std::string

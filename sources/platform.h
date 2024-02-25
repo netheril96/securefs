@@ -4,7 +4,8 @@
 #include "mystring.h"
 #include "myutils.h"
 #include "streams.h"
-#include "thread_safety_annotations.hpp"
+
+#include <absl/base/thread_annotations.h>
 
 #include <functional>
 #include <memory>
@@ -281,14 +282,14 @@ private:
     void setColour(const char* _escapeCode) noexcept;
 };
 
-class THREAD_ANNOTATION_CAPABILITY("mutex") Mutex
+class ABSL_LOCKABLE Mutex
 {
 public:
     Mutex();
     ~Mutex();
-    void lock() THREAD_ANNOTATION_ACQUIRE();
-    void unlock() noexcept THREAD_ANNOTATION_RELEASE();
-    bool try_lock() THREAD_ANNOTATION_TRY_ACQUIRE(true);
+    void lock() ABSL_EXCLUSIVE_LOCK_FUNCTION();
+    void unlock() noexcept ABSL_UNLOCK_FUNCTION();
+    bool try_lock() ABSL_EXCLUSIVE_TRYLOCK_FUNCTION(true);
 
 private:
 #ifdef _WIN32

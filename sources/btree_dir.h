@@ -125,52 +125,53 @@ private:
     absl::flat_hash_map<uint32_t, std::unique_ptr<Node>> m_node_cache;
 
 private:
-    bool read_node(uint32_t, Node&) THREAD_ANNOTATION_REQUIRES(*this);
-    void read_free_page(uint32_t, FreePage&) THREAD_ANNOTATION_REQUIRES(*this);
-    void write_node(uint32_t, const Node&) THREAD_ANNOTATION_REQUIRES(*this);
-    void write_free_page(uint32_t, const FreePage&) THREAD_ANNOTATION_REQUIRES(*this);
-    void deallocate_page(uint32_t) THREAD_ANNOTATION_REQUIRES(*this);
-    uint32_t allocate_page() THREAD_ANNOTATION_REQUIRES(*this);
+    bool read_node(uint32_t, Node&) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    void read_free_page(uint32_t, FreePage&) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    void write_node(uint32_t, const Node&) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    void write_free_page(uint32_t, const FreePage&) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    void deallocate_page(uint32_t) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    uint32_t allocate_page() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
-    Node* retrieve_node(uint32_t parent_num, uint32_t num) THREAD_ANNOTATION_REQUIRES(*this);
-    Node* retrieve_existing_node(uint32_t num) THREAD_ANNOTATION_REQUIRES(*this);
-    void del_node(Node*) THREAD_ANNOTATION_REQUIRES(*this);
-    Node* get_root_node() THREAD_ANNOTATION_REQUIRES(*this);
-    void flush_cache() THREAD_ANNOTATION_REQUIRES(*this);
-    void clear_cache() THREAD_ANNOTATION_REQUIRES(*this);
-    void adjust_children_in_cache(BtreeNode* n, uint32_t parent) THREAD_ANNOTATION_REQUIRES(*this);
-    void adjust_children_in_cache(BtreeNode* n) THREAD_ANNOTATION_REQUIRES(*this)
+    Node* retrieve_node(uint32_t parent_num, uint32_t num) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    Node* retrieve_existing_node(uint32_t num) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    void del_node(Node*) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    Node* get_root_node() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    void flush_cache() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    void clear_cache() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    void adjust_children_in_cache(BtreeNode* n, uint32_t parent)
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    void adjust_children_in_cache(BtreeNode* n) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         adjust_children_in_cache(n, n->page_number());
     }
     void rotate(BtreeNode* left, BtreeNode* right, Entry& separator)
-        THREAD_ANNOTATION_REQUIRES(*this);
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
     void merge(BtreeNode* left, BtreeNode* right, BtreeNode* parent, ptrdiff_t entry_index)
-        THREAD_ANNOTATION_REQUIRES(*this);
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
     std::tuple<Node*, ptrdiff_t, bool> find_node(const std::string& name)
-        THREAD_ANNOTATION_REQUIRES(*this);
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
     std::pair<ptrdiff_t, BtreeNode*> find_sibling(const BtreeNode* parent, const BtreeNode* child)
-        THREAD_ANNOTATION_REQUIRES(*this);
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
     void insert_and_balance(Node*, Entry, uint32_t additional_child, int depth)
-        THREAD_ANNOTATION_REQUIRES(*this);
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
     Node* replace_with_sub_entry(Node*, ptrdiff_t index, int depth)
-        THREAD_ANNOTATION_REQUIRES(*this);
-    void balance_up(Node*, int depth) THREAD_ANNOTATION_REQUIRES(*this);
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    void balance_up(Node*, int depth) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
-    bool validate_node(const Node* n, int depth) THREAD_ANNOTATION_REQUIRES(*this);
-    void write_dot_graph(const Node*, FILE*) THREAD_ANNOTATION_REQUIRES(*this);
+    bool validate_node(const Node* n, int depth) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    void write_dot_graph(const Node*, FILE*) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
     template <class Callback>
     void recursive_iterate(const Node* n, const Callback& cb, int depth)
-        THREAD_ANNOTATION_REQUIRES(*this);
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
     template <class Callback>
     void mutable_recursive_iterate(Node* n, const Callback& cb, int depth)
-        THREAD_ANNOTATION_REQUIRES(*this);
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
 protected:
-    void subflush() override THREAD_ANNOTATION_REQUIRES(*this);
+    void subflush() override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
 public:
     template <class... Args>
@@ -181,21 +182,21 @@ public:
 
 protected:
     bool get_entry_impl(const std::string& name, id_type& id, int& type) override
-        THREAD_ANNOTATION_REQUIRES(*this);
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
     bool add_entry_impl(const std::string& name, const id_type& id, int type) override
-        THREAD_ANNOTATION_REQUIRES(*this);
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
     bool remove_entry_impl(const std::string& name, id_type& id, int& type) override
-        THREAD_ANNOTATION_REQUIRES(*this);
-    void iterate_over_entries_impl(const callback&) override THREAD_ANNOTATION_REQUIRES(*this);
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    void iterate_over_entries_impl(const callback&) override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
 public:
-    virtual bool empty() override THREAD_ANNOTATION_REQUIRES(*this);
-    void rebuild() THREAD_ANNOTATION_REQUIRES(*this);
+    virtual bool empty() override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    void rebuild() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
 public:
-    bool validate_free_list() THREAD_ANNOTATION_REQUIRES(*this);
-    bool validate_btree_structure() THREAD_ANNOTATION_REQUIRES(*this);
-    void to_dot_graph(const char* filename) THREAD_ANNOTATION_REQUIRES(*this);
+    bool validate_free_list() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    bool validate_btree_structure() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    void to_dot_graph(const char* filename) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 };
 
 template <class... Args>

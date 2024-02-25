@@ -19,8 +19,8 @@ static void test(securefs::BtreeDirectory& dir,
                  double prob_get,
                  double prob_add,
                  double prob_del,
-                 unsigned sequence) THREAD_ANNOTATION_REQUIRES(dir)
-    THREAD_ANNOTATION_REQUIRES(reference)
+                 unsigned sequence) ABSL_EXCLUSIVE_LOCKS_REQUIRED(dir)
+    ABSL_EXCLUSIVE_LOCKS_REQUIRED(reference)
 {
     (void)sequence;    // May be used later
     bool is_prob_valid = (prob_get >= 0 && prob_add >= 0 && prob_del >= 0

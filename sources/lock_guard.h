@@ -1,25 +1,25 @@
 #pragma once
-#include "thread_safety_annotations.hpp"
+#include <absl/base/thread_annotations.h>
 
 namespace securefs
 {
 template <class Lockable>
-class THREAD_ANNOTATION_SCOPED_CAPABILITY LockGuard
+class ABSL_SCOPED_LOCKABLE LockGuard
 {
 private:
     Lockable* m_lock;
 
 public:
-    explicit LockGuard(Lockable& lock, bool exclusive) THREAD_ANNOTATION_ACQUIRE(lock)
+    explicit LockGuard(Lockable& lock, bool exclusive) ABSL_EXCLUSIVE_LOCK_FUNCTION(&lock)
         : m_lock(&lock)
     {
         lock.lock(exclusive);
     }
-    explicit LockGuard(Lockable& lock) THREAD_ANNOTATION_ACQUIRE(lock) : m_lock(&lock)
+    explicit LockGuard(Lockable& lock) ABSL_EXCLUSIVE_LOCK_FUNCTION(&lock) : m_lock(&lock)
     {
         lock.lock();
     }
-    ~LockGuard() THREAD_ANNOTATION_RELEASE() { m_lock->unlock(); }
+    ~LockGuard() ABSL_UNLOCK_FUNCTION() { m_lock->unlock(); }
     LockGuard(LockGuard&&) = delete;
     LockGuard(const LockGuard&) = delete;
     LockGuard& operator=(LockGuard&&) = delete;

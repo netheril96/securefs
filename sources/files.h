@@ -3,7 +3,13 @@
 #include "myutils.h"
 #include "platform.h"
 #include "streams.h"
-#include "thread_safety_annotations.hpp"
+
+#include <absl/base/thread_annotations.h>
+#include <absl/container/flat_hash_map.h>
+#include <cryptopp/aes.h>
+#include <cryptopp/gcm.h>
+#include <cryptopp/osrng.h>
+#include <cryptopp/rng.h>
 
 #include <atomic>
 #include <chrono>
@@ -12,19 +18,13 @@
 #include <string>
 #include <thread>
 
-#include <absl/container/flat_hash_map.h>
-#include <cryptopp/aes.h>
-#include <cryptopp/gcm.h>
-#include <cryptopp/osrng.h>
-#include <cryptopp/rng.h>
-
 namespace securefs
 {
 class RegularFile;
 class Directory;
 class Symlink;
 
-class THREAD_ANNOTATION_CAPABILITY("mutex") FileBase
+class ABSL_LOCKABLE FileBase
 {
 private:
     static const size_t NUM_FLAGS = 7, HEADER_SIZE = 32, EXTENDED_HEADER_SIZE = 80,
@@ -39,30 +39,29 @@ private:
 private:
     securefs::Mutex m_lock;
     ptrdiff_t m_refcount;
-    std::shared_ptr<HeaderBase> m_header THREAD_ANNOTATION_GUARDED_BY(*this);
+    std::shared_ptr<HeaderBase> m_header ABSL_GUARDED_BY(*this);
     const id_type m_id;
     std::atomic<uint32_t> m_flags[NUM_FLAGS];
-    fuse_timespec m_atime THREAD_ANNOTATION_GUARDED_BY(*this),
-        m_mtime THREAD_ANNOTATION_GUARDED_BY(*this), m_ctime THREAD_ANNOTATION_GUARDED_BY(*this),
-        m_birthtime THREAD_ANNOTATION_GUARDED_BY(*this);
-    std::shared_ptr<FileStream> m_data_stream THREAD_ANNOTATION_GUARDED_BY(*this),
-        m_meta_stream THREAD_ANNOTATION_GUARDED_BY(*this);
-    CryptoPP::GCM<CryptoPP::AES>::Encryption m_xattr_enc THREAD_ANNOTATION_GUARDED_BY(*this);
-    CryptoPP::GCM<CryptoPP::AES>::Decryption m_xattr_dec THREAD_ANNOTATION_GUARDED_BY(*this);
-    bool m_dirty THREAD_ANNOTATION_GUARDED_BY(*this);
+    fuse_timespec m_atime ABSL_GUARDED_BY(*this), m_mtime ABSL_GUARDED_BY(*this),
+        m_ctime ABSL_GUARDED_BY(*this), m_birthtime ABSL_GUARDED_BY(*this);
+    std::shared_ptr<FileStream>
+        m_data_stream ABSL_GUARDED_BY(*this), m_meta_stream ABSL_GUARDED_BY(*this);
+    CryptoPP::GCM<CryptoPP::AES>::Encryption m_xattr_enc ABSL_GUARDED_BY(*this);
+    CryptoPP::GCM<CryptoPP::AES>::Decryption m_xattr_dec ABSL_GUARDED_BY(*this);
+    bool m_dirty ABSL_GUARDED_BY(*this);
     const bool m_check, m_store_time;
 
 private:
-    void read_header() THREAD_ANNOTATION_REQUIRES(*this);
+    void read_header() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
     [[noreturn]] void throw_invalid_cast(int to_type);
 
 protected:
-    std::shared_ptr<StreamBase> m_stream THREAD_ANNOTATION_GUARDED_BY(*this);
+    std::shared_ptr<StreamBase> m_stream ABSL_GUARDED_BY(*this);
 
     uint32_t get_root_page() const noexcept { return m_flags[4]; }
 
-    void set_root_page(uint32_t value) noexcept THREAD_ANNOTATION_REQUIRES(*this)
+    void set_root_page(uint32_t value) noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         m_flags[4] = value;
         m_dirty = true;
@@ -70,7 +69,7 @@ protected:
 
     uint32_t get_start_free_page() const noexcept { return m_flags[5]; }
 
-    void set_start_free_page(uint32_t value) noexcept THREAD_ANNOTATION_REQUIRES(*this)
+    void set_start_free_page(uint32_t value) noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         m_flags[5] = value;
         m_dirty = true;
@@ -78,7 +77,7 @@ protected:
 
     uint32_t get_num_free_page() const noexcept { return m_flags[6]; }
 
-    void set_num_free_page(uint32_t value) noexcept THREAD_ANNOTATION_REQUIRES(*this)
+    void set_num_free_page(uint32_t value) noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         m_flags[6] = value;
         m_dirty = true;
@@ -87,7 +86,7 @@ protected:
     /**
      * Subclasss should override this if additional flush operations are needed
      */
-    virtual void subflush() THREAD_ANNOTATION_REQUIRES(*this) {}
+    virtual void subflush() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) {}
 
 public:
     static const byte REGULAR_FILE = S_IFREG >> 12, SYMLINK = S_IFLNK >> 12,
@@ -142,17 +141,17 @@ public:
     virtual ~FileBase();
     DISABLE_COPY_MOVE(FileBase)
 
-    void lock() THREAD_ANNOTATION_ACQUIRE() { m_lock.lock(); }
-    void unlock() THREAD_ANNOTATION_RELEASE() { m_lock.unlock(); }
-    bool try_lock() THREAD_ANNOTATION_TRY_ACQUIRE(true) { return m_lock.try_lock(); }
+    void lock() ABSL_EXCLUSIVE_LOCK_FUNCTION() { m_lock.lock(); }
+    void unlock() ABSL_UNLOCK_FUNCTION() { m_lock.unlock(); }
+    bool try_lock() ABSL_EXCLUSIVE_TRYLOCK_FUNCTION(true) { return m_lock.try_lock(); }
 
     void initialize_empty(uint32_t mode, uint32_t uid, uint32_t gid)
-        THREAD_ANNOTATION_REQUIRES(*this);
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
     // --Begin of getters and setters for stats---
     uint32_t get_mode() const noexcept { return m_flags[0]; }
 
-    void set_mode(uint32_t value) noexcept THREAD_ANNOTATION_REQUIRES(*this)
+    void set_mode(uint32_t value) noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         if (get_mode() == value)
             return;
@@ -163,7 +162,7 @@ public:
 
     uint32_t get_uid() const noexcept { return m_flags[1]; }
 
-    void set_uid(uint32_t value) noexcept THREAD_ANNOTATION_REQUIRES(*this)
+    void set_uid(uint32_t value) noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         if (get_uid() == value)
             return;
@@ -174,7 +173,7 @@ public:
 
     uint32_t get_gid() const noexcept { return m_flags[2]; }
 
-    void set_gid(uint32_t value) noexcept THREAD_ANNOTATION_REQUIRES(*this)
+    void set_gid(uint32_t value) noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         if (get_gid() == value)
             return;
@@ -185,7 +184,7 @@ public:
 
     uint32_t get_nlink() const noexcept { return m_flags[3]; }
 
-    void set_nlink(uint32_t value) noexcept THREAD_ANNOTATION_REQUIRES(*this)
+    void set_nlink(uint32_t value) noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         if (get_nlink() == value)
             return;
@@ -194,45 +193,45 @@ public:
         m_dirty = true;
     }
 
-    void get_atime(fuse_timespec& out) const noexcept THREAD_ANNOTATION_REQUIRES(*this)
+    void get_atime(fuse_timespec& out) const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         out = m_atime;
     }
 
-    void get_mtime(fuse_timespec& out) const noexcept THREAD_ANNOTATION_REQUIRES(*this)
+    void get_mtime(fuse_timespec& out) const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         out = m_mtime;
     }
 
-    void get_ctime(fuse_timespec& out) const noexcept THREAD_ANNOTATION_REQUIRES(*this)
+    void get_ctime(fuse_timespec& out) const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         out = m_ctime;
     }
 
-    void get_birthtime(fuse_timespec& out) const noexcept THREAD_ANNOTATION_REQUIRES(*this)
+    void get_birthtime(fuse_timespec& out) const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         out = m_birthtime;
     }
 
-    void set_atime(const fuse_timespec& in) noexcept THREAD_ANNOTATION_REQUIRES(*this)
+    void set_atime(const fuse_timespec& in) noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         m_atime = in;
         m_dirty = true;
     }
 
-    void set_mtime(const fuse_timespec& in) noexcept THREAD_ANNOTATION_REQUIRES(*this)
+    void set_mtime(const fuse_timespec& in) noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         m_mtime = in;
         m_dirty = true;
     }
 
-    void set_ctime(const fuse_timespec& in) noexcept THREAD_ANNOTATION_REQUIRES(*this)
+    void set_ctime(const fuse_timespec& in) noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         m_ctime = in;
         m_dirty = true;
     }
 
-    void update_atime_helper() THREAD_ANNOTATION_REQUIRES(*this)
+    void update_atime_helper() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         if (m_store_time && (m_atime.tv_sec < m_mtime.tv_sec || m_atime.tv_sec < m_ctime.tv_sec))
         {
@@ -241,7 +240,7 @@ public:
         }
     }
 
-    void update_mtime_helper() THREAD_ANNOTATION_REQUIRES(*this)
+    void update_mtime_helper() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         if (m_store_time)
         {
@@ -251,7 +250,7 @@ public:
         }
     }
 
-    void update_ctime_helper() THREAD_ANNOTATION_REQUIRES(*this)
+    void update_ctime_helper() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         if (m_store_time)
         {
@@ -278,32 +277,33 @@ public:
 
     bool is_unlinked() const noexcept { return get_nlink() <= 0; }
 
-    void unlink() THREAD_ANNOTATION_REQUIRES(*this)
+    void unlink() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         --m_flags[3];
         m_dirty = true;
     }
 
-    void flush() THREAD_ANNOTATION_REQUIRES(*this);
+    void flush() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
-    void fsync() THREAD_ANNOTATION_REQUIRES(*this)
+    void fsync() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         m_data_stream->fsync();
         m_meta_stream->fsync();
     }
 
-    void utimens(const struct fuse_timespec ts[2]) THREAD_ANNOTATION_REQUIRES(*this);
+    void utimens(const struct fuse_timespec ts[2]) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
-    void stat(struct fuse_stat* st) THREAD_ANNOTATION_REQUIRES(*this);
+    void stat(struct fuse_stat* st) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
-    ssize_t listxattr(char* buffer, size_t size) THREAD_ANNOTATION_REQUIRES(*this);
+    ssize_t listxattr(char* buffer, size_t size) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
-    ssize_t getxattr(const char* name, char* value, size_t size) THREAD_ANNOTATION_REQUIRES(*this);
+    ssize_t getxattr(const char* name, char* value, size_t size)
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
     void setxattr(const char* name, const char* value, size_t size, int flags)
-        THREAD_ANNOTATION_REQUIRES(*this);
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
-    void removexattr(const char* name) THREAD_ANNOTATION_REQUIRES(*this);
+    void removexattr(const char* name) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
     template <class T>
     T* cast_as()
@@ -330,22 +330,25 @@ public:
     int type() const noexcept override { return class_type(); }
 
     length_type read(void* output, offset_type off, length_type len)
-        THREAD_ANNOTATION_REQUIRES(*this)
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         update_atime_helper();
         return this->m_stream->read(output, off, len);
     }
 
     void write(const void* input, offset_type off, length_type len)
-        THREAD_ANNOTATION_REQUIRES(*this)
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         update_mtime_helper();
         return this->m_stream->write(input, off, len);
     }
 
-    length_type size() const noexcept THREAD_ANNOTATION_REQUIRES(*this) { return m_stream->size(); }
+    length_type size() const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
+    {
+        return m_stream->size();
+    }
 
-    void truncate(length_type new_size) THREAD_ANNOTATION_REQUIRES(*this)
+    void truncate(length_type new_size) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         update_mtime_helper();
         return m_stream->resize(new_size);
@@ -364,7 +367,7 @@ public:
 
     int type() const noexcept override { return class_type(); }
 
-    std::string get() THREAD_ANNOTATION_REQUIRES(*this)
+    std::string get() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         std::string result(m_stream->size(), 0);
         auto rc = m_stream->read(&result[0], 0, result.size());
@@ -373,7 +376,7 @@ public:
         return result;
     }
 
-    void set(const std::string& path) THREAD_ANNOTATION_REQUIRES(*this)
+    void set(const std::string& path) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         m_stream->write(path.data(), 0, path.size());
     }
@@ -398,14 +401,14 @@ public:
     typedef std::function<bool(const std::string&, const id_type&, int)> callback;
 
     bool get_entry(const std::string& name, id_type& id, int& type)
-        THREAD_ANNOTATION_REQUIRES(*this)
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         update_atime_helper();
         return get_entry_impl(name, id, type);
     }
 
     bool add_entry(const std::string& name, const id_type& id, int type)
-        THREAD_ANNOTATION_REQUIRES(*this)
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         update_mtime_helper();
         return add_entry_impl(name, id, type);
@@ -416,7 +419,7 @@ public:
      * Returns false when the entry is not found.
      */
     bool remove_entry(const std::string& name, id_type& id, int& type)
-        THREAD_ANNOTATION_REQUIRES(*this)
+        ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         update_mtime_helper();
         return remove_entry_impl(name, id, type);
@@ -425,13 +428,13 @@ public:
     /**
      * When callback returns false, the iteration will be terminated
      */
-    void iterate_over_entries(const callback& cb) THREAD_ANNOTATION_REQUIRES(*this)
+    void iterate_over_entries(const callback& cb) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         update_atime_helper();
         return iterate_over_entries_impl(cb);
     }
 
-    virtual bool empty() THREAD_ANNOTATION_REQUIRES(*this) = 0;
+    virtual bool empty() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) = 0;
 
 protected:
     virtual bool get_entry_impl(const std::string& name, id_type& id, int& type) = 0;
@@ -457,7 +460,7 @@ private:
     bool m_dirty;
 
 private:
-    void initialize() THREAD_ANNOTATION_REQUIRES(*this);
+    void initialize() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
 public:
     template <class... Args>
@@ -472,7 +475,7 @@ public:
 
     bool remove_entry_impl(const std::string& name, id_type& id, int& type) override;
 
-    void subflush() override THREAD_ANNOTATION_REQUIRES(*this);
+    void subflush() override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
     void iterate_over_entries_impl(const callback& cb) override
     {
@@ -488,32 +491,32 @@ public:
     ~SimpleDirectory();
 };
 
-class THREAD_ANNOTATION_SCOPED_CAPABILITY FileLockGuard
+class ABSL_SCOPED_LOCKABLE FileLockGuard
 {
 private:
     std::lock_guard<FileBase> m_lg;
 
 public:
-    explicit FileLockGuard(FileBase& fb) THREAD_ANNOTATION_ACQUIRE(fb)
-        THREAD_ANNOTATION_ACQUIRE(fb.cast_as<RegularFile>())
-            THREAD_ANNOTATION_ACQUIRE(fb.cast_as<Directory>())
-                THREAD_ANNOTATION_ACQUIRE(fb.cast_as<Symlink>())
+    explicit FileLockGuard(FileBase& fb) ABSL_EXCLUSIVE_LOCK_FUNCTION(fb)
+        ABSL_EXCLUSIVE_LOCK_FUNCTION(fb.cast_as<RegularFile>())
+            ABSL_EXCLUSIVE_LOCK_FUNCTION(fb.cast_as<Directory>())
+                ABSL_EXCLUSIVE_LOCK_FUNCTION(fb.cast_as<Symlink>())
         : m_lg(fb)
     {
     }
-    ~FileLockGuard() THREAD_ANNOTATION_RELEASE() {}
+    ~FileLockGuard() ABSL_UNLOCK_FUNCTION() {}
 };
 
-class THREAD_ANNOTATION_SCOPED_CAPABILITY SpinFileLockGuard
+class ABSL_SCOPED_LOCKABLE SpinFileLockGuard
 {
 private:
     std::unique_lock<FileBase> m_ul;
 
 public:
-    explicit SpinFileLockGuard(FileBase& fb) THREAD_ANNOTATION_ACQUIRE(fb)
-        THREAD_ANNOTATION_ACQUIRE(fb.cast_as<RegularFile>())
-            THREAD_ANNOTATION_ACQUIRE(fb.cast_as<Directory>())
-                THREAD_ANNOTATION_ACQUIRE(fb.cast_as<Symlink>())
+    explicit SpinFileLockGuard(FileBase& fb) ABSL_EXCLUSIVE_LOCK_FUNCTION(fb)
+        ABSL_EXCLUSIVE_LOCK_FUNCTION(fb.cast_as<RegularFile>())
+            ABSL_EXCLUSIVE_LOCK_FUNCTION(fb.cast_as<Directory>())
+                ABSL_EXCLUSIVE_LOCK_FUNCTION(fb.cast_as<Symlink>())
         : m_ul(fb, std::defer_lock)
     {
         for (int i = 0; i < 100; ++i)
@@ -526,22 +529,22 @@ public:
         }
         throwVFSException(EBUSY);
     }
-    ~SpinFileLockGuard() THREAD_ANNOTATION_RELEASE() {}
+    ~SpinFileLockGuard() ABSL_UNLOCK_FUNCTION() {}
 };
 
-class THREAD_ANNOTATION_SCOPED_CAPABILITY DoubleFileLockGuard
+class ABSL_SCOPED_LOCKABLE DoubleFileLockGuard
 {
 private:
     std::unique_lock<FileBase> m1, m2;
 
 public:
-    explicit DoubleFileLockGuard(FileBase& f1, FileBase& f2) THREAD_ANNOTATION_ACQUIRE(f1)
-        THREAD_ANNOTATION_ACQUIRE(f1.cast_as<RegularFile>())
-            THREAD_ANNOTATION_ACQUIRE(f1.cast_as<Directory>())
-                THREAD_ANNOTATION_ACQUIRE(f1.cast_as<Symlink>()) THREAD_ANNOTATION_ACQUIRE(f2)
-                    THREAD_ANNOTATION_ACQUIRE(f2.cast_as<RegularFile>())
-                        THREAD_ANNOTATION_ACQUIRE(f2.cast_as<Directory>())
-                            THREAD_ANNOTATION_ACQUIRE(f2.cast_as<Symlink>())
+    explicit DoubleFileLockGuard(FileBase& f1, FileBase& f2) ABSL_EXCLUSIVE_LOCK_FUNCTION(f1)
+        ABSL_EXCLUSIVE_LOCK_FUNCTION(f1.cast_as<RegularFile>())
+            ABSL_EXCLUSIVE_LOCK_FUNCTION(f1.cast_as<Directory>())
+                ABSL_EXCLUSIVE_LOCK_FUNCTION(f1.cast_as<Symlink>()) ABSL_EXCLUSIVE_LOCK_FUNCTION(f2)
+                    ABSL_EXCLUSIVE_LOCK_FUNCTION(f2.cast_as<RegularFile>())
+                        ABSL_EXCLUSIVE_LOCK_FUNCTION(f2.cast_as<Directory>())
+                            ABSL_EXCLUSIVE_LOCK_FUNCTION(f2.cast_as<Symlink>())
     {
         if (&f1 == &f2)
         {
@@ -554,6 +557,6 @@ public:
             m2 = {f2, std::adopt_lock};
         }
     }
-    ~DoubleFileLockGuard() THREAD_ANNOTATION_RELEASE() {}
+    ~DoubleFileLockGuard() ABSL_UNLOCK_FUNCTION() {}
 };
 }    // namespace securefs

@@ -48,8 +48,6 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 include_directories(BEFORE sources)
-set(EXTERNAL_DIR external)
-include_directories(${EXTERNAL_DIR})
 
 file(
     GLOB
