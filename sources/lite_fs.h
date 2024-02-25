@@ -138,14 +138,18 @@ namespace lite
 
         std::vector<unsigned char> lookup(absl::Span<const unsigned char> encrypted_hash);
         void insert_or_update(absl::Span<const unsigned char> encrypted_hash,
-                              absl::Span<const unsigned char> encrypted_long_name);
-        void delete_once(absl::Span<const unsigned char> encrypted_hash);
+                              absl::Span<const unsigned char> encrypted_long_name,
+                              const std::function<void()>& callback);
+        void delete_once(absl::Span<const unsigned char> encrypted_hash,
+                         const std::function<void()>& callback);
 
     private:
         Mutex mu_;
         SQLiteDB db_ THREAD_ANNOTATION_GUARDED_BY(mu_);
-        SQLiteStatement query_ THREAD_ANNOTATION_GUARDED_BY(mu_),
-            updater_ THREAD_ANNOTATION_GUARDED_BY(mu_), deleter_ THREAD_ANNOTATION_GUARDED_BY(mu_);
+
+    private:
+        void begin_exclusive() THREAD_ANNOTATION_REQUIRES(mu_);
+        void finish() noexcept THREAD_ANNOTATION_REQUIRES(mu_);
     };
 
     std::string

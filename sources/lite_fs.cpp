@@ -3,6 +3,8 @@
 #include "lock_guard.h"
 #include "logger.h"
 
+#include <absl/strings/escaping.h>
+#include <absl/strings/str_cat.h>
 #include <cryptopp/base32.h>
 
 #include <cerrno>
@@ -80,21 +82,16 @@ namespace lite
     // filesystem's limits.
     constexpr size_t max_normal_filename_component_size = 143;
 
-    static std::string encrypt_long_name_component(AES_SIV& encryptor,
-                                                   absl::string_view long_name,
-                                                   LongNameLookupTable* maybe_table)
+    static std::string encrypt_long_name_component(AES_SIV& encryptor, absl::string_view long_name)
     {
         unsigned char sha256[32];
         CryptoPP::SHA256 calc;
         calc.Update(reinterpret_cast<const byte*>(long_name.data()), long_name.size());
         calc.TruncatedFinal(sha256, sizeof(sha256));
-        std::vector<unsigned char> buffer(sizeof(sha256) + AES_SIV::IV_SIZE + long_name.size()
-                                          + AES_SIV::IV_SIZE);
+        std::vector<unsigned char> buffer(sizeof(sha256) + AES_SIV::IV_SIZE);
         encryptor.encrypt_and_authenticate(
             sha256, sizeof(sha256), nullptr, 0, buffer.data() + AES_SIV::IV_SIZE, buffer.data());
-        if (maybe_table)
-        {
-        }
+        return absl::StrCat("_", hexify(buffer), "_");
     }
 
     std::string encrypt_path(AES_SIV& encryptor, StringRef path, LongNameLookupTable* maybe_table)
@@ -529,19 +526,6 @@ namespace lite
                     end;
             )");
         }
-        query_ = SQLiteStatement(
-            db_, "select encrypted_name from encrypted_mappings where encrypted_hash = ?;");
-        updater_ = SQLiteStatement(db_, R"(
-            insert into encrypted_mappings 
-                (encrypted_hash, encrypted_name) 
-                values (?, ?)
-                on conflict (encrypted_hash)
-                do update set ref_count = ref_count + 1;
-        )");
-        deleter_ = SQLiteStatement(db_, R"(
-            update encrypted_mappings set ref_count = ref_count -1
-                where encrypted_hash = ?;
-        )");
     }
 
     LongNameLookupTable::~LongNameLookupTable() {}
@@ -550,32 +534,74 @@ namespace lite
     LongNameLookupTable::lookup(absl::Span<const unsigned char> encrypted_hash)
     {
         LockGuard<Mutex> lg(mu_);
-        query_.reset();
-        query_.bind_blob(1, encrypted_hash);
-        if (!query_.step())
+        SQLiteStatement q(
+            db_, "select encrypted_name from encrypted_mappings where encrypted_hash = ?;");
+        q.reset();
+        q.bind_blob(1, encrypted_hash);
+        if (!q.step())
         {
             return {};
         }
-        auto span = query_.get_blob(0);
+        auto span = q.get_blob(0);
         return std::vector<unsigned char>(span.begin(), span.end());
     }
 
     void LongNameLookupTable::insert_or_update(absl::Span<const unsigned char> encrypted_hash,
-                                               absl::Span<const unsigned char> encrypted_long_name)
+                                               absl::Span<const unsigned char> encrypted_long_name,
+                                               const std::function<void()>& callback)
     {
         LockGuard<Mutex> lg(mu_);
-        updater_.reset();
-        updater_.bind_blob(1, encrypted_hash);
-        updater_.bind_blob(2, encrypted_long_name);
-        updater_.step();
+        begin_exclusive();
+        auto g = stdex::make_guard([this]() THREAD_ANNOTATION_REQUIRES(mu_) { this->finish(); });
+        SQLiteStatement q(db_, R"(
+            insert into encrypted_mappings 
+                (encrypted_hash, encrypted_name) 
+                values (?, ?)
+                on conflict (encrypted_hash)
+                do update set ref_count = ref_count + 1;
+        )");
+        q.reset();
+        q.bind_blob(1, encrypted_hash);
+        q.bind_blob(2, encrypted_long_name);
+        q.step();
+        callback();
     }
 
-    void LongNameLookupTable::delete_once(absl::Span<const unsigned char> encrypted_hash)
+    void LongNameLookupTable::delete_once(absl::Span<const unsigned char> encrypted_hash,
+                                          const std::function<void()>& callback)
     {
         LockGuard<Mutex> lg(mu_);
-        deleter_.reset();
-        deleter_.bind_blob(1, encrypted_hash);
-        deleter_.step();
+        begin_exclusive();
+        auto g = stdex::make_guard([this]() THREAD_ANNOTATION_REQUIRES(mu_) { this->finish(); });
+        SQLiteStatement q(db_, R"(
+            update encrypted_mappings set ref_count = ref_count -1
+                where encrypted_hash = ?;
+        )");
+        q.reset();
+        q.bind_blob(1, encrypted_hash);
+        q.step();
+        callback();
+    }
+
+    void LongNameLookupTable::begin_exclusive() { db_.exec("begin exclusive;"); }
+
+    void LongNameLookupTable::finish() noexcept
+    {
+        try
+        {
+            if (std::uncaught_exception())
+            {
+                db_.exec("rollback");
+            }
+            else
+            {
+                db_.exec("commit");
+            }
+        }
+        catch (const std::exception& e)
+        {
+            ERROR_LOG("Failed to commit or rollback: %s", e.what());
+        }
     }
 
 #ifdef __APPLE__
