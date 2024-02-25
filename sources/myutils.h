@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <stddef.h>
 #include <stdexcept>
@@ -238,6 +239,32 @@ inline typename std::remove_reference<T>::type from_little_endian(const void* in
         value |= static_cast<underlying_type>(bytes[i]) << (8 * i);
     }
     return value;
+}
+
+template <typename To>
+inline To checked_cast(int value);
+
+template <>
+inline size_t checked_cast(int value)
+{
+    if (value < 0)
+    {
+        throw std::range_error("Converting a negative int to size_t");
+    }
+    return static_cast<size_t>(value);
+}
+
+template <typename To>
+inline To checked_cast(size_t value);
+
+template <>
+inline int checked_cast(size_t value)
+{
+    if (value > std::numeric_limits<int>::max())
+    {
+        throw std::range_error("Converting a negative int to size_t");
+    }
+    return static_cast<int>(value);
 }
 
 inline uint64_t to_inode_number(const id_type& id)
