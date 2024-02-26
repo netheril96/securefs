@@ -510,19 +510,10 @@ namespace lite
         if (!readonly)
         {
             db_.exec(R"(
-                pragma journal_mode = "TRUNCATE";
                 create table if not exists encrypted_mappings (
                     encrypted_hash blob not null primary key,
-                    encrypted_name blob not null,
-                    ref_count int default 1 not null
+                    encrypted_name blob not null
                 );
-                create trigger if not exists cleanup_on_ref_count_drop_to_zero
-                    after update of ref_count on encrypted_mappings 
-                    when ref_count <= 0
-                    begin
-                        delete from encrypted_mappings
-                            where row_id = new.row_id
-                    end;
             )");
         }
     }
@@ -532,7 +523,6 @@ namespace lite
     std::vector<unsigned char>
     LongNameLookupTable::lookup(absl::Span<const unsigned char> encrypted_hash)
     {
-        LockGuard<Mutex> lg(mu_);
         SQLiteStatement q(
             db_, "select encrypted_name from encrypted_mappings where encrypted_hash = ?;");
         q.reset();
@@ -546,43 +536,31 @@ namespace lite
     }
 
     void LongNameLookupTable::insert_or_update(absl::Span<const unsigned char> encrypted_hash,
-                                               absl::Span<const unsigned char> encrypted_long_name,
-                                               const std::function<void()>& callback)
+                                               absl::Span<const unsigned char> encrypted_long_name)
     {
-        LockGuard<Mutex> lg(mu_);
-        begin_exclusive();
-        auto g = stdex::make_guard([this]() ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) { this->finish(); });
         SQLiteStatement q(db_, R"(
-            insert into encrypted_mappings 
+            insert or ignore into encrypted_mappings 
                 (encrypted_hash, encrypted_name) 
-                values (?, ?)
-                on conflict (encrypted_hash)
-                do update set ref_count = ref_count + 1;
+                values (?, ?);
         )");
         q.reset();
         q.bind_blob(1, encrypted_hash);
         q.bind_blob(2, encrypted_long_name);
         q.step();
-        callback();
     }
 
-    void LongNameLookupTable::delete_once(absl::Span<const unsigned char> encrypted_hash,
-                                          const std::function<void()>& callback)
+    void LongNameLookupTable::delete_once(absl::Span<const unsigned char> encrypted_hash)
     {
-        LockGuard<Mutex> lg(mu_);
-        begin_exclusive();
-        auto g = stdex::make_guard([this]() ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) { this->finish(); });
         SQLiteStatement q(db_, R"(
-            update encrypted_mappings set ref_count = ref_count -1
+            delete from encrypted_mappings
                 where encrypted_hash = ?;
         )");
         q.reset();
         q.bind_blob(1, encrypted_hash);
         q.step();
-        callback();
     }
 
-    void LongNameLookupTable::begin_exclusive() { db_.exec("begin exclusive;"); }
+    void LongNameLookupTable::begin() { db_.exec("begin;"); }
 
     void LongNameLookupTable::finish() noexcept
     {
