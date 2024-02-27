@@ -304,25 +304,21 @@ void hmac_sha256(const securefs::key_type& base_key,
     hmac.TruncatedFinal(out_key.data(), out_key.size());
 }
 
-Json::Value generate_config(unsigned int version,
-                            const std::string& pbkdf_algorithm,
-                            const CryptoPP::AlignedSecByteBlock& master_key,
+Json::Value generate_config(const std::string& pbkdf_algorithm,
                             StringRef maybe_key_file_path,
                             const securefs::key_type& salt,
                             const void* password,
                             size_t pass_len,
-                            unsigned block_size,
-                            unsigned iv_size,
-                            unsigned max_padding,
-                            unsigned rounds)
+                            unsigned rounds,
+                            const FSConfig& fsconfig)
 {
     securefs::key_type effective_salt;
     hmac_sha256(salt, maybe_key_file_path, effective_salt);
 
     Json::Value config;
-    config["version"] = version;
+    config["version"] = fsconfig.version;
     key_type password_derived_key;
-    CryptoPP::AlignedSecByteBlock encrypted_master_key(nullptr, master_key.size());
+    CryptoPP::AlignedSecByteBlock encrypted_master_key(nullptr, fsconfig.master_key.size());
 
     if (pbkdf_algorithm == PBKDF_ALGO_PKCS5)
     {
@@ -390,15 +386,16 @@ Json::Value generate_config(unsigned int version,
     CryptoPP::GCM<CryptoPP::AES>::Encryption encryptor;
     encryptor.SetKeyWithIV(
         password_derived_key.data(), password_derived_key.size(), iv, array_length(iv));
-    encryptor.EncryptAndAuthenticate(encrypted_master_key.data(),
-                                     mac,
-                                     array_length(mac),
-                                     iv,
-                                     array_length(iv),
-                                     reinterpret_cast<const byte*>(get_version_header(version)),
-                                     strlen(get_version_header(version)),
-                                     master_key.data(),
-                                     master_key.size());
+    encryptor.EncryptAndAuthenticate(
+        encrypted_master_key.data(),
+        mac,
+        array_length(mac),
+        iv,
+        array_length(iv),
+        reinterpret_cast<const byte*>(get_version_header(fsconfig.version)),
+        strlen(get_version_header(fsconfig.version)),
+        fsconfig.master_key.data(),
+        fsconfig.master_key.size());
 
     Json::Value encrypted_key;
     encrypted_key["IV"] = hexify(iv, array_length(iv));
@@ -407,14 +404,18 @@ Json::Value generate_config(unsigned int version,
 
     config["encrypted_key"] = std::move(encrypted_key);
 
-    if (version >= 2)
+    if (fsconfig.version >= 2)
     {
-        config["block_size"] = block_size;
-        config["iv_size"] = iv_size;
+        config["block_size"] = fsconfig.block_size;
+        config["iv_size"] = fsconfig.iv_size;
     }
-    if (max_padding > 0)
+    if (fsconfig.max_padding > 0)
     {
-        config["max_padding"] = max_padding;
+        config["max_padding"] = fsconfig.max_padding;
+    }
+    if (fsconfig.long_name_component)
+    {
+        config["long_name_component"] = true;
     }
     return config;
 }
@@ -489,6 +490,7 @@ FSConfig parse_config(const Json::Value& config,
 
     fsconfig.version = config["version"].asUInt();
     fsconfig.max_padding = config.get("max_padding", 0u).asUInt();
+    fsconfig.long_name_component = config.get("long_name_component", false).asBool();
 
     if (fsconfig.version == 1)
     {
@@ -625,17 +627,8 @@ void CommandBase::write_config(FileStream* stream,
 {
     key_type salt;
     generate_random(salt.data(), salt.size());
-    auto str = generate_config(config.version,
-                               pbdkf_algorithm,
-                               config.master_key,
-                               maybe_key_file_path,
-                               salt,
-                               password,
-                               pass_len,
-                               config.block_size,
-                               config.iv_size,
-                               config.max_padding,
-                               rounds)
+    auto str = generate_config(
+                   pbdkf_algorithm, maybe_key_file_path, salt, password, pass_len, rounds, config)
                    .toStyledString();
     stream->sequential_write(str.data(), str.size());
 }
@@ -1366,6 +1359,10 @@ public:
                          "specify --config-path explicitly.");
             }
             fsopt.flags.value() |= kOptionNoNameTranslation;
+        }
+        if (config.long_name_component)
+        {
+            fsopt.flags.value() |= kOptionLongNameComponent;
         }
 
         if (config.version < 4)

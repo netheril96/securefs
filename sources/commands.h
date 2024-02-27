@@ -18,6 +18,7 @@ struct FSConfig
     unsigned iv_size{};
     unsigned version{};
     unsigned max_padding = 0;
+    bool long_name_component = true;
 };
 
 class CommandBase

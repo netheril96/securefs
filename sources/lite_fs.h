@@ -7,7 +7,6 @@
 #include "mystring.h"
 #include "myutils.h"
 #include "platform.h"
-#include "sqlite_helper.h"
 
 #include <absl/base/thread_annotations.h>
 #include <absl/types/span.h>
@@ -130,43 +129,8 @@ namespace lite
 
     typedef std::unique_ptr<File> AutoClosedFile;
 
-    class LongNameLookupTable
-    {
-    public:
-        LongNameLookupTable(StringRef filename, bool readonly);
-        ~LongNameLookupTable();
-
-        std::vector<unsigned char> lookup(absl::Span<const unsigned char> encrypted_hash)
-            ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
-        void insert_or_update(absl::Span<const unsigned char> encrypted_hash,
-                              absl::Span<const unsigned char> encrypted_long_name)
-            ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
-        void delete_once(absl::Span<const unsigned char> encrypted_hash)
-            ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
-
-        template <typename Callback>
-        auto transact(Callback&& callback) -> decltype(callback(this))
-        {
-            LockGuard<Mutex> lg(mu_);
-            begin();
-            auto guard = stdex::make_guard([this]() ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_)
-                                           { this->finish(); });
-            return callback(this);
-        }
-
-    private:
-        Mutex mu_;
-        SQLiteDB db_ ABSL_GUARDED_BY(mu_);
-
-    private:
-        void begin() ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
-        void finish() noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
-    };
-
-    std::string
-    encrypt_path(AES_SIV& encryptor, StringRef path, LongNameLookupTable* maybe_table = nullptr);
-    std::string
-    decrypt_path(AES_SIV& decryptor, StringRef path, LongNameLookupTable* maybe_table = nullptr);
+    std::string encrypt_path(AES_SIV& encryptor, StringRef path);
+    std::string decrypt_path(AES_SIV& decryptor, StringRef path);
 
     class InvalidFilenameException : public VerificationException
     {
@@ -187,7 +151,6 @@ namespace lite
 
     private:
         std::shared_ptr<AES_SIV> m_name_encryptor;
-        std::shared_ptr<LongNameLookupTable> m_name_lookup_;
         key_type m_content_key;
         CryptoPP::GCM<CryptoPP::AES>::Encryption m_xattr_enc;
         CryptoPP::GCM<CryptoPP::AES>::Decryption m_xattr_dec;

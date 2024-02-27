@@ -3,8 +3,6 @@
 #include "lock_guard.h"
 #include "logger.h"
 
-#include <absl/strings/escaping.h>
-#include <absl/strings/str_cat.h>
 #include <cryptopp/base32.h>
 
 #include <cerrno>
@@ -49,25 +47,6 @@ namespace lite
         {
             m_name_encryptor = std::make_shared<AES_SIV>(name_key.data(), name_key.size());
         }
-        auto db_path = root->norm_path(".long_names.db");
-        try
-        {
-            m_name_lookup_ = std::make_shared<LongNameLookupTable>(
-#ifdef _WIN32
-                narrow_string(db_path)
-#else
-                db_path
-#endif
-                    ,
-                flags & kOptionReadOnly);
-        }
-        catch (const std::exception& e)
-        {
-            ERROR_LOG("Failed to open database for long name lookup, so long filenames will not be "
-                      "supported: %s",
-                      e.what());
-            m_name_lookup_ = {};
-        }
     }
 
     FileSystem::~FileSystem() {}
@@ -78,25 +57,9 @@ namespace lite
         return strprintf("Invalid filename \"%s\"", m_filename.c_str());
     }
 
-    // Longer file names would be encrypted and base32 to > 255 bytes, and that exceeds most
-    // filesystem's limits.
-    constexpr size_t max_normal_filename_component_size = 143;
-
-    static std::string encrypt_long_name_component(AES_SIV& encryptor, absl::string_view long_name)
+    std::string encrypt_path(AES_SIV& encryptor, StringRef path)
     {
-        unsigned char sha256[32];
-        CryptoPP::SHA256 calc;
-        calc.Update(reinterpret_cast<const byte*>(long_name.data()), long_name.size());
-        calc.TruncatedFinal(sha256, sizeof(sha256));
-        std::vector<unsigned char> buffer(sizeof(sha256) + AES_SIV::IV_SIZE);
-        encryptor.encrypt_and_authenticate(
-            sha256, sizeof(sha256), nullptr, 0, buffer.data() + AES_SIV::IV_SIZE, buffer.data());
-        return absl::StrCat("_", hexify(buffer), "_");
-    }
-
-    std::string encrypt_path(AES_SIV& encryptor, StringRef path, LongNameLookupTable* maybe_table)
-    {
-        byte buffer[max_normal_filename_component_size * 2 + 32];
+        byte buffer[2032];
         std::string result;
         result.reserve((path.size() * 8 + 4) / 5);
         size_t last_nonseparator_index = 0;
@@ -110,16 +73,12 @@ namespace lite
                 {
                     const char* slice = path.data() + last_nonseparator_index;
                     size_t slice_size = i - last_nonseparator_index;
-                    if (slice_size <= max_normal_filename_component_size)
-                    {
-                        encryptor.encrypt_and_authenticate(
-                            slice, slice_size, nullptr, 0, buffer + AES_SIV::IV_SIZE, buffer);
-                        base32_encode(buffer, slice_size + AES_SIV::IV_SIZE, encoded_part);
-                        result.append(encoded_part);
-                    }
-                    else
-                    {
-                    }
+                    if (slice_size > 2000)
+                        throwVFSException(ENAMETOOLONG);
+                    encryptor.encrypt_and_authenticate(
+                        slice, slice_size, nullptr, 0, buffer + AES_SIV::IV_SIZE, buffer);
+                    base32_encode(buffer, slice_size + AES_SIV::IV_SIZE, encoded_part);
+                    result.append(encoded_part);
                 }
                 if (i < path.size())
                     result.push_back('/');
@@ -129,7 +88,7 @@ namespace lite
         return result;
     }
 
-    std::string decrypt_path(AES_SIV& decryptor, StringRef path, LongNameLookupTable* maybe_table)
+    std::string decrypt_path(AES_SIV& decryptor, StringRef path)
     {
         byte string_buffer[2032];
         std::string result, decoded_part;
@@ -499,87 +458,6 @@ namespace lite
     }
 
     Base::~Base() {}
-
-    LongNameLookupTable::LongNameLookupTable(StringRef filename, bool readonly)
-    {
-        db_ = SQLiteDB(
-            filename.c_str(),
-            SQLITE_OPEN_NOMUTEX
-                | (readonly ? SQLITE_OPEN_READONLY : (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)),
-            nullptr);
-        if (!readonly)
-        {
-            db_.exec(R"(
-                create table if not exists encrypted_mappings (
-                    encrypted_hash blob not null primary key,
-                    encrypted_name blob not null
-                );
-            )");
-        }
-    }
-
-    LongNameLookupTable::~LongNameLookupTable() {}
-
-    std::vector<unsigned char>
-    LongNameLookupTable::lookup(absl::Span<const unsigned char> encrypted_hash)
-    {
-        SQLiteStatement q(
-            db_, "select encrypted_name from encrypted_mappings where encrypted_hash = ?;");
-        q.reset();
-        q.bind_blob(1, encrypted_hash);
-        if (!q.step())
-        {
-            return {};
-        }
-        auto span = q.get_blob(0);
-        return std::vector<unsigned char>(span.begin(), span.end());
-    }
-
-    void LongNameLookupTable::insert_or_update(absl::Span<const unsigned char> encrypted_hash,
-                                               absl::Span<const unsigned char> encrypted_long_name)
-    {
-        SQLiteStatement q(db_, R"(
-            insert or ignore into encrypted_mappings 
-                (encrypted_hash, encrypted_name) 
-                values (?, ?);
-        )");
-        q.reset();
-        q.bind_blob(1, encrypted_hash);
-        q.bind_blob(2, encrypted_long_name);
-        q.step();
-    }
-
-    void LongNameLookupTable::delete_once(absl::Span<const unsigned char> encrypted_hash)
-    {
-        SQLiteStatement q(db_, R"(
-            delete from encrypted_mappings
-                where encrypted_hash = ?;
-        )");
-        q.reset();
-        q.bind_blob(1, encrypted_hash);
-        q.step();
-    }
-
-    void LongNameLookupTable::begin() { db_.exec("begin;"); }
-
-    void LongNameLookupTable::finish() noexcept
-    {
-        try
-        {
-            if (std::uncaught_exception())
-            {
-                db_.exec("rollback");
-            }
-            else
-            {
-                db_.exec("commit");
-            }
-        }
-        catch (const std::exception& e)
-        {
-            ERROR_LOG("Failed to commit or rollback: %s", e.what());
-        }
-    }
 
 #ifdef __APPLE__
     ssize_t
