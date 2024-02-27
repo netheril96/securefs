@@ -8,6 +8,7 @@
 #include "platform.h"
 #include "win_get_proc.h"
 
+#include <absl/strings/str_format.h>
 #include <absl/types/optional.h>
 #include <argon2.h>
 #include <cryptopp/cpu.h>
@@ -1400,7 +1401,7 @@ public:
             auto rc = fsopt.root->listxattr(".", nullptr, 0);
             if (rc < 0)
             {
-                absl::FPrintf(stderr,
+                absl::FPrintF(stderr,
                               "Warning: %s has no extended attribute support.\nXattr is disabled\n",
                               data_dir.getValue());
                 native_xattr = false;

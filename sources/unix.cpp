@@ -6,6 +6,8 @@
 #include "platform.h"
 #include "streams.h"
 
+#include <absl/strings/match.h>
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 
 #include <algorithm>
@@ -242,21 +244,21 @@ public:
     void rewind() override { ::rewinddir(m_dir); }
 };
 
-bool OSService::is_absolute(const std::string& path) { return path.size() > 0 && path[0] == '/'; }
+bool OSService::is_absolute(absl::string_view path) { return path.size() > 0 && path[0] == '/'; }
 
-native_string_type OSService::concat_and_norm(const std::string& base_dir, const std::string& path)
+native_string_type OSService::concat_and_norm(absl::string_view base_dir, absl::string_view path)
 {
     if (base_dir.empty() || is_absolute(path))
-        return path.to_string();
+        return {path.data(), path.size()};
     if (!is_absolute(base_dir))
     {
-        throwInvalidArgumentException("base_dir must be absolute, but is " + base_dir);
+        throwInvalidArgumentException(absl::StrCat("base_dir must be absolute, but is ", base_dir));
     }
-    if (base_dir.ends_with("/"))
+    if (base_dir.size() > 0 && base_dir.back() == '/')
     {
-        return base_dir + path;
+        return absl::StrCat(base_dir, path);
     }
-    return base_dir + "/" + path;
+    return absl::StrCat(base_dir, "/", path);
 }
 
 OSService::OSService() { m_dir_fd = AT_FDCWD; }

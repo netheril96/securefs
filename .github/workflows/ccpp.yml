@@ -20,14 +20,13 @@ jobs:
         run: sudo apt-get install fuse libfuse-dev
       - name: vcpkg build
         id: vcpkg
-        uses: johnwason/vcpkg-action@v4
+        uses: johnwason/vcpkg-action@v6
         with:
           manifest-dir: ${{ github.workspace }}
           triplet: x64-linux
           token: ${{ github.token }}
+          github-binarycache: true
       - name: build-test
-        env:
-          VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg_cache
         run: python3 build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build
       - name: upload
         uses: actions/upload-artifact@v1
@@ -46,7 +45,7 @@ jobs:
         with:
           python-version: "3.x"
       - name: install
-        run: sudo apt-get install fuse libfuse-dev libcrypto++-dev libargon2-dev libtclap-dev libabsl-dev libutf8proc-dev libjsoncpp-dev doctest-dev
+        run: sudo apt-get install fuse libfuse-dev libcrypto++-dev libargon2-dev libtclap-dev libabsl-dev libutf8proc-dev libjsoncpp-dev doctest-dev libsqlite3-dev
       - name: configure
         run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DSECUREFS_USE_VCPKG=OFF ..
       - name: build
@@ -69,15 +68,15 @@ jobs:
       - name: install
         run: brew install macfuse
       - name: vcpkg build
-        uses: johnwason/vcpkg-action@v4
+        uses: johnwason/vcpkg-action@v6
         id: vcpkg
         with:
           manifest-dir: ${{ github.workspace }}
           triplet: x64-osx
           token: ${{ github.token }}
+          cache-key: macos-11-x64
+          github-binarycache: true
       - name: build
-        env:
-          VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg_cache
         run: python3 build.py --enable_unit_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build
       - name: upload
         uses: actions/upload-artifact@v1
@@ -100,15 +99,15 @@ jobs:
       - name: install
         run: brew install macfuse
       - name: vcpkg build
-        uses: johnwason/vcpkg-action@v4
+        uses: johnwason/vcpkg-action@v6
         id: vcpkg
         with:
           manifest-dir: ${{ github.workspace }}
           triplet: arm64-osx
           token: ${{ github.token }}
+          cache-key: macos-11-arm64
+          github-binarycache: true
       - name: build
-        env:
-          VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg_cache
         run: python3 build.py --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build --cmake_defines CMAKE_OSX_ARCHITECTURES=arm64
       - name: upload
         uses: actions/upload-artifact@v1
@@ -129,16 +128,15 @@ jobs:
       - name: install
         run: choco install winfsp
       - name: vcpkg build
-        uses: johnwason/vcpkg-action@v4
+        uses: johnwason/vcpkg-action@v6
         id: vcpkg
         with:
           manifest-dir: ${{ github.workspace }}
           triplet: x64-windows-static-md
           token: ${{ github.token }}
           cache-key: windows
+          github-binarycache: true
       - name: build-test
-        env:
-          VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg_cache
         run: python3 build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build
       - name: upload
         uses: actions/upload-artifact@v1

@@ -165,9 +165,9 @@ private:
     std::string m_dir_name;
 
 public:
-    static bool is_absolute(const std::string& path);
-    static native_string_type concat_and_norm(const std::string& base_dir, const std::string& path);
-    native_string_type norm_path(const std::string& path) const
+    static bool is_absolute(absl::string_view path);
+    static native_string_type concat_and_norm(absl::string_view base_dir, absl::string_view path);
+    native_string_type norm_path(absl::string_view path) const
     {
         return concat_and_norm(m_dir_name, path);
     }
@@ -220,7 +220,7 @@ public:
     static uint32_t getgid() noexcept;
     static int64_t raise_fd_limit() noexcept;
 
-    static std::string temp_name(const std::string& prefix, const std::string& suffix);
+    static std::string temp_name(absl::string_view prefix, absl::string_view suffix);
     static const OSService& get_default();
     static void get_current_time(fuse_timespec& out);
     static void get_current_time_in_tm(struct tm* tm, int* nanoseconds);

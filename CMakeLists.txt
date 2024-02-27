@@ -74,8 +74,14 @@ find_path(TCLAP_INCLUDE_DIRS "tclap/Arg.h")
 target_include_directories(securefs-static PUBLIC ${TCLAP_INCLUDE_DIRS})
 find_package(absl CONFIG REQUIRED)
 target_link_libraries(
-    securefs-static PUBLIC absl::base absl::inlined_vector absl::flat_hash_map
-                           absl::strings absl::optional)
+    securefs-static
+    PUBLIC absl::base
+           absl::inlined_vector
+           absl::flat_hash_map
+           absl::strings
+           absl::optional
+           absl::str_format
+           absl::span)
 
 if(SECUREFS_USE_VCPKG)
     find_package(cryptopp CONFIG REQUIRED)

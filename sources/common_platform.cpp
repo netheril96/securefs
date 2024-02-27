@@ -10,7 +10,7 @@ const OSService& OSService::get_default()
     return service;
 }
 
-std::string OSService::temp_name(const std::string& prefix, const std::string& suffix)
+std::string OSService::temp_name(absl::string_view prefix, absl::string_view suffix)
 {
     byte random[16];
     generate_random(random, array_length(random));

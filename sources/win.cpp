@@ -712,81 +712,67 @@ OSService::OSService() : m_root_handle(INVALID_HANDLE_VALUE) {}
 
 OSService::~OSService() { CloseHandle(m_root_handle); }
 
-static bool is_absolute_path(absl::string_view path)
+bool OSService::is_absolute(absl::string_view path)
 {
     return path.empty() || path[0] == '/' || path[0] == '\\'
         || (path.size() >= 2 && path[1] == ':');
 }
 
-bool OSService::is_absolute(const std::string& path)
+native_string_type OSService::concat_and_norm(absl::string_view base_dir, absl::string_view path)
 {
-    return is_absolute_path(absl::string_view(path.data(), path.size()));
-}
-
-namespace
-{
-    native_string_type concat_and_norm_path(absl::string_view base_dir, absl::string_view path)
+    if (base_dir.empty() || is_absolute(path))
     {
-        if (base_dir.empty() || is_absolute_path(path))
-        {
-            return widen_string(path);
-        }
-        if (!is_absolute_path(base_dir))
-        {
-            throwInvalidArgumentException(
-                absl::StrCat("base_dir must be an absolute path, yet we received ", base_dir));
-        }
-        std::vector<char> buffer;
-        buffer.reserve(2 * (base_dir.size() + path.size()) + 15);
-        buffer.insert(buffer.end(), base_dir.begin(), base_dir.end());
-        buffer.push_back('\\');
-        buffer.insert(buffer.end(), path.begin(), path.end());
+        return widen_string(path);
+    }
+    if (!is_absolute(base_dir))
+    {
+        throwInvalidArgumentException(
+            absl::StrCat("base_dir must be an absolute path, yet we received ", base_dir));
+    }
+    std::vector<char> buffer;
+    buffer.reserve(2 * (base_dir.size() + path.size()) + 15);
+    buffer.insert(buffer.end(), base_dir.begin(), base_dir.end());
+    buffer.push_back('\\');
+    buffer.insert(buffer.end(), path.begin(), path.end());
 
-        absl::InlinedVector<absl::string_view, 32> pieces;
-        for (absl::string_view p :
-             absl::StrSplit(absl::string_view(buffer.data(), buffer.size()),
-                            absl::ByAnyChar("/\\"),
-                            [](absl::string_view p) { return !p.empty() && p != "."; }))
+    absl::InlinedVector<absl::string_view, 32> pieces;
+    for (absl::string_view p :
+         absl::StrSplit(absl::string_view(buffer.data(), buffer.size()),
+                        absl::ByAnyChar("/\\"),
+                        [](absl::string_view p) { return !p.empty() && p != "."; }))
+    {
+        if (p == "..")
         {
-            if (p == "..")
+            if (!pieces.empty())
             {
-                if (!pieces.empty())
-                {
-                    pieces.pop_back();
-                }
+                pieces.pop_back();
             }
-            else
-            {
-                pieces.push_back(p);
-            }
-        }
-        size_t offset = buffer.size();
-
-        static constexpr absl::string_view LONG_PATH_PREFIX = R"(\\)";
-
-        if (!absl::StartsWith(base_dir, LONG_PATH_PREFIX))
-        {
-            buffer.push_back('\\');
-            buffer.push_back('\\');
-            buffer.push_back('?');
         }
         else
         {
-            buffer.push_back('\\');
+            pieces.push_back(p);
         }
-        for (absl::string_view p : pieces)
-        {
-            buffer.push_back('\\');
-            buffer.insert(buffer.end(), p.begin(), p.end());
-        }
-        return widen_string(absl::string_view(buffer.data() + offset, buffer.size() - offset));
     }
-}    // namespace
+    size_t offset = buffer.size();
 
-native_string_type OSService::concat_and_norm(const std::string& base_dir, const std::string& path)
-{
-    return concat_and_norm_path(absl::string_view(base_dir.data(), base_dir.size()),
-                                absl::string_view(path.data(), path.size()));
+    static constexpr absl::string_view LONG_PATH_PREFIX = R"(\\)";
+
+    if (!absl::StartsWith(base_dir, LONG_PATH_PREFIX))
+    {
+        buffer.push_back('\\');
+        buffer.push_back('\\');
+        buffer.push_back('?');
+    }
+    else
+    {
+        buffer.push_back('\\');
+    }
+    for (absl::string_view p : pieces)
+    {
+        buffer.push_back('\\');
+        buffer.insert(buffer.end(), p.begin(), p.end());
+    }
+    return widen_string(absl::string_view(buffer.data() + offset, buffer.size() - offset));
 }
 
 OSService::OSService(const std::string& path)
