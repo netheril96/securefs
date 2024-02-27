@@ -3,6 +3,7 @@
 #include "lock_guard.h"
 #include "logger.h"
 
+#include <absl/strings/str_format.h>
 #include <cryptopp/base32.h>
 
 #include <cerrno>
@@ -54,7 +55,7 @@ namespace lite
     InvalidFilenameException::~InvalidFilenameException() {}
     std::string InvalidFilenameException::message() const
     {
-        return strprintf("Invalid filename \"%s\"", m_filename.c_str());
+        return absl::StrFormat("Invalid filename \"%s\"", m_filename);
     }
 
     std::string legacy_encrypt_path(AES_SIV& encryptor, StringRef path)

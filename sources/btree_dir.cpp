@@ -1,5 +1,7 @@
 #include "btree_dir.h"
 
+#include <absl/strings/str_format.h>
+
 #include <algorithm>
 #include <assert.h>
 #include <deque>
@@ -688,17 +690,17 @@ static std::string to_string(const std::vector<DirEntry>& entries)
 void BtreeDirectory::write_dot_graph(const BtreeNode* n, FILE* fp)
 {
     if (n->parent_page_number() != INVALID_PAGE)
-        fprintf(fp,
-                "    node%u -> node%u [style=dotted];\n",
-                n->page_number(),
-                n->parent_page_number());
-    fprintf(fp,
-            "node%u [label=\"node%u:\n\n%s\"];\n",
-            n->page_number(),
-            n->page_number(),
-            to_string(n->entries()).c_str());
+        absl::FPrintF(fp,
+                      "    node%u -> node%u [style=dotted];\n",
+                      n->page_number(),
+                      n->parent_page_number());
+    absl::FPrintF(fp,
+                  "node%u [label=\"node%u:\n\n%s\"];\n",
+                  n->page_number(),
+                  n->page_number(),
+                  to_string(n->entries()));
     for (uint32_t c : n->children())
-        fprintf(fp, "    node%u -> node%u;\n", c, n->page_number());
+        absl::FPrintF(fp, "    node%u -> node%u;\n", c, n->page_number());
     for (uint32_t c : n->children())
         write_dot_graph(retrieve_node(n->page_number(), c), fp);
 }
@@ -738,8 +740,7 @@ void BtreeDirectory::rebuild()
 
     std::vector<DirEntry> entries;
     entries.reserve(this->m_stream->size() / BLOCK_SIZE * BTREE_MAX_NUM_ENTRIES);
-    mutable_recursive_iterate(
-        root, [&](DirEntry&& e) { entries.push_back(std::move(e)); }, 0);
+    mutable_recursive_iterate(root, [&](DirEntry&& e) { entries.push_back(std::move(e)); }, 0);
     clear_cache();    // root is invalid after this line
     m_stream->resize(0);
     set_num_free_page(0);

@@ -12,30 +12,6 @@
 
 namespace securefs
 {
-std::string vstrprintf(const char* format, va_list args)
-{
-    va_list copied_args;
-    va_copy(copied_args, args);
-    const int MAX_SIZE = 4000;
-    char buffer[MAX_SIZE + 1];
-    int size = vsnprintf(buffer, sizeof(buffer), format, copied_args);
-    va_end(copied_args);
-    if (size < 0)
-        THROW_POSIX_EXCEPTION(errno, "vsnprintf");
-    if (size <= MAX_SIZE)
-        return std::string(buffer, size);
-    std::string result(static_cast<std::string::size_type>(size), '\0');
-    vsnprintf(&result[0], size + 1, format, args);
-    return result;
-}
-
-std::string strprintf(const char* format, ...)
-{
-    va_list args;
-    va_start(args, format);
-    DEFER(va_end(args));
-    return vstrprintf(format, args);
-}
 
 std::string to_lower(const std::string& str)
 {

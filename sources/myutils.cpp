@@ -3,6 +3,8 @@
 #include "logger.h"
 #include "platform.h"
 
+#include <absl/strings/str_format.h>
+
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
@@ -38,10 +40,10 @@ static void find_ids_helper(const std::string& current_dir,
                 }
                 else if (namechar != '/' && namechar != '\\')
                 {
-                    throw_runtime_error(
-                        strprintf("File \"%s\" has extension .meta, but not a valid securefs "
-                                  "meta filename. Please cleanup the underlying storage first.",
-                                  total_name.c_str()));
+                    throw_runtime_error(absl::StrFormat(
+                        "File \"%s\" has extension .meta, but not a valid securefs "
+                        "meta filename. Please cleanup the underlying storage first.",
+                        total_name));
                 }
                 --j;
             }

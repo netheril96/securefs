@@ -2,6 +2,8 @@
 #include "logger.h"
 #include "platform.h"
 
+#include <absl/strings/str_format.h>
+
 securefs::ExceptionBase::ExceptionBase() = default;
 
 securefs::ExceptionBase::~ExceptionBase() = default;
@@ -48,8 +50,7 @@ std::string securefs::VFSException::message() const
 
 std::string securefs::POSIXException::message() const
 {
-    return strprintf(
-        "%s (%s)", securefs::OSService::stringify_system_error(m_errno).c_str(), m_msg.c_str());
+    return absl::StrFormat("%s (%s)", securefs::OSService::stringify_system_error(m_errno), m_msg);
 }
 
 const char* ::securefs::ExceptionBase::what() const noexcept

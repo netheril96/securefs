@@ -131,13 +131,6 @@ bool operator!=(BasicStringRef<CharT> a, const char* b)
 typedef BasicStringRef<char> StringRef;
 typedef BasicStringRef<wchar_t> WideStringRef;
 
-std::string strprintf(const char* format, ...)
-#ifndef _MSC_VER
-    __attribute__((format(printf, 1, 2)))
-#endif
-    ;
-std::string vstrprintf(const char* format, va_list args);
-
 std::string hexify(const byte* data, size_t length);
 void parse_hex(StringRef hex, byte* output, size_t len);
 

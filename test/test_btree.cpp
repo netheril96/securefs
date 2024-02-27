@@ -74,7 +74,7 @@ static void test(securefs::BtreeDirectory& dir,
         }
         else if (p < prob_get + prob_add)
         {
-            auto name = securefs::strprintf("%12d", name_dist(get_random_number_engine()));
+            auto name = absl::StrFormat("%12d", name_dist(get_random_number_engine()));
             securefs::generate_random(id.data(), id.size());
             type = S_IFREG;
             bool added = dir.add_entry(name, id, type);

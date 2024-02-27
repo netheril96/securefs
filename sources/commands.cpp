@@ -168,11 +168,12 @@ void fix_helper(operations::FileSystemContext* fs,
         }
         catch (const std::exception& e)
         {
-            fprintf(stderr,
-                    "Encounter exception when opening %s: %s\nDo you want to remove the entry? "
-                    "(Yes/No, default: no)\n",
-                    (dir_name + '/' + name).c_str(),
-                    e.what());
+            absl::FPrintF(
+                stderr,
+                "Encounter exception when opening %s: %s\nDo you want to remove the entry? "
+                "(Yes/No, default: no)\n",
+                (dir_name + '/' + name),
+                e.what());
             auto remove = [&]()
             {
                 FileLockGuard file_lock_guard(*dir);
@@ -190,11 +191,12 @@ void fix_helper(operations::FileSystemContext* fs,
         int real_type = base->get_real_type();
         if (type != real_type)
         {
-            printf("Mismatch type for %s (inode has type %s, directory entry has type %s). Do you "
-                   "want to fix it? (Yes/No default: yes)\n",
-                   (dir_name + '/' + name).c_str(),
-                   FileBase::type_name(real_type),
-                   FileBase::type_name(type));
+            absl::PrintF(
+                "Mismatch type for %s (inode has type %s, directory entry has type %s). Do you "
+                "want to fix it? (Yes/No default: yes)\n",
+                (dir_name + '/' + name),
+                FileBase::type_name(real_type),
+                FileBase::type_name(type));
             fflush(stdout);
 
             auto fix_type = [&]()
@@ -236,9 +238,10 @@ void fix(const std::string& basedir, operations::FileSystemContext* fs)
     {
         if (all_ids.find(id) == all_ids.end())
         {
-            printf("%s is not referenced anywhere in the filesystem, do you want to recover it? "
-                   "([r]ecover/[d]elete/[i]gnore default: recover)\n",
-                   hexify(id).c_str());
+            absl::PrintF(
+                "%s is not referenced anywhere in the filesystem, do you want to recover it? "
+                "([r]ecover/[d]elete/[i]gnore default: recover)\n",
+                hexify(id));
             fflush(stdout);
 
             auto recover = [&]()
@@ -504,7 +507,7 @@ FSConfig parse_config(const Json::Value& config,
     }
     else
     {
-        throwInvalidArgumentException(strprintf("Unsupported version %u", fsconfig.version));
+        throwInvalidArgumentException(absl::StrFormat("Unsupported version %u", fsconfig.version));
     }
 
     byte iv[CONFIG_IV_LENGTH];
@@ -598,8 +601,7 @@ FSConfig CommandBase::read_config(FileStream* stream,
     Json::Value value;
     std::string error_message;
     if (!create_json_reader()->parse(str.data(), str.data() + str.size(), &value, &error_message))
-        throw_runtime_error(
-            strprintf("Failure to parse the config file: %s", error_message.c_str()));
+        throw_runtime_error(absl::StrFormat("Failure to parse the config file: %s", error_message));
 
     return parse_config(value, maybe_key_file_path, password, pass_len);
 }
@@ -725,11 +727,11 @@ protected:
     }
 };
 
-static const std::string message_for_setting_pbkdf
-    = strprintf("The algorithm to stretch passwords. Use %s for maximum protection (default), or "
-                "%s for compatibility with old versions of securefs",
-                PBKDF_ALGO_ARGON2ID,
-                PBKDF_ALGO_PKCS5);
+static const std::string message_for_setting_pbkdf = absl::StrFormat(
+    "The algorithm to stretch passwords. Use %s for maximum protection (default), or "
+    "%s for compatibility with old versions of securefs",
+    PBKDF_ALGO_ARGON2ID,
+    PBKDF_ALGO_PKCS5);
 
 class CreateCommand : public _SinglePasswordCommandBase
 {
@@ -788,14 +790,15 @@ public:
     {
         if (format.isSet() && store_time.isSet())
         {
-            fprintf(stderr, "Conflicting flags --format and --store_time are specified together\n");
+            absl::FPrintF(stderr,
+                          "Conflicting flags --format and --store_time are specified together\n");
             return 1;
         }
 
         if (format.isSet() && format.getValue() == 1 && (iv_size.isSet() || block_size.isSet()))
         {
-            fprintf(stderr,
-                    "IV and block size options are not available for filesystem format 1\n");
+            absl::FPrintF(stderr,
+                          "IV and block size options are not available for filesystem format 1\n");
             return 1;
         }
 
@@ -1229,11 +1232,11 @@ public:
             "-o",
             "subtype=" + fssubtype.getValue(),
             "-o",
-            strprintf("entry_timeout=%d", attr_timeout.getValue()),
+            absl::StrFormat("entry_timeout=%d", attr_timeout.getValue()),
             "-o",
-            strprintf("attr_timeout=%d", attr_timeout.getValue()),
+            absl::StrFormat("attr_timeout=%d", attr_timeout.getValue()),
             "-o",
-            strprintf("negative_timeout=%d", attr_timeout.getValue()),
+            absl::StrFormat("negative_timeout=%d", attr_timeout.getValue()),
 #ifndef _WIN32
             "-o",
             "atomic_o_trunc",
@@ -1248,7 +1251,7 @@ public:
 #ifdef _WIN32
             fuse_args.emplace_back("-o");
             fuse_args.emplace_back(
-                strprintf("ThreadCount=%d", 2 * std::thread::hardware_concurrency()));
+                absl::StrFormat("ThreadCount=%d", 2 * std::thread::hardware_concurrency()));
 #endif
         }
         if (!background.getValue())
@@ -1272,13 +1275,16 @@ public:
             fuse_args.emplace_back("--VolumePrefix=" + mount_point.getValue().substr(1));
         }
         fuse_args.emplace_back("-o");
-        fuse_args.emplace_back(strprintf("FileInfoTimeout=%d", attr_timeout.getValue() * 1000));
+        fuse_args.emplace_back(
+            absl::StrFormat("FileInfoTimeout=%d", attr_timeout.getValue() * 1000));
         fuse_args.emplace_back("-o");
-        fuse_args.emplace_back(strprintf("DirInfoTimeout=%d", attr_timeout.getValue() * 1000));
+        fuse_args.emplace_back(
+            absl::StrFormat("DirInfoTimeout=%d", attr_timeout.getValue() * 1000));
         fuse_args.emplace_back("-o");
-        fuse_args.emplace_back(strprintf("EaTimeout=%d", attr_timeout.getValue() * 1000));
+        fuse_args.emplace_back(absl::StrFormat("EaTimeout=%d", attr_timeout.getValue() * 1000));
         fuse_args.emplace_back("-o");
-        fuse_args.emplace_back(strprintf("VolumeInfoTimeout=%d", attr_timeout.getValue() * 1000));
+        fuse_args.emplace_back(
+            absl::StrFormat("VolumeInfoTimeout=%d", attr_timeout.getValue() * 1000));
 #else
         fuse_args.emplace_back("-o");
         fuse_args.emplace_back("big_writes");
@@ -1394,9 +1400,9 @@ public:
             auto rc = fsopt.root->listxattr(".", nullptr, 0);
             if (rc < 0)
             {
-                fprintf(stderr,
-                        "Warning: %s has no extended attribute support.\nXattr is disabled\n",
-                        data_dir.getValue().c_str());
+                absl::FPrintf(stderr,
+                              "Warning: %s has no extended attribute support.\nXattr is disabled\n",
+                              data_dir.getValue());
                 native_xattr = false;
             }
         }
@@ -1466,9 +1472,9 @@ public:
 
         if (config.version >= 4)
         {
-            fprintf(stderr,
-                    "The filesystem has format version %u which cannot be fixed\n",
-                    config.version);
+            absl::FPrintF(stderr,
+                          "The filesystem has format version %u which cannot be fixed\n",
+                          config.version);
             return 3;
         }
         generate_random(password.data(), password.size());    // Erase user input
@@ -1511,8 +1517,8 @@ public:
     int execute() override
     {
         using namespace CryptoPP;
-        printf("securefs %s\n", GIT_VERSION);
-        printf("Crypto++ %g\n", CRYPTOPP_VERSION / 100.0);
+        absl::PrintF("securefs %s\n", GIT_VERSION);
+        absl::PrintF("Crypto++ %g\n", CRYPTOPP_VERSION / 100.0);
 #ifdef WIN32
         HMODULE hd = GetModuleHandleW((sizeof(void*) == 8) ? L"winfsp-x64.dll" : L"winfsp-x86.dll");
         NTSTATUS(*fsp_version_func)
@@ -1522,31 +1528,31 @@ public:
             uint32_t vn;
             if (fsp_version_func(&vn) == 0)
             {
-                printf("WinFsp %u.%u\n", vn >> 16, vn & 0xFFFFu);
+                absl::PrintF("WinFsp %u.%u\n", vn >> 16, vn & 0xFFFFu);
             }
         }
 #else
         typedef int version_function(void);
         auto fuse_version_func
             = reinterpret_cast<version_function*>(::dlsym(RTLD_DEFAULT, "fuse_version"));
-        printf("libfuse %d\n", fuse_version_func());
+        absl::PrintF("libfuse %d\n", fuse_version_func());
 #endif
 
-        printf("utf8proc %s\n", utf8proc_version());
+        absl::PrintF("utf8proc %s\n", utf8proc_version());
 
 #ifdef CRYPTOPP_DISABLE_ASM
         fputs("\nBuilt without hardware acceleration\n", stdout);
 #else
 #if CRYPTOPP_BOOL_X86 || CRYPTOPP_BOOL_X32 || CRYPTOPP_BOOL_X64
-        printf("\nHardware features available:\nSSE2: %s\nSSE3: %s\nSSE4.1: %s\nSSE4.2: "
-               "%s\nAES-NI: %s\nCLMUL: %s\nSHA: %s\n",
-               HasSSE2() ? "true" : "false",
-               HasSSSE3() ? "true" : "false",
-               HasSSE41() ? "true" : "false",
-               HasSSE42() ? "true" : "false",
-               HasAESNI() ? "true" : "false",
-               HasCLMUL() ? "true" : "false",
-               HasSHA() ? "true" : "false");
+        absl::PrintF("\nHardware features available:\nSSE2: %s\nSSE3: %s\nSSE4.1: %s\nSSE4.2: "
+                     "%s\nAES-NI: %s\nCLMUL: %s\nSHA: %s\n",
+                     HasSSE2() ? "true" : "false",
+                     HasSSSE3() ? "true" : "false",
+                     HasSSE41() ? "true" : "false",
+                     HasSSE42() ? "true" : "false",
+                     HasAESNI() ? "true" : "false",
+                     HasCLMUL() ? "true" : "false",
+                     HasSHA() ? "true" : "false");
 #endif
 #endif
         return 0;
@@ -1607,7 +1613,7 @@ public:
                     buffer.data(), buffer.data() + buffer.size(), &config_json, &error_message))
             {
                 throw_runtime_error(
-                    strprintf("Failure to parse the config file: %s", error_message.c_str()));
+                    absl::StrFormat("Failure to parse the config file: %s", error_message));
             }
         }
 
@@ -1617,25 +1623,25 @@ public:
             ERROR_LOG("Unknown filesystem format version %u", format_version);
             return 44;
         }
-        printf("Config file path: %s\n", real_config_path.c_str());
-        printf("Filesystem format version: %u\n", format_version);
-        printf("Is full or lite format: %s\n", (format_version < 4) ? "full" : "lite");
-        printf("Is underlying directory flattened: %s\n", true_or_false(format_version < 4));
-        printf("Is multiple mounts allowed: %s\n", true_or_false(format_version >= 4));
-        printf("Is timestamp stored within the fs: %s\n\n", true_or_false(format_version == 3));
+        absl::PrintF("Config file path: %s\n", real_config_path);
+        absl::PrintF("Filesystem format version: %u\n", format_version);
+        absl::PrintF("Is full or lite format: %s\n", (format_version < 4) ? "full" : "lite");
+        absl::PrintF("Is underlying directory flattened: %v\n", format_version < 4);
+        absl::PrintF("Is multiple mounts allowed: %v\n", format_version >= 4);
+        absl::PrintF("Is timestamp stored within the fs: %v\n\n", format_version == 3);
 
-        printf("Content block size: %u bytes\n",
-               format_version == 1 ? 4096 : config_json["block_size"].asUInt());
-        printf("Content IV size: %u bits\n",
-               format_version == 1 ? 256 : config_json["iv_size"].asUInt() * 8);
-        printf("Password derivation algorithm: %s\n",
-               config_json.get("pbkdf", PBKDF_ALGO_PKCS5).asCString());
-        printf("Password derivation iterations: %u\n", config_json["iterations"].asUInt());
-        printf("Per file key generation algorithm: %s\n",
-               format_version < 4 ? "HMAC-SHA256" : "AES");
-        printf("Content cipher: %s\n", format_version < 4 ? "AES-256-GCM" : "AES-128-GCM");
-        printf("Maximum padding to obfuscate file sizes: %u byte(s)\n",
-               config_json.get("max_padding", 0u).asUInt());
+        absl::PrintF("Content block size: %u bytes\n",
+                     format_version == 1 ? 4096 : config_json["block_size"].asUInt());
+        absl::PrintF("Content IV size: %u bits\n",
+                     format_version == 1 ? 256 : config_json["iv_size"].asUInt() * 8);
+        absl::PrintF("Password derivation algorithm: %s\n",
+                     config_json.get("pbkdf", PBKDF_ALGO_PKCS5).asCString());
+        absl::PrintF("Password derivation iterations: %u\n", config_json["iterations"].asUInt());
+        absl::PrintF("Per file key generation algorithm: %s\n",
+                     format_version < 4 ? "HMAC-SHA256" : "AES");
+        absl::PrintF("Content cipher: %s\n", format_version < 4 ? "AES-256-GCM" : "AES-128-GCM");
+        absl::PrintF("Maximum padding to obfuscate file sizes: %u byte(s)\n",
+                     config_json.get("max_padding", 0u).asUInt());
         return 0;
     }
 };
@@ -1668,10 +1674,10 @@ public:
         for (auto c : commands)
         {
             if (c->short_name())
-                printf("## %s (short name: %c)\n", c->long_name(), c->short_name());
+                absl::PrintF("## %s (short name: %c)\n", c->long_name(), c->short_name());
             else
-                printf("## %s\n", c->long_name());
-            printf("%s\n\n", c->help_message());
+                absl::PrintF("## %s\n", c->long_name());
+            absl::PrintF("%s\n\n", c->help_message());
             auto cmdline = c->cmdline();
 
             std::vector<std::pair<size_t, TCLAP::Arg*>> prioritizedArgs;
@@ -1697,9 +1703,8 @@ public:
                     auto a = dynamic_cast<TCLAP::UnlabeledValueArg<std::string>*>(arg);
                     if (a)
                     {
-                        printf("- **%s**: (*positional*) %s\n",
-                               a->getName().c_str(),
-                               a->getDescription().c_str());
+                        absl::PrintF(
+                            "- **%s**: (*positional*) %s\n", a->getName(), a->getDescription());
                         continue;
                     }
                 }
@@ -1712,10 +1717,10 @@ public:
                 auto flag = arg->getFlag();
                 if (!flag.empty())
                 {
-                    printf("**%c%s** or ", arg->flagStartChar(), flag.c_str());
+                    absl::PrintF("**%c%s** or ", arg->flagStartChar(), flag);
                 }
-                printf("**%s%s**", arg->nameStartString().c_str(), arg->getName().c_str());
-                printf(": %s. ", arg->getDescription().c_str());
+                absl::PrintF("**%s%s**", arg->nameStartString(), arg->getName());
+                absl::PrintF(": %s. ", arg->getDescription());
                 {
                     auto a = dynamic_cast<TCLAP::SwitchArg*>(arg);
                     if (a)
@@ -1741,7 +1746,7 @@ public:
                         }
                         else
                         {
-                            printf("*Default: %s.*\n", a->getValue().c_str());
+                            absl::PrintF("*Default: %s.*\n", a->getValue());
                         }
                         continue;
                     }
@@ -1750,7 +1755,7 @@ public:
                     auto a = dynamic_cast<TCLAP::ValueArg<unsigned>*>(arg);
                     if (a)
                     {
-                        printf("*Default: %u.*\n", a->getValue());
+                        absl::PrintF("*Default: %u.*\n", a->getValue());
                         continue;
                     }
                 }
@@ -1758,7 +1763,7 @@ public:
                     auto a = dynamic_cast<TCLAP::ValueArg<int>*>(arg);
                     if (a)
                     {
-                        printf("*Default: %d.*\n", a->getValue());
+                        absl::PrintF("*Default: %d.*\n", a->getValue());
                         continue;
                     }
                 }
@@ -1805,19 +1810,20 @@ int commands_main(int argc, const char* const* argv)
             {
                 if (command->short_name())
                 {
-                    fprintf(stderr,
-                            "%s (alias: %c): %s\n",
-                            command->long_name(),
-                            command->short_name(),
-                            command->help_message());
+                    absl::FPrintF(stderr,
+                                  "%s (alias: %c): %s\n",
+                                  command->long_name(),
+                                  command->short_name(),
+                                  command->help_message());
                 }
                 else
                 {
-                    fprintf(stderr, "%s: %s\n", command->long_name(), command->help_message());
+                    absl::FPrintF(
+                        stderr, "%s: %s\n", command->long_name(), command->help_message());
                 }
             }
 
-            fprintf(stderr, "\nType %s ${SUBCOMMAND} --help for details\n", program_name);
+            absl::FPrintF(stderr, "\nType %s ${SUBCOMMAND} --help for details\n", program_name);
             return 1;
         };
 

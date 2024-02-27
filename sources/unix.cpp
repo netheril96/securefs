@@ -6,6 +6,8 @@
 #include "platform.h"
 #include "streams.h"
 
+#include <absl/strings/str_format.h>
+
 #include <algorithm>
 #include <locale.h>
 #include <vector>
@@ -286,8 +288,8 @@ OSService::open_file_stream(StringRef path, int flags, unsigned mode) const
 {
     int fd = ::openat(m_dir_fd, path.c_str(), flags, mode);
     if (fd < 0)
-        THROW_POSIX_EXCEPTION(
-            errno, strprintf("Opening %s with flags %#o", norm_path(path).c_str(), flags));
+        THROW_POSIX_EXCEPTION(errno,
+                              absl::StrFormat("Opening %s with flags %#o", norm_path(path), flags));
     return std::make_shared<UnixFileStream>(fd);
 }
 
@@ -314,7 +316,7 @@ void OSService::lock() const
     int rc = ::flock(m_dir_fd, LOCK_NB | LOCK_EX);
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno,
-                              strprintf("Fail to obtain exclusive lock on %s", m_dir_name.c_str()));
+                              absl::StrFormat("Fail to obtain exclusive lock on %s", m_dir_name));
 }
 
 void OSService::mkdir(StringRef path, unsigned mode) const
@@ -322,15 +324,15 @@ void OSService::mkdir(StringRef path, unsigned mode) const
     int rc = ::mkdirat(m_dir_fd, path.c_str(), mode);
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno,
-                              strprintf("Fail to create directory %s", norm_path(path).c_str()));
+                              absl::StrFormat("Fail to create directory %s", norm_path(path)));
 }
 
 void OSService::symlink(StringRef to, StringRef from) const
 {
     int rc = ::symlinkat(to.c_str(), m_dir_fd, from.c_str());
     if (rc < 0)
-        THROW_POSIX_EXCEPTION(
-            errno, strprintf("symlink to=%s and from=%s", to.c_str(), norm_path(from).c_str()));
+        THROW_POSIX_EXCEPTION(errno,
+                              absl::StrFormat("symlink to=%s and from=%s", to, norm_path(from)));
 }
 
 void OSService::link(StringRef source, StringRef dest) const
@@ -338,8 +340,7 @@ void OSService::link(StringRef source, StringRef dest) const
     int rc = ::linkat(m_dir_fd, source.c_str(), m_dir_fd, dest.c_str(), 0);
     if (rc < 0)
     {
-        THROW_POSIX_EXCEPTION(errno,
-                              strprintf("link src=%s dest=%s", source.c_str(), dest.c_str()));
+        THROW_POSIX_EXCEPTION(errno, absl::StrFormat("link src=%s dest=%s", source, dest));
     }
 }
 
@@ -355,7 +356,7 @@ void OSService::rename(StringRef a, StringRef b) const
     int rc = ::renameat(m_dir_fd, a.c_str(), m_dir_fd, b.c_str());
     if (rc < 0)
         THROW_POSIX_EXCEPTION(
-            errno, strprintf("Renaming from %s to %s", norm_path(a).c_str(), norm_path(b).c_str()));
+            errno, absl::StrFormat("Renaming from %s to %s", norm_path(a), norm_path(b)));
 }
 
 bool OSService::stat(StringRef path, struct fuse_stat* stat) const
@@ -365,7 +366,7 @@ bool OSService::stat(StringRef path, struct fuse_stat* stat) const
     {
         if (errno == ENOENT)
             return false;
-        THROW_POSIX_EXCEPTION(errno, strprintf("stating %s", norm_path(path).c_str()));
+        THROW_POSIX_EXCEPTION(errno, absl::StrFormat("stating %s", norm_path(path)));
     }
     return true;
 }
@@ -377,7 +378,7 @@ void OSService::chmod(StringRef path, fuse_mode_t mode) const
         rc = ::fchmodat(m_dir_fd, path.c_str(), mode, 0);
     if (rc < 0)
         THROW_POSIX_EXCEPTION(errno,
-                              strprintf("chmod %s with mode=0%o", norm_path(path).c_str(), mode));
+                              absl::StrFormat("chmod %s with mode=0%o", norm_path(path), mode));
 }
 
 void OSService::chown(StringRef path, uid_t uid, gid_t gid) const
@@ -386,11 +387,8 @@ void OSService::chown(StringRef path, uid_t uid, gid_t gid) const
     if (rc < 0 && errno == ENOTSUP)
         rc = ::fchownat(m_dir_fd, path.c_str(), uid, gid, 0);
     if (rc < 0)
-        THROW_POSIX_EXCEPTION(errno,
-                              strprintf("chown %s with uid=%lld and gid=%lld",
-                                        norm_path(path).c_str(),
-                                        static_cast<long long>(uid),
-                                        static_cast<long long>(gid)));
+        THROW_POSIX_EXCEPTION(
+            errno, absl::StrFormat("chown %s with uid=%d and gid=%d", norm_path(path), uid, gid));
 }
 
 ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
@@ -398,7 +396,7 @@ ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
     ssize_t rc = ::readlinkat(m_dir_fd, path.c_str(), output, size);
     if (rc < 0)
         THROW_POSIX_EXCEPTION(
-            errno, strprintf("readlink %s with buffer size=%zu", norm_path(path).c_str(), size));
+            errno, absl::StrFormat("readlink %s with buffer size=%zu", norm_path(path), size));
     return rc;
 }
 
@@ -554,7 +552,7 @@ static std::string postprocess_strerror(const char* rc, const char* buffer, int 
     if (rc)
         return rc;
     (void)buffer;
-    return strprintf("Unknown POSIX error %d", code);
+    return absl::StrFormat("Unknown POSIX error %d", code);
 }
 
 // XSI
@@ -562,7 +560,7 @@ static std::string postprocess_strerror(int rc, const char* buffer, int code)
 {
     if (rc == 0)
         return buffer;
-    return strprintf("Unknown POSIX error %d", code);
+    return absl::StrFormat("Unknown POSIX error %d", code);
 }
 
 std::string OSService::stringify_system_error(int errcode)

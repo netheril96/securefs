@@ -1,6 +1,8 @@
 #pragma once
 #include "myutils.h"
 
+#include <absl/strings/str_format.h>
+
 #include <cerrno>
 #include <exception>
 #include <memory>
@@ -43,7 +45,7 @@ public:
 
     std::string message() const override
     {
-        return strprintf(
+        return absl::StrFormat(
             "Unreachable code executed in function \"%s\" at %s:%d", m_func, m_file, m_line);
     }
 };
@@ -136,9 +138,8 @@ public:
 
     std::string message() const override
     {
-        return strprintf("Metadata for ID %s is corrupted (%s)",
-                         hexify(m_id.data(), m_id.size()).c_str(),
-                         m_reason);
+        return absl::StrFormat(
+            "Metadata for ID %s is corrupted (%s)", hexify(m_id.data(), m_id.size()), m_reason);
     }
 };
 
@@ -156,9 +157,9 @@ public:
 
     std::string message() const override
     {
-        return strprintf("Message for ID %s at offset %lld does not match the checksum",
-                         hexify(m_id.data(), m_id.size()).c_str(),
-                         (long long)m_off);
+        return absl::StrFormat("Message for ID %s at offset %d does not match the checksum",
+                               hexify(m_id.data(), m_id.size()),
+                               m_off);
     }
 };
 
@@ -177,9 +178,9 @@ public:
 
     std::string message() const override
     {
-        return strprintf("Extended attribute for ID %s and name \"%s\" has wrong checksum",
-                         hexify(m_id.data(), m_id.size()).c_str(),
-                         m_name.c_str());
+        return absl::StrFormat("Extended attribute for ID %s and name \"%s\" has wrong checksum",
+                               hexify(m_id.data(), m_id.size()),
+                               m_name);
     }
 };
 
@@ -203,9 +204,10 @@ public:
 
     std::string message() const override
     {
-        return strprintf("Operation on stream at point %lld, which exceeds its maximum size %lld",
-                         (long long)m_size,
-                         (long long)m_max_size);
+        return absl::StrFormat(
+            "Operation on stream at point %lld, which exceeds its maximum size %lld",
+            m_size,
+            m_max_size);
     }
     int error_number() const noexcept override { return EFBIG; }
 };
@@ -224,7 +226,7 @@ public:
 
     std::string message() const override
     {
-        return strprintf("Invalid cast from %s to %s", from_name, to_name);
+        return absl::StrFormat("Invalid cast from %s to %s", from_name, to_name);
     }
 };
 
