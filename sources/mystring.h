@@ -61,6 +61,11 @@ public:
     {
         return std::basic_string<CharT>(data() + start, std::min(size() - start, count));
     }
+    template <typename UnusedType = typename std::enable_if<std::is_same<CharT, char>::value>::type>
+    operator absl::string_view() const noexcept
+    {
+        return {data(), size()};
+    }
 };
 
 template <class CharT>

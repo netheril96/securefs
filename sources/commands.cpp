@@ -428,7 +428,7 @@ void compute_password_derived_key(const Json::Value& config,
 {
     unsigned iterations = config["iterations"].asUInt();
     std::string pbkdf_algorithm = config.get("pbkdf", PBKDF_ALGO_PKCS5).asString();
-    VERBOSE_LOG("Setting the password key derivation function to %s", pbkdf_algorithm.c_str());
+    VERBOSE_LOG("Setting the password key derivation function to %s", pbkdf_algorithm);
 
     if (pbkdf_algorithm == PBKDF_ALGO_PKCS5)
     {
@@ -1305,7 +1305,7 @@ public:
 
         if (!is_vulnerable)
         {
-            VERBOSE_LOG("Master key: %s", hexify(config.master_key).c_str());
+            VERBOSE_LOG("Master key: %s", hexify(config.master_key));
         }
 
         operations::MountOptions fsopt;
@@ -1411,7 +1411,7 @@ public:
         {
             lite::init_fuse_operations(&operations, native_xattr);
         }
-        VERBOSE_LOG("Calling fuse_main with arguments: %s", escape_args(fuse_args).c_str());
+        VERBOSE_LOG("Calling fuse_main with arguments: %s", escape_args(fuse_args));
         recreate_logger();
         return fuse_main(static_cast<int>(fuse_args.size()),
                          const_cast<char**>(to_c_style_args(fuse_args).data()),
@@ -1588,7 +1588,7 @@ public:
         struct fuse_stat st;
         if (!OSService::get_default().stat(path.getValue(), &st))
         {
-            ERROR_LOG("The path %s does not exist.", path.getValue().c_str());
+            ERROR_LOG("The path %s does not exist.", path.getValue());
         }
 
         std::string real_config_path = path.getValue();
@@ -1839,7 +1839,7 @@ int commands_main(int argc, const char* const* argv)
     }
     catch (const TCLAP::ArgException& e)
     {
-        ERROR_LOG("Error parsing arguments: %s at %s\n", e.error().c_str(), e.argId().c_str());
+        ERROR_LOG("Error parsing arguments: %s at %s\n", e.error(), e.argId());
         return 5;
     }
     catch (const std::runtime_error& e)

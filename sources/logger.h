@@ -1,6 +1,8 @@
 #pragma once
 #include "platform.h"
 
+#include <absl/strings/str_format.h>
+
 #include <memory>
 #include <stdarg.h>
 #include <stddef.h>
@@ -69,6 +71,27 @@ public:
 #endif
         ;
 
+    template <typename... Args>
+    void log_v2(LoggingLevel level,
+                const char* funcsig,
+                int lineno,
+                const absl::FormatSpec<Args...>& fms,
+                Args&&... args) noexcept
+    {
+        if (!m_fp || level < this->get_level())
+            return;
+        prelog(level, funcsig, lineno);
+        DEFER(postlog(level));
+        try
+        {
+            absl::FPrintF(m_fp, fms, std::forward<Args>(args)...);
+        }
+        catch (const std::exception& e)
+        {
+            absl::FPrintF(m_fp, "Logging itself throws exception: %s", e.what());
+        }
+    }
+
     LoggingLevel get_level() const noexcept { return m_level; }
     void set_level(LoggingLevel lvl) noexcept { m_level = lvl; }
 
@@ -89,7 +112,7 @@ extern Logger* global_logger;
         using securefs::global_logger;                                                             \
         if (global_logger && global_logger->get_level() <= log_level)                              \
         {                                                                                          \
-            global_logger->log(log_level, FULL_FUNCTION_NAME, __LINE__, __VA_ARGS__);              \
+            global_logger->log_v2(log_level, FULL_FUNCTION_NAME, __LINE__, __VA_ARGS__);           \
         }                                                                                          \
     } while (0)
 #define TRACE_LOG(...) GENERIC_LOG(securefs::kLogTrace, __VA_ARGS__)

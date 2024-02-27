@@ -282,7 +282,7 @@ void FileTableImpl::eject()
     for (size_t i = 0; i < num_eject; ++i)
     {
         m_files.erase(m_closed_ids[i]);
-        TRACE_LOG("Evicting file with ID=%s from cache", hexify(m_closed_ids[i]).c_str());
+        TRACE_LOG("Evicting file with ID=%s from cache", hexify(m_closed_ids[i]));
     }
     m_closed_ids.erase(m_closed_ids.begin(), m_closed_ids.begin() + num_eject);
 }

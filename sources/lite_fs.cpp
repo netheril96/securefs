@@ -158,7 +158,7 @@ namespace lite
             {
                 str.erase(str.begin());
             }
-            TRACE_LOG("Translate path %s into %s", path.c_str(), str.c_str());
+            TRACE_LOG("Translate path %s into %s", path, str);
             return str;
         }
     }
@@ -412,7 +412,7 @@ namespace lite
                     base32_decode(under_name.data(), under_name.size(), decoded_bytes);
                     if (decoded_bytes.size() <= AES_SIV::IV_SIZE)
                     {
-                        WARN_LOG("Skipping too small encrypted filename %s", under_name.c_str());
+                        WARN_LOG("Skipping too small encrypted filename %s", under_name);
                         continue;
                     }
                     name->assign(decoded_bytes.size() - AES_SIV::IV_SIZE, '\0');
