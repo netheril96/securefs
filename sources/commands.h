@@ -13,10 +13,10 @@ int commands_main(int argc, const char* const* argv);
 
 struct FSConfig
 {
-    CryptoPP::AlignedSecByteBlock master_key;
-    unsigned block_size;
-    unsigned iv_size;
-    unsigned version;
+    CryptoPP::AlignedSecByteBlock master_key{};
+    unsigned block_size{};
+    unsigned iv_size{};
+    unsigned version{};
     unsigned max_padding = 0;
 };
 

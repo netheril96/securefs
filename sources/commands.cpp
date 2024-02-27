@@ -8,6 +8,7 @@
 #include "platform.h"
 #include "win_get_proc.h"
 
+#include <absl/types/optional.h>
 #include <argon2.h>
 #include <cryptopp/cpu.h>
 #include <cryptopp/hmac.h>
@@ -478,32 +479,30 @@ void compute_password_derived_key(const Json::Value& config,
     }
 }
 
-bool parse_config(const Json::Value& config,
-                  StringRef maybe_key_file_path,
-                  const void* password,
-                  size_t pass_len,
-                  CryptoPP::AlignedSecByteBlock& master_key,
-                  unsigned& block_size,
-                  unsigned& iv_size,
-                  unsigned& max_padding)
+FSConfig parse_config(const Json::Value& config,
+                      StringRef maybe_key_file_path,
+                      const void* password,
+                      size_t pass_len)
 {
     using namespace securefs;
-    unsigned version = config["version"].asUInt();
-    max_padding = config.get("max_padding", 0u).asUInt();
+    FSConfig fsconfig{};
 
-    if (version == 1)
+    fsconfig.version = config["version"].asUInt();
+    fsconfig.max_padding = config.get("max_padding", 0u).asUInt();
+
+    if (fsconfig.version == 1)
     {
-        block_size = 4096;
-        iv_size = 32;
+        fsconfig.block_size = 4096;
+        fsconfig.iv_size = 32;
     }
-    else if (version == 2 || version == 3 || version == 4)
+    else if (fsconfig.version == 2 || fsconfig.version == 3 || fsconfig.version == 4)
     {
-        block_size = config["block_size"].asUInt();
-        iv_size = config["iv_size"].asUInt();
+        fsconfig.block_size = config["block_size"].asUInt();
+        fsconfig.iv_size = config["iv_size"].asUInt();
     }
     else
     {
-        throwInvalidArgumentException(strprintf("Unsupported version %u", version));
+        throwInvalidArgumentException(strprintf("Unsupported version %u", fsconfig.version));
     }
 
     byte iv[CONFIG_IV_LENGTH];
@@ -523,20 +522,20 @@ bool parse_config(const Json::Value& config,
 
     encrypted_key.resize(ekey_hex.size() / 2);
     parse_hex(ekey_hex, encrypted_key.data(), encrypted_key.size());
-    master_key.resize(encrypted_key.size());
+    fsconfig.master_key.resize(encrypted_key.size());
 
-    auto decrypt_and_verify = [&](const securefs::key_type& wrapping_key)
+    auto decrypt_and_verify = [&](const securefs::key_type& wrapping_key) -> bool
     {
         CryptoPP::GCM<CryptoPP::AES>::Decryption decryptor;
         decryptor.SetKeyWithIV(wrapping_key.data(), wrapping_key.size(), iv, array_length(iv));
         return decryptor.DecryptAndVerify(
-            master_key.data(),
+            fsconfig.master_key.data(),
             mac,
             array_length(mac),
             iv,
             array_length(iv),
-            reinterpret_cast<const byte*>(get_version_header(version)),
-            strlen(get_version_header(version)),
+            reinterpret_cast<const byte*>(get_version_header(fsconfig.version)),
+            strlen(get_version_header(fsconfig.version)),
             encrypted_key.data(),
             encrypted_key.size());
     };
@@ -549,7 +548,7 @@ bool parse_config(const Json::Value& config,
         compute_password_derived_key(config, password, pass_len, new_salt, password_derived_key);
         if (decrypt_and_verify(password_derived_key))
         {
-            return true;
+            return fsconfig;
         }
     }
 
@@ -559,8 +558,12 @@ bool parse_config(const Json::Value& config,
         securefs::key_type password_derived_key;
         compute_password_derived_key(config, password, pass_len, salt, password_derived_key);
         hmac_sha256(password_derived_key, maybe_key_file_path, wrapping_key);
-        return decrypt_and_verify(wrapping_key);
+        if (decrypt_and_verify(wrapping_key))
+        {
+            return fsconfig;
+        }
     }
+    throw std::runtime_error("Invalid password or keyfile combination");
 }
 }    // namespace
 
@@ -596,17 +599,7 @@ FSConfig CommandBase::read_config(FileStream* stream,
         throw_runtime_error(
             strprintf("Failure to parse the config file: %s", error_message.c_str()));
 
-    if (!parse_config(value,
-                      maybe_key_file_path,
-                      password,
-                      pass_len,
-                      result.master_key,
-                      result.block_size,
-                      result.iv_size,
-                      result.max_padding))
-        throw_runtime_error("Invalid password and/or keyfile");
-    result.version = value["version"].asUInt();
-    return result;
+    return parse_config(value, maybe_key_file_path, password, pass_len);
 }
 
 static void copy_key(const CryptoPP::AlignedSecByteBlock& in_key, key_type* out_key)
