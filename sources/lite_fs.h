@@ -9,6 +9,7 @@
 #include "platform.h"
 
 #include <absl/base/thread_annotations.h>
+#include <absl/strings/string_view.h>
 #include <absl/types/span.h>
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
@@ -129,8 +130,8 @@ namespace lite
 
     typedef std::unique_ptr<File> AutoClosedFile;
 
-    std::string encrypt_path(AES_SIV& encryptor, StringRef path);
-    std::string decrypt_path(AES_SIV& decryptor, StringRef path);
+    std::string legacy_encrypt_path(AES_SIV& encryptor, StringRef path);
+    std::string legacy_decrypt_path(AES_SIV& decryptor, StringRef path);
 
     class InvalidFilenameException : public VerificationException
     {
@@ -162,6 +163,12 @@ namespace lite
     private:
         std::string translate_path(StringRef path, bool preserve_leading_slash);
 
+        static std::string legacy_encrypt_symlink(StringRef path);
+        static std::string legacy_decrypt_symlink(StringRef path);
+
+        static std::string new_encrypt_symlink(StringRef path);
+        static std::string new_decrypt_symlink(StringRef path);
+
     public:
         FileSystem(std::shared_ptr<const securefs::OSService> root,
                    const key_type& name_key,
@@ -192,6 +199,7 @@ namespace lite
 
         bool has_padding() const noexcept { return m_max_padding_size > 0; }
         bool skip_dot_dot() const noexcept { return m_flags & kOptionSkipDotDot; }
+        bool supports_long_name() const noexcept { return m_flags & kOptionLongNameComponent; }
 
 #ifdef __APPLE__
         // These APIs, unlike all others, report errors through negative error numbers as defined in

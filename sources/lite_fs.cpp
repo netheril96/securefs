@@ -57,7 +57,7 @@ namespace lite
         return strprintf("Invalid filename \"%s\"", m_filename.c_str());
     }
 
-    std::string encrypt_path(AES_SIV& encryptor, StringRef path)
+    std::string legacy_encrypt_path(AES_SIV& encryptor, StringRef path)
     {
         byte buffer[2032];
         std::string result;
@@ -88,7 +88,7 @@ namespace lite
         return result;
     }
 
-    std::string decrypt_path(AES_SIV& decryptor, StringRef path)
+    std::string legacy_decrypt_path(AES_SIV& decryptor, StringRef path)
     {
         byte string_buffer[2032];
         std::string result, decoded_part;
@@ -149,10 +149,11 @@ namespace lite
         {
             std::string str = !m_name_encryptor
                 ? path.to_string()
-                : lite::encrypt_path(
-                    *m_name_encryptor,
-                    transform(path, m_flags & kOptionCaseFoldFileName, m_flags & kOptionNFCFileName)
-                        .get());
+                : lite::legacy_encrypt_path(*m_name_encryptor,
+                                            transform(path,
+                                                      m_flags & kOptionCaseFoldFileName,
+                                                      m_flags & kOptionNFCFileName)
+                                                .get());
             if (!preserve_leading_slash && !str.empty() && str[0] == '/')
             {
                 str.erase(str.begin());
@@ -222,7 +223,7 @@ namespace lite
             {
                 // Resize to actual size
                 buffer.resize(static_cast<size_t>(link_size));
-                auto resolved = decrypt_path(*m_name_encryptor, buffer);
+                auto resolved = legacy_decrypt_path(*m_name_encryptor, buffer);
                 buf->st_size = resolved.size();
             }
             else
@@ -312,8 +313,9 @@ namespace lite
         auto underbuf = securefs::make_unique_array<char>(max_size);
         memset(underbuf.get(), 0, max_size);
         m_root->readlink(translate_path(path, false), underbuf.get(), max_size - 1);
-        std::string resolved
-            = m_name_encryptor ? decrypt_path(*m_name_encryptor, underbuf.get()) : underbuf.get();
+        std::string resolved = m_name_encryptor
+            ? legacy_decrypt_path(*m_name_encryptor, underbuf.get())
+            : underbuf.get();
         size_t copy_size = std::min(resolved.size(), size - 1);
         memcpy(buf, resolved.data(), copy_size);
         buf[copy_size] = '\0';

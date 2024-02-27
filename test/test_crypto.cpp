@@ -231,14 +231,14 @@ TEST_CASE("Test filename enc/dec")
            0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a, 0x5b, 0x5b, 0x5d, 0x5e, 0x5f};
     securefs::AES_SIV aes_siv(key, sizeof(key));
     const std::string path1 = "//cbdfsef/rsy/e\0xFF";
-    std::string enc1 = securefs::lite::encrypt_path(aes_siv, path1);
+    std::string enc1 = securefs::lite::legacy_encrypt_path(aes_siv, path1);
     CAPTURE(enc1);
-    REQUIRE(securefs::lite::decrypt_path(aes_siv, enc1) == path1);
+    REQUIRE(securefs::lite::legacy_decrypt_path(aes_siv, enc1) == path1);
 
     const std::string path2 = "../1239/uuuuu";
-    std::string enc2 = securefs::lite::encrypt_path(aes_siv, path2);
+    std::string enc2 = securefs::lite::legacy_encrypt_path(aes_siv, path2);
     CAPTURE(enc2);
-    REQUIRE(securefs::lite::decrypt_path(aes_siv, enc2) == path2);
+    REQUIRE(securefs::lite::legacy_decrypt_path(aes_siv, enc2) == path2);
 }
 
 TEST_CASE("Test hkdf")
