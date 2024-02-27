@@ -814,7 +814,7 @@ public:
 
         auto config_stream
             = open_config_stream(get_real_config_path(), O_WRONLY | O_CREAT | O_EXCL);
-        DEFER(if (std::uncaught_exception()) {
+        DEFER(if (has_uncaught_exceptions()) {
             OSService::get_default().remove_file(get_real_config_path());
         });
         write_config(config_stream.get(),
@@ -964,7 +964,7 @@ public:
             stream.get(), old_password.data(), old_password.size(), old_key_file.getValue());
         stream = OSService::get_default().open_file_stream(
             tmp_path, O_WRONLY | O_CREAT | O_EXCL, 0644);
-        DEFER(if (std::uncaught_exception()) {
+        DEFER(if (has_uncaught_exceptions()) {
             OSService::get_default().remove_file_nothrow(tmp_path);
         });
         write_config(stream.get(),

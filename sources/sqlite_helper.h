@@ -1,9 +1,9 @@
 #pragma once
-
-#include <sqlite3.h>
+#include "platform.h"
 
 #include <absl/strings/string_view.h>
 #include <absl/types/span.h>
+#include <sqlite3.h>
 
 #include <memory>
 #include <stdexcept>
@@ -22,10 +22,19 @@ public:
     sqlite3* get() noexcept { return ptr_ ? ptr_->db : nullptr; }
     explicit operator bool() const noexcept { return ptr_ && ptr_->db; }
     int64_t last_changes() noexcept { return sqlite3_changes64(get()); }
+    Mutex& mutex()
+    {
+        if (!ptr_)
+        {
+            throw VFSException(EINVAL);
+        }
+        return ptr_->mu_;
+    }
 
 private:
     struct SQLiteDBWrapper
     {
+        Mutex mu_;
         sqlite3* db = nullptr;
         SQLiteDBWrapper() {}
         SQLiteDBWrapper(SQLiteDBWrapper&&) = delete;

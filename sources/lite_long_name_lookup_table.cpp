@@ -86,7 +86,7 @@ void LongNameLookupTable::finish() noexcept
 {
     try
     {
-        if (std::uncaught_exception())
+        if (has_uncaught_exceptions())
         {
             db_.exec("rollback");
         }

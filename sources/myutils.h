@@ -300,4 +300,14 @@ void warn_if_key_not_random(const Container& c, const char* file, int line) noex
 {
     warn_if_key_not_random(c.data(), c.size(), file, line);
 }
+
+inline bool has_uncaught_exceptions()
+{
+#ifdef __cpp_lib_uncaught_exceptions
+    return std::uncaught_exceptions() > 0;
+#else
+    return std::uncaught_exception();
+#endif
+}
+
 }    // namespace securefs
