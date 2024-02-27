@@ -10,7 +10,7 @@ const OSService& OSService::get_default()
     return service;
 }
 
-std::string OSService::temp_name(StringRef prefix, StringRef suffix)
+std::string OSService::temp_name(const std::string& prefix, const std::string& suffix)
 {
     byte random[16];
     generate_random(random, array_length(random));
@@ -22,7 +22,7 @@ std::string OSService::temp_name(StringRef prefix, StringRef suffix)
     return result;
 }
 
-void OSService::ensure_directory(StringRef path, unsigned mode) const
+void OSService::ensure_directory(const std::string& path, unsigned mode) const
 {
     try
     {
@@ -35,7 +35,7 @@ void OSService::ensure_directory(StringRef path, unsigned mode) const
     }
 }
 
-bool OSService::remove_file_nothrow(StringRef path) const noexcept
+bool OSService::remove_file_nothrow(const std::string& path) const noexcept
 {
     try
     {
@@ -48,7 +48,7 @@ bool OSService::remove_file_nothrow(StringRef path) const noexcept
     }
 }
 
-bool OSService::remove_directory_nothrow(StringRef path) const noexcept
+bool OSService::remove_directory_nothrow(const std::string& path) const noexcept
 {
     try
     {
@@ -61,7 +61,8 @@ bool OSService::remove_directory_nothrow(StringRef path) const noexcept
     }
 }
 
-void OSService::recursive_traverse(StringRef dir, const recursive_traverse_callback& callback) const
+void OSService::recursive_traverse(const std::string& dir,
+                                   const recursive_traverse_callback& callback) const
 {
     auto traverser = create_traverser(dir);
     std::string name;

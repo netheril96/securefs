@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include <absl/strings/str_format.h>
 #include <absl/strings/string_view.h>
 
 typedef unsigned char byte;
@@ -66,6 +67,7 @@ public:
     {
         return {data(), size()};
     }
+    operator std::basic_string<CharT>() const { return {data(), size()}; }
 };
 
 template <class CharT>
@@ -130,6 +132,16 @@ bool operator!=(BasicStringRef<CharT> a, const char* b)
 
 typedef BasicStringRef<char> StringRef;
 typedef BasicStringRef<wchar_t> WideStringRef;
+
+inline absl::FormatConvertResult<absl::FormatConversionCharSet::kString>
+AbslFormatConvert(const StringRef& p, const absl::FormatConversionSpec& spec, absl::FormatSink* s)
+{
+    if (spec.conversion_char() == absl::FormatConversionChar::s)
+    {
+        absl::Format(s, "%s", absl::string_view(p));
+    }
+    return {true};
+}
 
 std::string hexify(const byte* data, size_t length);
 void parse_hex(StringRef hex, byte* output, size_t len);

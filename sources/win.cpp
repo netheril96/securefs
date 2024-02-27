@@ -524,7 +524,7 @@ private:
     }
 
 public:
-    explicit WindowsFileStream(WideStringRef path, int flags, unsigned mode)
+    explicit WindowsFileStream(const std::wstring& path, int flags, unsigned mode)
         : m_handle(INVALID_HANDLE_VALUE)
     {
         DWORD access_flags = 0;
@@ -573,7 +573,7 @@ public:
         if (m_handle == INVALID_HANDLE_VALUE)
         {
             DWORD err = GetLastError();
-            throw WindowsException(err, L"CreateFileW", path.to_string());
+            throw WindowsException(err, L"CreateFileW", path);
         }
     }
 
@@ -718,30 +718,13 @@ static bool is_absolute_path(absl::string_view path)
         || (path.size() >= 2 && path[1] == ':');
 }
 
-bool OSService::is_absolute(StringRef path)
+bool OSService::is_absolute(const std::string& path)
 {
     return is_absolute_path(absl::string_view(path.data(), path.size()));
 }
 
 namespace
 {
-    std::wstring widen_string(absl::string_view str)
-    {
-        if (str.empty())
-        {
-            return {};
-        }
-        if (str.size() >= std::numeric_limits<int>::max())
-            throwInvalidArgumentException("String too long");
-        int sz
-            = MultiByteToWideChar(CP_UTF8, 0, str.data(), static_cast<int>(str.size()), nullptr, 0);
-        if (sz <= 0)
-            THROW_WINDOWS_EXCEPTION(GetLastError(), L"MultiByteToWideChar");
-        std::wstring result(sz, 0);
-        MultiByteToWideChar(CP_UTF8, 0, str.data(), static_cast<int>(str.size()), &result[0], sz);
-        return result;
-    }
-
     native_string_type concat_and_norm_path(absl::string_view base_dir, absl::string_view path)
     {
         if (base_dir.empty() || is_absolute_path(path))
@@ -800,13 +783,13 @@ namespace
     }
 }    // namespace
 
-native_string_type OSService::concat_and_norm(StringRef base_dir, StringRef path)
+native_string_type OSService::concat_and_norm(const std::string& base_dir, const std::string& path)
 {
     return concat_and_norm_path(absl::string_view(base_dir.data(), base_dir.size()),
                                 absl::string_view(path.data(), path.size()));
 }
 
-OSService::OSService(StringRef path)
+OSService::OSService(const std::string& path)
 {
     auto wide_path = widen_string(path);
     std::wstring fullname(33000, 0);
@@ -830,17 +813,17 @@ OSService::OSService(StringRef path)
 }
 
 std::shared_ptr<FileStream>
-OSService::open_file_stream(StringRef path, int flags, unsigned mode) const
+OSService::open_file_stream(const std::string& path, int flags, unsigned mode) const
 {
     return std::make_shared<WindowsFileStream>(norm_path(path), flags, mode);
 }
 
-void OSService::remove_file(StringRef path) const
+void OSService::remove_file(const std::string& path) const
 {
     CHECK_CALL(DeleteFileW(norm_path(path).c_str()));
 }
 
-void OSService::remove_directory(StringRef path) const
+void OSService::remove_directory(const std::string& path) const
 {
     CHECK_CALL(RemoveDirectoryW(norm_path(path).c_str()));
 }
@@ -856,7 +839,7 @@ void OSService::lock() const
             "Be careful not to mount the same data directory multiple times!\n");
 }
 
-void OSService::mkdir(StringRef path, unsigned mode) const
+void OSService::mkdir(const std::string& path, unsigned mode) const
 {
     auto npath = norm_path(path);
     if (CreateDirectoryW(npath.c_str(), nullptr) == 0)
@@ -887,7 +870,7 @@ void OSService::statfs(struct fuse_statvfs* fs_info) const
     fs_info->f_namemax = namemax;
 }
 
-void OSService::utimens(StringRef path, const fuse_timespec ts[2]) const
+void OSService::utimens(const std::string& path, const fuse_timespec ts[2]) const
 {
     FILETIME atime, mtime;
     if (!ts)
@@ -914,7 +897,7 @@ void OSService::utimens(StringRef path, const fuse_timespec ts[2]) const
     CHECK_CALL(SetFileTime(hd, nullptr, &atime, &mtime));
 }
 
-bool OSService::stat(StringRef path, struct fuse_stat* stat) const
+bool OSService::stat(const std::string& path, struct fuse_stat* stat) const
 {
     if (path == "." && m_root_handle != INVALID_HANDLE_VALUE)
     {
@@ -943,17 +926,23 @@ bool OSService::stat(StringRef path, struct fuse_stat* stat) const
     return true;
 }
 
-void OSService::link(StringRef source, StringRef dest) const { throwVFSException(ENOSYS); }
-void OSService::chmod(StringRef path, fuse_mode_t mode) const { (void)0; }
-void OSService::chown(StringRef, fuse_uid_t, fuse_gid_t) const { (void)0; }
-
-ssize_t OSService::readlink(StringRef path, char* output, size_t size) const
+void OSService::link(const std::string& source, const std::string& dest) const
 {
     throwVFSException(ENOSYS);
 }
-void OSService::symlink(StringRef source, StringRef dest) const { throwVFSException(ENOSYS); }
+void OSService::chmod(const std::string& path, fuse_mode_t mode) const { (void)0; }
+void OSService::chown(const std::string&, fuse_uid_t, fuse_gid_t) const { (void)0; }
 
-void OSService::rename(StringRef a, StringRef b) const
+ssize_t OSService::readlink(const std::string& path, char* output, size_t size) const
+{
+    throwVFSException(ENOSYS);
+}
+void OSService::symlink(const std::string& source, const std::string& dest) const
+{
+    throwVFSException(ENOSYS);
+}
+
+void OSService::rename(const std::string& a, const std::string& b) const
 {
     auto wa = norm_path(a);
     auto wb = norm_path(b);
@@ -1039,7 +1028,7 @@ public:
     }
 };
 
-std::unique_ptr<DirectoryTraverser> OSService::create_traverser(StringRef dir) const
+std::unique_ptr<DirectoryTraverser> OSService::create_traverser(const std::string& dir) const
 {
     return securefs::make_unique<WindowsDirectoryTraverser>(norm_path(dir) + L"\\*");
 }
@@ -1123,26 +1112,35 @@ std::string OSService::stringify_system_error(int errcode)
     return buffer;
 }
 
-std::wstring widen_string(StringRef str)
+std::wstring widen_string(const char* str, size_t size)
 {
-    return widen_string(absl::string_view{str.data(), str.size()});
-}
-
-std::string narrow_string(WideStringRef str)
-{
-    if (str.empty())
+    if (size <= 0)
     {
         return {};
     }
-    if (str.size() >= std::numeric_limits<int>::max())
+    if (size >= std::numeric_limits<int>::max())
         throwInvalidArgumentException("String too long");
-    int sz = WideCharToMultiByte(
-        CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), nullptr, 0, 0, 0);
+    int sz = MultiByteToWideChar(CP_UTF8, 0, str, static_cast<int>(size), nullptr, 0);
+    if (sz <= 0)
+        THROW_WINDOWS_EXCEPTION(GetLastError(), L"MultiByteToWideChar");
+    std::wstring result(sz, 0);
+    MultiByteToWideChar(CP_UTF8, 0, str, static_cast<int>(size), &result[0], sz);
+    return result;
+}
+
+std::string narrow_string(const wchar_t* str, size_t size)
+{
+    if (size <= 0)
+    {
+        return {};
+    }
+    if (size >= std::numeric_limits<int>::max())
+        throwInvalidArgumentException("String too long");
+    int sz = WideCharToMultiByte(CP_UTF8, 0, str, static_cast<int>(size), nullptr, 0, 0, 0);
     if (sz <= 0)
         THROW_WINDOWS_EXCEPTION(GetLastError(), L"WideCharToMultiByte");
     std::string result(sz, 0);
-    WideCharToMultiByte(
-        CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), &result[0], sz, 0, 0);
+    WideCharToMultiByte(CP_UTF8, 0, str, static_cast<int>(size), &result[0], sz, 0, 0);
     return result;
 }
 

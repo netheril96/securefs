@@ -139,8 +139,17 @@ typedef std::string native_string_type;
 #endif
 
 #ifdef WIN32
-std::wstring widen_string(StringRef str);
-std::string narrow_string(WideStringRef str);
+std::wstring widen_string(const char* str, size_t size);
+inline std::wstring widen_string(absl::string_view str)
+{
+    return widen_string(str.data(), str.size());
+}
+std::string narrow_string(const wchar_t* str, size_t size);
+inline std::string narrow_string(const std::wstring& str)
+{
+    return narrow_string(str.data(), str.size());
+}
+inline std::string narrow_string(const wchar_t* str) { return narrow_string(str, wcslen(str)); }
 [[noreturn]] void throw_windows_exception(const wchar_t* func_name);
 void windows_init(void);
 #endif
@@ -156,41 +165,46 @@ private:
     std::string m_dir_name;
 
 public:
-    static bool is_absolute(StringRef path);
-    static native_string_type concat_and_norm(StringRef base_dir, StringRef path);
-    native_string_type norm_path(StringRef path) const { return concat_and_norm(m_dir_name, path); }
+    static bool is_absolute(const std::string& path);
+    static native_string_type concat_and_norm(const std::string& base_dir, const std::string& path);
+    native_string_type norm_path(const std::string& path) const
+    {
+        return concat_and_norm(m_dir_name, path);
+    }
 
 public:
     OSService();
-    explicit OSService(StringRef path);
+    explicit OSService(const std::string& path);
     ~OSService();
-    std::shared_ptr<FileStream> open_file_stream(StringRef path, int flags, unsigned mode) const;
-    bool remove_file_nothrow(StringRef path) const noexcept;
-    bool remove_directory_nothrow(StringRef path) const noexcept;
-    void remove_file(StringRef path) const;
-    void remove_directory(StringRef path) const;
+    std::shared_ptr<FileStream>
+    open_file_stream(const std::string& path, int flags, unsigned mode) const;
+    bool remove_file_nothrow(const std::string& path) const noexcept;
+    bool remove_directory_nothrow(const std::string& path) const noexcept;
+    void remove_file(const std::string& path) const;
+    void remove_directory(const std::string& path) const;
 
-    void rename(StringRef a, StringRef b) const;
+    void rename(const std::string& a, const std::string& b) const;
     void lock() const;
-    void ensure_directory(StringRef path, unsigned mode) const;
-    void mkdir(StringRef path, unsigned mode) const;
+    void ensure_directory(const std::string& path, unsigned mode) const;
+    void mkdir(const std::string& path, unsigned mode) const;
     void statfs(struct fuse_statvfs*) const;
-    void utimens(StringRef path, const fuse_timespec ts[2]) const;
+    void utimens(const std::string& path, const fuse_timespec ts[2]) const;
 
     // Returns false when the path does not exist; throw exceptions on other errors
     // The ENOENT errors are too frequent so the API is redesigned
-    bool stat(StringRef path, struct fuse_stat* stat) const;
+    bool stat(const std::string& path, struct fuse_stat* stat) const;
 
-    void link(StringRef source, StringRef dest) const;
-    void chmod(StringRef path, fuse_mode_t mode) const;
-    void chown(StringRef path, fuse_uid_t uid, fuse_gid_t gid) const;
-    ssize_t readlink(StringRef path, char* output, size_t size) const;
-    void symlink(StringRef source, StringRef dest) const;
+    void link(const std::string& source, const std::string& dest) const;
+    void chmod(const std::string& path, fuse_mode_t mode) const;
+    void chown(const std::string& path, fuse_uid_t uid, fuse_gid_t gid) const;
+    ssize_t readlink(const std::string& path, char* output, size_t size) const;
+    void symlink(const std::string& source, const std::string& dest) const;
 
-    typedef std::function<void(StringRef, StringRef)> recursive_traverse_callback;
-    void recursive_traverse(StringRef dir, const recursive_traverse_callback& callback) const;
+    typedef std::function<void(const std::string&, const std::string&)> recursive_traverse_callback;
+    void recursive_traverse(const std::string& dir,
+                            const recursive_traverse_callback& callback) const;
 
-    std::unique_ptr<DirectoryTraverser> create_traverser(StringRef dir) const;
+    std::unique_ptr<DirectoryTraverser> create_traverser(const std::string& dir) const;
 
 #ifdef __APPLE__
     // These APIs, unlike all others, report errors through negative error numbers as defined in
@@ -206,7 +220,7 @@ public:
     static uint32_t getgid() noexcept;
     static int64_t raise_fd_limit() noexcept;
 
-    static std::string temp_name(StringRef prefix, StringRef suffix);
+    static std::string temp_name(const std::string& prefix, const std::string& suffix);
     static const OSService& get_default();
     static void get_current_time(fuse_timespec& out);
     static void get_current_time_in_tm(struct tm* tm, int* nanoseconds);
