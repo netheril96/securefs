@@ -17,7 +17,7 @@ namespace securefs
 class ABSL_LOCKABLE LongNameLookupTable
 {
 public:
-    LongNameLookupTable(StringRef filename, bool readonly);
+    LongNameLookupTable(const std::string& filename, bool readonly);
     ~LongNameLookupTable();
 
     std::vector<unsigned char> lookup(absl::Span<const unsigned char> encrypted_hash)

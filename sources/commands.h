@@ -27,10 +27,12 @@ class CommandBase
 
 protected:
     static std::shared_ptr<FileStream> open_config_stream(const std::string& full_path, int flags);
-    static FSConfig
-    read_config(FileStream*, const void* password, size_t pass_len, StringRef maybe_key_file_path);
+    static FSConfig read_config(FileStream*,
+                                const void* password,
+                                size_t pass_len,
+                                const std::string& maybe_key_file_path);
     static void write_config(FileStream*,
-                             StringRef maybe_key_file_path,
+                             const std::string& maybe_key_file_path,
                              const std::string& pbdkf_algorithm,
                              const FSConfig&,
                              const void* password,

@@ -285,7 +285,7 @@ void fix(const std::string& basedir, operations::FileSystemContext* fs)
 }
 
 void hmac_sha256(const securefs::key_type& base_key,
-                 StringRef maybe_key_file_path,
+                 const std::string& maybe_key_file_path,
                  securefs::key_type& out_key)
 {
     if (maybe_key_file_path.empty())
@@ -309,7 +309,7 @@ void hmac_sha256(const securefs::key_type& base_key,
 }
 
 Json::Value generate_config(const std::string& pbkdf_algorithm,
-                            StringRef maybe_key_file_path,
+                            const std::string& maybe_key_file_path,
                             const securefs::key_type& salt,
                             const void* password,
                             size_t pass_len,
@@ -485,7 +485,7 @@ void compute_password_derived_key(const Json::Value& config,
 }
 
 FSConfig parse_config(const Json::Value& config,
-                      StringRef maybe_key_file_path,
+                      const std::string& maybe_key_file_path,
                       const void* password,
                       size_t pass_len)
 {
@@ -584,7 +584,7 @@ std::shared_ptr<FileStream> CommandBase::open_config_stream(const std::string& p
 FSConfig CommandBase::read_config(FileStream* stream,
                                   const void* password,
                                   size_t pass_len,
-                                  StringRef maybe_key_file_path)
+                                  const std::string& maybe_key_file_path)
 {
     FSConfig result;
 
@@ -621,7 +621,7 @@ static void copy_key(const CryptoPP::AlignedSecByteBlock& in_key, optional<key_t
 }
 
 void CommandBase::write_config(FileStream* stream,
-                               StringRef maybe_key_file_path,
+                               const std::string& maybe_key_file_path,
                                const std::string& pbdkf_algorithm,
                                const FSConfig& config,
                                const void* password,
@@ -904,7 +904,7 @@ private:
         "",
         "string"};
 
-    static void assign(StringRef value, CryptoPP::AlignedSecByteBlock& output)
+    static void assign(absl::string_view value, CryptoPP::AlignedSecByteBlock& output)
     {
         output.Assign(reinterpret_cast<const byte*>(value.data()), value.size());
     }
@@ -1064,11 +1064,11 @@ private:
     }
 #ifdef WIN32
     static bool is_letter(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
-    static bool is_drive_mount(StringRef mount_point)
+    static bool is_drive_mount(absl::string_view mount_point)
     {
         return mount_point.size() == 2 && is_letter(mount_point[0]) && mount_point[1] == ':';
     }
-    static bool is_network_mount(StringRef mount_point)
+    static bool is_network_mount(absl::string_view mount_point)
     {
         return mount_point.starts_with("\\\\") && !mount_point.starts_with("\\\\?\\");
     }

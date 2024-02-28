@@ -77,7 +77,7 @@ namespace internal
     {
         absl::InlinedVector<std::string, 32> components = absl::StrSplit(
             transform(path, fs->flags & kOptionCaseFoldFileName, fs->flags & kOptionNFCFileName)
-                .get(),
+                .view(),
             absl::ByChar('/'),
             absl::SkipEmpty());
 

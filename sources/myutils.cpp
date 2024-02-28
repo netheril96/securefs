@@ -3,6 +3,7 @@
 #include "logger.h"
 #include "platform.h"
 
+#include <absl/strings/match.h>
 #include <absl/strings/str_format.h>
 
 #include <algorithm>
@@ -21,13 +22,14 @@ static void find_ids_helper(const std::string& current_dir,
     id_type id;
     std::string hex(id_type::size() * 2, 0);
     OSService::recursive_traverse_callback callback
-        = [&id, &result, &hex](StringRef dir, StringRef name) -> bool
+        = [&id, &result, &hex](absl::string_view dir, absl::string_view name) -> bool
     {
         if (name == "." || name == "..")
             return true;
-        if (name.ends_with(".meta"))
+        if (absl::EndsWithIgnoreCase(name, ".meta"))
         {
-            std::string total_name = dir + "/" + name.substr(0, name.size() - strlen(".meta"));
+            std::string total_name
+                = absl::StrCat(dir, "/", name.substr(0, name.size() - strlen(".meta")));
             hex.assign(hex.size(), 0);
             ptrdiff_t i = hex.size() - 1, j = total_name.size() - 1;
             while (i >= 0 && j >= 0)

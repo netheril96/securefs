@@ -58,7 +58,7 @@ namespace lite
         return absl::StrFormat("Invalid filename \"%s\"", m_filename);
     }
 
-    std::string legacy_encrypt_path(AES_SIV& encryptor, StringRef path)
+    std::string legacy_encrypt_path(AES_SIV& encryptor, absl::string_view path)
     {
         byte buffer[2032];
         std::string result;
@@ -89,7 +89,7 @@ namespace lite
         return result;
     }
 
-    std::string legacy_decrypt_path(AES_SIV& decryptor, StringRef path)
+    std::string legacy_decrypt_path(AES_SIV& decryptor, absl::string_view path)
     {
         byte string_buffer[2032];
         std::string result, decoded_part;
@@ -117,7 +117,7 @@ namespace lite
                                                        string_buffer,
                                                        &decoded_part[0]);
                     if (!success)
-                        throw InvalidFilenameException(path.to_string());
+                        throw InvalidFilenameException(std::string(path));
                     result.append((const char*)string_buffer,
                                   decoded_part.size() - AES_SIV::IV_SIZE);
                 }
@@ -129,7 +129,7 @@ namespace lite
         return result;
     }
 
-    std::string FileSystem::translate_path(StringRef path, bool preserve_leading_slash)
+    std::string FileSystem::translate_path(absl::string_view path, bool preserve_leading_slash)
     {
         if (path.empty())
         {
@@ -149,12 +149,12 @@ namespace lite
         else
         {
             std::string str = !m_name_encryptor
-                ? path.to_string()
+                ? std::string(path)
                 : lite::legacy_encrypt_path(*m_name_encryptor,
                                             transform(path,
                                                       m_flags & kOptionCaseFoldFileName,
                                                       m_flags & kOptionNFCFileName)
-                                                .get());
+                                                .view());
             if (!preserve_leading_slash && !str.empty() && str[0] == '/')
             {
                 str.erase(str.begin());
@@ -164,7 +164,7 @@ namespace lite
         }
     }
 
-    AutoClosedFile FileSystem::open(StringRef path, int flags, fuse_mode_t mode)
+    AutoClosedFile FileSystem::open(absl::string_view path, int flags, fuse_mode_t mode)
     {
         if (flags & O_APPEND)
         {
@@ -199,7 +199,7 @@ namespace lite
         return fp;
     }
 
-    bool FileSystem::stat(StringRef path, struct fuse_stat* buf)
+    bool FileSystem::stat(absl::string_view path, struct fuse_stat* buf)
     {
         auto enc_path = translate_path(path, false);
         if (!m_root->stat(enc_path, buf))
@@ -261,7 +261,7 @@ namespace lite
                     {
                         ERROR_LOG("Encountered exception %s when opening file %s for read: %s",
                                   get_type_name(e).get(),
-                                  path.c_str(),
+                                  path,
                                   e.what());
                     }
                 }
@@ -273,39 +273,39 @@ namespace lite
         return true;
     }
 
-    void FileSystem::mkdir(StringRef path, fuse_mode_t mode)
+    void FileSystem::mkdir(absl::string_view path, fuse_mode_t mode)
     {
         m_root->mkdir(translate_path(path, false), mode);
     }
 
-    void FileSystem::rmdir(StringRef path)
+    void FileSystem::rmdir(absl::string_view path)
     {
         m_root->remove_directory(translate_path(path, false));
     }
 
-    void FileSystem::rename(StringRef from, StringRef to)
+    void FileSystem::rename(absl::string_view from, absl::string_view to)
     {
         m_root->rename(translate_path(from, false), translate_path(to, false));
     }
 
-    void FileSystem::chmod(StringRef path, fuse_mode_t mode)
+    void FileSystem::chmod(absl::string_view path, fuse_mode_t mode)
     {
         if (!(mode & S_IRUSR))
         {
             WARN_LOG("Change the mode of file %s to 0%o which denies user read access. "
                      "Mysterious bugs will occur.",
-                     path.c_str(),
+                     path,
                      static_cast<unsigned>(mode));
         }
         m_root->chmod(translate_path(path, false), mode);
     }
 
-    void FileSystem::chown(StringRef path, fuse_uid_t uid, fuse_gid_t gid)
+    void FileSystem::chown(absl::string_view path, fuse_uid_t uid, fuse_gid_t gid)
     {
         m_root->chown(translate_path(path, false), uid, gid);
     }
 
-    size_t FileSystem::readlink(StringRef path, char* buf, size_t size)
+    size_t FileSystem::readlink(absl::string_view path, char* buf, size_t size)
     {
         if (size <= 0)
             return size;
@@ -323,20 +323,23 @@ namespace lite
         return copy_size;
     }
 
-    void FileSystem::symlink(StringRef to, StringRef from)
+    void FileSystem::symlink(absl::string_view to, absl::string_view from)
     {
         auto eto = translate_path(to, true), efrom = translate_path(from, false);
         m_root->symlink(eto, efrom);
     }
 
-    void FileSystem::utimens(StringRef path, const fuse_timespec* ts)
+    void FileSystem::utimens(absl::string_view path, const fuse_timespec* ts)
     {
         m_root->utimens(translate_path(path, false), ts);
     }
 
-    void FileSystem::unlink(StringRef path) { m_root->remove_file(translate_path(path, false)); }
+    void FileSystem::unlink(absl::string_view path)
+    {
+        m_root->remove_file(translate_path(path, false));
+    }
 
-    void FileSystem::link(StringRef src, StringRef dest)
+    void FileSystem::link(absl::string_view src, absl::string_view dest)
     {
         m_root->link(translate_path(src, false), translate_path(dest, false));
     }
@@ -369,7 +372,7 @@ namespace lite
         {
         }
 
-        StringRef path() const override { return m_path; }
+        absl::string_view path() const override { return m_path; }
 
         void rewind() override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
         {
@@ -448,12 +451,12 @@ namespace lite
         }
     };
 
-    std::unique_ptr<Directory> FileSystem::opendir(StringRef path)
+    std::unique_ptr<Directory> FileSystem::opendir(absl::string_view path)
     {
         if (path.empty())
             throwVFSException(EINVAL);
         return securefs::make_unique<LiteDirectory>(
-            path.to_string(),
+            std::string(path),
             m_root->create_traverser(translate_path(path, false)),
             this->m_name_encryptor,
             m_block_size,

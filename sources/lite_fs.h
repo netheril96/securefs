@@ -47,7 +47,7 @@ namespace lite
         Directory* as_dir() noexcept { return this; }
 
         // Obtains the (virtual) path of the directory.
-        virtual StringRef path() const = 0;
+        virtual absl::string_view path() const = 0;
 
         // Redeclare the methods in `DirectoryTraverser` to add thread safe annotations.
         virtual bool next(std::string* name, struct fuse_stat* st)
@@ -130,8 +130,8 @@ namespace lite
 
     typedef std::unique_ptr<File> AutoClosedFile;
 
-    std::string legacy_encrypt_path(AES_SIV& encryptor, StringRef path);
-    std::string legacy_decrypt_path(AES_SIV& decryptor, StringRef path);
+    std::string legacy_encrypt_path(AES_SIV& encryptor, absl::string_view path);
+    std::string legacy_decrypt_path(AES_SIV& decryptor, absl::string_view path);
 
     class InvalidFilenameException : public VerificationException
     {
@@ -161,13 +161,13 @@ namespace lite
         unsigned m_flags;
 
     private:
-        std::string translate_path(StringRef path, bool preserve_leading_slash);
+        std::string translate_path(absl::string_view path, bool preserve_leading_slash);
 
-        static std::string legacy_encrypt_symlink(StringRef path);
-        static std::string legacy_decrypt_symlink(StringRef path);
+        static std::string legacy_encrypt_symlink(absl::string_view path);
+        static std::string legacy_decrypt_symlink(absl::string_view path);
 
-        static std::string new_encrypt_symlink(StringRef path);
-        static std::string new_decrypt_symlink(StringRef path);
+        static std::string new_encrypt_symlink(absl::string_view path);
+        static std::string new_decrypt_symlink(absl::string_view path);
 
     public:
         FileSystem(std::shared_ptr<const securefs::OSService> root,
@@ -182,20 +182,20 @@ namespace lite
 
         ~FileSystem();
 
-        AutoClosedFile open(StringRef path, int flags, fuse_mode_t mode);
-        bool stat(StringRef path, struct fuse_stat* buf);
-        void mkdir(StringRef path, fuse_mode_t mode);
-        void rmdir(StringRef path);
-        void chmod(StringRef path, fuse_mode_t mode);
-        void chown(StringRef path, fuse_uid_t uid, fuse_gid_t gid);
-        void rename(StringRef from, StringRef to);
-        void unlink(StringRef path);
-        void symlink(StringRef to, StringRef from);
-        void link(StringRef src, StringRef dest);
-        size_t readlink(StringRef path, char* buf, size_t size);
-        void utimens(StringRef path, const fuse_timespec tm[2]);
+        AutoClosedFile open(absl::string_view path, int flags, fuse_mode_t mode);
+        bool stat(absl::string_view path, struct fuse_stat* buf);
+        void mkdir(absl::string_view path, fuse_mode_t mode);
+        void rmdir(absl::string_view path);
+        void chmod(absl::string_view path, fuse_mode_t mode);
+        void chown(absl::string_view path, fuse_uid_t uid, fuse_gid_t gid);
+        void rename(absl::string_view from, absl::string_view to);
+        void unlink(absl::string_view path);
+        void symlink(absl::string_view to, absl::string_view from);
+        void link(absl::string_view src, absl::string_view dest);
+        size_t readlink(absl::string_view path, char* buf, size_t size);
+        void utimens(absl::string_view path, const fuse_timespec tm[2]);
         void statvfs(struct fuse_statvfs* buf);
-        std::unique_ptr<Directory> opendir(StringRef path);
+        std::unique_ptr<Directory> opendir(absl::string_view path);
 
         bool has_padding() const noexcept { return m_max_padding_size > 0; }
         bool skip_dot_dot() const noexcept { return m_flags & kOptionSkipDotDot; }

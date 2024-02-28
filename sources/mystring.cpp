@@ -24,7 +24,7 @@ std::string to_lower(const std::string& str)
     return result;
 }
 
-void parse_hex(StringRef hex, byte* output, size_t len)
+void parse_hex(absl::string_view hex, byte* output, size_t len)
 {
     if (hex.size() % 2 != 0)
         throwInvalidArgumentException("Hex string must have an even length");
@@ -291,7 +291,7 @@ std::string escape_nonprintable(const char* str, size_t size)
     return result;
 }
 
-bool is_ascii(StringRef str)
+bool is_ascii(absl::string_view str)
 {
     for (char c : str)
     {
@@ -303,11 +303,11 @@ bool is_ascii(StringRef str)
     return true;
 }
 
-ManagedCharPointer transform(StringRef str, bool case_fold, bool nfc)
+MultipleOwnershipString transform(absl::string_view str, bool case_fold, bool nfc)
 {
     if (!case_fold && (!nfc || is_ascii(str)))
     {
-        return ManagedCharPointer(str.c_str(), [](const char*) {});
+        return MultipleOwnershipString(str);
     }
     utf8proc_uint8_t* result = nullptr;
     int options = UTF8PROC_STABLE;
@@ -319,7 +319,7 @@ ManagedCharPointer transform(StringRef str, bool case_fold, bool nfc)
     {
         options |= UTF8PROC_COMPOSE;
     }
-    auto rc = utf8proc_map(reinterpret_cast<const utf8proc_uint8_t*>(str.c_str()),
+    auto rc = utf8proc_map(reinterpret_cast<const utf8proc_uint8_t*>(str.data()),
                            static_cast<utf8proc_ssize_t>(str.size()),
                            &result,
                            static_cast<utf8proc_option_t>(options));
@@ -328,9 +328,8 @@ ManagedCharPointer transform(StringRef str, bool case_fold, bool nfc)
         ERROR_LOG("Failed to transform string \"%s\": %s",
                   escape_nonprintable(str.data(), str.size()).c_str(),
                   utf8proc_errmsg(rc));
-        return ManagedCharPointer(str.c_str(), [](const char*) {});
+        return MultipleOwnershipString(str);
     }
-    return ManagedCharPointer(reinterpret_cast<char*>(result),
-                              [](const char* str) { free(const_cast<char*>(str)); });
+    return MultipleOwnershipString(reinterpret_cast<char*>(result));
 }
 }    // namespace securefs

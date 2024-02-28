@@ -20,7 +20,7 @@ std::string encrypt_long_name_component(AES_SIV& encryptor, absl::string_view lo
     return absl::StrCat("_", hexify(buffer), "_");
 }
 
-LongNameLookupTable::LongNameLookupTable(StringRef filename, bool readonly)
+LongNameLookupTable::LongNameLookupTable(const std::string& filename, bool readonly)
 {
     db_ = SQLiteDB(
         filename.c_str(),

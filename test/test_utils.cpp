@@ -91,7 +91,7 @@ TEST_CASE("our base32 against CryptoPP")
 TEST_CASE("case fold")
 {
     auto case_fold
-        = [](const char* str) { return std::string(securefs::transform(str, true, false).get()); };
+        = [](const char* str) { return std::string(securefs::transform(str, true, false).view()); };
 
     REQUIRE(case_fold("abCdEfG") == "abcdefg");
     REQUIRE(case_fold("\xc8\xba") == "\xe2\xb1\xa5");
@@ -104,7 +104,7 @@ TEST_CASE("case fold")
 TEST_CASE("NFC")
 {
     auto nfc
-        = [](const char* str) { return std::string(securefs::transform(str, false, true).get()); };
+        = [](const char* str) { return std::string(securefs::transform(str, false, true).view()); };
 
     REQUIRE(nfc("\x41\xcc\x88\x66\x66\x69\x6e") == "\xc3\x84\x66\x66\x69\x6e");
     REQUIRE(nfc("Henry IV") == "Henry IV");
