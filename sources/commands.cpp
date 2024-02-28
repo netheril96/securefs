@@ -8,6 +8,7 @@
 #include "platform.h"
 #include "win_get_proc.h"
 
+#include <absl/strings/match.h>
 #include <absl/strings/str_format.h>
 #include <absl/types/optional.h>
 #include <argon2.h>
@@ -1070,7 +1071,7 @@ private:
     }
     static bool is_network_mount(absl::string_view mount_point)
     {
-        return mount_point.starts_with("\\\\") && !mount_point.starts_with("\\\\?\\");
+        return absl::StartsWith(mount_point, "\\\\") && !absl::StartsWith(mount_point, "\\\\?\\");
     }
 #endif
 
