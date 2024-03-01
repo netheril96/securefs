@@ -33,25 +33,6 @@ jobs:
         with:
           path: build/securefs
           name: securefs-linux-amd64
-  
-  build-ubuntu-without-vcpkg:
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: true
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.x"
-      - name: install
-        run: sudo apt-get install fuse libfuse-dev libcrypto++-dev libargon2-dev libtclap-dev libabsl-dev libutf8proc-dev libjsoncpp-dev doctest-dev libsqlite3-dev
-      - name: configure
-        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DSECUREFS_USE_VCPKG=OFF ..
-      - name: build
-        run: cmake --build build --config Release
-      - name: test
-        run: cd build && ctest -V -C Release
 
   build-mac:
     runs-on: macos-11
