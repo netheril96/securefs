@@ -2,6 +2,8 @@
 #include "fuse_tracer.h"
 #include "logger.h"
 
+#include <absl/functional/function_ref.h>
+
 namespace securefs
 {
 int FuseHighLevelOpsBase::static_statfs(const char* path, fuse_statvfs* buf)
@@ -248,6 +250,66 @@ int FuseHighLevelOpsBase::static_removexattr(const char* path, const char* name)
                                    "removexattr",
                                    __LINE__,
                                    {{path}, {name}});
+}
+
+fuse_operations FuseHighLevelOpsBase::build_ops(bool enable_xattr)
+{
+    fuse_operations opt{};
+
+    opt.flag_nopath = true;
+    opt.flag_nullpath_ok = true;
+
+    opt.init = [](fuse_conn_info* info) -> void*
+    {
+        void* args = fuse_get_context()->private_data;
+        auto op = (*static_cast<InitialDataType*>(args))();
+        op->initialize(info);
+        TRACE_LOG("Initalize with fuse op class %s", typeid(*op).name());
+        return op.release();
+    };
+    opt.destroy = [](void* data)
+    {
+        TRACE_LOG("Destroy");
+        delete static_cast<FuseHighLevelOpsBase*>(data);
+    };
+    opt.statfs = &FuseHighLevelOpsBase::static_statfs;
+    opt.getattr = &FuseHighLevelOpsBase::static_getattr;
+    opt.fgetattr = &FuseHighLevelOpsBase::static_fgetattr;
+    opt.opendir = &FuseHighLevelOpsBase::static_opendir;
+    opt.releasedir = &FuseHighLevelOpsBase::static_releasedir;
+    opt.readdir = &FuseHighLevelOpsBase::static_readdir;
+    opt.create = &FuseHighLevelOpsBase::static_create;
+    opt.open = &FuseHighLevelOpsBase::static_open;
+    opt.release = &FuseHighLevelOpsBase::static_release;
+    opt.read = &FuseHighLevelOpsBase::static_read;
+    opt.write = &FuseHighLevelOpsBase::static_write;
+    opt.flush = &FuseHighLevelOpsBase::static_flush;
+    opt.truncate = &FuseHighLevelOpsBase::static_truncate;
+    opt.ftruncate = &FuseHighLevelOpsBase::static_ftruncate;
+    opt.unlink = &FuseHighLevelOpsBase::static_unlink;
+    opt.mkdir = &FuseHighLevelOpsBase::static_mkdir;
+    opt.rmdir = &FuseHighLevelOpsBase::static_rmdir;
+#ifndef _WIN32
+    opt.chmod = &FuseHighLevelOpsBase::static_chmod;
+    opt.chown = &FuseHighLevelOpsBase::static_chown;
+    opt.symlink = &FuseHighLevelOpsBase::static_symlink;
+    opt.link = &FuseHighLevelOpsBase::static_link;
+    opt.readlink = &FuseHighLevelOpsBase::static_readlink;
+#endif
+    opt.rename = &FuseHighLevelOpsBase::static_rename;
+    opt.fsync = &FuseHighLevelOpsBase::static_fsync;
+    opt.utimens = &FuseHighLevelOpsBase::static_utimens;
+
+    if (!enable_xattr)
+        return opt;
+
+#ifdef __APPLE__
+    opt.listxattr = &FuseHighLevelOpsBase::static_listxattr;
+    opt.getxattr = &FuseHighLevelOpsBase::static_getxattr;
+    opt.setxattr = &FuseHighLevelOpsBase::static_setxattr;
+    opt.removexattr = &FuseHighLevelOpsBase::static_removexattr;
+#endif
+    return opt;
 }
 
 }    // namespace securefs

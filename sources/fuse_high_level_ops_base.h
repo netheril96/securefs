@@ -3,16 +3,20 @@
 #include "myutils.h"
 #include "platform.h"
 
+#include <absl/functional/function_ref.h>
+
 namespace securefs
 {
 class FuseHighLevelOpsBase
 {
 public:
+    using InitialDataType = absl::FunctionRef<std::unique_ptr<FuseHighLevelOpsBase>()>;
     FuseHighLevelOpsBase() = default;
     virtual ~FuseHighLevelOpsBase() = default;
     DISABLE_COPY_MOVE(FuseHighLevelOpsBase)
-    static fuse_operations build_ops();
+    static fuse_operations build_ops(bool enable_xattr);
 
+    virtual void initialize(fuse_conn_info* info) = 0;
     virtual int vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx) = 0;
     virtual int vgetattr(const char* path, fuse_stat* st, const fuse_context* ctx) = 0;
     virtual int
