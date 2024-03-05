@@ -52,6 +52,37 @@ namespace lite_format
         return *absl::any_cast<StreamOpener::AES_ECB*>(any);
     }
 
+    namespace
+    {
+        class LegacyNameTranslator : public NameTranslator
+        {
+        public:
+            INJECT(LegacyNameTranslator(ANNOTATED(tNameMasterKey, key_type) name_master_key))
+                : name_master_key_(name_master_key)
+            {
+            }
+
+        private:
+            key_type name_master_key_;
+            ThreadLocal name_aes_siv_;
+        };
+    }    // namespace
+
+    void FuseHighLevelOps::initialize(fuse_conn_info* info)
+    {
+        (void)info;
+#ifdef FSP_FUSE_CAP_READDIR_PLUS
+        info->want |= (info->capable & FSP_FUSE_CAP_READDIR_PLUS);
+#endif
+    }
+
+    int FuseHighLevelOps::vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx)
+    {
+        root_->statfs(buf);
+        buf->f_namemax = name_trans_.max_virtual_path_component_size(buf->f_namemax);
+        return 0;
+    }
+
 }    // namespace lite_format
 
 }    // namespace securefs
