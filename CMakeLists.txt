@@ -122,8 +122,8 @@ find_library(
     NAMES fruit
     HINTS (/usr /usr/local)
     PATH_SUFFIXES lib lib64)
-target_include_directories(securefs-static PUBLIC $FRUIT_INCLUDE_DIR)
-target_link_libraries(securefs-static PUBLIC $FRUIT_LIBRARY)
+target_include_directories(securefs-static PUBLIC ${FRUIT_INCLUDE_DIR})
+target_link_libraries(securefs-static PUBLIC ${FRUIT_LIBRARY})
 
 if(CMAKE_DL_LIBS)
     target_link_libraries(securefs-static PUBLIC ${CMAKE_DL_LIBS})
