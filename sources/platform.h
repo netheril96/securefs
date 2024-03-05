@@ -3,6 +3,7 @@
 #include "exceptions.h"
 #include "mystring.h"
 #include "myutils.h"
+#include "object.h"
 #include "streams.h"
 
 #include <absl/base/thread_annotations.h>
@@ -118,10 +119,8 @@ public:
     virtual void sequential_write(const void*, length_type) = 0;
 };
 
-class DirectoryTraverser
+class DirectoryTraverser : public Object
 {
-    DISABLE_COPY_MOVE(DirectoryTraverser)
-
 public:
     DirectoryTraverser() {}
     virtual ~DirectoryTraverser();
@@ -268,13 +267,9 @@ struct Colour
     };
 };
 
-class ConsoleColourSetter
+class ConsoleColourSetter : public Object
 {
 public:
-    DISABLE_COPY_MOVE(ConsoleColourSetter)
-
-    explicit ConsoleColourSetter() {}
-    virtual ~ConsoleColourSetter() {}
     virtual void use(Colour::Code colour) noexcept = 0;
 
     // Returns null if fp is not connected to console/tty

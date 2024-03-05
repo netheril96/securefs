@@ -1,6 +1,7 @@
 #pragma once
 
 #include "myutils.h"
+#include "object.h"
 #include "platform.h"
 
 #include <cryptopp/secblock.h>
@@ -21,7 +22,7 @@ struct FSConfig
     bool long_name_component = true;
 };
 
-class CommandBase
+class CommandBase : public Object
 {
     DISABLE_COPY_MOVE(CommandBase)
 
@@ -41,7 +42,6 @@ protected:
 
 public:
     CommandBase() = default;
-    virtual ~CommandBase() = default;
 
     virtual const char* long_name() const noexcept = 0;
     virtual char short_name() const noexcept = 0;

@@ -6,6 +6,7 @@
 #include "lock_guard.h"
 #include "mystring.h"
 #include "myutils.h"
+#include "object.h"
 #include "platform.h"
 
 #include <absl/base/thread_annotations.h>
@@ -27,7 +28,7 @@ namespace lite
     class File;
     class Directory;
 
-    class Base
+    class Base : public Object
     {
     public:
         Base() {}

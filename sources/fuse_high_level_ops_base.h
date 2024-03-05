@@ -1,19 +1,18 @@
 #pragma once
 
 #include "myutils.h"
+#include "object.h"
 #include "platform.h"
 
 #include <absl/functional/function_ref.h>
 
 namespace securefs
 {
-class FuseHighLevelOpsBase
+class FuseHighLevelOpsBase : public Object
 {
 public:
     using InitialDataType = absl::FunctionRef<std::unique_ptr<FuseHighLevelOpsBase>()>;
-    FuseHighLevelOpsBase() = default;
-    virtual ~FuseHighLevelOpsBase() = default;
-    DISABLE_COPY_MOVE(FuseHighLevelOpsBase)
+
     static fuse_operations build_ops(bool enable_xattr);
 
     virtual void initialize(fuse_conn_info* info) = 0;

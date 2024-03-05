@@ -3,6 +3,7 @@
 #include "exceptions.h"
 #include "files.h"
 #include "myutils.h"
+#include "object.h"
 #include "platform.h"
 #include "streams.h"
 
@@ -19,7 +20,7 @@ class FileTableIO;
 
 class AutoClosedFileBase;
 
-class FileTable
+class FileTable : public Object
 {
 public:
     FileTable() {}

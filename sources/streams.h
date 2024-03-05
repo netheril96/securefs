@@ -1,6 +1,7 @@
 #pragma once
 #include "exceptions.h"
 #include "myutils.h"
+#include "object.h"
 
 #include <memory>
 #include <utility>
@@ -11,13 +12,9 @@ namespace securefs
 /**
  * Base classes for byte streams.
  **/
-class StreamBase
+class StreamBase : public Object
 {
 public:
-    StreamBase() {}
-    virtual ~StreamBase() {}
-    DISABLE_COPY_MOVE(StreamBase)
-
     /**
      * Returns the number of bytes actually read into the buffer `output`.
      * Always read in full unless beyond the end, i.e., offset + length > size.
@@ -176,7 +173,7 @@ make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
                          unsigned iv_size,
                          unsigned header_size = 32);
 
-class PaddedStream final: public StreamBase
+class PaddedStream final : public StreamBase
 {
 public:
     explicit PaddedStream(std::shared_ptr<StreamBase> delegate, unsigned padding_size);

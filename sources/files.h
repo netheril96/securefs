@@ -1,6 +1,7 @@
 #pragma once
 
 #include "myutils.h"
+#include "object.h"
 #include "platform.h"
 #include "streams.h"
 
@@ -24,7 +25,7 @@ class RegularFile;
 class Directory;
 class Symlink;
 
-class ABSL_LOCKABLE FileBase
+class ABSL_LOCKABLE FileBase : public Object
 {
 private:
     static const size_t NUM_FLAGS = 7, HEADER_SIZE = 32, EXTENDED_HEADER_SIZE = 80,
