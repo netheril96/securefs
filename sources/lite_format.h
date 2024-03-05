@@ -4,13 +4,14 @@
 #include "tags.h"
 #include "thread_local.h"
 
+#include <cryptopp/aes.h>
 #include <fruit/fruit.h>
 
 namespace securefs
 {
 namespace lite_format
 {
-    class StreamOpener
+    class StreamOpener : public lite::AESGCMCryptStream::ParamCalculator
     {
     public:
         INJECT(StreamOpener(ANNOTATED(tContentMasterKey, key_type) content_master_key,
@@ -29,6 +30,15 @@ namespace lite_format
         }
 
         std::unique_ptr<securefs::lite::AESGCMCryptStream> open(std::shared_ptr<StreamBase> base);
+
+        virtual void compute_session_key(const std::array<unsigned char, 16>& id,
+                                         std::array<unsigned char, 16>& outkey) override;
+        virtual unsigned compute_padding(const std::array<unsigned char, 16>& id) override;
+
+    private:
+        using AES_ECB = CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption;
+        AES_ECB& get_thread_local_content_master_enc();
+        AES_ECB& get_thread_local_padding_master_enc();
 
     private:
         key_type content_master_key_, padding_master_key_;
