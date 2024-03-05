@@ -18,6 +18,11 @@ namespace lite
         std::string message() const override;
     };
 
+    unsigned default_compute_padding(unsigned max_padding,
+                                     CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption& padding_aes,
+                                     const byte* id,
+                                     size_t id_size);
+
     class AESGCMCryptStream : public BlockBasedStream
     {
     private:
@@ -46,6 +51,14 @@ namespace lite
 
         unsigned get_padding_size() const noexcept { return m_padding_size; }
 
+        struct ParamCalculator : public Object
+        {
+            virtual void compute_session_key(const std::array<unsigned char, 16>& id,
+                                             std::array<unsigned char, 16>& outkey)
+                = 0;
+            virtual unsigned compute_padding(const std::array<unsigned char, 16>& id) = 0;
+        };
+
     protected:
         length_type read_block(offset_type block_number, void* output) override;
 
@@ -62,6 +75,11 @@ namespace lite
                                    unsigned max_padding_size = 0,
                                    CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption* padding_aes
                                    = nullptr);
+        explicit AESGCMCryptStream(std::shared_ptr<StreamBase> stream,
+                                   ParamCalculator& calc,
+                                   unsigned block_size = 4096,
+                                   unsigned iv_size = 12,
+                                   bool check = true);
 
         ~AESGCMCryptStream();
 

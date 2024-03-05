@@ -14,23 +14,46 @@ namespace lite
     namespace
     {
         const offset_type MAX_BLOCKS = (1ULL << 31) - 1;
-        unsigned compute_padding(unsigned max_padding,
-                                 CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption* padding_aes,
-                                 const byte* id,
-                                 size_t id_size)
+
+        class DefaultParamsCalculator final : public AESGCMCryptStream::ParamCalculator
         {
-            if (!max_padding || !padding_aes)
+        public:
+            explicit DefaultParamsCalculator(
+                const key_type& master_key,
+                unsigned max_padding_size,
+                CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption* padding_aes = nullptr)
+                : ecenc(master_key.data(), master_key.size())
+                , padding_aes(padding_aes)
+                , max_padding_size(max_padding_size)
             {
-                return 0;
             }
-            CryptoPP::FixedSizeAlignedSecBlock<byte, 16> transformed;
-            padding_aes->ProcessData(transformed.data(), id, id_size);
-            CryptoPP::Integer integer(transformed.data(),
-                                      transformed.size(),
-                                      CryptoPP::Integer::UNSIGNED,
-                                      CryptoPP::BIG_ENDIAN_ORDER);
-            return static_cast<unsigned>(integer.Modulo(max_padding + 1));
+            virtual void compute_session_key(const std::array<unsigned char, 16>& id,
+                                             std::array<unsigned char, 16>& outkey) override
+            {
+                ecenc.ProcessData(outkey.data(), id.data(), id.size());
+            }
+
+            virtual unsigned compute_padding(const std::array<unsigned char, 16>& id) override
+            {
+                if (!max_padding_size || !padding_aes)
+                {
+                    return 0;
+                }
+                return default_compute_padding(
+                    max_padding_size, *padding_aes, id.data(), id.size());
+            }
+
+        private:
+            CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption ecenc;
+            CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption* padding_aes;
+            unsigned max_padding_size;
+        };
+        template <typename T>
+        T& as_lvalue(T&& val)
+        {
+            return val;
         }
+
     }    // namespace
     std::string CorruptedStreamException::message() const { return "Stream is corrupted"; }
 
@@ -41,6 +64,20 @@ namespace lite
                                          bool check,
                                          unsigned max_padding_size,
                                          CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption* padding_aes)
+        : AESGCMCryptStream(
+            stream,
+            as_lvalue(DefaultParamsCalculator(master_key, max_padding_size, padding_aes)),
+            block_size,
+            iv_size,
+            check)
+    {
+    }
+
+    AESGCMCryptStream::AESGCMCryptStream(std::shared_ptr<StreamBase> stream,
+                                         ParamCalculator& calc,
+                                         unsigned block_size,
+                                         unsigned iv_size,
+                                         bool check)
         : BlockBasedStream(block_size)
         , m_stream(std::move(stream))
         , m_iv_size(iv_size)
@@ -54,16 +91,14 @@ namespace lite
         if (block_size < 32)
             throwInvalidArgumentException("Block size too small");
 
-        warn_if_key_not_random(master_key, __FILE__, __LINE__);
-
-        CryptoPP::FixedSizeAlignedSecBlock<byte, get_id_size()> id, session_key;
+        std::array<byte, get_id_size()> id, session_key;
         auto rc = m_stream->read(id.data(), 0, id.size());
 
         if (rc == 0)
         {
             generate_random(id.data(), id.size());
             m_stream->write(id.data(), 0, id.size());
-            m_padding_size = compute_padding(max_padding_size, padding_aes, id.data(), id.size());
+            m_padding_size = calc.compute_padding(id);
             m_auxiliary.reset(new byte[sizeof(std::uint32_t) + m_padding_size]);
             if (m_padding_size)
             {
@@ -78,7 +113,7 @@ namespace lite
         }
         else
         {
-            m_padding_size = compute_padding(max_padding_size, padding_aes, id.data(), id.size());
+            m_padding_size = calc.compute_padding(id);
             m_auxiliary.reset(new byte[sizeof(std::uint32_t) + m_padding_size]);
             if (m_padding_size
                 && m_stream->read(
@@ -87,13 +122,12 @@ namespace lite
                 throwInvalidArgumentException("Invalid padding in the underlying file");
         }
 
-        if (max_padding_size > 0)
+        if (m_padding_size > 0)
         {
             TRACE_LOG("Stream padded with %u bytes", m_padding_size);
         }
 
-        CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption ecenc(master_key.data(), master_key.size());
-        ecenc.ProcessData(session_key.data(), id.data(), id.size());
+        calc.compute_session_key(id, session_key);
 
         m_buffer.reset(new byte[get_underlying_block_size()]);
 
@@ -219,6 +253,23 @@ namespace lite
         auto residue = underlying_size % underlying_block_size;
         return num_blocks * block_size
             + (residue > (iv_size + get_mac_size()) ? residue - iv_size - get_mac_size() : 0);
+    }
+    unsigned default_compute_padding(unsigned max_padding,
+                                     CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption& padding_aes,
+                                     const byte* id,
+                                     size_t id_size)
+    {
+        if (!max_padding)
+        {
+            return 0;
+        }
+        CryptoPP::FixedSizeAlignedSecBlock<byte, 16> transformed;
+        padding_aes.ProcessData(transformed.data(), id, id_size);
+        CryptoPP::Integer integer(transformed.data(),
+                                  transformed.size(),
+                                  CryptoPP::Integer::UNSIGNED,
+                                  CryptoPP::BIG_ENDIAN_ORDER);
+        return static_cast<unsigned>(integer.Modulo(max_padding + 1));
     }
 }    // namespace lite
 }    // namespace securefs
