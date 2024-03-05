@@ -209,7 +209,7 @@ void FileBase::read_header()
 
 int FileBase::get_real_type() { return type_for_mode(get_mode() & S_IFMT); }
 
-void FileBase::stat(struct fuse_stat* st)
+void FileBase::stat(fuse_stat* st)
 {
     m_data_stream->fstat(st);
     st->st_ino = to_inode_number(get_id());
@@ -323,11 +323,11 @@ ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
     return true_size;
 }
 
-void FileBase::utimens(const struct fuse_timespec* ts)
+void FileBase::utimens(const fuse_timespec* ts)
 {
     if (m_store_time)
     {
-        struct fuse_timespec current_time;
+        fuse_timespec current_time;
 
         if (ts)
         {

@@ -23,7 +23,7 @@ namespace details
         }
 
         template <typename StatClass>
-        const struct fuse_timespec* get_atim_helper(const StatClass*, ...)
+        const fuse_timespec* get_atim_helper(const StatClass*, ...)
         {
             return nullptr;
         }
@@ -41,7 +41,7 @@ namespace details
         }
 
         template <typename StatClass>
-        const struct fuse_timespec* get_mtim_helper(const StatClass*, ...)
+        const fuse_timespec* get_mtim_helper(const StatClass*, ...)
         {
             return nullptr;
         }
@@ -59,7 +59,7 @@ namespace details
         }
 
         template <typename StatClass>
-        const struct fuse_timespec* get_ctim_helper(const StatClass*, ...)
+        const fuse_timespec* get_ctim_helper(const StatClass*, ...)
         {
             return nullptr;
         }
@@ -77,7 +77,7 @@ namespace details
         }
 
         template <typename StatClass>
-        const struct fuse_timespec* get_birthtim_helper(const StatClass*, ...)
+        const fuse_timespec* get_birthtim_helper(const StatClass*, ...)
         {
             return nullptr;
         }
@@ -89,7 +89,7 @@ namespace details
         void print(FILE* fp, const long long* v) { fprintf(fp, "%lld", *v); }
         void print(FILE* fp, const unsigned long long* v) { fprintf(fp, "%llu", *v); }
 
-        void print(FILE* fp, const struct fuse_timespec* v)
+        void print(FILE* fp, const fuse_timespec* v)
         {
             std::tm tm;
 #ifdef _WIN32
@@ -147,7 +147,7 @@ namespace details
             fputc('\"', fp);
         }
 
-        void print(FILE* fp, const struct fuse_stat* v)
+        void print(FILE* fp, const fuse_stat* v)
         {
             fprintf(fp,
                     "{st_size=%lld, st_mode=%#o, st_nlink=%lld, st_uid=%lld, st_gid=%lld, "
@@ -192,7 +192,7 @@ namespace details
             fprintf(fp, "{fh=0x%p, flags=%#o}", (const void*)(v->fh), v->flags);
         }
 
-        void print(FILE* fp, const struct fuse_statvfs* v)
+        void print(FILE* fp, const fuse_statvfs* v)
         {
             fprintf(fp,
                     "{f_bsize=%lld, f_frsize=%lld, f_blocks=%lld, f_bfree=%lld, f_bavail=%lld, "
@@ -229,7 +229,7 @@ void FuseTracer::print(FILE* fp, const WrappedFuseArg& arg)
     {
     }
     SECUREFS_DISPATCH(char)
-    SECUREFS_DISPATCH(struct fuse_stat)
+    SECUREFS_DISPATCH(fuse_stat)
     SECUREFS_DISPATCH(int)
     SECUREFS_DISPATCH(unsigned)
     SECUREFS_DISPATCH(long)
@@ -237,8 +237,8 @@ void FuseTracer::print(FILE* fp, const WrappedFuseArg& arg)
     SECUREFS_DISPATCH(long long)
     SECUREFS_DISPATCH(unsigned long long)
     SECUREFS_DISPATCH(struct fuse_file_info)
-    SECUREFS_DISPATCH(struct fuse_statvfs)
-    SECUREFS_DISPATCH(struct fuse_timespec)
+    SECUREFS_DISPATCH(fuse_statvfs)
+    SECUREFS_DISPATCH(fuse_timespec)
     else
     {
         fprintf(fp, "0x%p", arg.value);

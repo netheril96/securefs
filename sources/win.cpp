@@ -32,7 +32,7 @@ static inline uint64_t convert_dword_pair(uint64_t low_part, uint64_t high_part)
     return low_part | (high_part << 32);
 }
 
-static void filetime_to_unix_time(const FILETIME* ft, struct fuse_timespec* out)
+static void filetime_to_unix_time(const FILETIME* ft, fuse_timespec* out)
 {
     long long ll = convert_dword_pair(ft->dwLowDateTime, ft->dwHighDateTime) - 116444736000000000LL;
     static const long long FACTOR = 10000000LL;
@@ -442,7 +442,7 @@ public:
     if (!(exp))                                                                                    \
         THROW_WINDOWS_EXCEPTION(GetLastError(), L"" #exp);
 
-static void stat_file_handle(HANDLE hd, struct fuse_stat* st)
+static void stat_file_handle(HANDLE hd, fuse_stat* st)
 {
     memset(st, 0, sizeof(*st));
     BY_HANDLE_FILE_INFORMATION info;
@@ -689,7 +689,7 @@ public:
     length_type optimal_block_size() const noexcept override { return 4096; }
 
     void fsync() override { CHECK_CALL(FlushFileBuffers(m_handle)); }
-    void utimens(const struct fuse_timespec ts[2]) override
+    void utimens(const fuse_timespec ts[2]) override
     {
         FILETIME access_time, mod_time;
         if (!ts)
@@ -704,7 +704,7 @@ public:
         }
         CHECK_CALL(SetFileTime(m_handle, nullptr, &access_time, &mod_time));
     }
-    void fstat(struct fuse_stat* st) const override { stat_file_handle(m_handle, st); }
+    void fstat(fuse_stat* st) const override { stat_file_handle(m_handle, st); }
     bool is_sparse() const noexcept override { return true; }
 };
 
@@ -835,7 +835,7 @@ void OSService::mkdir(const std::string& path, unsigned mode) const
     }
 }
 
-void OSService::statfs(struct fuse_statvfs* fs_info) const
+void OSService::statfs(fuse_statvfs* fs_info) const
 {
     memset(fs_info, 0, sizeof(*fs_info));
     ULARGE_INTEGER FreeBytesAvailable, TotalNumberOfBytes, TotalNumberOfFreeBytes;
@@ -883,7 +883,7 @@ void OSService::utimens(const std::string& path, const fuse_timespec ts[2]) cons
     CHECK_CALL(SetFileTime(hd, nullptr, &atime, &mtime));
 }
 
-bool OSService::stat(const std::string& path, struct fuse_stat* stat) const
+bool OSService::stat(const std::string& path, fuse_stat* stat) const
 {
     if (path == "." && m_root_handle != INVALID_HANDLE_VALUE)
     {
@@ -976,7 +976,7 @@ public:
         }
     }
 
-    bool next(std::string* name, struct fuse_stat* st) override
+    bool next(std::string* name, fuse_stat* st) override
     {
         if (m_is_initial)
         {

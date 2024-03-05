@@ -31,7 +31,7 @@ public:
     virtual bool is_readonly() const noexcept = 0;
     virtual bool is_auth_enabled() const noexcept = 0;
     virtual bool is_time_stored() const noexcept = 0;
-    virtual void statfs(struct fuse_statvfs* fs_info) = 0;
+    virtual void statfs(fuse_statvfs* fs_info) = 0;
     virtual bool has_padding() const noexcept = 0;
 };
 
@@ -76,7 +76,7 @@ public:
         return (m_flags & kOptionNoAuthentication) == 0;
     }
     bool is_time_stored() const noexcept override { return (m_flags & kOptionStoreTime) != 0; }
-    void statfs(struct fuse_statvfs* fs_info) override { m_root->statfs(fs_info); }
+    void statfs(fuse_statvfs* fs_info) override { m_root->statfs(fs_info); }
     bool has_padding() const noexcept override { return m_max_padding_size > 0; }
 };
 
@@ -102,7 +102,7 @@ public:
     bool is_readonly() const noexcept override { return m_shards.back()->is_readonly(); }
     bool is_auth_enabled() const noexcept override { return m_shards.back()->is_auth_enabled(); }
     bool is_time_stored() const noexcept override { return m_shards.back()->is_time_stored(); }
-    void statfs(struct fuse_statvfs* fs_info) override { return m_shards.back()->statfs(fs_info); }
+    void statfs(fuse_statvfs* fs_info) override { return m_shards.back()->statfs(fs_info); }
     bool has_padding() const noexcept override { return m_shards.back()->has_padding(); }
 };
 

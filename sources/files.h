@@ -291,9 +291,9 @@ public:
         m_meta_stream->fsync();
     }
 
-    void utimens(const struct fuse_timespec ts[2]) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    void utimens(const fuse_timespec ts[2]) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
-    void stat(struct fuse_stat* st) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    void stat(fuse_stat* st) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
     ssize_t listxattr(char* buffer, size_t size) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 

@@ -76,27 +76,24 @@ typedef ptrdiff_t ssize_t;
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define fuse_uid_t uid_t
-#define fuse_gid_t gid_t
-#define fuse_pid_t pid_t
+using fuse_uid_t = uid_t;
+using fuse_gid_t = gid_t;
+using fuse_pid_t = pid_t;
+using fuse_dev_t = dev_t;
+using fuse_ino_t = ino_t;
+using fuse_mode_t = mode_t;
+using fuse_nlink_t = nlink_t;
+using fuse_off_t = off_t;
+using fuse_fsblkcnt_t = fsblkcnt_t;
+using fuse_fsfilcnt_t = fsfilcnt_t;
+using fuse_blksize_t = blksize_t;
+using fuse_blkcnt_t = blkcnt_t;
+using fuse_utimbuf = utimbuf;
+using fuse_timespec = struct timespec;
+using fuse_stat = struct stat;
+using fuse_statvfs = struct statvfs;
+using fuse_flock = flock;
 
-#define fuse_dev_t dev_t
-#define fuse_ino_t ino_t
-#define fuse_mode_t mode_t
-#define fuse_nlink_t nlink_t
-#define fuse_off_t off_t
-
-#define fuse_fsblkcnt_t fsblkcnt_t
-#define fuse_fsfilcnt_t fsfilcnt_t
-#define fuse_blksize_t blksize_t
-#define fuse_blkcnt_t blkcnt_t
-
-#define fuse_utimbuf utimbuf
-#define fuse_timespec timespec
-
-#define fuse_stat stat
-#define fuse_statvfs statvfs
-#define fuse_flock flock
 #endif    // WIN32
 
 namespace securefs
@@ -108,8 +105,8 @@ class FileStream : public StreamBase
 {
 public:
     virtual void fsync() = 0;
-    virtual void utimens(const struct fuse_timespec ts[2]) = 0;
-    virtual void fstat(struct fuse_stat*) const = 0;
+    virtual void utimens(const fuse_timespec ts[2]) = 0;
+    virtual void fstat(fuse_stat*) const = 0;
     virtual void close() noexcept = 0;
     virtual ssize_t listxattr(char*, size_t);
     virtual ssize_t getxattr(const char*, void*, size_t);
@@ -128,7 +125,7 @@ class DirectoryTraverser
 public:
     DirectoryTraverser() {}
     virtual ~DirectoryTraverser();
-    virtual bool next(std::string* name, struct fuse_stat* st) = 0;
+    virtual bool next(std::string* name, fuse_stat* st) = 0;
     virtual void rewind() = 0;
 };
 
@@ -187,12 +184,12 @@ public:
     void lock() const;
     void ensure_directory(const std::string& path, unsigned mode) const;
     void mkdir(const std::string& path, unsigned mode) const;
-    void statfs(struct fuse_statvfs*) const;
+    void statfs(fuse_statvfs*) const;
     void utimens(const std::string& path, const fuse_timespec ts[2]) const;
 
     // Returns false when the path does not exist; throw exceptions on other errors
     // The ENOENT errors are too frequent so the API is redesigned
-    bool stat(const std::string& path, struct fuse_stat* stat) const;
+    bool stat(const std::string& path, fuse_stat* stat) const;
 
     void link(const std::string& source, const std::string& dest) const;
     void chmod(const std::string& path, fuse_mode_t mode) const;

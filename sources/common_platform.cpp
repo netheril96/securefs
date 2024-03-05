@@ -66,7 +66,7 @@ void OSService::recursive_traverse(const std::string& dir,
 {
     auto traverser = create_traverser(dir);
     std::string name;
-    struct fuse_stat st;
+    fuse_stat st;
 
     while (traverser->next(&name, &st))
     {

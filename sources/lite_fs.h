@@ -50,8 +50,7 @@ namespace lite
         virtual absl::string_view path() const = 0;
 
         // Redeclare the methods in `DirectoryTraverser` to add thread safe annotations.
-        virtual bool next(std::string* name, struct fuse_stat* st)
-            ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
+        virtual bool next(std::string* name, fuse_stat* st) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
             = 0;
         virtual void rewind() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) = 0;
     };
@@ -99,7 +98,7 @@ namespace lite
         {
             return m_crypt_stream->write(input, off, len);
         }
-        void fstat(struct fuse_stat* stat) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+        void fstat(fuse_stat* stat) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
         void fsync() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) { m_file_stream->fsync(); }
         void utimens(const fuse_timespec ts[2]) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
         {
@@ -183,7 +182,7 @@ namespace lite
         ~FileSystem();
 
         AutoClosedFile open(absl::string_view path, int flags, fuse_mode_t mode);
-        bool stat(absl::string_view path, struct fuse_stat* buf);
+        bool stat(absl::string_view path, fuse_stat* buf);
         void mkdir(absl::string_view path, fuse_mode_t mode);
         void rmdir(absl::string_view path);
         void chmod(absl::string_view path, fuse_mode_t mode);
@@ -194,7 +193,7 @@ namespace lite
         void link(absl::string_view src, absl::string_view dest);
         size_t readlink(absl::string_view path, char* buf, size_t size);
         void utimens(absl::string_view path, const fuse_timespec tm[2]);
-        void statvfs(struct fuse_statvfs* buf);
+        void statvfs(fuse_statvfs* buf);
         std::unique_ptr<Directory> opendir(absl::string_view path);
 
         bool has_padding() const noexcept { return m_max_padding_size > 0; }

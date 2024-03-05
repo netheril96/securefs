@@ -267,7 +267,7 @@ namespace operations
         delete fs;
     }
 
-    int statfs(const char* path, struct fuse_statvfs* fs_info)
+    int statfs(const char* path, fuse_statvfs* fs_info)
     {
         auto func = [=]()
         {
@@ -279,7 +279,7 @@ namespace operations
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {fs_info}});
     }
 
-    int getattr(const char* path, struct fuse_stat* st)
+    int getattr(const char* path, fuse_stat* st)
     {
         auto func = [=]()
         {
@@ -301,7 +301,7 @@ namespace operations
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {st}});
     }
 
-    int fgetattr(const char* path, struct fuse_stat* st, struct fuse_file_info* info)
+    int fgetattr(const char* path, fuse_stat* st, struct fuse_file_info* info)
     {
         auto func = [=]()
         {
@@ -353,7 +353,7 @@ namespace operations
             if (fb->type() != FileBase::DIRECTORY)
                 return -ENOTDIR;
 
-            struct fuse_stat st;
+            fuse_stat st;
             memset(&st, 0, sizeof(st));
 
             FileLockGuard file_lock_guard(*fb);
@@ -764,7 +764,7 @@ namespace operations
         return ::securefs::operations::fsync(path, isdatasync, fi);
     }
 
-    int utimens(const char* path, const struct fuse_timespec ts[2])
+    int utimens(const char* path, const fuse_timespec ts[2])
     {
         auto func = [=]()
         {

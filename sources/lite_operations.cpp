@@ -126,7 +126,7 @@ namespace lite
         INFO_LOG("destroy");
     }
 
-    int statfs(const char* path, struct fuse_statvfs* buf)
+    int statfs(const char* path, fuse_statvfs* buf)
     {
         auto func = [=]()
         {
@@ -141,7 +141,7 @@ namespace lite
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {buf}});
     }
 
-    int getattr(const char* path, struct fuse_stat* st)
+    int getattr(const char* path, fuse_stat* st)
     {
         auto func = [=]()
         {
@@ -154,7 +154,7 @@ namespace lite
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {st}});
     }
 
-    int fgetattr(const char* path, struct fuse_stat* st, struct fuse_file_info* info)
+    int fgetattr(const char* path, fuse_stat* st, struct fuse_file_info* info)
     {
         auto func = [=]()
         {
@@ -216,7 +216,7 @@ namespace lite
             LockGuard<Directory> lock_guard(*traverser);
             traverser->rewind();
             std::string name;
-            struct fuse_stat stbuf;
+            fuse_stat stbuf;
             memset(&stbuf, 0, sizeof(stbuf));
 
             while (traverser->next(&name, &stbuf))
@@ -477,7 +477,7 @@ namespace lite
         return FuseTracer::traced_call(func, FULL_FUNCTION_NAME, __LINE__, {{path}, {&len}});
     }
 
-    int utimens(const char* path, const struct fuse_timespec ts[2])
+    int utimens(const char* path, const fuse_timespec ts[2])
     {
         auto func = [=]()
         {

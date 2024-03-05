@@ -57,15 +57,15 @@ namespace operations
 
     void init_fuse_operations(struct fuse_operations* opt, bool xattr);
 
-    int statfs(const char*, struct fuse_statvfs*);
+    int statfs(const char*, fuse_statvfs*);
 
     void* init(struct fuse_conn_info*);
 
     void destroy(void* ptr);
 
-    int getattr(const char*, struct fuse_stat*);
+    int getattr(const char*, fuse_stat*);
 
-    int fgetattr(const char*, struct fuse_stat*, struct fuse_file_info*);
+    int fgetattr(const char*, fuse_stat*, struct fuse_file_info*);
 
     int opendir(const char*, struct fuse_file_info*);
 
@@ -111,7 +111,7 @@ namespace operations
 
     int fsyncdir(const char* path, int isdatasync, struct fuse_file_info* fi);
 
-    int utimens(const char* path, const struct fuse_timespec ts[2]);
+    int utimens(const char* path, const fuse_timespec ts[2]);
 
 #ifdef __APPLE__
     int listxattr(const char* path, char* list, size_t size);

@@ -16,7 +16,7 @@ namespace lite
 
     File::~File() {}
 
-    void File::fstat(struct fuse_stat* stat)
+    void File::fstat(fuse_stat* stat)
     {
         m_file_stream->fstat(stat);
         stat->st_size = AESGCMCryptStream::calculate_real_size(
@@ -199,7 +199,7 @@ namespace lite
         return fp;
     }
 
-    bool FileSystem::stat(absl::string_view path, struct fuse_stat* buf)
+    bool FileSystem::stat(absl::string_view path, fuse_stat* buf)
     {
         auto enc_path = translate_path(path, false);
         if (!m_root->stat(enc_path, buf))
@@ -344,7 +344,7 @@ namespace lite
         m_root->link(translate_path(src, false), translate_path(dest, false));
     }
 
-    void FileSystem::statvfs(struct fuse_statvfs* buf) { m_root->statfs(buf); }
+    void FileSystem::statvfs(fuse_statvfs* buf) { m_root->statfs(buf); }
 
     class ABSL_LOCKABLE LiteDirectory final : public Directory
     {
@@ -379,8 +379,7 @@ namespace lite
             m_underlying_traverser->rewind();
         }
 
-        bool next(std::string* name, struct fuse_stat* stbuf) override
-            ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
+        bool next(std::string* name, fuse_stat* stbuf) override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
         {
             std::string under_name, decoded_bytes;
 

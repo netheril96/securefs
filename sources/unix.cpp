@@ -149,7 +149,7 @@ public:
 
     bool is_sparse() const noexcept override { return true; }
 
-    void utimens(const struct fuse_timespec ts[2]) override
+    void utimens(const fuse_timespec ts[2]) override
     {
         int rc = ::futimens(m_fd, ts);
         if (rc < 0)
@@ -204,7 +204,7 @@ public:
     }
     ~UnixDirectoryTraverser() { ::closedir(m_dir); }
 
-    bool next(std::string* name, struct fuse_stat* st) override
+    bool next(std::string* name, fuse_stat* st) override
     {
         errno = 0;
         auto entry = ::readdir(m_dir);
@@ -346,7 +346,7 @@ void OSService::link(const std::string& source, const std::string& dest) const
     }
 }
 
-void OSService::statfs(struct fuse_statvfs* fs_info) const
+void OSService::statfs(fuse_statvfs* fs_info) const
 {
     int rc = ::fstatvfs(m_dir_fd, fs_info);
     if (rc < 0)
@@ -361,7 +361,7 @@ void OSService::rename(const std::string& a, const std::string& b) const
             errno, absl::StrFormat("Renaming from %s to %s", norm_path(a), norm_path(b)));
 }
 
-bool OSService::stat(const std::string& path, struct fuse_stat* stat) const
+bool OSService::stat(const std::string& path, fuse_stat* stat) const
 {
     int rc = ::fstatat(m_dir_fd, path.c_str(), stat, AT_SYMLINK_NOFOLLOW);
     if (rc < 0)
