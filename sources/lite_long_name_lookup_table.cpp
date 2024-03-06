@@ -31,8 +31,8 @@ LongNameLookupTable::LongNameLookupTable(const std::string& filename, bool reado
     {
         db_.exec(R"(
                 create table if not exists encrypted_mappings (
-                    encrypted_hash blob not null primary key,
-                    encrypted_name blob not null
+                    encrypted_hash text not null primary key,
+                    encrypted_name text not null
                 );
             )");
     }
@@ -40,23 +40,22 @@ LongNameLookupTable::LongNameLookupTable(const std::string& filename, bool reado
 
 LongNameLookupTable::~LongNameLookupTable() {}
 
-std::vector<unsigned char>
-LongNameLookupTable::lookup(absl::Span<const unsigned char> encrypted_hash)
+std::string LongNameLookupTable::lookup(absl::string_view encrypted_hash)
 {
     SQLiteStatement q(db_,
                       "select encrypted_name from encrypted_mappings where encrypted_hash = ?;");
     q.reset();
-    q.bind_blob(1, encrypted_hash);
+    q.bind_text(1, encrypted_hash);
     if (!q.step())
     {
         return {};
     }
-    auto span = q.get_blob(0);
-    return std::vector<unsigned char>(span.begin(), span.end());
+    auto view = q.get_text(0);
+    return {view.begin(), view.end()};
 }
 
-void LongNameLookupTable::insert_or_update(absl::Span<const unsigned char> encrypted_hash,
-                                           absl::Span<const unsigned char> encrypted_long_name)
+void LongNameLookupTable::insert_or_update(absl::string_view encrypted_hash,
+                                           absl::string_view encrypted_long_name)
 {
     SQLiteStatement q(db_, R"(
             insert or ignore into encrypted_mappings
@@ -64,19 +63,19 @@ void LongNameLookupTable::insert_or_update(absl::Span<const unsigned char> encry
                 values (?, ?);
         )");
     q.reset();
-    q.bind_blob(1, encrypted_hash);
-    q.bind_blob(2, encrypted_long_name);
+    q.bind_text(1, encrypted_hash);
+    q.bind_text(2, encrypted_long_name);
     q.step();
 }
 
-void LongNameLookupTable::delete_once(absl::Span<const unsigned char> encrypted_hash)
+void LongNameLookupTable::delete_once(absl::string_view encrypted_hash)
 {
     SQLiteStatement q(db_, R"(
             delete from encrypted_mappings
                 where encrypted_hash = ?;
         )");
     q.reset();
-    q.bind_blob(1, encrypted_hash);
+    q.bind_text(1, encrypted_hash);
     q.step();
 }
 

@@ -1,9 +1,18 @@
 #include "lite_format.h"
+#include "exceptions.h"
+#include "lite_long_name_lookup_table.h"
 #include "logger.h"
+#include "macro.h"
 #include "platform.h"
+
+#include <absl/base/thread_annotations.h>
+#include <absl/strings/str_cat.h>
 #include <absl/strings/string_view.h>
+
+#include <absl/utility/utility.h>
 #include <cerrno>
 #include <memory>
+#include <utility>
 
 namespace securefs
 {
@@ -75,15 +84,16 @@ namespace lite_format
         {
         public:
             INJECT(NoOpNameTranslator()) {}
+            bool is_no_op() const noexcept override { return true; }
             std::string encrypt_full_path(absl::string_view path,
                                           std::string* out_encrypted_last_component) override
             {
                 return {path.data(), path.size()};
             }
 
-            std::string decrypt_path_component(absl::string_view path) override
+            absl::optional<std::string> decrypt_path_component(absl::string_view path) override
             {
-                return {path.data(), path.size()};
+                return absl::optional<std::string>{absl::in_place, path.data(), path.size()};
             }
 
             std::string encrypt_path_for_symlink(absl::string_view path) override
@@ -104,10 +114,109 @@ namespace lite_format
         class DirectoryImpl : public Directory
         {
         public:
-            INJECT(DirectoryImpl(std::string dir_abs_path,
-                                 std::unique_ptr<DirectoryTraverser> underlying_traverser,
-                                 StreamOpener& opener,
-                                 NameTranslator& name_trans));
+            DirectoryImpl(std::string dir_abs_path,
+                          NameTranslator& name_trans,
+                          StreamOpener& opener,
+                          bool readdir_plus)
+                : dir_abs_path_(std::move(dir_abs_path))
+                , name_trans_(name_trans)
+                , opener_(opener)
+                , readdir_plus_(readdir_plus)
+            {
+                if (readdir_plus && !opener_.can_compute_virtual_size())
+                {
+                    throw_runtime_error("Readdir plus should only be used without padding");
+                }
+                under_traverser_ = OSService::get_default().create_traverser(dir_abs_path);
+            }
+
+            void fstat(fuse_stat* stat) override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
+            {
+                OSService().get_default().stat(dir_abs_path_, stat);
+            }
+
+            bool next(std::string* name, fuse_stat* stbuf) override
+                ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
+            {
+                std::string under_name;
+
+                while (true)
+                {
+                    if (under_traverser_->next(&under_name, stbuf))
+                        return false;
+                    if (!name)
+                        return true;
+
+                    if (under_name.empty())
+                        continue;
+                    if (under_name == "." || under_name == "..")
+                    {
+                        if (name)
+                            name->swap(under_name);
+                        return true;
+                    }
+                    if (stbuf && readdir_plus_ && (stbuf->st_mode & S_IFMT) == S_IFREG)
+                    {
+                        stbuf->st_size = opener_.compute_virtual_size(stbuf->st_size);
+                    }
+                    if (name_trans_.is_no_op())
+                    {
+                        // Plain text name mode
+                        if (name)
+                            name->swap(under_name);
+                        return true;
+                    }
+                    if (under_name[0] == '.')
+                        continue;
+                    try
+                    {
+                        auto decoded = name_trans_.decrypt_path_component(under_name);
+                        if (decoded.has_value())
+                        {
+                            decoded->swap(*name);
+                        }
+                        else
+                        {
+                            decoded = name_trans_.decrypt_path_component(lazy_get_table().transact(
+                                [&](LongNameLookupTable& table) -> std::string
+                                { return table.lookup(under_name); }));
+                            decoded.value().swap(*name);
+                        }
+                    }
+                    catch (const std::exception& e)
+                    {
+                        WARN_LOG("Skipping filename %s/%s due to exception in decoding: %s",
+                                 dir_abs_path_,
+                                 under_name,
+                                 e.what());
+                        continue;
+                    }
+                    return true;
+                }
+            }
+            void rewind() override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
+            {
+                under_traverser_->rewind();
+            }
+
+        private:
+            LongNameLookupTable& lazy_get_table() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
+            {
+                if (long_table_.has_value())
+                {
+                    return *long_table_;
+                }
+                long_table_.emplace(absl::StrCat(dir_abs_path_, "/.long_names.db"), true);
+                return *long_table_;
+            }
+
+        private:
+            absl::optional<LongNameLookupTable> long_table_ ABSL_GUARDED_BY(*this);
+            std::string dir_abs_path_;
+            std::unique_ptr<DirectoryTraverser> under_traverser_ ABSL_GUARDED_BY(*this);
+            NameTranslator& name_trans_;
+            StreamOpener& opener_;
+            bool readdir_plus_;
         };
     }    // namespace
 
@@ -115,8 +224,11 @@ namespace lite_format
     {
         (void)info;
 #ifdef FSP_FUSE_CAP_READDIR_PLUS
-        info->want |= (info->capable & FSP_FUSE_CAP_READDIR_PLUS);
-        read_dir_plus_ = true;
+        if (opener_.can_compute_virtual_size() && (info->capable & FSP_FUSE_CAP_READDIR_PLUS))
+        {
+            info->want |= FSP_FUSE_CAP_READDIR_PLUS;
+            read_dir_plus_ = true;
+        }
 #endif
     }
 
@@ -147,7 +259,7 @@ namespace lite_format
             if (link_size != buf->st_size && link_size != (buf->st_size - 8) / 2)
                 throwVFSException(EIO);
 
-            if (dynamic_cast<NoOpNameTranslator*>(&name_trans_) == nullptr)
+            if (!name_trans_.is_no_op())
             {
                 // Resize to actual size
                 buffer.resize(static_cast<size_t>(link_size));

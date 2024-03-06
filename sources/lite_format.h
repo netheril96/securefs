@@ -64,11 +64,14 @@ namespace lite_format
     class File;
     class Directory;
 
-    class Base : public Object
+    class ABSL_LOCKABLE Base : public Object
     {
     public:
         virtual File* as_file() noexcept { return nullptr; }
         virtual Directory* as_dir() noexcept { return nullptr; }
+        virtual void lock(bool exclusive) ABSL_EXCLUSIVE_LOCK_FUNCTION() = 0;
+        virtual void unlock() noexcept ABSL_UNLOCK_FUNCTION() = 0;
+        virtual void fstat(fuse_stat* stat) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) = 0;
     };
 
     class ABSL_LOCKABLE Directory : public Base, public DirectoryTraverser
@@ -77,12 +80,9 @@ namespace lite_format
         securefs::Mutex m_lock;
 
     public:
-        void lock() ABSL_EXCLUSIVE_LOCK_FUNCTION() { m_lock.lock(); }
-        void unlock() noexcept ABSL_UNLOCK_FUNCTION() { m_lock.unlock(); }
+        void lock(bool exclusive) override ABSL_EXCLUSIVE_LOCK_FUNCTION() { m_lock.lock(); }
+        void unlock() noexcept override ABSL_UNLOCK_FUNCTION() { m_lock.unlock(); }
         Directory* as_dir() noexcept override { return this; }
-
-        // Obtains the (virtual) path of the directory.
-        virtual absl::string_view path() const = 0;
 
         // Redeclare the methods in `DirectoryTraverser` to add thread safe annotations.
         bool next(std::string* name, fuse_stat* st) override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
@@ -130,13 +130,17 @@ namespace lite_format
         {
             return m_crypt_stream->write(input, off, len);
         }
-        void fstat(fuse_stat* stat) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+        void fstat(fuse_stat* stat) override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
+        {
+            m_file_stream->fstat(stat);
+            stat->st_size = m_crypt_stream->size();
+        }
         void fsync() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) { m_file_stream->fsync(); }
         void utimens(const fuse_timespec ts[2]) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
         {
             m_file_stream->utimens(ts);
         }
-        void lock(bool exclusive = true) ABSL_EXCLUSIVE_LOCK_FUNCTION()
+        void lock(bool exclusive) override ABSL_EXCLUSIVE_LOCK_FUNCTION()
         {
             m_lock.lock();
             try
@@ -149,7 +153,7 @@ namespace lite_format
                 throw;
             }
         }
-        void unlock() noexcept ABSL_UNLOCK_FUNCTION()
+        void unlock() noexcept override ABSL_UNLOCK_FUNCTION()
         {
             m_file_stream->unlock();
             m_lock.unlock();
@@ -159,7 +163,7 @@ namespace lite_format
 
     struct NameTranslator : public Object
     {
-
+        virtual bool is_no_op() const noexcept { return false; }
         /// @brief Encrypt the full path.
         /// @param path The original path.
         /// @param out_encrypted_last_component If it is not null, and the last path component is a
@@ -171,7 +175,7 @@ namespace lite_format
 
         /// @brief Decrypt a component of an encrypted path.
         /// If a long component, then the result is empty.
-        virtual std::string decrypt_path_component(absl::string_view path) = 0;
+        virtual absl::optional<std::string> decrypt_path_component(absl::string_view path) = 0;
 
         virtual std::string encrypt_path_for_symlink(absl::string_view path) = 0;
         virtual std::string decrypt_path_from_symlink(absl::string_view path) = 0;

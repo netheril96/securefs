@@ -14,7 +14,7 @@ namespace securefs
 class SQLiteDB
 {
 public:
-    SQLiteDB() {}
+    SQLiteDB() = default;
     SQLiteDB(const char* filename, int flags, const char* vfs);
 
     void exec(const char* sql);
