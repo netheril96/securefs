@@ -12,3 +12,4 @@ out/
 CMakeSettings.json
 __pycache__
 .venv/
+.cache/
