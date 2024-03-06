@@ -1,6 +1,5 @@
 #pragma once
 
-#include "myutils.h"
 #include "object.h"
 #include "platform.h"
 

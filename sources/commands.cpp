@@ -31,9 +31,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <thread>
 #include <typeinfo>
-#include <unordered_map>
 #include <vector>
 
 #ifdef _WIN32
@@ -81,7 +79,7 @@ std::unique_ptr<Json::CharReader> create_json_reader()
     return std::unique_ptr<Json::CharReader>(builder.newCharReader());
 }
 
-enum class NLinkFixPhase
+enum class NLinkFixPhase : unsigned char
 {
     CollectingNLink,
     FixingNLink
@@ -176,7 +174,7 @@ void fix_helper(operations::FileSystemContext* fs,
                 stderr,
                 "Encounter exception when opening %s: %s\nDo you want to remove the entry? "
                 "(Yes/No, default: no)\n",
-                (dir_name + '/' + name),
+                absl::StrCat(dir_name, "/", name),
                 e.what());
             auto remove = [&]()
             {
@@ -198,7 +196,7 @@ void fix_helper(operations::FileSystemContext* fs,
             absl::PrintF(
                 "Mismatch type for %s (inode has type %s, directory entry has type %s). Do you "
                 "want to fix it? (Yes/No default: yes)\n",
-                (dir_name + '/' + name),
+                absl::StrCat(dir_name, "/", name),
                 FileBase::type_name(real_type),
                 FileBase::type_name(type));
             fflush(stdout);
@@ -225,7 +223,7 @@ void fix_helper(operations::FileSystemContext* fs,
         {
             fix_helper(fs,
                        open_as(fs->table, id, FileBase::DIRECTORY).get_as<Directory>(),
-                       dir_name + '/' + name,
+                       absl::StrCat(dir_name, "/", name),
                        all_ids);
         }
     }

@@ -3,6 +3,7 @@
 #include "fuse_high_level_ops_base.h"
 #include "lite_stream.h"
 #include "lock_guard.h"
+#include "myutils.h"
 #include "platform.h"
 #include "tags.h"
 #include "thread_local.h"
@@ -18,8 +19,8 @@ namespace lite_format
     class StreamOpener : public lite::AESGCMCryptStream::ParamCalculator
     {
     public:
-        INJECT(StreamOpener(ANNOTATED(tContentMasterKey, key_type) content_master_key,
-                            ANNOTATED(tPaddingMasterKey, key_type) padding_master_key,
+        INJECT(StreamOpener(ANNOTATED(tContentMasterKey, const key_type&) content_master_key,
+                            ANNOTATED(tPaddingMasterKey, const key_type&) padding_master_key,
                             ANNOTATED(tBlockSize, unsigned) block_size,
                             ANNOTATED(tIvSize, unsigned) iv_size,
                             ANNOTATED(tMaxPaddingSize, unsigned) max_padding_size,
@@ -89,10 +90,10 @@ namespace lite_format
 
     public:
         File(std::shared_ptr<securefs::FileStream> file_stream, StreamOpener& opener)
-            : m_file_stream(file_stream)
+            : m_file_stream(std::move(file_stream))
         {
             LockGuard<FileStream> lock_guard(*m_file_stream, true);
-            m_crypt_stream = opener.open(file_stream);
+            m_crypt_stream = opener.open(m_file_stream);
         }
 
         ~File();

@@ -1,5 +1,4 @@
 #include "exceptions.h"
-#include "logger.h"
 #include "platform.h"
 
 #include <absl/strings/str_format.h>

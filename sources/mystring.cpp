@@ -6,9 +6,7 @@
 #include <utf8proc.h>
 
 #include <ctype.h>
-#include <errno.h>
 #include <stdint.h>
-#include <system_error>
 
 namespace securefs
 {

@@ -11,7 +11,6 @@
 #include <absl/container/flat_hash_map.h>
 
 #include <memory>
-#include <string.h>
 #include <utility>
 
 namespace securefs

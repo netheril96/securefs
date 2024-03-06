@@ -367,8 +367,8 @@ namespace internal
                                    unsigned block_size,
                                    unsigned iv_size,
                                    unsigned header_size)
-            : CryptStream(data_stream, block_size)
-            , m_metastream(meta_key, id_, meta_stream, check)
+            : CryptStream(std::move(data_stream), block_size)
+            , m_metastream(meta_key, id_, std::move(meta_stream), check)
             , m_id(id_)
             , m_iv_size(iv_size)
             , m_header_size(header_size)

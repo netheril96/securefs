@@ -9,7 +9,7 @@ namespace lite_format
     StreamOpener::open(std::shared_ptr<StreamBase> base)
     {
         return std::make_unique<securefs::lite::AESGCMCryptStream>(
-            base, *this, block_size_, iv_size_, !skip_verification_);
+            std::move(base), *this, block_size_, iv_size_, !skip_verification_);
     }
 
     void StreamOpener::compute_session_key(const std::array<unsigned char, 16>& id,
@@ -57,7 +57,7 @@ namespace lite_format
         class LegacyNameTranslator : public NameTranslator
         {
         public:
-            INJECT(LegacyNameTranslator(ANNOTATED(tNameMasterKey, key_type) name_master_key))
+            INJECT(LegacyNameTranslator(ANNOTATED(tNameMasterKey, const key_type&) name_master_key))
                 : name_master_key_(name_master_key)
             {
             }

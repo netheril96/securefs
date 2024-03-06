@@ -1,0 +1,9 @@
+Checks: > 
+        modernize-*,abseil-*,performance-*,
+        -modernize-use-trailing-return-type,
+        -performance-no-int-to-ptr,
+        bugprone-*,
+        -bugprone-implicit-widening-of-multiplication-result,
+        -bugprone-narrowing-conversions,
+        -modernize-deprecated-headers,
+        -bugprone-easily-swappable-parameters

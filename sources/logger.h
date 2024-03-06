@@ -11,7 +11,7 @@
 
 namespace securefs
 {
-enum LoggingLevel
+enum LoggingLevel : unsigned char
 {
     kLogTrace = 0,
     kLogVerbose = 1,

@@ -5,7 +5,6 @@
 #include <cryptopp/integer.h>
 #include <cryptopp/secblock.h>
 
-#include <algorithm>
 #include <utility>
 
 #include <sys/types.h>

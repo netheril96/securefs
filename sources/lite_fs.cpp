@@ -7,7 +7,6 @@
 #include <cryptopp/base32.h>
 
 #include <cerrno>
-#include <mutex>
 
 namespace securefs
 {

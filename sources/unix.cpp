@@ -4,15 +4,10 @@
 #include "lock_enabled.h"
 #include "logger.h"
 #include "platform.h"
-#include "streams.h"
 
 #include <absl/strings/match.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
-
-#include <algorithm>
-#include <locale.h>
-#include <vector>
 
 #include <cxxabi.h>
 #include <dirent.h>

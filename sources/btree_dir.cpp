@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <assert.h>
-#include <deque>
 #include <iterator>
 #include <stdio.h>
 #include <type_traits>
@@ -14,7 +13,9 @@
 static void dir_check(bool condition)
 {
     if (!condition)
+    {
         throw securefs::CorruptedDirectoryException();
+    }
 }
 
 namespace securefs
@@ -135,7 +136,9 @@ void BtreeDirectory::read_free_page(uint32_t num, FreePage& fp)
     byte buffer[BLOCK_SIZE];
     dir_check(m_stream->read(buffer, num * BLOCK_SIZE, BLOCK_SIZE) == BLOCK_SIZE);
     if (from_little_endian<uint32_t>(buffer) != 0)
+    {
         throw CorruptedDirectoryException();
+    }
     fp.next = from_little_endian<uint32_t>(buffer + sizeof(uint32_t));
     fp.prev = from_little_endian<uint32_t>(buffer + sizeof(uint32_t) * 2);
 }
@@ -201,7 +204,9 @@ bool BtreeNode::from_buffer(const byte* buffer, size_t size)
 
     auto flag = read_little_endian_and_forward<uint32_t>(&buffer, end_of_buffer);
     if (flag == 0)
+    {
         return false;
+    }
     auto child_num = read_little_endian_and_forward<uint16_t>(&buffer, end_of_buffer);
     auto entry_num = read_little_endian_and_forward<uint16_t>(&buffer, end_of_buffer);
 

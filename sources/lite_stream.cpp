@@ -7,6 +7,8 @@
 #include <cryptopp/modes.h>
 #include <cryptopp/osrng.h>
 
+#include <utility>
+
 namespace securefs
 {
 namespace lite
@@ -65,11 +67,11 @@ namespace lite
                                          unsigned max_padding_size,
                                          CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption* padding_aes)
         : AESGCMCryptStream(
-            stream,
-            as_lvalue(DefaultParamsCalculator(master_key, max_padding_size, padding_aes)),
-            block_size,
-            iv_size,
-            check)
+              std::move(stream),
+              as_lvalue(DefaultParamsCalculator(master_key, max_padding_size, padding_aes)),
+              block_size,
+              iv_size,
+              check)
     {
     }
 

@@ -109,7 +109,7 @@ namespace details
             fputc('\"', fp);
             while (*v)
             {
-                int ch = *v;
+                int ch = static_cast<unsigned char>(*v);
                 switch (ch)
                 {
                 case '\"':

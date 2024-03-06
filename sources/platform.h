@@ -231,7 +231,7 @@ public:
 
 struct Colour
 {
-    enum Code
+    enum Code : unsigned char
     {
         Default = 0,
 

@@ -6,13 +6,10 @@
 #include <absl/strings/match.h>
 #include <absl/strings/str_format.h>
 
-#include <algorithm>
 #include <cctype>
 #include <cerrno>
 #include <string.h>
-#include <system_error>
 #include <time.h>
-#include <vector>
 
 namespace securefs
 {

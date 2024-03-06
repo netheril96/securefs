@@ -4,7 +4,6 @@
 #include <absl/types/any.h>
 
 #include <array>
-#include <functional>
 
 namespace securefs
 {
