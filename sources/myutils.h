@@ -181,7 +181,7 @@ public:
     {
         if (size != Size)
         {
-            throw_runtime_error("Invalid size");
+            throw std::runtime_error("Invalid size");
         }
         memcpy(m_data, ptr, size);
     }
