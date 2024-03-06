@@ -1099,7 +1099,6 @@ private:
 
     fruit::Component<FuseHighLevelOpsBase> get_fuse_high_ops_component()
     {
-        lite_format::NameNormalizationFlags name_norm_flags{};
         if (normalization.getValue() == "nfc")
         {
             name_norm_flags.should_normalize_nfc = true;

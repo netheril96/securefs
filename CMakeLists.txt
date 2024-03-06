@@ -81,7 +81,8 @@ target_link_libraries(
            absl::strings
            absl::optional
            absl::str_format
-           absl::span)
+           absl::span
+           absl::any)
 
 if(SECUREFS_USE_VCPKG)
     find_package(cryptopp CONFIG REQUIRED)
