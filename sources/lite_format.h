@@ -69,7 +69,7 @@ namespace lite_format
     public:
         virtual File* as_file() noexcept { return nullptr; }
         virtual Directory* as_dir() noexcept { return nullptr; }
-        virtual void lock(bool exclusive) ABSL_EXCLUSIVE_LOCK_FUNCTION() = 0;
+        virtual void lock(bool exclusive = true) ABSL_EXCLUSIVE_LOCK_FUNCTION() = 0;
         virtual void unlock() noexcept ABSL_UNLOCK_FUNCTION() = 0;
         virtual void fstat(fuse_stat* stat) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) = 0;
     };
@@ -80,7 +80,7 @@ namespace lite_format
         securefs::Mutex m_lock;
 
     public:
-        void lock(bool exclusive) override ABSL_EXCLUSIVE_LOCK_FUNCTION() { m_lock.lock(); }
+        void lock(bool exclusive = true) override ABSL_EXCLUSIVE_LOCK_FUNCTION() { m_lock.lock(); }
         void unlock() noexcept override ABSL_UNLOCK_FUNCTION() { m_lock.unlock(); }
         Directory* as_dir() noexcept override { return this; }
 
@@ -140,7 +140,7 @@ namespace lite_format
         {
             m_file_stream->utimens(ts);
         }
-        void lock(bool exclusive) override ABSL_EXCLUSIVE_LOCK_FUNCTION()
+        void lock(bool exclusive = true) override ABSL_EXCLUSIVE_LOCK_FUNCTION()
         {
             m_lock.lock();
             try

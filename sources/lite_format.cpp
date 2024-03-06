@@ -9,9 +9,11 @@
 #include <absl/base/thread_annotations.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/string_view.h>
-
 #include <absl/utility/utility.h>
+#include <fuse.h>
+
 #include <cerrno>
+#include <cstdint>
 #include <memory>
 #include <utility>
 
@@ -68,18 +70,19 @@ namespace lite_format
 
     namespace
     {
-        class LegacyNameTranslator : public NameTranslator
-        {
-        public:
-            INJECT(LegacyNameTranslator(ANNOTATED(tNameMasterKey, const key_type&) name_master_key))
-                : name_master_key_(name_master_key)
-            {
-            }
+        // class LegacyNameTranslator : public NameTranslator
+        // {
+        // public:
+        //     INJECT(LegacyNameTranslator(ANNOTATED(tNameMasterKey, const key_type&)
+        //     name_master_key))
+        //         : name_master_key_(name_master_key)
+        //     {
+        //     }
 
-        private:
-            key_type name_master_key_;
-            ThreadLocal name_aes_siv_;
-        };
+        // private:
+        //     key_type name_master_key_;
+        //     ThreadLocal name_aes_siv_;
+        // };
 
         class NoOpNameTranslator : public NameTranslator
         {
@@ -223,6 +226,31 @@ namespace lite_format
             StreamOpener& opener_;
             bool readdir_plus_;
         };
+
+        Base* get_base(fuse_file_info* info)
+        {
+            return reinterpret_cast<Base*>(static_cast<uintptr_t>(info->fh));
+        }
+
+        File* get_file_checked(fuse_file_info* info)
+        {
+            auto fp = get_base(info)->as_file();
+            if (!fp)
+            {
+                throwVFSException(EISDIR);
+            }
+            return fp;
+        }
+
+        Directory* get_dir_checked(fuse_file_info* info)
+        {
+            auto fp = get_base(info)->as_dir();
+            if (!fp)
+            {
+                throwVFSException(ENOTDIR);
+            }
+            return fp;
+        }
     }    // namespace
 
     void FuseHighLevelOps::initialize(fuse_conn_info* info)
@@ -314,10 +342,15 @@ namespace lite_format
                                     fuse_file_info* info,
                                     const fuse_context* ctx)
     {
-        return -ENOSYS;
+        auto fp = get_base(info);
+        LockGuard<Base> lg(*fp);
+        fp->fstat(st);
+        return 0;
     }
     int FuseHighLevelOps::vopendir(const char* path, fuse_file_info* info, const fuse_context* ctx)
     {
+        // auto dir = std::make_unique<DirectoryImpl>(
+        //     root_.norm_path(path), opener_, name_trans_, read_dir_plus_);
         return -ENOSYS;
     }
     int
