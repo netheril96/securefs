@@ -167,6 +167,7 @@ public:
     {
         return concat_and_norm(m_dir_name, path);
     }
+    DISABLE_COPY_MOVE(OSService)
 
 public:
     OSService();

@@ -78,7 +78,7 @@ namespace lite_format
 
     int FuseHighLevelOps::vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx)
     {
-        root_->statfs(buf);
+        root_.statfs(buf);
         buf->f_namemax = name_trans_.max_virtual_path_component_size(buf->f_namemax);
         return 0;
     }

@@ -1,6 +1,7 @@
 #include "commands.h"
 #include "exceptions.h"
 #include "git-version.h"
+#include "lite_format.h"
 #include "lite_operations.h"
 #include "lock_enabled.h"
 #include "myutils.h"
@@ -17,6 +18,7 @@
 #include <cryptopp/osrng.h>
 #include <cryptopp/scrypt.h>
 #include <cryptopp/secblock.h>
+#include <fruit/fruit.h>
 #include <fuse.h>
 #include <json/json.h>
 #include <tclap/CmdLine.h>
@@ -1090,6 +1092,67 @@ private:
         return result;
     }
 
+    fruit::Component<FuseHighLevelOpsBase> get_fuse_high_ops_component(const FSConfig* fsconfig,
+                                                                       OSService* os)
+    {
+        lite_format::NameNormalizationArgs name_norm_args{};
+        return fruit::createComponent()
+            .bind<FuseHighLevelOpsBase, lite_format::FuseHighLevelOps>()
+            .install(lite_format::get_name_translator_component, name_norm_args)
+            .bindInstance<fruit::Annotated<tSkipVerification, bool>>(insecure.getValue())
+            .bindInstance<fruit::Annotated<tMaxPaddingSize, unsigned>>(fsconfig->max_padding)
+            .bindInstance<fruit::Annotated<tIvSize, unsigned>>(fsconfig->iv_size)
+            .bindInstance<fruit::Annotated<tBlockSize, unsigned>>(fsconfig->block_size)
+            .bindInstance<fruit::Annotated<tMasterKey, CryptoPP::AlignedSecByteBlock>>(
+                fsconfig->master_key)
+            .registerProvider<fruit::Annotated<tNameMasterKey, key_type>(
+                fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
+                [](const CryptoPP::AlignedSecByteBlock& master_key)
+                {
+                    if (master_key.size() < key_type::size())
+                    {
+                        throw_runtime_error("Master key too short");
+                    }
+                    return key_type(master_key.data(), key_type::size());
+                })
+            .registerProvider<fruit::Annotated<tContentMasterKey, key_type>(
+                fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
+                [](const CryptoPP::AlignedSecByteBlock& master_key)
+                {
+                    if (master_key.size() < key_type::size() * 2)
+                    {
+                        throw_runtime_error("Master key too short");
+                    }
+                    return key_type(master_key.data() + key_type::size(), key_type::size());
+                })
+            .registerProvider<fruit::Annotated<tXattrMasterKey, key_type>(
+                fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
+                [](const CryptoPP::AlignedSecByteBlock& master_key)
+                {
+                    if (master_key.size() < 3 * key_type::size())
+                    {
+                        throw_runtime_error("Master key too short");
+                    }
+                    return key_type(master_key.data() + 2 * key_type::size(), key_type::size());
+                })
+            .registerProvider<fruit::Annotated<tPaddingMasterKey, key_type>(
+                fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>,
+                fruit::Annotated<tMaxPaddingSize, const unsigned&>)>(
+                [](const CryptoPP::AlignedSecByteBlock& master_key, const unsigned& max_padding)
+                {
+                    if (max_padding <= 0)
+                    {
+                        return key_type{};
+                    }
+                    if (master_key.size() < 4 * key_type::size())
+                    {
+                        throw_runtime_error("Master key too short");
+                    }
+                    return key_type(master_key.data() + 3 * key_type::size(), key_type::size());
+                })
+            .bindInstance(*os);
+    }
+
 public:
     std::unique_ptr<TCLAP::CmdLine> cmdline() override
     {
@@ -1315,6 +1378,13 @@ public:
         {
             VERBOSE_LOG("Master key: %s", hexify(config.master_key));
         }
+        OSService root(data_dir.getValue());
+        fruit::Injector<FuseHighLevelOpsBase> injector(
+            +[](MountCommand* cmd, const FSConfig* fsconfig, OSService* os)
+            { return cmd->get_fuse_high_ops_component(fsconfig, os); },
+            this,
+            &config,
+            &root);
 
         operations::MountOptions fsopt;
         fsopt.root = std::make_shared<OSService>(data_dir.getValue());

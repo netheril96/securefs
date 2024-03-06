@@ -177,6 +177,14 @@ public:
     {
         std::fill(std::begin(m_data), std::end(m_data), value);
     }
+    explicit PODArray(const T* ptr, size_t size)
+    {
+        if (size != Size)
+        {
+            throw_runtime_error("Invalid size");
+        }
+        memcpy(m_data, ptr, size);
+    }
     PODArray(const PODArray& other) noexcept { memcpy(m_data, other.m_data, size()); }
     PODArray& operator=(const PODArray& other) noexcept
     {

@@ -172,28 +172,27 @@ namespace lite_format
         static absl::string_view remove_last_component(absl::string_view path);
     };
 
-    struct ShouldNormalizeNFC
+    struct NameNormalizationArgs
     {
-        bool value;
-    };
-    struct ShouldCaseFold
-    {
-        bool value;
-    };
-    struct SupportsLongName
-    {
-        bool value;
+        bool should_case_fold;
+        bool should_normalize_nfc;
+        bool supports_long_name;
+
+        bool operator==(const NameNormalizationArgs& other) const noexcept
+        {
+            return should_case_fold == other.should_case_fold
+                && should_normalize_nfc == other.should_normalize_nfc
+                && supports_long_name == other.supports_long_name;
+        }
     };
 
     fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
-    get_name_translator_component(ShouldNormalizeNFC nfc,
-                                  ShouldCaseFold case_fold,
-                                  SupportsLongName long_name);
+    get_name_translator_component(NameNormalizationArgs args);
 
     class FuseHighLevelOps : public ::securefs::FuseHighLevelOpsBase
     {
     public:
-        INJECT(FuseHighLevelOps(std::shared_ptr<::securefs::OSService> root,
+        INJECT(FuseHighLevelOps(::securefs::OSService& root,
                                 StreamOpener& opener,
                                 NameTranslator& name_trans))
             : root_(root), opener_(opener), name_trans_(name_trans)
@@ -279,7 +278,7 @@ namespace lite_format
         vremovexattr(const char* path, const char* name, const fuse_context* ctx) override;
 
     private:
-        std::shared_ptr<::securefs::OSService> root_;
+        ::securefs::OSService& root_;
         StreamOpener& opener_;
         NameTranslator& name_trans_;
     };
@@ -287,3 +286,12 @@ namespace lite_format
 }    // namespace lite_format
 
 }    // namespace securefs
+
+template <>
+struct std::hash<securefs::lite_format::NameNormalizationArgs>
+{
+    std::size_t operator()(const securefs::lite_format::NameNormalizationArgs& args) const noexcept
+    {
+        return args.should_case_fold + args.should_normalize_nfc + args.supports_long_name;
+    }
+};

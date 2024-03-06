@@ -265,13 +265,9 @@ fuse_operations FuseHighLevelOpsBase::build_ops(bool enable_xattr)
         auto op = (*static_cast<InitialDataType*>(args))();
         op->initialize(info);
         TRACE_LOG("Initalize with fuse op class %s", typeid(*op).name());
-        return op.release();
+        return op;
     };
-    opt.destroy = [](void* data)
-    {
-        TRACE_LOG("Destroy");
-        delete static_cast<FuseHighLevelOpsBase*>(data);
-    };
+    opt.destroy = [](void* data) { TRACE_LOG("Destroy"); };
     opt.statfs = &FuseHighLevelOpsBase::static_statfs;
     opt.getattr = &FuseHighLevelOpsBase::static_getattr;
     opt.fgetattr = &FuseHighLevelOpsBase::static_fgetattr;
