@@ -1,18 +1,14 @@
 #include "operations.h"
-#include "apple_xattr_workaround.h"
+#include "apple_xattr_workaround.h"    // IWYU pragma: keep
 #include "constants.h"
 #include "crypto.h"
 #include "fuse_tracer.h"
 #include "platform.h"
 
 #include <algorithm>
-#include <chrono>
-#include <mutex>
 #include <stdio.h>
 #include <string.h>
 #include <string>
-#include <typeinfo>
-#include <utility>
 
 #include <absl/container/inlined_vector.h>
 #include <absl/strings/str_split.h>

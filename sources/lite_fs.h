@@ -4,7 +4,6 @@
 #include "crypto.h"
 #include "lite_stream.h"
 #include "lock_guard.h"
-#include "mystring.h"
 #include "myutils.h"
 #include "object.h"
 #include "platform.h"
@@ -16,10 +15,8 @@
 #include <cryptopp/gcm.h>
 #include <cryptopp/secblock.h>
 
-#include <map>
 #include <memory>
 #include <string>
-#include <vector>
 
 namespace securefs
 {

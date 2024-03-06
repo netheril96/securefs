@@ -1,11 +1,8 @@
 #pragma once
 #include "logger.h"
-#include "platform.h"
 
 #include <cstdio>
-#include <type_traits>
 #include <typeindex>
-#include <typeinfo>
 
 namespace securefs
 {

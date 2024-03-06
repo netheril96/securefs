@@ -1,7 +1,6 @@
 #pragma once
 
 #include "file_table.h"
-#include "logger.h"
 #include "myutils.h"
 
 #include <fuse.h>

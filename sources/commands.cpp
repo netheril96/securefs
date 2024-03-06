@@ -1,13 +1,15 @@
 #include "commands.h"
+#include "crypto.h"
 #include "exceptions.h"
 #include "git-version.h"
 #include "lite_format.h"
 #include "lite_operations.h"
 #include "lock_enabled.h"
+#include "logger.h"
 #include "myutils.h"
 #include "operations.h"
 #include "platform.h"
-#include "win_get_proc.h"
+#include "win_get_proc.h"    // IWYU pragma: keep
 
 #include <absl/strings/match.h>
 #include <absl/strings/str_format.h>

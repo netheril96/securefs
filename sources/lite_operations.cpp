@@ -1,8 +1,7 @@
 #include "lite_operations.h"
-#include "apple_xattr_workaround.h"
+#include "apple_xattr_workaround.h"    // IWYU pragma: keep
 #include "fuse_tracer.h"
 #include "lite_fs.h"
-#include "lite_stream.h"
 #include "lock_guard.h"
 #include "logger.h"
 #include "myutils.h"

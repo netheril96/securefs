@@ -6,4 +6,5 @@ Checks: >
         -bugprone-implicit-widening-of-multiplication-result,
         -bugprone-narrowing-conversions,
         -modernize-deprecated-headers,
-        -bugprone-easily-swappable-parameters
+        -bugprone-easily-swappable-parameters,
+        -bugprone-switch-missing-default-case
