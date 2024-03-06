@@ -71,28 +71,27 @@ namespace
     {
     public:
         INJECT(NoOpNameTranslator()) {}
-        virtual std::string encrypt_full_path(absl::string_view path,
-                                              std::string* out_encrypted_last_component) override
+        std::string encrypt_full_path(absl::string_view path,
+                                      std::string* out_encrypted_last_component) override
         {
             return {path.data(), path.size()};
         }
 
-        virtual std::string decrypt_path_component(absl::string_view path) override
+        std::string decrypt_path_component(absl::string_view path) override
         {
             return {path.data(), path.size()};
         }
 
-        virtual std::string encrypt_path_for_symlink(absl::string_view path) override
+        std::string encrypt_path_for_symlink(absl::string_view path) override
         {
             return {path.data(), path.size()};
         }
-        virtual std::string decrypt_path_from_symlink(absl::string_view path) override
+        std::string decrypt_path_from_symlink(absl::string_view path) override
         {
             return {path.data(), path.size()};
         }
 
-        virtual unsigned
-        max_virtual_path_component_size(unsigned physical_path_component_size) override
+        unsigned max_virtual_path_component_size(unsigned physical_path_component_size) override
         {
             return physical_path_component_size;
         }

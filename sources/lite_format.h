@@ -76,14 +76,14 @@ private:
 public:
     void lock() ABSL_EXCLUSIVE_LOCK_FUNCTION() { m_lock.lock(); }
     void unlock() noexcept ABSL_UNLOCK_FUNCTION() { m_lock.unlock(); }
-    Directory* as_dir() noexcept { return this; }
+    Directory* as_dir() noexcept override { return this; }
 
     // Obtains the (virtual) path of the directory.
     virtual absl::string_view path() const = 0;
 
     // Redeclare the methods in `DirectoryTraverser` to add thread safe annotations.
-    virtual bool next(std::string* name, fuse_stat* st) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) = 0;
-    virtual void rewind() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) = 0;
+    bool next(std::string* name, fuse_stat* st) override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) = 0;
+    void rewind() override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) = 0;
 };
 
 class ABSL_LOCKABLE File final : public Base
@@ -202,77 +202,72 @@ public:
     {
     }
 
-    virtual void initialize(fuse_conn_info* info) override;
-    virtual int vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx) override;
-    virtual int vgetattr(const char* path, fuse_stat* st, const fuse_context* ctx) override;
-    virtual int vfgetattr(const char* path,
-                          fuse_stat* st,
-                          fuse_file_info* info,
-                          const fuse_context* ctx) override;
-    virtual int vopendir(const char* path, fuse_file_info* info, const fuse_context* ctx) override;
-    virtual int
-    vreleasedir(const char* path, fuse_file_info* info, const fuse_context* ctx) override;
-    virtual int vreaddir(const char* path,
-                         void* buf,
-                         fuse_fill_dir_t filler,
-                         fuse_off_t off,
-                         fuse_file_info* info,
-                         const fuse_context* ctx) override;
-    virtual int vcreate(const char* path,
-                        fuse_mode_t mode,
-                        fuse_file_info* info,
-                        const fuse_context* ctx) override;
-    virtual int vopen(const char* path, fuse_file_info* info, const fuse_context* ctx) override;
-    virtual int vrelease(const char* path, fuse_file_info* info, const fuse_context* ctx) override;
-    virtual int vread(const char* path,
-                      char* buf,
-                      size_t size,
-                      fuse_off_t offset,
-                      fuse_file_info* info,
-                      const fuse_context* ctx) override;
-    virtual int vwrite(const char* path,
-                       const char* buf,
-                       size_t size,
-                       fuse_off_t offset,
-                       fuse_file_info* info,
-                       const fuse_context* ctx) override;
-    virtual int vflush(const char* path, fuse_file_info* info, const fuse_context* ctx) override;
-    virtual int vftruncate(const char* path,
-                           fuse_off_t len,
-                           fuse_file_info* info,
-                           const fuse_context* ctx) override;
-    virtual int vunlink(const char* path, const fuse_context* ctx) override;
-    virtual int vmkdir(const char* path, fuse_mode_t mode, const fuse_context* ctx) override;
-    virtual int vrmdir(const char* path, const fuse_context* ctx) override;
-    virtual int vchmod(const char* path, fuse_mode_t mode, const fuse_context* ctx) override;
-    virtual int
-    vchown(const char* path, fuse_uid_t uid, fuse_gid_t gid, const fuse_context* ctx) override;
-    virtual int vsymlink(const char* to, const char* from, const fuse_context* ctx) override;
-    virtual int vlink(const char* src, const char* dest, const fuse_context* ctx) override;
-    virtual int
-    vreadlink(const char* path, char* buf, size_t size, const fuse_context* ctx) override;
-    virtual int vrename(const char* from, const char* to, const fuse_context* ctx) override;
-    virtual int
+    void initialize(fuse_conn_info* info) override;
+    int vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx) override;
+    int vgetattr(const char* path, fuse_stat* st, const fuse_context* ctx) override;
+    int vfgetattr(const char* path,
+                  fuse_stat* st,
+                  fuse_file_info* info,
+                  const fuse_context* ctx) override;
+    int vopendir(const char* path, fuse_file_info* info, const fuse_context* ctx) override;
+    int vreleasedir(const char* path, fuse_file_info* info, const fuse_context* ctx) override;
+    int vreaddir(const char* path,
+                 void* buf,
+                 fuse_fill_dir_t filler,
+                 fuse_off_t off,
+                 fuse_file_info* info,
+                 const fuse_context* ctx) override;
+    int vcreate(const char* path,
+                fuse_mode_t mode,
+                fuse_file_info* info,
+                const fuse_context* ctx) override;
+    int vopen(const char* path, fuse_file_info* info, const fuse_context* ctx) override;
+    int vrelease(const char* path, fuse_file_info* info, const fuse_context* ctx) override;
+    int vread(const char* path,
+              char* buf,
+              size_t size,
+              fuse_off_t offset,
+              fuse_file_info* info,
+              const fuse_context* ctx) override;
+    int vwrite(const char* path,
+               const char* buf,
+               size_t size,
+               fuse_off_t offset,
+               fuse_file_info* info,
+               const fuse_context* ctx) override;
+    int vflush(const char* path, fuse_file_info* info, const fuse_context* ctx) override;
+    int vftruncate(const char* path,
+                   fuse_off_t len,
+                   fuse_file_info* info,
+                   const fuse_context* ctx) override;
+    int vunlink(const char* path, const fuse_context* ctx) override;
+    int vmkdir(const char* path, fuse_mode_t mode, const fuse_context* ctx) override;
+    int vrmdir(const char* path, const fuse_context* ctx) override;
+    int vchmod(const char* path, fuse_mode_t mode, const fuse_context* ctx) override;
+    int vchown(const char* path, fuse_uid_t uid, fuse_gid_t gid, const fuse_context* ctx) override;
+    int vsymlink(const char* to, const char* from, const fuse_context* ctx) override;
+    int vlink(const char* src, const char* dest, const fuse_context* ctx) override;
+    int vreadlink(const char* path, char* buf, size_t size, const fuse_context* ctx) override;
+    int vrename(const char* from, const char* to, const fuse_context* ctx) override;
+    int
     vfsync(const char* path, int datasync, fuse_file_info* info, const fuse_context* ctx) override;
-    virtual int vtruncate(const char* path, fuse_off_t len, const fuse_context* ctx) override;
-    virtual int
-    vutimens(const char* path, const fuse_timespec* ts, const fuse_context* ctx) override;
-    virtual int
-    vlistxattr(const char* path, char* list, size_t size, const fuse_context* ctx) override;
-    virtual int vgetxattr(const char* path,
-                          const char* name,
-                          char* value,
-                          size_t size,
-                          uint32_t position,
-                          const fuse_context* ctx) override;
-    virtual int vsetxattr(const char* path,
-                          const char* name,
-                          const char* value,
-                          size_t size,
-                          int flags,
-                          uint32_t position,
-                          const fuse_context* ctx) override;
-    virtual int vremovexattr(const char* path, const char* name, const fuse_context* ctx) override;
+    int vtruncate(const char* path, fuse_off_t len, const fuse_context* ctx) override;
+    int vutimens(const char* path, const fuse_timespec* ts, const fuse_context* ctx) override;
+    int vlistxattr(const char* path, char* list, size_t size, const fuse_context* ctx) override;
+    int vgetxattr(const char* path,
+                  const char* name,
+                  char* value,
+                  size_t size,
+                  uint32_t position,
+                  const fuse_context* ctx) override;
+    int vsetxattr(const char* path,
+                  const char* name,
+                  const char* value,
+                  size_t size,
+                  int flags,
+                  uint32_t position,
+                  const fuse_context* ctx) override;
+    int vremovexattr(const char* path, const char* name, const fuse_context* ctx) override;
 
 private:
     ::securefs::OSService& root_;
