@@ -66,6 +66,38 @@ namespace lite_format
             key_type name_master_key_;
             ThreadLocal name_aes_siv_;
         };
+
+        class NoOpNameTranslator : public NameTranslator
+        {
+        public:
+            INJECT(NoOpNameTranslator()) {}
+            virtual std::string
+            encrypt_full_path(absl::string_view path,
+                              std::string* out_encrypted_last_component) override
+            {
+                return {path.data(), path.size()};
+            }
+
+            virtual std::string decrypt_path_component(absl::string_view path) override
+            {
+                return {path.data(), path.size()};
+            }
+
+            virtual std::string encrypt_path_for_symlink(absl::string_view path) override
+            {
+                return {path.data(), path.size()};
+            }
+            virtual std::string decrypt_path_from_symlink(absl::string_view path) override
+            {
+                return {path.data(), path.size()};
+            }
+
+            virtual unsigned
+            max_virtual_path_component_size(unsigned physical_path_component_size) override
+            {
+                return physical_path_component_size;
+            }
+        };
     }    // namespace
 
     void FuseHighLevelOps::initialize(fuse_conn_info* info)
@@ -232,6 +264,13 @@ namespace lite_format
     int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fuse_context* ctx)
     {
         return -ENOSYS;
+    }
+
+    fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
+    get_name_translator_component(NameNormalizationFlags args)
+    {
+        // TODO: replace them with real name translators.
+        return fruit::createComponent().bind<NameTranslator, NoOpNameTranslator>();
     }
 }    // namespace lite_format
 

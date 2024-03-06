@@ -1055,6 +1055,11 @@ private:
                                       "names. Use it at your own risk. No effect on full format.",
                                       false};
 
+    lite_format::NameNormalizationFlags name_norm_flags{};
+    FSConfig config{};
+    bool skip_dot_dot_value, skip_verification_value;
+    std::unique_ptr<OSService> os;
+
 private:
     std::vector<const char*> to_c_style_args(const std::vector<std::string>& args)
     {
@@ -1092,19 +1097,42 @@ private:
         return result;
     }
 
-    fruit::Component<FuseHighLevelOpsBase> get_fuse_high_ops_component(const FSConfig* fsconfig,
-                                                                       OSService* os)
+    fruit::Component<FuseHighLevelOpsBase> get_fuse_high_ops_component()
     {
-        lite_format::NameNormalizationArgs name_norm_args{};
+        lite_format::NameNormalizationFlags name_norm_flags{};
+        if (normalization.getValue() == "nfc")
+        {
+            name_norm_flags.should_normalize_nfc = true;
+        }
+        else if (normalization.getValue() == "casefold")
+        {
+            name_norm_flags.should_case_fold = true;
+        }
+        else if (normalization.getValue() == "casefold+nfc")
+        {
+            name_norm_flags.should_normalize_nfc = true;
+            name_norm_flags.should_case_fold = true;
+        }
+        else if (normalization.getValue() != "none")
+        {
+            throw_runtime_error("Invalid flag of --normalization: " + normalization.getValue());
+        }
+        name_norm_flags.supports_long_name = config.long_name_component;
+
+        if (!os)
+            os = std::make_unique<OSService>(data_dir.getValue());
+        skip_dot_dot_value = skip_dot_dot.getValue();
+        skip_verification_value = insecure.getValue();
+
         return fruit::createComponent()
             .bind<FuseHighLevelOpsBase, lite_format::FuseHighLevelOps>()
-            .install(lite_format::get_name_translator_component, name_norm_args)
-            .bindInstance<fruit::Annotated<tSkipVerification, bool>>(insecure.getValue())
-            .bindInstance<fruit::Annotated<tMaxPaddingSize, unsigned>>(fsconfig->max_padding)
-            .bindInstance<fruit::Annotated<tIvSize, unsigned>>(fsconfig->iv_size)
-            .bindInstance<fruit::Annotated<tBlockSize, unsigned>>(fsconfig->block_size)
+            .install(lite_format::get_name_translator_component, name_norm_flags)
+            .bindInstance<fruit::Annotated<tSkipVerification, bool>>(skip_verification_value)
+            .bindInstance<fruit::Annotated<tMaxPaddingSize, unsigned>>(config.max_padding)
+            .bindInstance<fruit::Annotated<tIvSize, unsigned>>(config.iv_size)
+            .bindInstance<fruit::Annotated<tBlockSize, unsigned>>(config.block_size)
             .bindInstance<fruit::Annotated<tMasterKey, CryptoPP::AlignedSecByteBlock>>(
-                fsconfig->master_key)
+                config.master_key)
             .registerProvider<fruit::Annotated<tNameMasterKey, key_type>(
                 fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
                 [](const CryptoPP::AlignedSecByteBlock& master_key)
@@ -1256,7 +1284,7 @@ public:
             }
             throw;
         }
-        auto config = read_config(
+        config = read_config(
             config_stream.get(), password.data(), password.size(), keyfile.getValue());
         config_stream.reset();
         CryptoPP::SecureWipeBuffer(password.data(), password.size());
@@ -1378,13 +1406,8 @@ public:
         {
             VERBOSE_LOG("Master key: %s", hexify(config.master_key));
         }
-        OSService root(data_dir.getValue());
         fruit::Injector<FuseHighLevelOpsBase> injector(
-            +[](MountCommand* cmd, const FSConfig* fsconfig, OSService* os)
-            { return cmd->get_fuse_high_ops_component(fsconfig, os); },
-            this,
-            &config,
-            &root);
+            +[](MountCommand* cmd) { return cmd->get_fuse_high_ops_component(); }, this);
 
         operations::MountOptions fsopt;
         fsopt.root = std::make_shared<OSService>(data_dir.getValue());

@@ -172,13 +172,13 @@ namespace lite_format
         static absl::string_view remove_last_component(absl::string_view path);
     };
 
-    struct NameNormalizationArgs
+    struct NameNormalizationFlags
     {
         bool should_case_fold;
         bool should_normalize_nfc;
         bool supports_long_name;
 
-        bool operator==(const NameNormalizationArgs& other) const noexcept
+        bool operator==(const NameNormalizationFlags& other) const noexcept
         {
             return should_case_fold == other.should_case_fold
                 && should_normalize_nfc == other.should_normalize_nfc
@@ -187,7 +187,7 @@ namespace lite_format
     };
 
     fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
-    get_name_translator_component(NameNormalizationArgs args);
+    get_name_translator_component(NameNormalizationFlags args);
 
     class FuseHighLevelOps : public ::securefs::FuseHighLevelOpsBase
     {
@@ -288,9 +288,9 @@ namespace lite_format
 }    // namespace securefs
 
 template <>
-struct std::hash<securefs::lite_format::NameNormalizationArgs>
+struct std::hash<securefs::lite_format::NameNormalizationFlags>
 {
-    std::size_t operator()(const securefs::lite_format::NameNormalizationArgs& args) const noexcept
+    std::size_t operator()(const securefs::lite_format::NameNormalizationFlags& args) const noexcept
     {
         return args.should_case_fold + args.should_normalize_nfc + args.supports_long_name;
     }
