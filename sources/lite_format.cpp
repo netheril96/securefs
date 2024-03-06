@@ -1,7 +1,9 @@
 #include "lite_format.h"
 #include "logger.h"
+#include "platform.h"
 #include <absl/strings/string_view.h>
 #include <cerrno>
+#include <memory>
 
 namespace securefs::lite_format
 {
@@ -96,6 +98,15 @@ namespace
             return physical_path_component_size;
         }
     };
+
+    class DirectoryImpl : public Directory
+    {
+    public:
+        INJECT(DirectoryImpl(std::string dir_abs_path,
+                             std::unique_ptr<DirectoryTraverser> underlying_traverser,
+                             StreamOpener& opener,
+                             NameTranslator& name_trans));
+    };
 }    // namespace
 
 void FuseHighLevelOps::initialize(fuse_conn_info* info)
@@ -103,6 +114,7 @@ void FuseHighLevelOps::initialize(fuse_conn_info* info)
     (void)info;
 #ifdef FSP_FUSE_CAP_READDIR_PLUS
     info->want |= (info->capable & FSP_FUSE_CAP_READDIR_PLUS);
+    read_dir_plus_ = true;
 #endif
 }
 

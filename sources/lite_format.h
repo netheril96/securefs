@@ -273,6 +273,7 @@ private:
     ::securefs::OSService& root_;
     StreamOpener& opener_;
     NameTranslator& name_trans_;
+    bool read_dir_plus_ = false;
 };
 
 }    // namespace securefs::lite_format
