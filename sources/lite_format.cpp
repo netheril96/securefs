@@ -1,6 +1,7 @@
 #include "lite_format.h"
 #include "exceptions.h"
 #include "lite_long_name_lookup_table.h"
+#include "lock_guard.h"
 #include "logger.h"
 #include "macro.h"
 #include "platform.h"
@@ -177,9 +178,13 @@ namespace lite_format
                         }
                         else
                         {
-                            decoded = name_trans_.decrypt_path_component(lazy_get_table().transact(
-                                [&](LongNameLookupTable& table) -> std::string
-                                { return table.lookup(under_name); }));
+                            auto&& table = lazy_get_table();
+                            std::string encrypted_name;
+                            {
+                                LockGuard<LongNameLookupTable> lg(table);
+                                encrypted_name = table.lookup(under_name);
+                            }
+                            decoded = name_trans_.decrypt_path_component(encrypted_name);
                             decoded.value().swap(*name);
                         }
                     }

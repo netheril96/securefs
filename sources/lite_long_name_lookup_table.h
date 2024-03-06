@@ -1,6 +1,5 @@
 #pragma once
 #include "crypto.h"
-#include "lock_guard.h"
 #include "platform.h"
 #include "sqlite_helper.h"
 
@@ -22,13 +21,6 @@ public:
     void insert_or_update(absl::string_view encrypted_hash, absl::string_view encrypted_long_name)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
     void delete_once(absl::string_view encrypted_hash) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
-
-    template <typename Callback>
-    auto transact(Callback&& callback) -> decltype(callback(*this))
-    {
-        LockGuard<LongNameLookupTable> lg(*this);
-        return callback(*this);
-    }
 
     void lock() ABSL_EXCLUSIVE_LOCK_FUNCTION(*this) ABSL_NO_THREAD_SAFETY_ANALYSIS
     {
