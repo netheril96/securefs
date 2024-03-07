@@ -9,7 +9,6 @@
         "doctest",
         "jsoncpp",
         "sqlite3",
-        "fruit",
-        "bext-di"
+        "fruit"
     ]
 }

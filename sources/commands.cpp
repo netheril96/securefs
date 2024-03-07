@@ -1,8 +1,6 @@
 #include "commands.h"
 #include "crypto.h"
-#include "di.h"    // IWYU pragma: keep
 #include "exceptions.h"
-#include "fuse_high_level_ops_base.h"
 #include "git-version.h"
 #include "lite_format.h"
 #include "lite_operations.h"
@@ -11,14 +9,12 @@
 #include "myutils.h"
 #include "operations.h"
 #include "platform.h"
-#include "tags.h"
 #include "win_get_proc.h"    // IWYU pragma: keep
 
 #include <absl/strings/match.h>
 #include <absl/strings/str_format.h>
 #include <absl/types/optional.h>
 #include <argon2.h>
-#include <boost/di.hpp>
 #include <cryptopp/cpu.h>
 #include <cryptopp/hmac.h>
 #include <cryptopp/osrng.h>
@@ -1101,88 +1097,88 @@ private:
         return result;
     }
 
-    // fruit::Component<FuseHighLevelOpsBase> get_fuse_high_ops_component()
-    // {
-    //     if (normalization.getValue() == "nfc")
-    //     {
-    //         name_norm_flags.should_normalize_nfc = true;
-    //     }
-    //     else if (normalization.getValue() == "casefold")
-    //     {
-    //         name_norm_flags.should_case_fold = true;
-    //     }
-    //     else if (normalization.getValue() == "casefold+nfc")
-    //     {
-    //         name_norm_flags.should_normalize_nfc = true;
-    //         name_norm_flags.should_case_fold = true;
-    //     }
-    //     else if (normalization.getValue() != "none")
-    //     {
-    //         throw_runtime_error("Invalid flag of --normalization: " + normalization.getValue());
-    //     }
-    //     name_norm_flags.supports_long_name = config.long_name_component;
+    fruit::Component<FuseHighLevelOpsBase> get_fuse_high_ops_component()
+    {
+        if (normalization.getValue() == "nfc")
+        {
+            name_norm_flags.should_normalize_nfc = true;
+        }
+        else if (normalization.getValue() == "casefold")
+        {
+            name_norm_flags.should_case_fold = true;
+        }
+        else if (normalization.getValue() == "casefold+nfc")
+        {
+            name_norm_flags.should_normalize_nfc = true;
+            name_norm_flags.should_case_fold = true;
+        }
+        else if (normalization.getValue() != "none")
+        {
+            throw_runtime_error("Invalid flag of --normalization: " + normalization.getValue());
+        }
+        name_norm_flags.supports_long_name = config.long_name_component;
 
-    //     if (!os)
-    //         os = std::make_unique<OSService>(data_dir.getValue());
-    //     skip_dot_dot_value = skip_dot_dot.getValue();
-    //     skip_verification_value = insecure.getValue();
+        if (!os)
+            os = std::make_unique<OSService>(data_dir.getValue());
+        skip_dot_dot_value = skip_dot_dot.getValue();
+        skip_verification_value = insecure.getValue();
 
-    //     return fruit::createComponent()
-    //         .bind<FuseHighLevelOpsBase, lite_format::FuseHighLevelOps>()
-    //         .install(lite_format::get_name_translator_component, name_norm_flags)
-    //         .bindInstance<fruit::Annotated<tSkipVerification, bool>>(skip_verification_value)
-    //         .bindInstance<fruit::Annotated<tMaxPaddingSize, unsigned>>(config.max_padding)
-    //         .bindInstance<fruit::Annotated<tIvSize, unsigned>>(config.iv_size)
-    //         .bindInstance<fruit::Annotated<tBlockSize, unsigned>>(config.block_size)
-    //         .bindInstance<fruit::Annotated<tMasterKey, CryptoPP::AlignedSecByteBlock>>(
-    //             config.master_key)
-    //         .registerProvider<fruit::Annotated<tNameMasterKey, key_type>(
-    //             fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
-    //             [](const CryptoPP::AlignedSecByteBlock& master_key)
-    //             {
-    //                 if (master_key.size() < key_type::size())
-    //                 {
-    //                     throw_runtime_error("Master key too short");
-    //                 }
-    //                 return key_type(master_key.data(), key_type::size());
-    //             })
-    //         .registerProvider<fruit::Annotated<tContentMasterKey, key_type>(
-    //             fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
-    //             [](const CryptoPP::AlignedSecByteBlock& master_key)
-    //             {
-    //                 if (master_key.size() < key_type::size() * 2)
-    //                 {
-    //                     throw_runtime_error("Master key too short");
-    //                 }
-    //                 return key_type(master_key.data() + key_type::size(), key_type::size());
-    //             })
-    //         .registerProvider<fruit::Annotated<tXattrMasterKey, key_type>(
-    //             fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
-    //             [](const CryptoPP::AlignedSecByteBlock& master_key)
-    //             {
-    //                 if (master_key.size() < 3 * key_type::size())
-    //                 {
-    //                     throw_runtime_error("Master key too short");
-    //                 }
-    //                 return key_type(master_key.data() + 2 * key_type::size(), key_type::size());
-    //             })
-    //         .registerProvider<fruit::Annotated<tPaddingMasterKey, key_type>(
-    //             fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>,
-    //             fruit::Annotated<tMaxPaddingSize, const unsigned&>)>(
-    //             [](const CryptoPP::AlignedSecByteBlock& master_key, const unsigned& max_padding)
-    //             {
-    //                 if (max_padding <= 0)
-    //                 {
-    //                     return key_type{};
-    //                 }
-    //                 if (master_key.size() < 4 * key_type::size())
-    //                 {
-    //                     throw_runtime_error("Master key too short");
-    //                 }
-    //                 return key_type(master_key.data() + 3 * key_type::size(), key_type::size());
-    //             })
-    //         .bindInstance(*os);
-    // }
+        return fruit::createComponent()
+            .bind<FuseHighLevelOpsBase, lite_format::FuseHighLevelOps>()
+            .install(lite_format::get_name_translator_component, name_norm_flags)
+            .bindInstance<fruit::Annotated<tSkipVerification, bool>>(skip_verification_value)
+            .bindInstance<fruit::Annotated<tMaxPaddingSize, unsigned>>(config.max_padding)
+            .bindInstance<fruit::Annotated<tIvSize, unsigned>>(config.iv_size)
+            .bindInstance<fruit::Annotated<tBlockSize, unsigned>>(config.block_size)
+            .bindInstance<fruit::Annotated<tMasterKey, CryptoPP::AlignedSecByteBlock>>(
+                config.master_key)
+            .registerProvider<fruit::Annotated<tNameMasterKey, key_type>(
+                fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
+                [](const CryptoPP::AlignedSecByteBlock& master_key)
+                {
+                    if (master_key.size() < key_type::size())
+                    {
+                        throw_runtime_error("Master key too short");
+                    }
+                    return key_type(master_key.data(), key_type::size());
+                })
+            .registerProvider<fruit::Annotated<tContentMasterKey, key_type>(
+                fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
+                [](const CryptoPP::AlignedSecByteBlock& master_key)
+                {
+                    if (master_key.size() < key_type::size() * 2)
+                    {
+                        throw_runtime_error("Master key too short");
+                    }
+                    return key_type(master_key.data() + key_type::size(), key_type::size());
+                })
+            .registerProvider<fruit::Annotated<tXattrMasterKey, key_type>(
+                fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
+                [](const CryptoPP::AlignedSecByteBlock& master_key)
+                {
+                    if (master_key.size() < 3 * key_type::size())
+                    {
+                        throw_runtime_error("Master key too short");
+                    }
+                    return key_type(master_key.data() + 2 * key_type::size(), key_type::size());
+                })
+            .registerProvider<fruit::Annotated<tPaddingMasterKey, key_type>(
+                fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>,
+                fruit::Annotated<tMaxPaddingSize, const unsigned&>)>(
+                [](const CryptoPP::AlignedSecByteBlock& master_key, const unsigned& max_padding)
+                {
+                    if (max_padding <= 0)
+                    {
+                        return key_type{};
+                    }
+                    if (master_key.size() < 4 * key_type::size())
+                    {
+                        throw_runtime_error("Master key too short");
+                    }
+                    return key_type(master_key.data() + 3 * key_type::size(), key_type::size());
+                })
+            .bindInstance(*os);
+    }
 
 public:
     std::unique_ptr<TCLAP::CmdLine> cmdline() override
@@ -1409,22 +1405,8 @@ public:
         {
             VERBOSE_LOG("Master key: %s", hexify(config.master_key));
         }
-        // fruit::Injector<FuseHighLevelOpsBase> injector(
-        //     +[](MountCommand* cmd) { return cmd->get_fuse_high_ops_component(); }, this);
-
-        auto injector = di::make_injector(
-            di::bind<unsigned>.named(tBlockSize{}).to(config.block_size),
-            di::bind<FuseHighLevelOpsBase>().to<lite_format::FuseHighLevelOps>(),
-            di::bind<std::string>().to(data_dir.getValue()),
-            di::bind<unsigned>().named(tIvSize{}).to(config.iv_size),
-            di::bind<unsigned>().named(tMaxPaddingSize{}).to(config.max_padding),
-            di::bind<key_type>().named(tContentMasterKey{}).to(key_type{}),
-            di::bind<key_type>().named(tPaddingMasterKey{}).to(key_type{}),
-            di::bind<bool>().named(tSkipVerification{}).to(insecure.getValue()),
-            lite_format::get_name_translator_module({})
-
-        );
-        injector.create<std::unique_ptr<FuseHighLevelOpsBase>>();
+        fruit::Injector<FuseHighLevelOpsBase> injector(
+            +[](MountCommand* cmd) { return cmd->get_fuse_high_ops_component(); }, this);
 
         operations::MountOptions fsopt;
         fsopt.root = std::make_shared<OSService>(data_dir.getValue());

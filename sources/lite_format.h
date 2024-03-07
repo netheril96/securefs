@@ -1,6 +1,5 @@
 #pragma once
 
-#include "di.h"    // IWYU pragma: keep
 #include "fuse_high_level_ops_base.h"
 #include "lite_stream.h"
 #include "lock_guard.h"
@@ -10,12 +9,9 @@
 #include "thread_local.h"
 
 #include <absl/types/optional.h>
-#include <boost/di.hpp>
 #include <cryptopp/aes.h>
 #include <cstddef>
 #include <fruit/fruit.h>
-#include <memory>
-#include <utility>
 
 namespace securefs
 {
@@ -24,13 +20,12 @@ namespace lite_format
     class StreamOpener : public lite::AESGCMCryptStream::ParamCalculator
     {
     public:
-        BOOST_DI_INJECT(StreamOpener,
-                        (named = tContentMasterKey{}) key_type content_master_key,
-                        (named = tPaddingMasterKey{}) key_type padding_master_key,
-                        (named = tBlockSize{}) unsigned block_size,
-                        (named = tIvSize{}) unsigned iv_size,
-                        (named = tMaxPaddingSize{}) unsigned max_padding_size,
-                        (named = tSkipVerification{}) bool skip_verfication)
+        INJECT(StreamOpener(ANNOTATED(tContentMasterKey, const key_type&) content_master_key,
+                            ANNOTATED(tPaddingMasterKey, const key_type&) padding_master_key,
+                            ANNOTATED(tBlockSize, unsigned) block_size,
+                            ANNOTATED(tIvSize, unsigned) iv_size,
+                            ANNOTATED(tMaxPaddingSize, unsigned) max_padding_size,
+                            ANNOTATED(tSkipVerification, bool) skip_verfication))
             : content_master_key_(content_master_key)
             , padding_master_key_(padding_master_key)
             , block_size_(block_size)
@@ -205,17 +200,16 @@ namespace lite_format
         }
     };
 
-    di::injector<std::shared_ptr<NameTranslator>>
-    get_name_translator_module(const NameNormalizationFlags& flags);
+    fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
+    get_name_translator_component(NameNormalizationFlags args);
 
     class FuseHighLevelOps : public ::securefs::FuseHighLevelOpsBase
     {
     public:
-        BOOST_DI_INJECT(FuseHighLevelOps,
-                        std::shared_ptr<::securefs::OSService> root,
-                        std::shared_ptr<StreamOpener> opener,
-                        std::shared_ptr<NameTranslator> name_trans)
-            : root_(std::move(root)), opener_(std::move(opener)), name_trans_(std::move(name_trans))
+        INJECT(FuseHighLevelOps(::securefs::OSService& root,
+                                StreamOpener& opener,
+                                NameTranslator& name_trans))
+            : root_(root), opener_(opener), name_trans_(name_trans)
         {
         }
 
@@ -290,9 +284,9 @@ namespace lite_format
         int vremovexattr(const char* path, const char* name, const fuse_context* ctx) override;
 
     private:
-        std::shared_ptr<::securefs::OSService> root_;
-        std::shared_ptr<StreamOpener> opener_;
-        std::shared_ptr<NameTranslator> name_trans_;
+        ::securefs::OSService& root_;
+        StreamOpener& opener_;
+        NameTranslator& name_trans_;
         bool read_dir_plus_ = false;
     };
 }    // namespace lite_format

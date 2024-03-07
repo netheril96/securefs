@@ -112,10 +112,7 @@ else()
     find_library(CRYPTOPP_FLAGS NAMES cryptopp crypto++)
     target_link_libraries(securefs-static PUBLIC ${CRYPTOPP_FLAGS})
 endif()
-find_path(BEXT_DI_INCLUDE_DIRS "boost/di.hpp")
-target_include_directories(securefs-static PUBLIC ${BEXT_DI_INCLUDE_DIRS})
-target_compile_definitions(securefs-static
-                           PUBLIC BOOST_DI_CFG_DIAGNOSTICS_LEVEL=2)
+
 find_path(
     FRUIT_INCLUDE_DIR fruit.h
     HINTS (/usr /usr/local)
