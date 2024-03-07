@@ -386,13 +386,7 @@ namespace lite_format
 
         while (dir->next(&name, &st))
         {
-#ifdef WIN32
-            int rc = filler(buf, name.c_str(), read_dir_plus_ ? &st : nullptr, 0);
-#else
-            // On Unix platforms, only st_ino and st_mode is used, therefore we are OK to send the
-            // stat here even if padding is enabled.
             int rc = filler(buf, name.c_str(), &st, 0);
-#endif
             if (rc != 0)
             {
                 return -std::abs(rc);
