@@ -1,11 +1,10 @@
 #pragma once
 #include "platform.h"
 
+#include <absl/functional/function_ref.h>
 #include <absl/strings/str_format.h>
 
 #include <memory>
-#include <stdarg.h>
-#include <stddef.h>
 #include <stdio.h>
 #include <string>
 
@@ -56,20 +55,14 @@ private:
     void prelog(LoggingLevel level, const char* funcsig, int lineno) noexcept;
     void postlog(LoggingLevel level) noexcept;
 
+    void log_v2(LoggingLevel level,
+                const char* funcsig,
+                int lineno,
+                absl::FunctionRef<void(std::FILE*)> output_fun);
+
 public:
     static Logger* create_stderr_logger();
     static Logger* create_file_logger(const std::string& path);
-
-    void vlog(LoggingLevel level,
-              const char* funcsig,
-              int lineno,
-              const char* format,
-              va_list args) noexcept;
-    void log(LoggingLevel level, const char* funcsig, int lineno, const char* format, ...) noexcept
-#ifndef _MSC_VER
-        __attribute__((format(printf, 5, 6)))
-#endif
-        ;
 
     template <typename... Args>
     void log_v2(LoggingLevel level,
@@ -78,18 +71,10 @@ public:
                 const absl::FormatSpec<Args...>& fms,
                 Args&&... args) noexcept
     {
-        if (!m_fp || level < this->get_level())
-            return;
-        prelog(level, funcsig, lineno);
-        DEFER(postlog(level));
-        try
-        {
-            absl::FPrintF(m_fp, fms, std::forward<Args>(args)...);
-        }
-        catch (const std::exception& e)
-        {
-            absl::FPrintF(m_fp, "Logging itself throws exception: %s", e.what());
-        }
+        log_v2(level,
+               funcsig,
+               lineno,
+               [&](std::FILE* fp) { absl::FPrintF(fp, fms, std::forward<Args>(args)...); });
     }
 
     LoggingLevel get_level() const noexcept { return m_level; }

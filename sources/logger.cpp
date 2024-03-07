@@ -2,7 +2,6 @@
 #include "myutils.h"
 #include "platform.h"
 
-#include <stdarg.h>
 #include <stdio.h>
 
 #ifdef WIN32
@@ -23,29 +22,6 @@ static const void* current_thread_id(void) { return (void*)(pthread_self()); }
 
 namespace securefs
 {
-void Logger::vlog(
-    LoggingLevel level, const char* funcsig, int lineno, const char* format, va_list args) noexcept
-{
-    if (!m_fp || level < this->get_level())
-        return;
-    prelog(level, funcsig, lineno);
-    DEFER(postlog(level));
-
-    vfprintf(m_fp, format, args);
-}
-
-void Logger::log(
-    LoggingLevel level, const char* funcsig, int lineno, const char* format, ...) noexcept
-{
-    if (!m_fp || level < this->get_level())
-        return;
-    va_list args;
-    va_start(args, format);
-    DEFER(va_end(args));
-
-    vlog(level, funcsig, lineno, format, args);
-}
-
 Logger::Logger(FILE* fp, bool close_on_exit)
     : m_level(kLogInfo), m_fp(fp), m_close_on_exit(close_on_exit)
 {
@@ -102,6 +78,25 @@ void Logger::postlog(LoggingLevel level) noexcept
     putc('\n', m_fp);
     fflush(m_fp);
     funlockfile(m_fp);
+}
+
+void Logger::log_v2(LoggingLevel level,
+                    const char* funcsig,
+                    int lineno,
+                    absl::FunctionRef<void(std::FILE*)> output_fun)
+{
+    if (!m_fp || level < this->get_level())
+        return;
+    prelog(level, funcsig, lineno);
+    DEFER(postlog(level));
+    try
+    {
+        output_fun(m_fp);
+    }
+    catch (const std::exception& e)
+    {
+        absl::FPrintF(m_fp, "Logging itself throws exception: %s", e.what());
+    }
 }
 
 Logger::~Logger()
