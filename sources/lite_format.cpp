@@ -9,6 +9,7 @@
 #include <absl/base/thread_annotations.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/string_view.h>
+#include <absl/types/variant.h>
 #include <absl/utility/utility.h>
 #include <cstdlib>
 #include <fcntl.h>
@@ -97,9 +98,10 @@ namespace lite_format
                 return {path.data(), path.size()};
             }
 
-            absl::optional<std::string> decrypt_path_component(absl::string_view path) override
+            absl::variant<InvalidNameTag, LongNameTag, std::string>
+            decrypt_path_component(absl::string_view path) override
             {
-                return absl::optional<std::string>{absl::in_place, path.data(), path.size()};
+                return std::string{path.data(), path.size()};
             }
 
             std::string encrypt_path_for_symlink(absl::string_view path) override
@@ -176,21 +178,26 @@ namespace lite_format
                     try
                     {
                         auto decoded = name_trans_.decrypt_path_component(under_name);
-                        if (decoded.has_value())
+                        auto decoded_string = absl::get_if<std::string>(&decoded);
+                        if (decoded_string)
                         {
-                            decoded->swap(*name);
+                            decoded_string->swap(*name);
+                            continue;
                         }
-                        else
+                        if (absl::get_if<InvalidNameTag>(&decoded))
                         {
-                            auto&& table = lazy_get_table();
-                            std::string encrypted_name;
-                            {
-                                LockGuard<LongNameLookupTable> lg(table);
-                                encrypted_name = table.lookup(under_name);
-                            }
-                            decoded = name_trans_.decrypt_path_component(encrypted_name);
-                            decoded.value().swap(*name);
+                            continue;
                         }
+                        absl::get<LongNameTag>(decoded);    // Assert that this is a long name
+                                                            // component in need of lookup.
+                        auto&& table = lazy_get_table();
+                        std::string encrypted_name;
+                        {
+                            LockGuard<LongNameLookupTable> lg(table);
+                            encrypted_name = table.lookup(under_name);
+                        }
+                        decoded = name_trans_.decrypt_path_component(encrypted_name);
+                        absl::get<std::string>(decoded).swap(*name);
                     }
                     catch (const std::exception& e)
                     {

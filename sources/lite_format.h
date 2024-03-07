@@ -10,6 +10,7 @@
 
 #include <absl/strings/string_view.h>
 #include <absl/types/optional.h>
+#include <absl/types/variant.h>
 #include <cryptopp/aes.h>
 #include <cstddef>
 #include <fruit/fruit.h>
@@ -164,6 +165,13 @@ namespace lite_format
         File* as_file() noexcept override { return this; }
     };
 
+    struct InvalidNameTag
+    {
+    };
+    struct LongNameTag
+    {
+    };
+
     struct NameTranslator : public Object
     {
         virtual bool is_no_op() const noexcept { return false; }
@@ -177,8 +185,8 @@ namespace lite_format
             = 0;
 
         /// @brief Decrypt a component of an encrypted path.
-        /// If a long component, then the result is empty.
-        virtual absl::optional<std::string> decrypt_path_component(absl::string_view path) = 0;
+        virtual absl::variant<InvalidNameTag, LongNameTag, std::string>
+        decrypt_path_component(absl::string_view path) = 0;
 
         virtual std::string encrypt_path_for_symlink(absl::string_view path) = 0;
         virtual std::string decrypt_path_from_symlink(absl::string_view path) = 0;
