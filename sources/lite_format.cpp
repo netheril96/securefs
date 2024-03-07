@@ -84,10 +84,10 @@ namespace lite_format
         //     ThreadLocal name_aes_siv_;
         // };
 
-        class NoOpNameTranslator : public NameTranslator
+        class NoOpNameTranslator : public NameTranslator, public Injectable
         {
         public:
-            INJECT(NoOpNameTranslator()) {}
+            BOOST_DI_INJECT(NoOpNameTranslator) {}
             bool is_no_op() const noexcept override { return true; }
             std::string encrypt_full_path(absl::string_view path,
                                           std::string* out_encrypted_last_component) override
@@ -253,11 +253,17 @@ namespace lite_format
         }
     }    // namespace
 
+    di::injector<std::shared_ptr<NameTranslator>>
+    get_name_translator_module(const NameNormalizationFlags& flags)
+    {
+        return di::make_injector(
+            di::bind<NameTranslator>().to<NoOpNameTranslator>().in(di::scopes::singleton{}));
+    }
     void FuseHighLevelOps::initialize(fuse_conn_info* info)
     {
         (void)info;
 #ifdef FSP_FUSE_CAP_READDIR_PLUS
-        if (opener_.can_compute_virtual_size() && (info->capable & FSP_FUSE_CAP_READDIR_PLUS))
+        if (opener_->can_compute_virtual_size() && (info->capable & FSP_FUSE_CAP_READDIR_PLUS))
         {
             info->want |= FSP_FUSE_CAP_READDIR_PLUS;
             read_dir_plus_ = true;
@@ -267,14 +273,14 @@ namespace lite_format
 
     int FuseHighLevelOps::vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx)
     {
-        root_.statfs(buf);
-        buf->f_namemax = name_trans_.max_virtual_path_component_size(buf->f_namemax);
+        root_->statfs(buf);
+        buf->f_namemax = name_trans_->max_virtual_path_component_size(buf->f_namemax);
         return 0;
     }
     int FuseHighLevelOps::vgetattr(const char* path, fuse_stat* buf, const fuse_context* ctx)
     {
-        auto enc_path = name_trans_.encrypt_full_path(path, nullptr);
-        if (!root_.stat(enc_path, buf))
+        auto enc_path = name_trans_->encrypt_full_path(path, nullptr);
+        if (!root_->stat(enc_path, buf))
             return -ENOENT;
         if (buf->st_size <= 0)
             return 0;
@@ -288,15 +294,15 @@ namespace lite_format
             // 'buf->st_size' is the expected link size, but on NTFS volumes the link starts with
             // 'IntxLNK\1' followed by the UTF-16 encoded target.
             std::string buffer(buf->st_size, '\0');
-            ssize_t link_size = root_.readlink(enc_path, &buffer[0], buffer.size());
+            ssize_t link_size = root_->readlink(enc_path, &buffer[0], buffer.size());
             if (link_size != buf->st_size && link_size != (buf->st_size - 8) / 2)
                 throwVFSException(EIO);
 
-            if (!name_trans_.is_no_op())
+            if (!name_trans_->is_no_op())
             {
                 // Resize to actual size
                 buffer.resize(static_cast<size_t>(link_size));
-                auto resolved = name_trans_.decrypt_path_from_symlink(buffer);
+                auto resolved = name_trans_->decrypt_path_from_symlink(buffer);
                 buf->st_size = resolved.size();
             }
             else
@@ -310,16 +316,16 @@ namespace lite_format
         case S_IFREG:
             if (buf->st_size > 0)
             {
-                if (opener_.can_compute_virtual_size())
+                if (opener_->can_compute_virtual_size())
                 {
-                    buf->st_size = opener_.compute_virtual_size(buf->st_size);
+                    buf->st_size = opener_->compute_virtual_size(buf->st_size);
                 }
                 else
                 {
                     try
                     {
                         auto virtual_file
-                            = opener_.open(root_.open_file_stream(enc_path, O_RDONLY, 0));
+                            = opener_->open(root_->open_file_stream(enc_path, O_RDONLY, 0));
                         buf->st_size = virtual_file->size();
                     }
                     catch (const std::exception& e)
@@ -488,13 +494,6 @@ namespace lite_format
     int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fuse_context* ctx)
     {
         return -ENOSYS;
-    }
-
-    fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
-    get_name_translator_component(NameNormalizationFlags args)
-    {
-        // TODO: replace them with real name translators.
-        return fruit::createComponent().bind<NameTranslator, NoOpNameTranslator>();
     }
 }    // namespace lite_format
 }    // namespace securefs
