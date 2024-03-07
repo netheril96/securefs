@@ -86,11 +86,11 @@ using fuse_fsblkcnt_t = fsblkcnt_t;
 using fuse_fsfilcnt_t = fsfilcnt_t;
 using fuse_blksize_t = blksize_t;
 using fuse_blkcnt_t = blkcnt_t;
-using fuse_utimbuf = utimbuf;
+using fuse_utimbuf = struct utimbuf;
 using fuse_timespec = struct timespec;
 using fuse_stat = struct stat;
 using fuse_statvfs = struct statvfs;
-using fuse_flock = flock;
+using fuse_flock = struct flock;
 
 #endif    // WIN32
 
