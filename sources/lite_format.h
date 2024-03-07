@@ -8,15 +8,18 @@
 #include "tags.h"
 #include "thread_local.h"
 
+#include <absl/strings/string_view.h>
 #include <absl/types/optional.h>
 #include <cryptopp/aes.h>
 #include <cstddef>
 #include <fruit/fruit.h>
+#include <memory>
 
 namespace securefs
 {
 namespace lite_format
 {
+    constexpr absl::string_view LONG_NAME_DATABASE_FILE_NAME = ".long_names.db";
     class StreamOpener : public lite::AESGCMCryptStream::ParamCalculator
     {
     public:
@@ -105,7 +108,7 @@ namespace lite_format
             m_crypt_stream = opener.open(m_file_stream);
         }
 
-        ~File();
+        ~File() = default;
 
         length_type size() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
         {
@@ -288,6 +291,9 @@ namespace lite_format
         StreamOpener& opener_;
         NameTranslator& name_trans_;
         bool read_dir_plus_ = false;
+
+    private:
+        std::unique_ptr<File> open(absl::string_view path, int flags, unsigned mode);
     };
 }    // namespace lite_format
 }    // namespace securefs

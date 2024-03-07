@@ -11,6 +11,7 @@
 #include <absl/strings/string_view.h>
 #include <absl/utility/utility.h>
 #include <cstdlib>
+#include <fcntl.h>
 #include <fuse.h>
 
 #include <cerrno>
@@ -214,8 +215,9 @@ namespace lite_format
                 {
                     return *long_table_;
                 }
-                long_table_.emplace(
-                    OSService::concat_and_norm_narrowed(dir_abs_path_, ".long_names.db"), true);
+                long_table_.emplace(OSService::concat_and_norm_narrowed(
+                                        dir_abs_path_, LONG_NAME_DATABASE_FILE_NAME),
+                                    true);
                 return *long_table_;
             }
 
@@ -397,15 +399,19 @@ namespace lite_format
                                   fuse_file_info* info,
                                   const fuse_context* ctx)
     {
-        return -ENOSYS;
+        info->fh
+            = reinterpret_cast<uintptr_t>(open(path, O_CREAT | O_EXCL | O_RDWR, mode).release());
+        return 0;
     }
     int FuseHighLevelOps::vopen(const char* path, fuse_file_info* info, const fuse_context* ctx)
     {
-        return -ENOSYS;
+        info->fh = reinterpret_cast<uintptr_t>(open(path, info->flags, 0).release());
+        return 0;
     }
     int FuseHighLevelOps::vrelease(const char* path, fuse_file_info* info, const fuse_context* ctx)
     {
-        return -ENOSYS;
+        delete get_base(info);
+        return 0;
     }
     int FuseHighLevelOps::vread(const char* path,
                                 char* buf,
@@ -414,7 +420,9 @@ namespace lite_format
                                 fuse_file_info* info,
                                 const fuse_context* ctx)
     {
-        return -ENOSYS;
+        auto fp = get_file_checked(info);
+        LockGuard<File> lg(*fp);
+        return static_cast<int>(fp->read(buf, offset, size));
     }
     int FuseHighLevelOps::vwrite(const char* path,
                                  const char* buf,
@@ -423,18 +431,27 @@ namespace lite_format
                                  fuse_file_info* info,
                                  const fuse_context* ctx)
     {
-        return -ENOSYS;
+        auto fp = get_file_checked(info);
+        LockGuard<File> lg(*fp);
+        fp->write(buf, offset, size);
+        return static_cast<int>(size);
     }
     int FuseHighLevelOps::vflush(const char* path, fuse_file_info* info, const fuse_context* ctx)
     {
-        return -ENOSYS;
+        auto fp = get_file_checked(info);
+        LockGuard<File> lg(*fp);
+        fp->flush();
+        return 0;
     }
     int FuseHighLevelOps::vftruncate(const char* path,
                                      fuse_off_t len,
                                      fuse_file_info* info,
                                      const fuse_context* ctx)
     {
-        return -ENOSYS;
+        auto fp = get_file_checked(info);
+        LockGuard<File> lg(*fp);
+        fp->resize(len);
+        return 0;
     }
     int FuseHighLevelOps::vunlink(const char* path, const fuse_context* ctx) { return -ENOSYS; };
     int FuseHighLevelOps::vmkdir(const char* path, fuse_mode_t mode, const fuse_context* ctx)
@@ -514,12 +531,69 @@ namespace lite_format
     {
         return -ENOSYS;
     }
+    std::unique_ptr<File> FuseHighLevelOps::open(absl::string_view path, int flags, unsigned mode)
+    {
+        if (flags & O_APPEND)
+        {
+            flags &= ~((unsigned)O_APPEND);
+            // Clear append flags. Workaround for FUSE bug.
+            // See https://github.com/netheril96/securefs/issues/58.
+        }
+
+        // Files cannot be opened write-only because the header must be read in order to derive the
+        // session key
+        if ((flags & O_ACCMODE) == O_WRONLY)
+        {
+            flags = (flags & ~O_ACCMODE) | O_RDWR;
+        }
+        if ((flags & O_CREAT))
+        {
+            mode |= S_IRUSR;
+        }
+        std::string encrypted_last_component, enc_path;
+        enc_path = name_trans_.encrypt_full_path(
+            path, (flags & O_CREAT) ? &encrypted_last_component : nullptr);
+        std::unique_ptr<File> fp;
+        if (encrypted_last_component.empty())
+        {
+            fp = std::make_unique<File>(root_.open_file_stream(enc_path, flags, mode), opener_);
+        }
+        else
+        {
+            auto db_path = root_.norm_path_narrowed(absl::StrCat(
+                name_trans_.remove_last_component(enc_path), LONG_NAME_DATABASE_FILE_NAME));
+            LongNameLookupTable table(db_path, false);
+            // Open a transaction so that we will rollback properly if opening the file stream later
+            // fails.
+            LockGuard<LongNameLookupTable> table_lg(table);
+            table.insert_or_update(name_trans_.get_last_component(enc_path),
+                                   encrypted_last_component);
+            fp = std::make_unique<File>(root_.open_file_stream(enc_path, flags, mode), opener_);
+        }
+
+        if (flags & O_TRUNC)
+        {
+            LockGuard<File> lock_guard(*fp, true);
+            fp->resize(0);
+        }
+        return fp;
+    }
 
     fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
     get_name_translator_component(NameNormalizationFlags args)
     {
         // TODO: replace them with real name translators.
         return fruit::createComponent().bind<NameTranslator, NoOpNameTranslator>();
+    }
+
+    absl::string_view NameTranslator::get_last_component(absl::string_view path)
+    {
+        return path.substr(path.rfind('/') + 1);
+    }
+
+    absl::string_view NameTranslator::remove_last_component(absl::string_view path)
+    {
+        return path.substr(0, path.rfind('/') + 1);
     }
 }    // namespace lite_format
 }    // namespace securefs
