@@ -10,6 +10,7 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/string_view.h>
 #include <absl/utility/utility.h>
+#include <cstdlib>
 #include <fuse.h>
 
 #include <cerrno>
@@ -146,7 +147,7 @@ namespace lite_format
 
                 while (true)
                 {
-                    if (under_traverser_->next(&under_name, stbuf))
+                    if (!under_traverser_->next(&under_name, stbuf))
                         return false;
                     if (!name)
                         return true;
@@ -166,8 +167,7 @@ namespace lite_format
                     if (name_trans_.is_no_op())
                     {
                         // Plain text name mode
-                        if (name)
-                            name->swap(under_name);
+                        name->swap(under_name);
                         return true;
                     }
                     if (under_name[0] == '.')
@@ -214,7 +214,8 @@ namespace lite_format
                 {
                     return *long_table_;
                 }
-                long_table_.emplace(absl::StrCat(dir_abs_path_, "/.long_names.db"), true);
+                long_table_.emplace(
+                    OSService::concat_and_norm_narrowed(dir_abs_path_, ".long_names.db"), true);
                 return *long_table_;
             }
 
@@ -349,14 +350,16 @@ namespace lite_format
     }
     int FuseHighLevelOps::vopendir(const char* path, fuse_file_info* info, const fuse_context* ctx)
     {
-        // auto dir = std::make_unique<DirectoryImpl>(
-        //     root_.norm_path(path), opener_, name_trans_, read_dir_plus_);
-        return -ENOSYS;
+        auto dir = std::make_unique<DirectoryImpl>(
+            root_.norm_path_narrowed(path), name_trans_, opener_, read_dir_plus_);
+        info->fh = reinterpret_cast<uintptr_t>(dir.release());
+        return 0;
     }
     int
     FuseHighLevelOps::vreleasedir(const char* path, fuse_file_info* info, const fuse_context* ctx)
     {
-        return -ENOSYS;
+        delete get_base(info);
+        return 0;
     }
     int FuseHighLevelOps::vreaddir(const char* path,
                                    void* buf,
@@ -365,7 +368,29 @@ namespace lite_format
                                    fuse_file_info* info,
                                    const fuse_context* ctx)
     {
-        return -ENOSYS;
+        auto dir = get_dir_checked(info);
+        LockGuard<Directory> lg(*dir);
+
+        std::string name;
+        fuse_stat st{};
+        dir->rewind();
+
+        while (dir->next(&name, &st))
+        {
+#ifdef WIN32
+            int rc = filler(buf, name.c_str(), read_dir_plus_ ? &st : nullptr, 0);
+#else
+            // On Unix platforms, only st_ino and st_mode is used, therefore we are OK to send the
+            // stat here even if padding is enabled.
+            int rc = filler(buf, name.c_str(), &st, 0);
+#endif
+            if (rc != 0)
+            {
+                return -std::abs(rc);
+            }
+        }
+
+        return 0;
     }
     int FuseHighLevelOps::vcreate(const char* path,
                                   fuse_mode_t mode,

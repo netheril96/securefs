@@ -14,6 +14,7 @@
 #include <string>
 
 #include <fuse.h>
+#include <type_traits>
 
 #ifdef WIN32
 #include <Windows.h>
@@ -126,9 +127,9 @@ public:
 };
 
 #ifdef WIN32
-typedef std::wstring native_string_type;
+using native_string_type = std::wstring;
 #else
-typedef std::string native_string_type;
+using native_string_type = std::string;
 #endif
 
 #ifdef WIN32
@@ -160,10 +161,26 @@ private:
 public:
     static bool is_absolute(absl::string_view path);
     static native_string_type concat_and_norm(absl::string_view base_dir, absl::string_view path);
+
+    static std::string concat_and_norm_narrowed(absl::string_view base_dir, absl::string_view path)
+    {
+#ifdef WIN32
+        return narrow_string(concat_and_norm(base_dir, path));
+#else
+        return concat_and_norm(base_dir, path);
+#endif
+    }
+
     native_string_type norm_path(absl::string_view path) const
     {
         return concat_and_norm(m_dir_name, path);
     }
+
+    std::string norm_path_narrowed(absl::string_view path) const
+    {
+        return concat_and_norm_narrowed(m_dir_name, path);
+    }
+
     DISABLE_COPY_MOVE(OSService)
 
 public:
