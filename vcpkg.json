@@ -10,6 +10,11 @@
         "jsoncpp",
         "sqlite3",
         "fruit",
-        "bext-di"
+        {
+            "name": "bext-di",
+            "features": [
+                "extensions"
+            ]
+        }
     ]
 }
