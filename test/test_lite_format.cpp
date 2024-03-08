@@ -163,6 +163,14 @@ namespace
         return result;
     }
 
+    constexpr std::string_view kLongFileNameExample
+        = "📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙"
+          "📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙"
+          "📙📙📙📙📙📙 "
+          "📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙"
+          "📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙"
+          "📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙📙";
+
     TEST_CASE("Lite FuseHighLevelOps")
     {
         auto whole_component
@@ -174,7 +182,7 @@ namespace
                 .bindInstance(*os);
         };
 
-        auto temp_dir_name = OSService::temp_name("lite", "dir");
+        auto temp_dir_name = OSService::temp_name("tmp/lite", "dir");
         OSService::get_default().ensure_directory(temp_dir_name, 0755);
         auto root = std::make_shared<OSService>(temp_dir_name);
 
@@ -187,6 +195,12 @@ namespace
         REQUIRE(ops.vrelease(nullptr, &info, nullptr) == 0);
 
         CHECK(names(listdir(ops, "/")) == std::vector<std::string>{".", "..", "hello"});
+
+        REQUIRE(ops.vcreate(absl::StrCat("/", kLongFileNameExample).c_str(), 0644, &info, nullptr)
+                == 0);
+        REQUIRE(ops.vrelease(nullptr, &info, nullptr) == 0);
+        CHECK(names(listdir(ops, "/"))
+              == std::vector<std::string>{".", "..", "hello", std::string(kLongFileNameExample)});
     }
 }    // namespace
 }    // namespace securefs::lite_format

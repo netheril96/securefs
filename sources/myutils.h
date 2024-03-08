@@ -74,7 +74,7 @@ struct scope_guard
     scope_guard(scope_guard const&) = delete;
     scope_guard& operator=(scope_guard const&) = delete;
 
-    scope_guard(scope_guard&& other) : on_exit_(std::move(other.on_exit_)) {}
+    scope_guard(scope_guard&& other) noexcept : on_exit_(std::move(other.on_exit_)) {}
 
     ~scope_guard()
     {
