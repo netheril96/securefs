@@ -13,7 +13,7 @@
 #include <absl/types/variant.h>
 #include <cryptopp/aes.h>
 #include <cstddef>
-#include <fruit/fruit.h>
+#include <fruit.h>
 #include <memory>
 
 namespace securefs
@@ -37,6 +37,7 @@ namespace lite_format
             , max_padding_size_(max_padding_size)
             , skip_verification_(skip_verfication)
         {
+            validate();
         }
 
         std::unique_ptr<securefs::lite::AESGCMCryptStream> open(std::shared_ptr<StreamBase> base);
@@ -57,6 +58,7 @@ namespace lite_format
         using AES_ECB = CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption;
         AES_ECB& get_thread_local_content_master_enc();
         AES_ECB& get_thread_local_padding_master_enc();
+        void validate();
 
     private:
         key_type content_master_key_, padding_master_key_;

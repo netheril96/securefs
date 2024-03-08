@@ -1,7 +1,7 @@
 #pragma once
 
 #include "object.h"
-#include "platform.h"
+#include "platform.h"    // IWYU pragma: keep
 
 #include <absl/functional/function_ref.h>
 

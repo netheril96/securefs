@@ -1,6 +1,10 @@
-#include "exceptions.h"
+#include "fuse_high_level_ops_base.h"
 #include "lite_format.h"
 #include "mystring.h"
+#include "myutils.h"
+#include "platform.h"
+#include "tags.h"
+#include "test_common.h"
 
 #include <absl/strings/match.h>
 #include <absl/strings/str_cat.h>
@@ -8,10 +12,16 @@
 #include <absl/strings/str_split.h>
 #include <absl/strings/string_view.h>
 #include <absl/utility/utility.h>
-#include <array>
 #include <cryptopp/sha.h>
 #include <doctest/doctest.h>
+#include <fruit.h>
+
+#include <algorithm>
+#include <array>
+#include <iterator>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace securefs
@@ -28,19 +38,27 @@ namespace lite_format
             sha.TruncatedFinal(h.data(), h.size());
             return hexify(h);
         }
-        class FakeNameTranslator : NameTranslator
+        class FakeNameTranslator : public NameTranslator
         {
         public:
+            INJECT(FakeNameTranslator()) {}
+            static constexpr size_t kMaxNameLength = 144;
             std::string encrypt_full_path(absl::string_view path,
                                           std::string* out_encrypted_last_component) override
             {
                 std::vector<absl::string_view> parts = absl::StrSplit(path, '/');
                 std::vector<std::string> transformed;
                 transformed.reserve(parts.size() + 2);
+                transformed.emplace_back(".");
 
                 for (absl::string_view p : parts)
                 {
-                    if (p.size() > 5)
+                    if (p.empty())
+                    {
+                        transformed.emplace_back();
+                        continue;
+                    }
+                    if (p.size() > kMaxNameLength)
                     {
                         transformed.emplace_back(absl::StrCat("hash-", hash(p)));
                     }
@@ -50,7 +68,7 @@ namespace lite_format
                     }
                 }
                 if (out_encrypted_last_component != nullptr && parts.size() > 0
-                    && parts.back().size() > 5)
+                    && parts.back().size() > kMaxNameLength)
                 {
                     *out_encrypted_last_component = absl::StrCat("enc-", parts.back());
                 }
@@ -95,6 +113,84 @@ namespace lite_format
             CHECK(NameTranslator::remove_last_component("abcde") == "");
             CHECK(NameTranslator::remove_last_component("/abcde") == "/");
             CHECK(NameTranslator::remove_last_component("/cc/abcde") == "/cc/");
+        }
+
+        fruit::Component<StreamOpener> get_test_component()
+        {
+            return fruit::createComponent()
+                .registerProvider<fruit::Annotated<tContentMasterKey, key_type>()>(
+                    []() { return key_type(-1); })
+                .registerProvider<fruit::Annotated<tPaddingMasterKey, key_type>()>(
+                    []() { return key_type(-2); })
+                .registerProvider<fruit::Annotated<tSkipVerification, bool>()>([]()
+                                                                               { return false; })
+                .registerProvider<fruit::Annotated<tBlockSize, unsigned>()>([]() { return 64u; })
+                .registerProvider<fruit::Annotated<tIvSize, unsigned>()>([]() { return 12u; })
+                .registerProvider<fruit::Annotated<tMaxPaddingSize, unsigned>()>([]()
+                                                                                 { return 24u; })
+
+                ;
+        }
+
+        using ListDirResult = std::vector<std::pair<std::string, fuse_stat>>;
+        ListDirResult listdir(FuseHighLevelOpsBase& op, const char* path)
+        {
+            ListDirResult result;
+            fuse_file_info info{};
+            REQUIRE(op.vopendir(path, &info, nullptr) == 0);
+            DEFER(op.vreleasedir(path, &info, nullptr));
+            REQUIRE(op.vreaddir(
+                        path,
+                        &result,
+                        [](void* buf, const char* name, const fuse_stat* st, fuse_off_t off)
+                        {
+                            static_cast<ListDirResult*>(buf)->emplace_back(name,
+                                                                           st ? *st : fuse_stat{});
+                            return 0;
+                        },
+                        0,
+                        &info,
+                        nullptr)
+                    == 0);
+            std::sort(result.begin(),
+                      result.end(),
+                      [](const auto& p1, const auto& p2) { return p1.first < p2.first; });
+            return result;
+        }
+        std::vector<std::string> names(const ListDirResult& l)
+        {
+            std::vector<std::string> result;
+            std::transform(l.begin(),
+                           l.end(),
+                           std::back_inserter(result),
+                           [](const auto& pair) { return pair.first; });
+            return result;
+        }
+
+        TEST_CASE("Lite FuseHighLevelOps")
+        {
+            auto whole_component
+                = [](std::shared_ptr<OSService> os) -> fruit::Component<FuseHighLevelOps>
+            {
+                return fruit::createComponent()
+                    .bind<NameTranslator, FakeNameTranslator>()
+                    .install(get_test_component)
+                    .bindInstance(*os);
+            };
+
+            auto temp_dir_name = OSService::temp_name("lite", "dir");
+            OSService::get_default().ensure_directory(temp_dir_name, 0755);
+            auto root = std::make_shared<OSService>(temp_dir_name);
+
+            fruit::Injector<FuseHighLevelOps> injector(+whole_component, root);
+            auto& ops = injector.get<FuseHighLevelOps&>();
+            CHECK(names(listdir(ops, "/")) == std::vector<std::string>{".", ".."});
+
+            fuse_file_info info{};
+            REQUIRE(ops.vcreate("/hello", 0644, &info, nullptr) == 0);
+            REQUIRE(ops.vrelease(nullptr, &info, nullptr) == 0);
+
+            CHECK(names(listdir(ops, "/")) == std::vector<std::string>{".", "..", "hello"});
         }
     }    // namespace
 }    // namespace lite_format

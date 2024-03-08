@@ -176,6 +176,8 @@ if(SECUREFS_ENABLE_UNIT_TEST)
     find_package(doctest CONFIG REQUIRED)
     target_link_libraries(securefs_test PRIVATE doctest::doctest)
     add_test(NAME sec_test COMMAND securefs_test)
+    target_compile_definitions(securefs_test
+                               PRIVATE DOCTEST_CONFIG_SUPER_FAST_ASSERTS=1)
 endif()
 
 find_package(Python3 COMPONENTS Interpreter)

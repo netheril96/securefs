@@ -4,6 +4,7 @@
 #include "lock_guard.h"
 #include "logger.h"
 #include "macro.h"
+#include "myutils.h"
 #include "platform.h"
 
 #include <absl/base/thread_annotations.h>
@@ -11,12 +12,10 @@
 #include <absl/strings/string_view.h>
 #include <absl/types/variant.h>
 #include <absl/utility/utility.h>
-#include <cstdlib>
-#include <fcntl.h>
-#include <fuse.h>
 
 #include <cerrno>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
 #include <utility>
 
@@ -50,25 +49,34 @@ namespace lite_format
     StreamOpener::AES_ECB& StreamOpener::get_thread_local_content_master_enc()
     {
         auto&& any = content_ecb.get();
-        auto* enc = absl::any_cast<StreamOpener::AES_ECB*>(any);
+        auto* enc = absl::any_cast<StreamOpener::AES_ECB>(&any);
         if (enc)
         {
             return *enc;
         }
         any.emplace<StreamOpener::AES_ECB>(content_master_key_.data(), content_master_key_.size());
-        return *absl::any_cast<StreamOpener::AES_ECB*>(any);
+        return *absl::any_cast<StreamOpener::AES_ECB>(&any);
     }
 
     StreamOpener::AES_ECB& StreamOpener::get_thread_local_padding_master_enc()
     {
         auto&& any = content_ecb.get();
-        auto* enc = absl::any_cast<StreamOpener::AES_ECB*>(any);
+        auto* enc = absl::any_cast<StreamOpener::AES_ECB>(&any);
         if (enc)
         {
             return *enc;
         }
         any.emplace<StreamOpener::AES_ECB>(padding_master_key_.data(), padding_master_key_.size());
-        return *absl::any_cast<StreamOpener::AES_ECB*>(any);
+        return *absl::any_cast<StreamOpener::AES_ECB>(&any);
+    }
+
+    void StreamOpener::validate()
+    {
+        warn_if_key_not_random(content_master_key_, __FILE__, __LINE__);
+        if (max_padding_size_ > 0)
+        {
+            warn_if_key_not_random(padding_master_key_, __FILE__, __LINE__);
+        }
     }
 
     namespace
@@ -135,7 +143,7 @@ namespace lite_format
                 {
                     throw_runtime_error("Readdir plus should only be used without padding");
                 }
-                under_traverser_ = OSService::get_default().create_traverser(dir_abs_path);
+                under_traverser_ = OSService::get_default().create_traverser(dir_abs_path_);
             }
 
             void fstat(fuse_stat* stat) override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
@@ -182,7 +190,7 @@ namespace lite_format
                         if (decoded_string)
                         {
                             decoded_string->swap(*name);
-                            continue;
+                            return true;
                         }
                         if (absl::get_if<InvalidNameTag>(&decoded))
                         {
@@ -360,7 +368,10 @@ namespace lite_format
     int FuseHighLevelOps::vopendir(const char* path, fuse_file_info* info, const fuse_context* ctx)
     {
         auto dir = std::make_unique<DirectoryImpl>(
-            root_.norm_path_narrowed(path), name_trans_, opener_, read_dir_plus_);
+            root_.norm_path_narrowed(name_trans_.encrypt_full_path(path, nullptr)),
+            name_trans_,
+            opener_,
+            read_dir_plus_);
         info->fh = reinterpret_cast<uintptr_t>(dir.release());
         return 0;
     }

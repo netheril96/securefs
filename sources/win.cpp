@@ -948,11 +948,11 @@ private:
     std::wstring m_pattern;
     WIN32_FIND_DATAW m_data;
     HANDLE m_handle;
-    bool m_is_initial;
+    bool m_is_initial{};
 
 public:
     explicit WindowsDirectoryTraverser(std::wstring pattern)
-        : m_pattern(std::move(pattern)), m_handle(INVALID_HANDLE_VALUE), m_is_initial(false)
+        : m_pattern(std::move(pattern)), m_handle(INVALID_HANDLE_VALUE)
     {
         rewind();
     }
@@ -974,6 +974,7 @@ public:
         {
             THROW_WINDOWS_EXCEPTION_WITH_PATH(GetLastError(), L"FindFirstFileW", m_pattern);
         }
+        m_is_initial = true;
     }
 
     bool next(std::string* name, fuse_stat* st) override
