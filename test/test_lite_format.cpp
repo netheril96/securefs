@@ -13,7 +13,7 @@
 #include <absl/utility/utility.h>
 #include <cryptopp/sha.h>
 #include <doctest/doctest.h>
-#include <fruit.h>
+#include <fruit/fruit.h>
 
 #include <algorithm>
 #include <array>

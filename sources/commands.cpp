@@ -19,7 +19,7 @@
 #include <cryptopp/osrng.h>
 #include <cryptopp/scrypt.h>
 #include <cryptopp/secblock.h>
-#include <fruit.h>
+#include <fruit/fruit.h>
 #include <json/json.h>
 #include <optional>
 #include <tclap/CmdLine.h>

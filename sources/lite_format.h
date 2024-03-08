@@ -10,7 +10,7 @@
 
 #include <cryptopp/aes.h>
 #include <cstddef>
-#include <fruit.h>
+#include <fruit/fruit.h>
 #include <memory>
 #include <string_view>
 #include <variant>

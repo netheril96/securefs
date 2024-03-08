@@ -3,13 +3,13 @@
 #include "lite_long_name_lookup_table.h"
 #include "lock_guard.h"
 #include "logger.h"
-#include "macro.h"
 #include "myutils.h"
 #include "platform.h"
 
 #include <absl/base/thread_annotations.h>
 #include <absl/strings/str_cat.h>
 #include <absl/utility/utility.h>
+#include <fruit/fruit.h>
 
 #include <cerrno>
 #include <cstdint>
@@ -17,7 +17,6 @@
 #include <memory>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <utility>
 #include <variant>
 
