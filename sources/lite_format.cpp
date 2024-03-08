@@ -1,4 +1,5 @@
 #include "lite_format.h"
+#include "crypto.h"
 #include "exceptions.h"
 #include "lite_long_name_lookup_table.h"
 #include "lock_guard.h"
@@ -8,7 +9,10 @@
 
 #include <absl/base/thread_annotations.h>
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 #include <absl/utility/utility.h>
+#include <any>
+#include <cstddef>
 #include <fruit/fruit.h>
 
 #include <cerrno>
@@ -80,19 +84,196 @@ void StreamOpener::validate()
 
 namespace
 {
-    // class LegacyNameTranslator : public NameTranslator
-    // {
-    // public:
-    //     INJECT(LegacyNameTranslator(ANNOTATED(tNameMasterKey, const key_type&)
-    //     name_master_key))
-    //         : name_master_key_(name_master_key)
-    //     {
-    //     }
+    class InvalidFilenameException : public VerificationException
+    {
+    private:
+        std::string m_filename;
 
-    // private:
-    //     key_type name_master_key_;
-    //     ThreadLocal name_aes_siv_;
-    // };
+    public:
+        explicit InvalidFilenameException(std::string filename) : m_filename(std::move(filename)) {}
+
+        std::string message() const override
+        {
+            return absl::StrFormat("Invalid filename \"%s\"", m_filename);
+        }
+        int error_number() const noexcept override { return EINVAL; }
+    };
+
+    class LegacyNameTranslator : public NameTranslator
+    {
+    public:
+        INJECT(LegacyNameTranslator(ANNOTATED(tNameMasterKey, const key_type&) name_master_key))
+            : name_master_key_(name_master_key)
+        {
+        }
+
+        std::string encrypt_full_path(std::string_view path,
+                                      std::string* out_encrypted_last_component) override
+        {
+            if (path.empty())
+            {
+                return {};
+            }
+            else if (path.size() == 1 && path[0] == '/')
+            {
+                return ".";
+            }
+            auto str = legacy_encrypt_path(get_siv(), path);
+            if (!str.empty() && str.front() == '/')
+            {
+                str.erase(str.begin());
+                return str;
+            }
+            return str;
+        }
+
+        std::variant<InvalidNameTag, LongNameTag, std::string>
+        decrypt_path_component(std::string_view path) override
+        {
+            std::string decoded_bytes;
+            decoded_bytes.reserve(path.size());
+            base32_decode(path.data(), path.size(), decoded_bytes);
+            if (decoded_bytes.size() <= AES_SIV::IV_SIZE)
+            {
+                WARN_LOG("Skipping too small encrypted filename %s", path);
+                return InvalidNameTag{};
+            }
+            std::string result(decoded_bytes.size() - AES_SIV::IV_SIZE, '\0');
+            bool success = get_siv().decrypt_and_verify(&decoded_bytes[AES_SIV::IV_SIZE],
+                                                        result.size(),
+                                                        nullptr,
+                                                        0,
+                                                        result.data(),
+                                                        decoded_bytes.data());
+            if (success)
+            {
+                return result;
+            }
+            return InvalidNameTag();
+        }
+
+        std::string encrypt_path_for_symlink(std::string_view path) override
+        {
+            if (path.empty())
+            {
+                return {};
+            }
+            else if (path.size() == 1 && path[0] == '/')
+            {
+                return ".";
+            }
+            return legacy_encrypt_path(get_siv(), path);
+        }
+        std::string decrypt_path_from_symlink(std::string_view path) override
+        {
+            if (path.empty())
+            {
+                return {};
+            }
+            else if (path == ".")
+            {
+                return "/";
+            }
+            return legacy_decrypt_path(get_siv(), path);
+        }
+
+        unsigned max_virtual_path_component_size(unsigned physical_path_component_size) override
+        {
+            if (physical_path_component_size <= AES_SIV::IV_SIZE * 8 / 5)
+            {
+                return 0;
+            }
+            return physical_path_component_size * 5 / 8 - AES_SIV::IV_SIZE;
+        }
+
+    private:
+        AES_SIV& get_siv()
+        {
+            auto&& any = name_aes_siv_.get();
+            if (auto p = std::any_cast<std::shared_ptr<AES_SIV>>(&any))
+            {
+                return **p;
+            }
+            any.emplace<std::shared_ptr<AES_SIV>>(
+                std::make_shared<AES_SIV>(name_master_key_.data(), name_master_key_.size()));
+            return **std::any_cast<std::shared_ptr<AES_SIV>>(&any);
+        }
+
+        static std::string legacy_encrypt_path(AES_SIV& encryptor, std::string_view path)
+        {
+            byte buffer[2032];
+            std::string result;
+            result.reserve((path.size() * 8 + 4) / 5);
+            size_t last_nonseparator_index = 0;
+            std::string encoded_part;
+
+            for (size_t i = 0; i <= path.size(); ++i)
+            {
+                if (i >= path.size() || path[i] == '/')
+                {
+                    if (i > last_nonseparator_index)
+                    {
+                        const char* slice = path.data() + last_nonseparator_index;
+                        size_t slice_size = i - last_nonseparator_index;
+                        if (slice_size > 2000)
+                            throwVFSException(ENAMETOOLONG);
+                        encryptor.encrypt_and_authenticate(
+                            slice, slice_size, nullptr, 0, buffer + AES_SIV::IV_SIZE, buffer);
+                        base32_encode(buffer, slice_size + AES_SIV::IV_SIZE, encoded_part);
+                        result.append(encoded_part);
+                    }
+                    if (i < path.size())
+                        result.push_back('/');
+                    last_nonseparator_index = i + 1;
+                }
+            }
+            return result;
+        }
+
+        static std::string legacy_decrypt_path(AES_SIV& decryptor, std::string_view path)
+        {
+            byte string_buffer[2032];
+            std::string result, decoded_part;
+            result.reserve(path.size() * 5 / 8 + 10);
+            size_t last_nonseparator_index = 0;
+
+            for (size_t i = 0; i <= path.size(); ++i)
+            {
+                if (i >= path.size() || path[i] == '/')
+                {
+                    if (i > last_nonseparator_index)
+                    {
+                        const char* slice = path.data() + last_nonseparator_index;
+                        size_t slice_size = i - last_nonseparator_index;
+
+                        base32_decode(slice, slice_size, decoded_part);
+                        if (decoded_part.size() >= sizeof(string_buffer))
+                            throwVFSException(ENAMETOOLONG);
+
+                        bool success
+                            = decryptor.decrypt_and_verify(&decoded_part[AES_SIV::IV_SIZE],
+                                                           decoded_part.size() - AES_SIV::IV_SIZE,
+                                                           nullptr,
+                                                           0,
+                                                           string_buffer,
+                                                           &decoded_part[0]);
+                        if (!success)
+                            throw InvalidFilenameException(std::string(path));
+                        result.append((const char*)string_buffer,
+                                      decoded_part.size() - AES_SIV::IV_SIZE);
+                    }
+                    if (i < path.size())
+                        result.push_back('/');
+                    last_nonseparator_index = i + 1;
+                }
+            }
+            return result;
+        }
+
+    private:
+        key_type name_master_key_;
+        ThreadLocal name_aes_siv_;
+    };
 
     class NoOpNameTranslator : public NameTranslator
     {
@@ -574,7 +755,7 @@ std::unique_ptr<File> FuseHighLevelOps::open(std::string_view path, int flags, u
 }
 
 fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
-get_name_translator_component(NameNormalizationFlags args)
+get_name_translator_component(std::shared_ptr<NameNormalizationFlags> flags)
 {
     // TODO: replace them with real name translators.
     return fruit::createComponent().bind<NameTranslator, NoOpNameTranslator>();

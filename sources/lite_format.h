@@ -193,20 +193,14 @@ struct NameTranslator : public Object
 
 struct NameNormalizationFlags
 {
+    bool no_op;
     bool should_case_fold;
     bool should_normalize_nfc;
     bool supports_long_name;
-
-    bool operator==(const NameNormalizationFlags& other) const noexcept
-    {
-        return should_case_fold == other.should_case_fold
-            && should_normalize_nfc == other.should_normalize_nfc
-            && supports_long_name == other.supports_long_name;
-    }
 };
 
 fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
-get_name_translator_component(NameNormalizationFlags args);
+get_name_translator_component(std::shared_ptr<NameNormalizationFlags> args);
 
 class FuseHighLevelOps : public ::securefs::FuseHighLevelOpsBase
 {

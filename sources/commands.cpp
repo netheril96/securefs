@@ -1054,7 +1054,6 @@ private:
                                       "names. Use it at your own risk. No effect on full format.",
                                       false};
 
-    lite_format::NameNormalizationFlags name_norm_flags{};
     FSConfig config{};
     bool skip_dot_dot_value, skip_verification_value;
     std::unique_ptr<OSService> os;
@@ -1098,24 +1097,25 @@ private:
 
     fruit::Component<FuseHighLevelOpsBase> get_fuse_high_ops_component()
     {
+        auto name_norm_flags = std::make_shared<lite_format::NameNormalizationFlags>();
         if (normalization.getValue() == "nfc")
         {
-            name_norm_flags.should_normalize_nfc = true;
+            name_norm_flags->should_normalize_nfc = true;
         }
         else if (normalization.getValue() == "casefold")
         {
-            name_norm_flags.should_case_fold = true;
+            name_norm_flags->should_case_fold = true;
         }
         else if (normalization.getValue() == "casefold+nfc")
         {
-            name_norm_flags.should_normalize_nfc = true;
-            name_norm_flags.should_case_fold = true;
+            name_norm_flags->should_normalize_nfc = true;
+            name_norm_flags->should_case_fold = true;
         }
         else if (normalization.getValue() != "none")
         {
             throw_runtime_error("Invalid flag of --normalization: " + normalization.getValue());
         }
-        name_norm_flags.supports_long_name = config.long_name_component;
+        name_norm_flags->supports_long_name = config.long_name_component;
 
         if (!os)
             os = std::make_unique<OSService>(data_dir.getValue());
@@ -1124,7 +1124,7 @@ private:
 
         return fruit::createComponent()
             .bind<FuseHighLevelOpsBase, lite_format::FuseHighLevelOps>()
-            .install(lite_format::get_name_translator_component, name_norm_flags)
+            .install(&lite_format::get_name_translator_component, name_norm_flags)
             .bindInstance<fruit::Annotated<tSkipVerification, bool>>(skip_verification_value)
             .bindInstance<fruit::Annotated<tMaxPaddingSize, unsigned>>(config.max_padding)
             .bindInstance<fruit::Annotated<tIvSize, unsigned>>(config.iv_size)
