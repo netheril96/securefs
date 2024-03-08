@@ -25,9 +25,9 @@ namespace
     };
 }    // namespace
 
-std::array<absl::any, ThreadLocal::kMaxIndex>& ThreadLocal::get_local()
+std::array<std::any, ThreadLocal::kMaxIndex>& ThreadLocal::get_local()
 {
-    static thread_local std::array<absl::any, kMaxIndex> locals{};
+    static thread_local std::array<std::any, kMaxIndex> locals{};
     return locals;
 }
 

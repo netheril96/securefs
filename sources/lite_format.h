@@ -8,19 +8,19 @@
 #include "tags.h"
 #include "thread_local.h"
 
-#include <absl/strings/string_view.h>
-#include <absl/types/optional.h>
-#include <absl/types/variant.h>
 #include <cryptopp/aes.h>
 #include <cstddef>
 #include <fruit.h>
 #include <memory>
+#include <optional>
+#include <string_view>
+#include <variant>
 
 namespace securefs
 {
 namespace lite_format
 {
-    constexpr absl::string_view LONG_NAME_DATABASE_FILE_NAME = ".long_names.db";
+    constexpr std::string_view LONG_NAME_DATABASE_FILE_NAME = ".long_names.db";
     class StreamOpener : public lite::AESGCMCryptStream::ParamCalculator
     {
     public:
@@ -182,21 +182,21 @@ namespace lite_format
         /// @param out_encrypted_last_component If it is not null, and the last path component is a
         /// long component, then this contains the encrypted version of the last path component.
         /// @return Encrypted path.
-        virtual std::string encrypt_full_path(absl::string_view path,
+        virtual std::string encrypt_full_path(std::string_view path,
                                               std::string* out_encrypted_last_component)
             = 0;
 
         /// @brief Decrypt a component of an encrypted path.
-        virtual absl::variant<InvalidNameTag, LongNameTag, std::string>
-        decrypt_path_component(absl::string_view path) = 0;
+        virtual std::variant<InvalidNameTag, LongNameTag, std::string>
+        decrypt_path_component(std::string_view path) = 0;
 
-        virtual std::string encrypt_path_for_symlink(absl::string_view path) = 0;
-        virtual std::string decrypt_path_from_symlink(absl::string_view path) = 0;
+        virtual std::string encrypt_path_for_symlink(std::string_view path) = 0;
+        virtual std::string decrypt_path_from_symlink(std::string_view path) = 0;
 
         virtual unsigned max_virtual_path_component_size(unsigned physical_path_component_size) = 0;
 
-        static absl::string_view get_last_component(absl::string_view path);
-        static absl::string_view remove_last_component(absl::string_view path);
+        static std::string_view get_last_component(std::string_view path);
+        static std::string_view remove_last_component(std::string_view path);
     };
 
     struct NameNormalizationFlags
@@ -303,7 +303,7 @@ namespace lite_format
         bool read_dir_plus_ = false;
 
     private:
-        std::unique_ptr<File> open(absl::string_view path, int flags, unsigned mode);
+        std::unique_ptr<File> open(std::string_view path, int flags, unsigned mode);
     };
 }    // namespace lite_format
 }    // namespace securefs

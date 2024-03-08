@@ -239,9 +239,9 @@ public:
     void rewind() override { ::rewinddir(m_dir); }
 };
 
-bool OSService::is_absolute(absl::string_view path) { return path.size() > 0 && path[0] == '/'; }
+bool OSService::is_absolute(std::string_view path) { return path.size() > 0 && path[0] == '/'; }
 
-native_string_type OSService::concat_and_norm(absl::string_view base_dir, absl::string_view path)
+native_string_type OSService::concat_and_norm(std::string_view base_dir, std::string_view path)
 {
     if (base_dir.empty() || is_absolute(path))
         return {path.data(), path.size()};

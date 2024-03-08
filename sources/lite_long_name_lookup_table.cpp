@@ -3,12 +3,12 @@
 #include "logger.h"
 
 #include <absl/strings/str_cat.h>
-#include <absl/strings/string_view.h>
 #include <cryptopp/sha.h>
+#include <string_view>
 
 namespace securefs
 {
-std::string encrypt_long_name_component(AES_SIV& encryptor, absl::string_view long_name)
+std::string encrypt_long_name_component(AES_SIV& encryptor, std::string_view long_name)
 {
     unsigned char sha256[32];
     CryptoPP::SHA256 calc;
@@ -40,7 +40,7 @@ LongNameLookupTable::LongNameLookupTable(const std::string& filename, bool reado
 
 LongNameLookupTable::~LongNameLookupTable() {}
 
-std::string LongNameLookupTable::lookup(absl::string_view encrypted_hash)
+std::string LongNameLookupTable::lookup(std::string_view encrypted_hash)
 {
     SQLiteStatement q(db_,
                       "select encrypted_name from encrypted_mappings where encrypted_hash = ?;");
@@ -54,8 +54,8 @@ std::string LongNameLookupTable::lookup(absl::string_view encrypted_hash)
     return {view.begin(), view.end()};
 }
 
-void LongNameLookupTable::insert_or_update(absl::string_view encrypted_hash,
-                                           absl::string_view encrypted_long_name)
+void LongNameLookupTable::insert_or_update(std::string_view encrypted_hash,
+                                           std::string_view encrypted_long_name)
 {
     SQLiteStatement q(db_, R"(
             insert or ignore into encrypted_mappings
@@ -68,7 +68,7 @@ void LongNameLookupTable::insert_or_update(absl::string_view encrypted_hash,
     q.step();
 }
 
-void LongNameLookupTable::delete_once(absl::string_view encrypted_hash)
+void LongNameLookupTable::delete_once(std::string_view encrypted_hash)
 {
     SQLiteStatement q(db_, R"(
             delete from encrypted_mappings

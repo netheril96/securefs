@@ -10,7 +10,6 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 #include <absl/strings/str_split.h>
-#include <absl/strings/string_view.h>
 #include <absl/utility/utility.h>
 #include <cryptopp/sha.h>
 #include <doctest/doctest.h>
@@ -21,6 +20,7 @@
 #include <iterator>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -30,7 +30,7 @@ namespace lite_format
 {
     namespace
     {
-        std::string hash(absl::string_view view)
+        std::string hash(std::string_view view)
         {
             CryptoPP::SHA256 sha;
             sha.Update(reinterpret_cast<const byte*>(view.data()), view.size());
@@ -43,15 +43,15 @@ namespace lite_format
         public:
             INJECT(FakeNameTranslator()) {}
             static constexpr size_t kMaxNameLength = 144;
-            std::string encrypt_full_path(absl::string_view path,
+            std::string encrypt_full_path(std::string_view path,
                                           std::string* out_encrypted_last_component) override
             {
-                std::vector<absl::string_view> parts = absl::StrSplit(path, '/');
+                std::vector<std::string_view> parts = absl::StrSplit(path, '/');
                 std::vector<std::string> transformed;
                 transformed.reserve(parts.size() + 2);
                 transformed.emplace_back(".");
 
-                for (absl::string_view p : parts)
+                for (std::string_view p : parts)
                 {
                     if (p.empty())
                     {
@@ -75,8 +75,8 @@ namespace lite_format
                 return absl::StrJoin(transformed, "/");
             }
 
-            absl::variant<InvalidNameTag, LongNameTag, std::string>
-            decrypt_path_component(absl::string_view path) override
+            std::variant<InvalidNameTag, LongNameTag, std::string>
+            decrypt_path_component(std::string_view path) override
             {
                 if (absl::StartsWithIgnoreCase(path, "enc-"))
                 {
@@ -90,11 +90,11 @@ namespace lite_format
                 return InvalidNameTag{};
             }
 
-            std::string encrypt_path_for_symlink(absl::string_view path) override
+            std::string encrypt_path_for_symlink(std::string_view path) override
             {
                 return absl::StrCat("/enc/", path);
             }
-            std::string decrypt_path_from_symlink(absl::string_view path) override
+            std::string decrypt_path_from_symlink(std::string_view path) override
             {
                 return std::string(path.substr(5));
             }

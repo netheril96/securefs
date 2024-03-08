@@ -134,7 +134,7 @@ using native_string_type = std::string;
 
 #ifdef WIN32
 std::wstring widen_string(const char* str, size_t size);
-inline std::wstring widen_string(absl::string_view str)
+inline std::wstring widen_string(std::string_view str)
 {
     return widen_string(str.data(), str.size());
 }
@@ -159,10 +159,10 @@ private:
     std::string m_dir_name;
 
 public:
-    static bool is_absolute(absl::string_view path);
-    static native_string_type concat_and_norm(absl::string_view base_dir, absl::string_view path);
+    static bool is_absolute(std::string_view path);
+    static native_string_type concat_and_norm(std::string_view base_dir, std::string_view path);
 
-    static std::string concat_and_norm_narrowed(absl::string_view base_dir, absl::string_view path)
+    static std::string concat_and_norm_narrowed(std::string_view base_dir, std::string_view path)
     {
 #ifdef WIN32
         return narrow_string(concat_and_norm(base_dir, path));
@@ -171,12 +171,12 @@ public:
 #endif
     }
 
-    native_string_type norm_path(absl::string_view path) const
+    native_string_type norm_path(std::string_view path) const
     {
         return concat_and_norm(m_dir_name, path);
     }
 
-    std::string norm_path_narrowed(absl::string_view path) const
+    std::string norm_path_narrowed(std::string_view path) const
     {
         return concat_and_norm_narrowed(m_dir_name, path);
     }
@@ -231,7 +231,7 @@ public:
     static uint32_t getgid() noexcept;
     static int64_t raise_fd_limit() noexcept;
 
-    static std::string temp_name(absl::string_view prefix, absl::string_view suffix);
+    static std::string temp_name(std::string_view prefix, std::string_view suffix);
     static const OSService& get_default();
     static void get_current_time(fuse_timespec& out);
     static void get_current_time_in_tm(struct tm* tm, int* nanoseconds);

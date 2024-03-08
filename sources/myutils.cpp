@@ -19,7 +19,7 @@ static void find_ids_helper(const std::string& current_dir,
     id_type id;
     std::string hex(id_type::size() * 2, 0);
     OSService::recursive_traverse_callback callback
-        = [&id, &result, &hex](absl::string_view dir, absl::string_view name) -> bool
+        = [&id, &result, &hex](std::string_view dir, std::string_view name) -> bool
     {
         if (name == "." || name == "..")
             return true;

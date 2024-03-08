@@ -1,8 +1,7 @@
 #pragma once
 #include "myutils.h"
 
-#include <absl/types/any.h>
-
+#include <any>
 #include <array>
 
 namespace securefs
@@ -13,7 +12,7 @@ public:
     static constexpr size_t kMaxIndex = 256;
 
 private:
-    static std::array<absl::any, kMaxIndex>& get_local();
+    static std::array<std::any, kMaxIndex>& get_local();
 
     size_t index_;
 
@@ -23,7 +22,7 @@ public:
 
     DISABLE_COPY_MOVE(ThreadLocal)
 
-    absl::any& get() { return get_local()[index_]; }
-    const absl::any& get() const { return get_local()[index_]; }
+    std::any& get() { return get_local()[index_]; }
+    const std::any& get() const { return get_local()[index_]; }
 };
 }    // namespace securefs

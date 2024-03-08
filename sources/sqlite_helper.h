@@ -1,9 +1,9 @@
 #pragma once
 #include "platform.h"
 
-#include <absl/strings/string_view.h>
 #include <absl/types/span.h>
 #include <sqlite3.h>
+#include <string_view>
 
 #include <memory>
 #include <stdexcept>
@@ -53,11 +53,11 @@ public:
     bool step();
 
     void bind_int(int column, int64_t value);
-    void bind_text(int column, absl::string_view value);
+    void bind_text(int column, std::string_view value);
     void bind_blob(int column, absl::Span<const unsigned char> value);
 
     int64_t get_int(int column);
-    absl::string_view get_text(int column);
+    std::string_view get_text(int column);
     absl::Span<const unsigned char> get_blob(int column);
     bool is_null(int column);
 

@@ -57,7 +57,7 @@ namespace lite
         return absl::StrFormat("Invalid filename \"%s\"", m_filename);
     }
 
-    std::string legacy_encrypt_path(AES_SIV& encryptor, absl::string_view path)
+    std::string legacy_encrypt_path(AES_SIV& encryptor, std::string_view path)
     {
         byte buffer[2032];
         std::string result;
@@ -88,7 +88,7 @@ namespace lite
         return result;
     }
 
-    std::string legacy_decrypt_path(AES_SIV& decryptor, absl::string_view path)
+    std::string legacy_decrypt_path(AES_SIV& decryptor, std::string_view path)
     {
         byte string_buffer[2032];
         std::string result, decoded_part;
@@ -128,7 +128,7 @@ namespace lite
         return result;
     }
 
-    std::string FileSystem::translate_path(absl::string_view path, bool preserve_leading_slash)
+    std::string FileSystem::translate_path(std::string_view path, bool preserve_leading_slash)
     {
         if (path.empty())
         {
@@ -149,11 +149,10 @@ namespace lite
         {
             std::string str = !m_name_encryptor
                 ? std::string(path)
-                : lite::legacy_encrypt_path(*m_name_encryptor,
-                                            transform(path,
-                                                      m_flags & kOptionCaseFoldFileName,
-                                                      m_flags & kOptionNFCFileName)
-                                                .view());
+                : lite::legacy_encrypt_path(
+                    *m_name_encryptor,
+                    transform(path, m_flags & kOptionCaseFoldFileName, m_flags & kOptionNFCFileName)
+                        .view());
             if (!preserve_leading_slash && !str.empty() && str[0] == '/')
             {
                 str.erase(str.begin());
@@ -163,7 +162,7 @@ namespace lite
         }
     }
 
-    AutoClosedFile FileSystem::open(absl::string_view path, int flags, fuse_mode_t mode)
+    AutoClosedFile FileSystem::open(std::string_view path, int flags, fuse_mode_t mode)
     {
         if (flags & O_APPEND)
         {
@@ -198,7 +197,7 @@ namespace lite
         return fp;
     }
 
-    bool FileSystem::stat(absl::string_view path, fuse_stat* buf)
+    bool FileSystem::stat(std::string_view path, fuse_stat* buf)
     {
         auto enc_path = translate_path(path, false);
         if (!m_root->stat(enc_path, buf))
@@ -272,22 +271,22 @@ namespace lite
         return true;
     }
 
-    void FileSystem::mkdir(absl::string_view path, fuse_mode_t mode)
+    void FileSystem::mkdir(std::string_view path, fuse_mode_t mode)
     {
         m_root->mkdir(translate_path(path, false), mode);
     }
 
-    void FileSystem::rmdir(absl::string_view path)
+    void FileSystem::rmdir(std::string_view path)
     {
         m_root->remove_directory(translate_path(path, false));
     }
 
-    void FileSystem::rename(absl::string_view from, absl::string_view to)
+    void FileSystem::rename(std::string_view from, std::string_view to)
     {
         m_root->rename(translate_path(from, false), translate_path(to, false));
     }
 
-    void FileSystem::chmod(absl::string_view path, fuse_mode_t mode)
+    void FileSystem::chmod(std::string_view path, fuse_mode_t mode)
     {
         if (!(mode & S_IRUSR))
         {
@@ -299,12 +298,12 @@ namespace lite
         m_root->chmod(translate_path(path, false), mode);
     }
 
-    void FileSystem::chown(absl::string_view path, fuse_uid_t uid, fuse_gid_t gid)
+    void FileSystem::chown(std::string_view path, fuse_uid_t uid, fuse_gid_t gid)
     {
         m_root->chown(translate_path(path, false), uid, gid);
     }
 
-    size_t FileSystem::readlink(absl::string_view path, char* buf, size_t size)
+    size_t FileSystem::readlink(std::string_view path, char* buf, size_t size)
     {
         if (size <= 0)
             return size;
@@ -322,23 +321,23 @@ namespace lite
         return copy_size;
     }
 
-    void FileSystem::symlink(absl::string_view to, absl::string_view from)
+    void FileSystem::symlink(std::string_view to, std::string_view from)
     {
         auto eto = translate_path(to, true), efrom = translate_path(from, false);
         m_root->symlink(eto, efrom);
     }
 
-    void FileSystem::utimens(absl::string_view path, const fuse_timespec* ts)
+    void FileSystem::utimens(std::string_view path, const fuse_timespec* ts)
     {
         m_root->utimens(translate_path(path, false), ts);
     }
 
-    void FileSystem::unlink(absl::string_view path)
+    void FileSystem::unlink(std::string_view path)
     {
         m_root->remove_file(translate_path(path, false));
     }
 
-    void FileSystem::link(absl::string_view src, absl::string_view dest)
+    void FileSystem::link(std::string_view src, std::string_view dest)
     {
         m_root->link(translate_path(src, false), translate_path(dest, false));
     }
@@ -371,7 +370,7 @@ namespace lite
         {
         }
 
-        absl::string_view path() const override { return m_path; }
+        std::string_view path() const override { return m_path; }
 
         void rewind() override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
         {
@@ -449,7 +448,7 @@ namespace lite
         }
     };
 
-    std::unique_ptr<Directory> FileSystem::opendir(absl::string_view path)
+    std::unique_ptr<Directory> FileSystem::opendir(std::string_view path)
     {
         if (path.empty())
             throwVFSException(EINVAL);

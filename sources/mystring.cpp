@@ -22,7 +22,7 @@ std::string to_lower(const std::string& str)
     return result;
 }
 
-void parse_hex(absl::string_view hex, byte* output, size_t len)
+void parse_hex(std::string_view hex, byte* output, size_t len)
 {
     if (hex.size() % 2 != 0)
         throwInvalidArgumentException("Hex string must have an even length");
@@ -289,7 +289,7 @@ std::string escape_nonprintable(const char* str, size_t size)
     return result;
 }
 
-bool is_ascii(absl::string_view str)
+bool is_ascii(std::string_view str)
 {
     for (char c : str)
     {
@@ -301,7 +301,7 @@ bool is_ascii(absl::string_view str)
     return true;
 }
 
-MultipleOwnershipString transform(absl::string_view str, bool case_fold, bool nfc)
+MultipleOwnershipString transform(std::string_view str, bool case_fold, bool nfc)
 {
     if (!case_fold && (!nfc || is_ascii(str)))
     {

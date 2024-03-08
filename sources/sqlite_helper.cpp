@@ -78,7 +78,7 @@ void SQLiteStatement::bind_int(int column, int64_t value)
     check_sqlite_call(db_.get(), sqlite3_bind_int64(holder_.get(), column, value));
 }
 
-void SQLiteStatement::bind_text(int column, absl::string_view value)
+void SQLiteStatement::bind_text(int column, std::string_view value)
 {
     prologue();
     check_sqlite_call(
@@ -97,7 +97,7 @@ void SQLiteStatement::bind_blob(int column, absl::Span<const unsigned char> valu
 
 int64_t SQLiteStatement::get_int(int column) { return sqlite3_column_int64(holder_.get(), column); }
 
-absl::string_view SQLiteStatement::get_text(int column)
+std::string_view SQLiteStatement::get_text(int column)
 {
     return {reinterpret_cast<const char*>(sqlite3_column_text(holder_.get(), column)),
             checked_cast<size_t>(sqlite3_column_bytes(holder_.get(), column))};

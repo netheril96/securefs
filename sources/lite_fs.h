@@ -9,11 +9,11 @@
 #include "platform.h"
 
 #include <absl/base/thread_annotations.h>
-#include <absl/strings/string_view.h>
 #include <absl/types/span.h>
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
 #include <cryptopp/secblock.h>
+#include <string_view>
 
 #include <memory>
 #include <string>
@@ -45,7 +45,7 @@ namespace lite
         Directory* as_dir() noexcept { return this; }
 
         // Obtains the (virtual) path of the directory.
-        virtual absl::string_view path() const = 0;
+        virtual std::string_view path() const = 0;
 
         // Redeclare the methods in `DirectoryTraverser` to add thread safe annotations.
         virtual bool next(std::string* name, fuse_stat* st) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
@@ -127,8 +127,8 @@ namespace lite
 
     typedef std::unique_ptr<File> AutoClosedFile;
 
-    std::string legacy_encrypt_path(AES_SIV& encryptor, absl::string_view path);
-    std::string legacy_decrypt_path(AES_SIV& decryptor, absl::string_view path);
+    std::string legacy_encrypt_path(AES_SIV& encryptor, std::string_view path);
+    std::string legacy_decrypt_path(AES_SIV& decryptor, std::string_view path);
 
     class InvalidFilenameException : public VerificationException
     {
@@ -158,13 +158,13 @@ namespace lite
         unsigned m_flags;
 
     private:
-        std::string translate_path(absl::string_view path, bool preserve_leading_slash);
+        std::string translate_path(std::string_view path, bool preserve_leading_slash);
 
-        static std::string legacy_encrypt_symlink(absl::string_view path);
-        static std::string legacy_decrypt_symlink(absl::string_view path);
+        static std::string legacy_encrypt_symlink(std::string_view path);
+        static std::string legacy_decrypt_symlink(std::string_view path);
 
-        static std::string new_encrypt_symlink(absl::string_view path);
-        static std::string new_decrypt_symlink(absl::string_view path);
+        static std::string new_encrypt_symlink(std::string_view path);
+        static std::string new_decrypt_symlink(std::string_view path);
 
     public:
         FileSystem(std::shared_ptr<const securefs::OSService> root,
@@ -179,20 +179,20 @@ namespace lite
 
         ~FileSystem();
 
-        AutoClosedFile open(absl::string_view path, int flags, fuse_mode_t mode);
-        bool stat(absl::string_view path, fuse_stat* buf);
-        void mkdir(absl::string_view path, fuse_mode_t mode);
-        void rmdir(absl::string_view path);
-        void chmod(absl::string_view path, fuse_mode_t mode);
-        void chown(absl::string_view path, fuse_uid_t uid, fuse_gid_t gid);
-        void rename(absl::string_view from, absl::string_view to);
-        void unlink(absl::string_view path);
-        void symlink(absl::string_view to, absl::string_view from);
-        void link(absl::string_view src, absl::string_view dest);
-        size_t readlink(absl::string_view path, char* buf, size_t size);
-        void utimens(absl::string_view path, const fuse_timespec tm[2]);
+        AutoClosedFile open(std::string_view path, int flags, fuse_mode_t mode);
+        bool stat(std::string_view path, fuse_stat* buf);
+        void mkdir(std::string_view path, fuse_mode_t mode);
+        void rmdir(std::string_view path);
+        void chmod(std::string_view path, fuse_mode_t mode);
+        void chown(std::string_view path, fuse_uid_t uid, fuse_gid_t gid);
+        void rename(std::string_view from, std::string_view to);
+        void unlink(std::string_view path);
+        void symlink(std::string_view to, std::string_view from);
+        void link(std::string_view src, std::string_view dest);
+        size_t readlink(std::string_view path, char* buf, size_t size);
+        void utimens(std::string_view path, const fuse_timespec tm[2]);
         void statvfs(fuse_statvfs* buf);
-        std::unique_ptr<Directory> opendir(absl::string_view path);
+        std::unique_ptr<Directory> opendir(std::string_view path);
 
         bool has_padding() const noexcept { return m_max_padding_size > 0; }
         bool skip_dot_dot() const noexcept { return m_flags & kOptionSkipDotDot; }

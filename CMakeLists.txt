@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.6 FATAL_ERROR)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(NOT CMAKE_CXX_STANDARD)
-    set(CMAKE_CXX_STANDARD 14)
+    set(CMAKE_CXX_STANDARD 17)
 endif()
 
 option(
@@ -49,15 +49,7 @@ endif()
 
 include_directories(BEFORE sources)
 
-file(
-    GLOB
-    SOURCES
-    sources/*.cpp
-    sources/*.h
-    ${EXTERNAL_DIR}/*.h
-    ${EXTERNAL_DIR}/*.hpp
-    ${EXTERNAL_DIR}/*.cpp
-    ${CMAKE_BINARY_DIR}/git-version.cpp)
+file(GLOB SOURCES sources/*.cpp sources/*.h ${CMAKE_BINARY_DIR}/git-version.cpp)
 file(GLOB TEST_SOURCES test/*.h test/*.cpp)
 add_library(securefs-static STATIC ${SOURCES})
 link_libraries(securefs-static)
@@ -74,15 +66,8 @@ find_path(TCLAP_INCLUDE_DIRS "tclap/Arg.h")
 target_include_directories(securefs-static PUBLIC ${TCLAP_INCLUDE_DIRS})
 find_package(absl CONFIG REQUIRED)
 target_link_libraries(
-    securefs-static
-    PUBLIC absl::base
-           absl::inlined_vector
-           absl::flat_hash_map
-           absl::strings
-           absl::optional
-           absl::str_format
-           absl::span
-           absl::any)
+    securefs-static PUBLIC absl::base absl::inlined_vector absl::flat_hash_map
+                           absl::strings absl::str_format absl::span)
 
 if(SECUREFS_USE_VCPKG)
     find_package(cryptopp CONFIG REQUIRED)

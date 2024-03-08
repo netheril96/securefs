@@ -9,15 +9,15 @@
 
 #include <absl/base/thread_annotations.h>
 #include <absl/strings/str_cat.h>
-#include <absl/strings/string_view.h>
-#include <absl/types/variant.h>
 #include <absl/utility/utility.h>
 
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
+#include <string_view>
 #include <utility>
+#include <variant>
 
 namespace securefs
 {
@@ -49,25 +49,25 @@ namespace lite_format
     StreamOpener::AES_ECB& StreamOpener::get_thread_local_content_master_enc()
     {
         auto&& any = content_ecb.get();
-        auto* enc = absl::any_cast<StreamOpener::AES_ECB>(&any);
+        auto* enc = std::any_cast<StreamOpener::AES_ECB>(&any);
         if (enc)
         {
             return *enc;
         }
         any.emplace<StreamOpener::AES_ECB>(content_master_key_.data(), content_master_key_.size());
-        return *absl::any_cast<StreamOpener::AES_ECB>(&any);
+        return *std::any_cast<StreamOpener::AES_ECB>(&any);
     }
 
     StreamOpener::AES_ECB& StreamOpener::get_thread_local_padding_master_enc()
     {
         auto&& any = content_ecb.get();
-        auto* enc = absl::any_cast<StreamOpener::AES_ECB>(&any);
+        auto* enc = std::any_cast<StreamOpener::AES_ECB>(&any);
         if (enc)
         {
             return *enc;
         }
         any.emplace<StreamOpener::AES_ECB>(padding_master_key_.data(), padding_master_key_.size());
-        return *absl::any_cast<StreamOpener::AES_ECB>(&any);
+        return *std::any_cast<StreamOpener::AES_ECB>(&any);
     }
 
     void StreamOpener::validate()
@@ -100,23 +100,23 @@ namespace lite_format
         public:
             INJECT(NoOpNameTranslator()) {}
             bool is_no_op() const noexcept override { return true; }
-            std::string encrypt_full_path(absl::string_view path,
+            std::string encrypt_full_path(std::string_view path,
                                           std::string* out_encrypted_last_component) override
             {
                 return {path.data(), path.size()};
             }
 
             absl::variant<InvalidNameTag, LongNameTag, std::string>
-            decrypt_path_component(absl::string_view path) override
+            decrypt_path_component(std::string_view path) override
             {
                 return std::string{path.data(), path.size()};
             }
 
-            std::string encrypt_path_for_symlink(absl::string_view path) override
+            std::string encrypt_path_for_symlink(std::string_view path) override
             {
                 return {path.data(), path.size()};
             }
-            std::string decrypt_path_from_symlink(absl::string_view path) override
+            std::string decrypt_path_from_symlink(std::string_view path) override
             {
                 return {path.data(), path.size()};
             }
@@ -186,18 +186,18 @@ namespace lite_format
                     try
                     {
                         auto decoded = name_trans_.decrypt_path_component(under_name);
-                        auto decoded_string = absl::get_if<std::string>(&decoded);
+                        auto decoded_string = std::get_if<std::string>(&decoded);
                         if (decoded_string)
                         {
                             decoded_string->swap(*name);
                             return true;
                         }
-                        if (absl::get_if<InvalidNameTag>(&decoded))
+                        if (std::get_if<InvalidNameTag>(&decoded))
                         {
                             continue;
                         }
-                        absl::get<LongNameTag>(decoded);    // Assert that this is a long name
-                                                            // component in need of lookup.
+                        std::get<LongNameTag>(decoded);    // Assert that this is a long name
+                                                           // component in need of lookup.
                         auto&& table = lazy_get_table();
                         std::string encrypted_name;
                         {
@@ -205,7 +205,7 @@ namespace lite_format
                             encrypted_name = table.lookup(under_name);
                         }
                         decoded = name_trans_.decrypt_path_component(encrypted_name);
-                        absl::get<std::string>(decoded).swap(*name);
+                        std::get<std::string>(decoded).swap(*name);
                     }
                     catch (const std::exception& e)
                     {
@@ -237,7 +237,7 @@ namespace lite_format
             }
 
         private:
-            absl::optional<LongNameLookupTable> long_table_ ABSL_GUARDED_BY(*this);
+            std::optional<LongNameLookupTable> long_table_ ABSL_GUARDED_BY(*this);
             std::string dir_abs_path_;
             std::unique_ptr<DirectoryTraverser> under_traverser_ ABSL_GUARDED_BY(*this);
             NameTranslator& name_trans_;
@@ -543,7 +543,7 @@ namespace lite_format
     {
         return -ENOSYS;
     }
-    std::unique_ptr<File> FuseHighLevelOps::open(absl::string_view path, int flags, unsigned mode)
+    std::unique_ptr<File> FuseHighLevelOps::open(std::string_view path, int flags, unsigned mode)
     {
         if (flags & O_APPEND)
         {
@@ -598,12 +598,12 @@ namespace lite_format
         return fruit::createComponent().bind<NameTranslator, NoOpNameTranslator>();
     }
 
-    absl::string_view NameTranslator::get_last_component(absl::string_view path)
+    std::string_view NameTranslator::get_last_component(std::string_view path)
     {
         return path.substr(path.rfind('/') + 1);
     }
 
-    absl::string_view NameTranslator::remove_last_component(absl::string_view path)
+    std::string_view NameTranslator::remove_last_component(std::string_view path)
     {
         return path.substr(0, path.rfind('/') + 1);
     }

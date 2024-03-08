@@ -13,7 +13,6 @@
 
 #include <absl/strings/match.h>
 #include <absl/strings/str_format.h>
-#include <absl/types/optional.h>
 #include <argon2.h>
 #include <cryptopp/cpu.h>
 #include <cryptopp/hmac.h>
@@ -22,6 +21,7 @@
 #include <cryptopp/secblock.h>
 #include <fruit.h>
 #include <json/json.h>
+#include <optional>
 #include <tclap/CmdLine.h>
 #include <utf8proc.h>
 
@@ -906,7 +906,7 @@ private:
         "",
         "string"};
 
-    static void assign(absl::string_view value, CryptoPP::AlignedSecByteBlock& output)
+    static void assign(std::string_view value, CryptoPP::AlignedSecByteBlock& output)
     {
         output.Assign(reinterpret_cast<const byte*>(value.data()), value.size());
     }
@@ -1071,11 +1071,11 @@ private:
     }
 #ifdef WIN32
     static bool is_letter(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
-    static bool is_drive_mount(absl::string_view mount_point)
+    static bool is_drive_mount(std::string_view mount_point)
     {
         return mount_point.size() == 2 && is_letter(mount_point[0]) && mount_point[1] == ':';
     }
-    static bool is_network_mount(absl::string_view mount_point)
+    static bool is_network_mount(std::string_view mount_point)
     {
         return absl::StartsWith(mount_point, "\\\\") && !absl::StartsWith(mount_point, "\\\\?\\");
     }

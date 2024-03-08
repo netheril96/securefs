@@ -1,7 +1,6 @@
 {
     "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
     "dependencies": [
-        "abseil",
         "argon2",
         "cryptopp",
         "tclap",
@@ -9,6 +8,12 @@
         "doctest",
         "jsoncpp",
         "sqlite3",
-        "fruit"
+        "fruit",
+        {
+            "name": "abseil",
+            "features": [
+                "cxx17"
+            ]
+        }
     ]
 }

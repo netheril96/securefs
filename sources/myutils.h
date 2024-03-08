@@ -17,7 +17,7 @@
 #include <vector>
 
 #include <absl/container/flat_hash_map.h>
-#include <absl/types/optional.h>
+#include <optional>
 
 #define DISABLE_COPY_MOVE(cls)                                                                     \
     cls(const cls&) = delete;                                                                      \
@@ -116,7 +116,7 @@ inline constexpr bool is_windows(void)
     return false;
 #endif
 }
-using absl::optional;
+using std::optional;
 
 typedef uint64_t length_type;
 typedef uint64_t offset_type;
