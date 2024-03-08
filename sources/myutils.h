@@ -108,6 +108,14 @@ constexpr inline size_t array_length(const T (&)[N])
     return N;
 };
 
+template <typename... Ts>
+struct Overload : Ts...
+{
+    using Ts::operator()...;
+};
+template <class... Ts>
+Overload(Ts...) -> Overload<Ts...>;
+
 inline constexpr bool is_windows(void)
 {
 #ifdef WIN32
@@ -118,8 +126,8 @@ inline constexpr bool is_windows(void)
 }
 using std::optional;
 
-typedef uint64_t length_type;
-typedef uint64_t offset_type;
+using length_type = uint64_t;
+using offset_type = uint64_t;
 
 constexpr uint32_t KEY_LENGTH = 32, ID_LENGTH = 32, BLOCK_SIZE = 4096;
 
@@ -188,6 +196,10 @@ public:
     PODArray(const PODArray& other) noexcept { memcpy(m_data, other.m_data, size()); }
     PODArray& operator=(const PODArray& other) noexcept
     {
+        if (this == &other)
+        {
+            return *this;
+        }
         memmove(m_data, other.m_data, size());
         return *this;
     }
@@ -202,8 +214,8 @@ public:
     ~PODArray() { CryptoPP::SecureWipeArray(m_data, Size); }
 };
 
-typedef PODArray<byte, KEY_LENGTH> key_type;
-typedef PODArray<byte, ID_LENGTH> id_type;
+using key_type = PODArray<byte, KEY_LENGTH>;
+using id_type = PODArray<byte, ID_LENGTH>;
 
 template <class Iterator, class T>
 inline bool is_all_equal(Iterator begin, Iterator end, const T& value)

@@ -184,27 +184,21 @@ namespace
                     continue;
                 try
                 {
-                    auto decoded = name_trans_.decrypt_path_component(under_name);
-                    auto decoded_string = std::get_if<std::string>(&decoded);
-                    if (decoded_string)
-                    {
-                        decoded_string->swap(*name);
-                        return true;
-                    }
-                    if (std::get_if<InvalidNameTag>(&decoded))
-                    {
-                        continue;
-                    }
-                    std::get<LongNameTag>(decoded);    // Assert that this is a long name
-                                                       // component in need of lookup.
-                    auto&& table = lazy_get_table();
-                    std::string encrypted_name;
-                    {
-                        LockGuard<LongNameLookupTable> lg(table);
-                        encrypted_name = table.lookup(under_name);
-                    }
-                    decoded = name_trans_.decrypt_path_component(encrypted_name);
-                    std::get<std::string>(decoded).swap(*name);
+                    std::visit(Overload{[&](std::string&& decoded) { decoded.swap(*name); },
+                                        [](const InvalidNameTag&) {},
+                                        [&](const LongNameTag&) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
+                                        {
+                                            auto&& table = lazy_get_table();
+                                            std::string encrypted_name;
+                                            {
+                                                LockGuard<LongNameLookupTable> lg(table);
+                                                encrypted_name = table.lookup(under_name);
+                                            }
+                                            auto decoded = name_trans_.decrypt_path_component(
+                                                encrypted_name);
+                                            std::get<std::string>(decoded).swap(*name);
+                                        }},
+                               name_trans_.decrypt_path_component(under_name));
                 }
                 catch (const std::exception& e)
                 {
