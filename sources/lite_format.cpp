@@ -850,7 +850,20 @@ int FuseHighLevelOps::vlink(const char* src, const char* dest, const fuse_contex
 }
 int FuseHighLevelOps::vreadlink(const char* path, char* buf, size_t size, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    memset(buf, 0, size);
+    if (size <= 1)
+    {
+        return 0;
+    }
+
+    auto max_size = size / 5 * 8 + 32;
+    std::vector<char> buffer(max_size);
+    root_.readlink(name_trans_.encrypt_full_path(path, nullptr), buffer.data(), max_size - 1);
+    std::string resolved = name_trans_.decrypt_path_from_symlink(std::string_view(buffer.data()));
+    size_t copy_size = std::min(resolved.size(), size - 1);
+    memcpy(buf, resolved.data(), copy_size);
+    buf[copy_size] = '\0';
+    return 0;
 }
 int FuseHighLevelOps::vrename(const char* from, const char* to, const fuse_context* ctx)
 {
