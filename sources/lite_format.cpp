@@ -447,7 +447,11 @@ namespace
         std::string encrypt_full_path(std::string_view path,
                                       std::string* out_encrypted_last_component) override
         {
-            return {path.data(), path.size()};
+            if (absl::StartsWith(path, "/"))
+            {
+                return absl::StrCat(".", path);
+            }
+            return absl::StrCat("./", path);
         }
 
         absl::variant<InvalidNameTag, LongNameTag, std::string>

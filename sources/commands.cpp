@@ -1,6 +1,7 @@
 #include "commands.h"
 #include "crypto.h"
 #include "exceptions.h"
+#include "fuse_high_level_ops_base.h"
 #include "git-version.h"
 #include "lite_format.h"
 #include "lite_operations.h"
@@ -1055,8 +1056,6 @@ private:
                                       false};
 
     FSConfig config{};
-    bool skip_dot_dot_value, skip_verification_value;
-    std::unique_ptr<OSService> os;
 
 private:
     std::vector<const char*> to_c_style_args(const std::vector<std::string>& args)
@@ -1121,15 +1120,12 @@ private:
         }
         name_norm_flags->supports_long_name = config.long_name_component;
 
-        if (!os)
-            os = std::make_unique<OSService>(data_dir.getValue());
-        skip_dot_dot_value = skip_dot_dot.getValue();
-        skip_verification_value = insecure.getValue();
-
         return fruit::createComponent()
             .bind<FuseHighLevelOpsBase, lite_format::FuseHighLevelOps>()
+            .bindInstance(*this)
             .install(::securefs::lite_format::get_name_translator_component, name_norm_flags)
-            .bindInstance<fruit::Annotated<tSkipVerification, bool>>(skip_verification_value)
+            .registerProvider<fruit::Annotated<tSkipVerification, bool>(const MountCommand&)>(
+                [](const MountCommand& cmd) { return cmd.insecure.getValue(); })
             .bindInstance<fruit::Annotated<tMaxPaddingSize, unsigned>>(config.max_padding)
             .bindInstance<fruit::Annotated<tIvSize, unsigned>>(config.iv_size)
             .bindInstance<fruit::Annotated<tBlockSize, unsigned>>(config.block_size)
@@ -1180,7 +1176,8 @@ private:
                     }
                     return key_type(master_key.data() + 3 * key_type::size(), key_type::size());
                 })
-            .bindInstance(*os);
+            .registerProvider([](const MountCommand& cmd)
+                              { return new OSService(cmd.data_dir.getValue()); });
     }
 
 public:
@@ -1408,9 +1405,36 @@ public:
         {
             VERBOSE_LOG("Master key: %s", hexify(config.master_key));
         }
-        fruit::Injector<FuseHighLevelOpsBase> injector(
-            +[](MountCommand* cmd) { return cmd->get_fuse_high_ops_component(); }, this);
+        if (config.version == 4)
+        {
+            fruit::Injector<FuseHighLevelOpsBase> injector(
+                +[](MountCommand* cmd) { return cmd->get_fuse_high_ops_component(); }, this);
+            FuseHighLevelOpsBase::InitialDataType init
+                = [&]() { return injector.get<FuseHighLevelOpsBase*>(); };
 
+            bool native_xattr = !noxattr.getValue();
+#ifdef __APPLE__
+            if (native_xattr)
+            {
+                auto rc = OSService::get_default().listxattr(data_dir.getValue(), nullptr, 0);
+                if (rc < 0)
+                {
+                    absl::FPrintF(stderr,
+                                  "Warning: the filesystem under %s has no extended attribute "
+                                  "support.\nXattr is disabled\n",
+                                  data_dir.getValue());
+                    native_xattr = false;
+                }
+            }
+#endif
+            auto op = FuseHighLevelOpsBase::build_ops(native_xattr);
+            VERBOSE_LOG("Calling fuse_main with arguments: %s", escape_args(fuse_args));
+            recreate_logger();
+            return fuse_main(static_cast<int>(fuse_args.size()),
+                             const_cast<char**>(to_c_style_args(fuse_args).data()),
+                             &op,
+                             &init);
+        }
         operations::MountOptions fsopt;
         fsopt.root = std::make_shared<OSService>(data_dir.getValue());
         fsopt.block_size = config.block_size;
