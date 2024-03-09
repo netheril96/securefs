@@ -283,31 +283,33 @@ namespace
                                       std::string* out_encrypted_last_component) override
         {
             absl::InlinedVector<std::string_view, 7> splits = absl::StrSplit(path, '/');
-            absl::InlinedVector<std::string, 7> to_join;
-            to_join.reserve(splits.size() + 2);
-            to_join.emplace_back(".");
+            std::string result;
+            result.reserve(path.size() * 3);
+            result.push_back('.');
 
             std::array<unsigned char, kMaxNormalFileNameSize + kSIVSize> aes_buffer;
             std::string part;
             part.reserve(260);
 
+            auto&& siv = get_siv();
+
             for (std::string_view view : splits)
             {
+                result.push_back('/');
                 if (view.empty())
                 {
-                    to_join.emplace_back();
                     continue;
                 }
                 if (view.size() <= kMaxNormalFileNameSize)
                 {
-                    get_siv().encrypt_and_authenticate(view.data(),
-                                                       view.size(),
-                                                       nullptr,
-                                                       0,
-                                                       aes_buffer.data() + kSIVSize,
-                                                       aes_buffer.data());
+                    siv.encrypt_and_authenticate(view.data(),
+                                                 view.size(),
+                                                 nullptr,
+                                                 0,
+                                                 aes_buffer.data() + kSIVSize,
+                                                 aes_buffer.data());
                     base32_encode(aes_buffer.data(), view.size() + kSIVSize, part);
-                    to_join.emplace_back(part);
+                    result.append(part);
                 }
                 else
                 {
@@ -322,14 +324,15 @@ namespace
                     blake.Update(reinterpret_cast<const byte*>(view.data()), view.size());
                     std::array<unsigned char, kHashSize> digest;
                     blake.TruncatedFinal(digest.data(), digest.size());
-                    get_siv().encrypt_and_authenticate(digest.data(),
-                                                       digest.size(),
-                                                       nullptr,
-                                                       0,
-                                                       aes_buffer.data() + kSIVSize,
-                                                       aes_buffer.data());
+                    siv.encrypt_and_authenticate(digest.data(),
+                                                 digest.size(),
+                                                 nullptr,
+                                                 0,
+                                                 aes_buffer.data() + kSIVSize,
+                                                 aes_buffer.data());
                     base32_encode(aes_buffer.data(), digest.size() + kSIVSize, part);
-                    to_join.emplace_back(absl::StrCat(part, kLongNameSuffix));
+                    result.append(part);
+                    result.append(kLongNameSuffix);
                 }
             }
             if (out_encrypted_last_component != nullptr && !splits.empty()
@@ -337,11 +340,11 @@ namespace
             {
                 auto view = splits.back();
                 std::vector<unsigned char> buffer(view.size() + kSIVSize);
-                get_siv().encrypt_and_authenticate(
+                siv.encrypt_and_authenticate(
                     view.data(), view.size(), nullptr, 0, buffer.data() + kSIVSize, buffer.data());
                 base32_encode(buffer.data(), buffer.size(), *out_encrypted_last_component);
             }
-            return absl::StrJoin(to_join, "/");
+            return result;
         }
 
         std::variant<InvalidNameTag, LongNameTag, std::string>
