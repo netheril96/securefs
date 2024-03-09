@@ -1,6 +1,8 @@
 #include "crypto.h"
 #include "fuse_high_level_ops_base.h"
 #include "lite_format.h"
+#include "lite_long_name_lookup_table.h"
+#include "lock_guard.h"
 #include "mystring.h"
 #include "myutils.h"
 #include "platform.h"
@@ -178,6 +180,18 @@ namespace
             concurrent_read_thread.join();
 
             REQUIRE(ops.vrelease(nullptr, &write_info, nullptr) == 0);
+        }
+
+        CHECK(ops.vunlink("/hello", nullptr) == 0);
+        CHECK(ops.vunlink(absl::StrCat("/", kLongFileNameExample).c_str(), nullptr) == 0);
+        CHECK(names(listdir(ops, "/")) == std::vector<std::string>{".", ".."});
+        {
+            LongNameLookupTable root_long_name_table(
+                OSService::get_default().norm_path_narrowed(
+                    absl::StrCat(temp_dir_name, "/", LONG_NAME_DATABASE_FILE_NAME)),
+                true);
+            LockGuard<LongNameLookupTable> lg(root_long_name_table);
+            CHECK(root_long_name_table.list_hashes() == std::vector<std::string>{});
         }
     }
 }    // namespace

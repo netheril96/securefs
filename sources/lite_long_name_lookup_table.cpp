@@ -36,6 +36,7 @@ LongNameLookupTable::LongNameLookupTable(const std::string& filename, bool reado
                 );
             )");
     }
+    db_.set_timeout(2000);
 }
 
 LongNameLookupTable::~LongNameLookupTable() {}
@@ -52,6 +53,18 @@ std::string LongNameLookupTable::lookup(std::string_view encrypted_hash)
     }
     auto view = q.get_text(0);
     return {view.begin(), view.end()};
+}
+
+std::vector<std::string> LongNameLookupTable::list_hashes()
+{
+    SQLiteStatement q(db_, "select encrypted_hash from encrypted_mappings;");
+    q.reset();
+    std::vector<std::string> result;
+    while (q.step())
+    {
+        result.emplace_back(q.get_text(0));
+    }
+    return result;
 }
 
 void LongNameLookupTable::insert_or_update(std::string_view encrypted_hash,

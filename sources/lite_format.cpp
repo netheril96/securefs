@@ -796,7 +796,26 @@ int FuseHighLevelOps::vftruncate(const char* path,
     fp->resize(len);
     return 0;
 }
-int FuseHighLevelOps::vunlink(const char* path, const fuse_context* ctx) { return -ENOSYS; };
+int FuseHighLevelOps::vunlink(const char* path, const fuse_context* ctx)
+{
+    std::string encrypted_last_component, enc_path;
+    enc_path = name_trans_.encrypt_full_path(path, &encrypted_last_component);
+
+    if (encrypted_last_component.empty())
+    {
+        root_.remove_file(enc_path);
+        return 0;
+    }
+
+    auto db_path = root_.norm_path_narrowed(
+        absl::StrCat(name_trans_.remove_last_component(enc_path), LONG_NAME_DATABASE_FILE_NAME));
+    LongNameLookupTable table(db_path, false);
+    // Open a transaction so that we will rollback properly if the following operations fail.
+    LockGuard<LongNameLookupTable> table_lg(table);
+    table.delete_once(name_trans_.get_last_component(enc_path));
+    root_.remove_file(enc_path);
+    return 0;
+};
 int FuseHighLevelOps::vmkdir(const char* path, fuse_mode_t mode, const fuse_context* ctx)
 {
     return -ENOSYS;

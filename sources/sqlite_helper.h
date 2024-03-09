@@ -16,7 +16,7 @@ class SQLiteDB
 public:
     SQLiteDB() = default;
     SQLiteDB(const char* filename, int flags, const char* vfs);
-
+    void set_timeout(int ms);
     void exec(const char* sql);
 
     sqlite3* get() noexcept { return ptr_ ? ptr_->db : nullptr; }

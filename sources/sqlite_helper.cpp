@@ -33,6 +33,8 @@ SQLiteDB::SQLiteDB(const char* filename, int flags, const char* vfs)
     check_sqlite_call(sqlite3_open_v2(filename, &ptr_->db, flags, vfs));
 }
 
+void SQLiteDB::set_timeout(int ms) { check_sqlite_call(get(), sqlite3_busy_timeout(get(), ms)); }
+
 void SQLiteDB::exec(const char* sql)
 {
     check_sqlite_call(sqlite3_exec(get(), sql, nullptr, nullptr, nullptr));

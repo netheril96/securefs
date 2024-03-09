@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include <string>
+#include <vector>
 
 namespace securefs
 {
@@ -21,6 +22,8 @@ public:
     void insert_or_update(std::string_view encrypted_hash, std::string_view encrypted_long_name)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
     void delete_once(std::string_view encrypted_hash) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+
+    std::vector<std::string> list_hashes() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
     void lock() ABSL_EXCLUSIVE_LOCK_FUNCTION(*this) ABSL_NO_THREAD_SAFETY_ANALYSIS
     {
