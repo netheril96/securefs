@@ -9,6 +9,7 @@
 #include "thread_local.h"
 
 #include <cryptopp/aes.h>
+#include <cryptopp/modes.h>
 #include <cstddef>
 #include <fruit/fruit.h>
 #include <memory>
@@ -33,6 +34,18 @@ public:
         , iv_size_(iv_size)
         , max_padding_size_(max_padding_size)
         , skip_verification_(skip_verfication)
+        , content_ecb(
+              [this]()
+              {
+                  return std::make_unique<decltype(content_ecb)::Holder>(
+                      content_master_key_.data(), content_master_key_.size());
+              })
+        , padding_ecb(
+              [this]()
+              {
+                  return std::make_unique<decltype(padding_ecb)::Holder>(
+                      padding_master_key_.data(), padding_master_key_.size());
+              })
     {
         validate();
     }
@@ -52,15 +65,13 @@ public:
 
 private:
     using AES_ECB = CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption;
-    AES_ECB& get_thread_local_content_master_enc();
-    AES_ECB& get_thread_local_padding_master_enc();
     void validate();
 
 private:
     key_type content_master_key_, padding_master_key_;
     unsigned block_size_, iv_size_, max_padding_size_;
     bool skip_verification_;
-    ThreadLocal content_ecb, padding_ecb;
+    ThreadLocal<AES_ECB> content_ecb, padding_ecb;
 };
 
 class File;

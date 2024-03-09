@@ -1,28 +1,61 @@
 #pragma once
-#include "myutils.h"
+#include "object.h"
 
-#include <any>
 #include <array>
+#include <functional>
+#include <memory>
 
 namespace securefs
 {
-class ThreadLocal
+
+class ThreadLocalBase : public Object
 {
 public:
-    static constexpr size_t kMaxIndex = 256;
+    inline static constexpr size_t kMaxIndex = 256;
 
-private:
-    static std::array<std::any, kMaxIndex>& get_local();
+protected:
+    static std::array<std::unique_ptr<Object>, kMaxIndex>& get_local();
 
+protected:
     size_t index_;
 
+    ThreadLocalBase();
+    ~ThreadLocalBase() override;
+};
+
+template <typename T>
+class ThreadLocal final : public ThreadLocalBase
+{
 public:
-    ThreadLocal();
-    ~ThreadLocal();
+    struct Holder : public Object
+    {
+        T value;
 
-    DISABLE_COPY_MOVE(ThreadLocal)
+        template <typename... Args>
+        explicit Holder(Args&&... args) : value(std::forward<Args>(args)...)
+        {
+        }
 
-    std::any& get() { return get_local()[index_]; }
-    const std::any& get() const { return get_local()[index_]; }
+        ~Holder() override = default;
+    };
+
+    using Initializer = std::function<std::unique_ptr<Holder>()>;
+
+private:
+    Initializer init_;
+
+public:
+    explicit ThreadLocal(Initializer init) : init_(std::move(init)) {}
+
+    T& get()
+    {
+        std::unique_ptr<Object>& ptr = get_local()[index_];
+        if (auto p = dynamic_cast<Holder*>(ptr.get()); p)
+        {
+            return p->value;
+        }
+        ptr = init_();
+        return dynamic_cast<Holder*>(ptr.get())->value;
+    }
 };
 }    // namespace securefs

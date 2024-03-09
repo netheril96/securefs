@@ -11,7 +11,7 @@ namespace
     {
     public:
         Mutex mu;
-        std::array<bool, ThreadLocal::kMaxIndex> taken ABSL_GUARDED_BY(mu);
+        std::array<bool, ThreadLocalBase::kMaxIndex> taken ABSL_GUARDED_BY(mu);
 
         static ThreadLocalRegistry& get_registry()
         {
@@ -23,15 +23,16 @@ namespace
         ThreadLocalRegistry() : mu(), taken() {}
         DISABLE_COPY_MOVE(ThreadLocalRegistry)
     };
+
 }    // namespace
 
-std::array<std::any, ThreadLocal::kMaxIndex>& ThreadLocal::get_local()
+std::array<std::unique_ptr<Object>, ThreadLocalBase::kMaxIndex>& ThreadLocalBase::get_local()
 {
-    static thread_local std::array<std::any, kMaxIndex> locals{};
+    static thread_local std::array<std::unique_ptr<Object>, kMaxIndex> locals;
     return locals;
 }
 
-ThreadLocal::ThreadLocal()
+ThreadLocalBase::ThreadLocalBase()
 {
     auto& registry = ThreadLocalRegistry::get_registry();
     LockGuard<Mutex> lg(registry.mu);
@@ -47,7 +48,7 @@ ThreadLocal::ThreadLocal()
     throw_runtime_error("No more slots for thread locals");
 }
 
-ThreadLocal::~ThreadLocal()
+ThreadLocalBase::~ThreadLocalBase()
 {
     auto& registry = ThreadLocalRegistry::get_registry();
     LockGuard<Mutex> lg(registry.mu);

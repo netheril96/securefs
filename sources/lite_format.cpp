@@ -21,7 +21,6 @@
 #include <cstddef>
 #include <fruit/fruit.h>
 
-#include <any>
 #include <array>
 #include <cerrno>
 #include <cstdint>
@@ -45,7 +44,7 @@ StreamOpener::open(std::shared_ptr<StreamBase> base)
 void StreamOpener::compute_session_key(const std::array<unsigned char, 16>& id,
                                        std::array<unsigned char, 16>& outkey)
 {
-    get_thread_local_content_master_enc().ProcessData(outkey.data(), id.data(), id.size());
+    content_ecb.get().ProcessData(outkey.data(), id.data(), id.size());
 }
 
 unsigned StreamOpener::compute_padding(const std::array<unsigned char, 16>& id)
@@ -55,31 +54,7 @@ unsigned StreamOpener::compute_padding(const std::array<unsigned char, 16>& id)
         return 0;
     }
     return lite::default_compute_padding(
-        max_padding_size_, get_thread_local_padding_master_enc(), id.data(), id.size());
-}
-
-StreamOpener::AES_ECB& StreamOpener::get_thread_local_content_master_enc()
-{
-    auto&& any = content_ecb.get();
-    auto* enc = std::any_cast<StreamOpener::AES_ECB>(&any);
-    if (enc)
-    {
-        return *enc;
-    }
-    any.emplace<StreamOpener::AES_ECB>(content_master_key_.data(), content_master_key_.size());
-    return *std::any_cast<StreamOpener::AES_ECB>(&any);
-}
-
-StreamOpener::AES_ECB& StreamOpener::get_thread_local_padding_master_enc()
-{
-    auto&& any = content_ecb.get();
-    auto* enc = std::any_cast<StreamOpener::AES_ECB>(&any);
-    if (enc)
-    {
-        return *enc;
-    }
-    any.emplace<StreamOpener::AES_ECB>(padding_master_key_.data(), padding_master_key_.size());
-    return *std::any_cast<StreamOpener::AES_ECB>(&any);
+        max_padding_size_, padding_ecb.get(), id.data(), id.size());
 }
 
 void StreamOpener::validate()
@@ -115,25 +90,21 @@ namespace
 
         explicit AESSIVBasedNameTranslator(const key_type& name_master_key)
             : name_master_key_(name_master_key)
+            , name_aes_siv_(
+                  [this]()
+                  {
+                      return std::make_unique<decltype(name_aes_siv_)::Holder>(
+                          name_master_key_.data(), name_master_key_.size());
+                  })
         {
         }
 
     protected:
-        AES_SIV& get_siv()
-        {
-            auto&& any = name_aes_siv_.get();
-            if (auto p = std::any_cast<std::shared_ptr<AES_SIV>>(&any))
-            {
-                return **p;
-            }
-            any.emplace<std::shared_ptr<AES_SIV>>(
-                std::make_shared<AES_SIV>(name_master_key_.data(), name_master_key_.size()));
-            return **std::any_cast<std::shared_ptr<AES_SIV>>(&any);
-        }
+        AES_SIV& get_siv() { return name_aes_siv_.get(); }
 
     protected:
         key_type name_master_key_;
-        ThreadLocal name_aes_siv_;
+        ThreadLocal<AES_SIV> name_aes_siv_;
     };
 
     class LegacyNameTranslator : public AESSIVBasedNameTranslator
