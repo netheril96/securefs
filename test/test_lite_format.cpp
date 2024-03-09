@@ -1,3 +1,4 @@
+#include "crypto.h"
 #include "fuse_high_level_ops_base.h"
 #include "lite_format.h"
 #include "mystring.h"
@@ -21,6 +22,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -126,17 +128,57 @@ namespace
         auto& ops = injector.get<FuseHighLevelOps&>();
         CHECK(names(listdir(ops, "/")) == std::vector<std::string>{".", ".."});
 
-        fuse_file_info info{};
-        REQUIRE(ops.vcreate("/hello", 0644, &info, nullptr) == 0);
-        REQUIRE(ops.vrelease(nullptr, &info, nullptr) == 0);
+        {
+            fuse_file_info info{};
+            REQUIRE(ops.vcreate("/hello", 0644, &info, nullptr) == 0);
+            REQUIRE(ops.vrelease(nullptr, &info, nullptr) == 0);
+        }
 
         CHECK(names(listdir(ops, "/")) == std::vector<std::string>{".", "..", "hello"});
 
-        REQUIRE(ops.vcreate(absl::StrCat("/", kLongFileNameExample).c_str(), 0644, &info, nullptr)
+        {
+            fuse_file_info info{};
+            REQUIRE(
+                ops.vcreate(absl::StrCat("/", kLongFileNameExample).c_str(), 0644, &info, nullptr)
                 == 0);
-        REQUIRE(ops.vrelease(nullptr, &info, nullptr) == 0);
-        CHECK(names(listdir(ops, "/"))
-              == std::vector<std::string>{".", "..", "hello", std::string(kLongFileNameExample)});
+            REQUIRE(ops.vrelease(nullptr, &info, nullptr) == 0);
+            CHECK(
+                names(listdir(ops, "/"))
+                == std::vector<std::string>{".", "..", "hello", std::string(kLongFileNameExample)});
+        }
+
+        {
+            // Asserts read and write
+
+            std::vector<char> written(333), read(444);
+            generate_random(written.data(), written.size());
+            fuse_file_info write_info{};
+            write_info.flags = O_WRONLY;
+            REQUIRE(ops.vopen(absl::StrCat("/", kLongFileNameExample).c_str(), &write_info, nullptr)
+                    == 0);
+            REQUIRE(ops.vwrite(nullptr, written.data(), written.size(), 1, &write_info, nullptr)
+                    == written.size());
+
+            std::thread concurrent_read_thread(
+                [&]()
+                {
+                    fuse_file_info read_info{};
+                    read_info.flags = O_RDONLY;
+                    REQUIRE(ops.vopen(absl::StrCat("/", kLongFileNameExample).c_str(),
+                                      &read_info,
+                                      nullptr)
+                            == 0);
+                    REQUIRE(ops.vread(nullptr, read.data(), read.size(), 0, &read_info, nullptr)
+                            == written.size() + 1);
+                    REQUIRE(ops.vrelease(nullptr, &read_info, nullptr) == 0);
+                    CHECK(read.front() == 0);
+                    CHECK(std::string_view(written.data(), written.size())
+                          == std::string_view(read.data() + 1, written.size()));
+                });
+            concurrent_read_thread.join();
+
+            REQUIRE(ops.vrelease(nullptr, &write_info, nullptr) == 0);
+        }
     }
 }    // namespace
 }    // namespace securefs::lite_format
