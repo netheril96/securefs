@@ -1124,7 +1124,7 @@ private:
 
         return fruit::createComponent()
             .bind<FuseHighLevelOpsBase, lite_format::FuseHighLevelOps>()
-            .install(&lite_format::get_name_translator_component, name_norm_flags)
+            .install(::securefs::lite_format::get_name_translator_component, name_norm_flags)
             .bindInstance<fruit::Annotated<tSkipVerification, bool>>(skip_verification_value)
             .bindInstance<fruit::Annotated<tMaxPaddingSize, unsigned>>(config.max_padding)
             .bindInstance<fruit::Annotated<tIvSize, unsigned>>(config.iv_size)

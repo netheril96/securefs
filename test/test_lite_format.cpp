@@ -36,72 +36,6 @@ namespace
         sha.TruncatedFinal(h.data(), h.size());
         return hexify(h);
     }
-    class FakeNameTranslator : public NameTranslator
-    {
-    public:
-        INJECT(FakeNameTranslator()) {}
-        static constexpr size_t kMaxNameLength = 144;
-        std::string encrypt_full_path(std::string_view path,
-                                      std::string* out_encrypted_last_component) override
-        {
-            std::vector<std::string_view> parts = absl::StrSplit(path, '/');
-            std::vector<std::string> transformed;
-            transformed.reserve(parts.size() + 2);
-            transformed.emplace_back(".");
-
-            for (std::string_view p : parts)
-            {
-                if (p.empty())
-                {
-                    transformed.emplace_back();
-                    continue;
-                }
-                if (p.size() > kMaxNameLength)
-                {
-                    transformed.emplace_back(absl::StrCat("hash-", hash(p)));
-                }
-                else
-                {
-                    transformed.emplace_back(absl::StrCat("enc-", p));
-                }
-            }
-            if (out_encrypted_last_component != nullptr && parts.size() > 0
-                && parts.back().size() > kMaxNameLength)
-            {
-                *out_encrypted_last_component = absl::StrCat("enc-", parts.back());
-            }
-            return absl::StrJoin(transformed, "/");
-        }
-
-        std::variant<InvalidNameTag, LongNameTag, std::string>
-        decrypt_path_component(std::string_view path) override
-        {
-            if (absl::StartsWithIgnoreCase(path, "enc-"))
-            {
-                auto sub = path.substr(4);
-                return std::string(sub);
-            }
-            if (absl::StartsWithIgnoreCase(path, "hash-"))
-            {
-                return LongNameTag{};
-            }
-            return InvalidNameTag{};
-        }
-
-        std::string encrypt_path_for_symlink(std::string_view path) override
-        {
-            return absl::StrCat("/enc/", path);
-        }
-        std::string decrypt_path_from_symlink(std::string_view path) override
-        {
-            return std::string(path.substr(5));
-        }
-
-        unsigned max_virtual_path_component_size(unsigned physical_path_component_size) override
-        {
-            return 1024;
-        }
-    };
 
     TEST_CASE("component manipulation")
     {
@@ -123,9 +57,7 @@ namespace
             .registerProvider<fruit::Annotated<tSkipVerification, bool>()>([]() { return false; })
             .registerProvider<fruit::Annotated<tBlockSize, unsigned>()>([]() { return 64u; })
             .registerProvider<fruit::Annotated<tIvSize, unsigned>()>([]() { return 12u; })
-            .registerProvider<fruit::Annotated<tMaxPaddingSize, unsigned>()>([]() { return 24u; })
-
-            ;
+            .registerProvider<fruit::Annotated<tMaxPaddingSize, unsigned>()>([]() { return 24u; });
     }
 
     using ListDirResult = std::vector<std::pair<std::string, fuse_stat>>;
@@ -176,9 +108,13 @@ namespace
         auto whole_component
             = [](std::shared_ptr<OSService> os) -> fruit::Component<FuseHighLevelOps>
         {
+            auto flags = std::make_shared<NameNormalizationFlags>();
+            flags->supports_long_name = true;
             return fruit::createComponent()
-                .bind<NameTranslator, FakeNameTranslator>()
+                .install(get_name_translator_component, flags)
                 .install(get_test_component)
+                .registerProvider<fruit::Annotated<tNameMasterKey, key_type>()>(
+                    []() { return key_type(122); })
                 .bindInstance(*os);
         };
 
