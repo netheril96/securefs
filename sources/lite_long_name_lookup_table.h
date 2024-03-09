@@ -48,10 +48,10 @@ public:
     LongNameLookupTable(const std::string& filename, bool readonly);
     ~LongNameLookupTable();
 
-    std::string lookup(std::string_view encrypted_hash) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
-    void insert_or_update(std::string_view encrypted_hash, std::string_view encrypted_long_name)
+    std::string lookup(std::string_view keyed_hash) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    void update_mapping(std::string_view keyed_hash, std::string_view encrypted_long_name)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
-    void delete_once(std::string_view encrypted_hash) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    void remove_mapping(std::string_view keyed_hash) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
     std::vector<std::string> list_hashes() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 };
@@ -62,10 +62,10 @@ class ABSL_LOCKABLE DoubleLongNameLookupTable : public internal::LookupTableBase
 public:
     DoubleLongNameLookupTable(const std::string& from_dir_db, const std::string& to_dir_db);
 
-    void remove_mapping_in_from_db(std::string_view encrypted_hash)
+    void remove_mapping_from_from_db(std::string_view keyed_hash)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
-    void add_mapping_in_to_db(std::string_view encrypted_hash, std::string_view encrypted_long_name)
+    void update_mapping_to_to_db(std::string_view keyed_hash, std::string_view encrypted_long_name)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 };
 }    // namespace securefs

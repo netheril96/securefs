@@ -20,7 +20,7 @@ LongNameLookupTable::LongNameLookupTable(const std::string& filename, bool reado
     {
         db_.exec(R"(
                 create table if not exists encrypted_mappings (
-                    encrypted_hash text not null primary key,
+                    keyed_hash text not null primary key,
                     encrypted_name text not null
                 );
             )");
@@ -30,12 +30,11 @@ LongNameLookupTable::LongNameLookupTable(const std::string& filename, bool reado
 
 LongNameLookupTable::~LongNameLookupTable() {}
 
-std::string LongNameLookupTable::lookup(std::string_view encrypted_hash)
+std::string LongNameLookupTable::lookup(std::string_view keyed_hash)
 {
-    SQLiteStatement q(db_,
-                      "select encrypted_name from encrypted_mappings where encrypted_hash = ?;");
+    SQLiteStatement q(db_, "select encrypted_name from encrypted_mappings where keyed_hash = ?;");
     q.reset();
-    q.bind_text(1, encrypted_hash);
+    q.bind_text(1, keyed_hash);
     if (!q.step())
     {
         return {};
@@ -46,7 +45,7 @@ std::string LongNameLookupTable::lookup(std::string_view encrypted_hash)
 
 std::vector<std::string> LongNameLookupTable::list_hashes()
 {
-    SQLiteStatement q(db_, "select encrypted_hash from encrypted_mappings;");
+    SQLiteStatement q(db_, "select keyed_hash from encrypted_mappings;");
     q.reset();
     std::vector<std::string> result;
     while (q.step())
@@ -56,28 +55,28 @@ std::vector<std::string> LongNameLookupTable::list_hashes()
     return result;
 }
 
-void LongNameLookupTable::insert_or_update(std::string_view encrypted_hash,
-                                           std::string_view encrypted_long_name)
+void LongNameLookupTable::update_mapping(std::string_view keyed_hash,
+                                         std::string_view encrypted_long_name)
 {
     SQLiteStatement q(db_, R"(
             insert or ignore into encrypted_mappings
-                (encrypted_hash, encrypted_name)
+                (keyed_hash, encrypted_name)
                 values (?, ?);
         )");
     q.reset();
-    q.bind_text(1, encrypted_hash);
+    q.bind_text(1, keyed_hash);
     q.bind_text(2, encrypted_long_name);
     q.step();
 }
 
-void LongNameLookupTable::delete_once(std::string_view encrypted_hash)
+void LongNameLookupTable::remove_mapping(std::string_view keyed_hash)
 {
     SQLiteStatement q(db_, R"(
             delete from encrypted_mappings
-                where encrypted_hash = ?;
+                where keyed_hash = ?;
         )");
     q.reset();
-    q.bind_text(1, encrypted_hash);
+    q.bind_text(1, keyed_hash);
     q.step();
 }
 
@@ -116,38 +115,38 @@ DoubleLongNameLookupTable::DoubleLongNameLookupTable(const std::string& from_dir
     }
     db_.exec(R"(
                 create table if not exists main.encrypted_mappings (
-                    encrypted_hash text not null primary key,
+                    keyed_hash text not null primary key,
                     encrypted_name text not null
                 );
 
                 create table if not exists secondary.encrypted_mappings (
-                    encrypted_hash text not null primary key,
+                    keyed_hash text not null primary key,
                     encrypted_name text not null
                 );
             )");
 }
 
-void DoubleLongNameLookupTable::remove_mapping_in_from_db(std::string_view encrypted_hash)
+void DoubleLongNameLookupTable::remove_mapping_from_from_db(std::string_view keyed_hash)
 {
     SQLiteStatement q(db_, R"(
             delete from main.encrypted_mappings
-                where encrypted_hash = ?;
+                where keyed_hash = ?;
         )");
     q.reset();
-    q.bind_text(1, encrypted_hash);
+    q.bind_text(1, keyed_hash);
     q.step();
 }
 
-void DoubleLongNameLookupTable::add_mapping_in_to_db(std::string_view encrypted_hash,
-                                                     std::string_view encrypted_long_name)
+void DoubleLongNameLookupTable::update_mapping_to_to_db(std::string_view keyed_hash,
+                                                        std::string_view encrypted_long_name)
 {
     SQLiteStatement q(db_, R"(
             insert or ignore into secondary.encrypted_mappings
-                (encrypted_hash, encrypted_name)
+                (keyed_hash, encrypted_name)
                 values (?, ?);
         )");
     q.reset();
-    q.bind_text(1, encrypted_hash);
+    q.bind_text(1, keyed_hash);
     q.bind_text(2, encrypted_long_name);
     q.step();
 }

@@ -866,11 +866,11 @@ int FuseHighLevelOps::vreadlink(const char* path, char* buf, size_t size, const 
 }
 int FuseHighLevelOps::vrename(const char* from, const char* to, const fuse_context* ctx)
 {
-    std::string encrypted_last_from, encrypted_last_to;
-    auto enc_from = name_trans_.encrypt_full_path(from, &encrypted_last_from);
-    auto enc_to = name_trans_.encrypt_full_path(to, &encrypted_last_to);
+    std::string encrypted_last_component_from, encrypted_last_component_to;
+    auto enc_from = name_trans_.encrypt_full_path(from, &encrypted_last_component_from);
+    auto enc_to = name_trans_.encrypt_full_path(to, &encrypted_last_component_to);
 
-    if (encrypted_last_from.empty() && encrypted_last_to.empty())
+    if (encrypted_last_component_from.empty() && encrypted_last_component_to.empty())
     {
         // Neither are long name, so fast path.
         root_.rename(enc_from, enc_to);
@@ -881,13 +881,14 @@ int FuseHighLevelOps::vrename(const char* from, const char* to, const fuse_conte
                                     long_name_table_file_name(enc_to));
     LockGuard<decltype(table)> lg(table);
 
-    if (!encrypted_last_from.empty())
+    if (!encrypted_last_component_from.empty())
     {
-        table.remove_mapping_in_from_db(name_trans_.get_last_component(enc_from));
+        table.remove_mapping_from_from_db(name_trans_.get_last_component(enc_from));
     }
-    if (!encrypted_last_to.empty())
+    if (!encrypted_last_component_to.empty())
     {
-        table.add_mapping_in_to_db(name_trans_.get_last_component(enc_to), encrypted_last_to);
+        table.update_mapping_to_to_db(name_trans_.get_last_component(enc_to),
+                                      encrypted_last_component_to);
     }
     root_.rename(enc_from, enc_to);
     return 0;
@@ -1005,10 +1006,10 @@ void FuseHighLevelOps::process_possible_long_name(
     switch (action)
     {
     case LongNameComponentAction::kCreate:
-        table.insert_or_update(name_trans_.get_last_component(enc_path), encrypted_last_component);
+        table.update_mapping(name_trans_.get_last_component(enc_path), encrypted_last_component);
         break;
     case LongNameComponentAction::kDelete:
-        table.delete_once(name_trans_.get_last_component(enc_path));
+        table.remove_mapping(name_trans_.get_last_component(enc_path));
         break;
     default:
         throw_runtime_error("Unspecified action");
