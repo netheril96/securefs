@@ -798,47 +798,55 @@ int FuseHighLevelOps::vftruncate(const char* path,
 }
 int FuseHighLevelOps::vunlink(const char* path, const fuse_context* ctx)
 {
-    std::string encrypted_last_component, enc_path;
-    enc_path = name_trans_.encrypt_full_path(path, &encrypted_last_component);
-
-    if (encrypted_last_component.empty())
-    {
-        root_.remove_file(enc_path);
-        return 0;
-    }
-
-    auto db_path = root_.norm_path_narrowed(
-        absl::StrCat(name_trans_.remove_last_component(enc_path), LONG_NAME_DATABASE_FILE_NAME));
-    LongNameLookupTable table(db_path, false);
-    // Open a transaction so that we will rollback properly if the following operations fail.
-    LockGuard<LongNameLookupTable> table_lg(table);
-    table.delete_once(name_trans_.get_last_component(enc_path));
-    root_.remove_file(enc_path);
+    process_possible_long_name(path,
+                               LongNameComponentAction::kDelete,
+                               [&](std::string&& enc_path) { root_.remove_file(enc_path); });
     return 0;
 };
 int FuseHighLevelOps::vmkdir(const char* path, fuse_mode_t mode, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    process_possible_long_name(path,
+                               LongNameComponentAction::kCreate,
+                               [&](std::string&& enc_path) { root_.mkdir(enc_path, mode); });
+    return 0;
 }
-int FuseHighLevelOps::vrmdir(const char* path, const fuse_context* ctx) { return -ENOSYS; };
+int FuseHighLevelOps::vrmdir(const char* path, const fuse_context* ctx)
+{
+    process_possible_long_name(path,
+                               LongNameComponentAction::kDelete,
+                               [&](std::string&& enc_path) { root_.remove_directory(enc_path); });
+    return 0;
+}
 int FuseHighLevelOps::vchmod(const char* path, fuse_mode_t mode, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    root_.chmod(name_trans_.encrypt_full_path(path, nullptr), mode);
+    return 0;
 }
 int FuseHighLevelOps::vchown(const char* path,
                              fuse_uid_t uid,
                              fuse_gid_t gid,
                              const fuse_context* ctx)
 {
-    return -ENOSYS;
+    root_.chown(name_trans_.encrypt_full_path(path, nullptr), uid, gid);
+    return 0;
 }
 int FuseHighLevelOps::vsymlink(const char* to, const char* from, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    process_possible_long_name(
+        from,
+        LongNameComponentAction::kCreate,
+        [&](std::string&& enc_path)
+        { root_.symlink(name_trans_.encrypt_path_for_symlink(to), enc_path); });
+    return 0;
 }
 int FuseHighLevelOps::vlink(const char* src, const char* dest, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    process_possible_long_name(
+        dest,
+        LongNameComponentAction::kCreate,
+        [&](std::string&& enc_path)
+        { root_.link(name_trans_.encrypt_full_path(src, nullptr), enc_path); });
+    return 0;
 }
 int FuseHighLevelOps::vreadlink(const char* path, char* buf, size_t size, const fuse_context* ctx)
 {
@@ -853,15 +861,23 @@ int FuseHighLevelOps::vfsync(const char* path,
                              fuse_file_info* info,
                              const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto fp = get_file_checked(info);
+    LockGuard<File> lg(*fp);
+    fp->flush();
+    fp->fsync();
+    return 0;
 }
 int FuseHighLevelOps::vtruncate(const char* path, fuse_off_t len, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto fp = open(path, O_WRONLY, 0);
+    LockGuard<File> lg(*fp);
+    fp->resize(len);
+    return 0;
 }
 int FuseHighLevelOps::vutimens(const char* path, const fuse_timespec* ts, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    root_.utimens(name_trans_.encrypt_full_path(path, nullptr), ts);
+    return 0;
 }
 int FuseHighLevelOps::vlistxattr(const char* path, char* list, size_t size, const fuse_context* ctx)
 {
@@ -909,25 +925,13 @@ std::unique_ptr<File> FuseHighLevelOps::open(std::string_view path, int flags, u
     {
         mode |= S_IRUSR;
     }
-    std::string encrypted_last_component, enc_path;
-    enc_path = name_trans_.encrypt_full_path(
-        path, (flags & O_CREAT) ? &encrypted_last_component : nullptr);
     std::unique_ptr<File> fp;
-    if (encrypted_last_component.empty())
-    {
-        fp = std::make_unique<File>(root_.open_file_stream(enc_path, flags, mode), opener_);
-    }
-    else
-    {
-        auto db_path = root_.norm_path_narrowed(absl::StrCat(
-            name_trans_.remove_last_component(enc_path), LONG_NAME_DATABASE_FILE_NAME));
-        LongNameLookupTable table(db_path, false);
-        // Open a transaction so that we will rollback properly if opening the file stream later
-        // fails.
-        LockGuard<LongNameLookupTable> table_lg(table);
-        table.insert_or_update(name_trans_.get_last_component(enc_path), encrypted_last_component);
-        fp = std::make_unique<File>(root_.open_file_stream(enc_path, flags, mode), opener_);
-    }
+
+    process_possible_long_name(
+        path,
+        (flags & O_CREAT) ? LongNameComponentAction::kCreate : LongNameComponentAction::kIgnore,
+        [&](std::string&& enc_path)
+        { fp = std::make_unique<File>(root_.open_file_stream(enc_path, flags, mode), opener_); });
 
     if (flags & O_TRUNC)
     {
@@ -935,6 +939,44 @@ std::unique_ptr<File> FuseHighLevelOps::open(std::string_view path, int flags, u
         fp->resize(0);
     }
     return fp;
+}
+
+void FuseHighLevelOps::process_possible_long_name(
+    absl::string_view path,
+    LongNameComponentAction action,
+    absl::FunctionRef<void(std::string&& enc_path)> callback)
+{
+    if (action == LongNameComponentAction::kIgnore)
+    {
+        callback(name_trans_.encrypt_full_path(path, nullptr));
+        return;
+    }
+    std::string encrypted_last_component, enc_path;
+    enc_path = name_trans_.encrypt_full_path(path, &encrypted_last_component);
+
+    if (encrypted_last_component.empty())
+    {
+        callback(std::move(enc_path));
+        return;
+    }
+
+    auto db_path = root_.norm_path_narrowed(
+        absl::StrCat(name_trans_.remove_last_component(enc_path), LONG_NAME_DATABASE_FILE_NAME));
+    LongNameLookupTable table(db_path, false);
+    // Open a transaction so that we will rollback properly if the following operations fail.
+    LockGuard<LongNameLookupTable> table_lg(table);
+    switch (action)
+    {
+    case LongNameComponentAction::kCreate:
+        table.insert_or_update(name_trans_.get_last_component(enc_path), encrypted_last_component);
+        break;
+    case LongNameComponentAction::kDelete:
+        table.delete_once(name_trans_.get_last_component(enc_path));
+        break;
+    default:
+        throw_runtime_error("Unspecified action");
+    }
+    callback(std::move(enc_path));
 }
 
 fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>

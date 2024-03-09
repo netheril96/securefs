@@ -1,6 +1,7 @@
 #pragma once
 
 #include "fuse_high_level_ops_base.h"
+#include "lite_long_name_lookup_table.h"
 #include "lite_stream.h"
 #include "lock_guard.h"
 #include "myutils.h"
@@ -8,6 +9,7 @@
 #include "tags.h"
 #include "thread_local.h"
 
+#include <absl/functional/function_ref.h>
 #include <cryptopp/aes.h>
 #include <cryptopp/modes.h>
 #include <cstddef>
@@ -298,6 +300,17 @@ private:
 
 private:
     std::unique_ptr<File> open(std::string_view path, int flags, unsigned mode);
+
+    enum class LongNameComponentAction : unsigned char
+    {
+        kCreate = 0,
+        kDelete = 1,
+        kIgnore = 2,
+    };
+
+    void process_possible_long_name(absl::string_view path,
+                                    LongNameComponentAction action,
+                                    absl::FunctionRef<void(std::string&& enc_path)> callback);
 };
 }    // namespace securefs::lite_format
 
