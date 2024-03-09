@@ -81,6 +81,7 @@ def main():
         nargs="*",
         help="Additional CMake definitions. Example: FOO=BAR",
     )
+    parser.add_argument("--build_type", default="Release", help="CMake build type")
     args = parser.parse_args()
 
     if args.enable_test:  # For backwards compat
@@ -91,7 +92,7 @@ def main():
     os.chdir(get_build_root(args.build_root))
     configure_args = [
         "cmake",
-        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_BUILD_TYPE=" + args.build_type,
         f"-DCMAKE_TOOLCHAIN_FILE={get_vcpkg_cmake_file(args.vcpkg_root)}",
     ]
     if args.triplet:
@@ -105,9 +106,9 @@ def main():
     configure_args.append(source_dir)
 
     check_call(*configure_args)
-    check_call("cmake", "--build", ".", "--config", "Release")
+    check_call("cmake", "--build", ".", "--config", args.build_type)
     if args.enable_unit_test or args.enable_integration_test:
-        check_call("ctest", "-V", "-C", "Release")
+        check_call("ctest", "-V", "-C", args.build_type)
     print(
         "Build succeeds. Please copy the binary somewhere in your PATH:",
         os.path.realpath("./securefs"),
