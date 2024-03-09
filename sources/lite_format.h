@@ -10,6 +10,7 @@
 #include "thread_local.h"
 
 #include <absl/functional/function_ref.h>
+#include <absl/strings/string_view.h>
 #include <cryptopp/aes.h>
 #include <cryptopp/modes.h>
 #include <cstddef>
@@ -20,7 +21,7 @@
 
 namespace securefs::lite_format
 {
-constexpr std::string_view LONG_NAME_DATABASE_FILE_NAME = ".long_names.db";
+constexpr std::string_view kLongNameTableFileName = ".long_names.db";
 class StreamOpener : public lite::AESGCMCryptStream::ParamCalculator
 {
 public:
@@ -311,6 +312,8 @@ private:
     void process_possible_long_name(absl::string_view path,
                                     LongNameComponentAction action,
                                     absl::FunctionRef<void(std::string&& enc_path)> callback);
+
+    std::string long_name_table_file_name(absl::string_view enc_path);
 };
 }    // namespace securefs::lite_format
 

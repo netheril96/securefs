@@ -188,7 +188,7 @@ namespace
         {
             LongNameLookupTable root_long_name_table(
                 OSService::get_default().norm_path_narrowed(
-                    absl::StrCat(temp_dir_name, "/", LONG_NAME_DATABASE_FILE_NAME)),
+                    absl::StrCat(temp_dir_name, "/", kLongNameTableFileName)),
                 true);
             LockGuard<LongNameLookupTable> lg(root_long_name_table);
             CHECK(root_long_name_table.list_hashes() == std::vector<std::string>{});

@@ -18,11 +18,11 @@
 #include <absl/utility/utility.h>
 #include <cryptopp/blake2.h>
 #include <cryptopp/sha.h>
-#include <cstddef>
 #include <fruit/fruit.h>
 
 #include <array>
 #include <cerrno>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
@@ -565,8 +565,7 @@ namespace
                 return *long_table_;
             }
             long_table_.emplace(
-                OSService::concat_and_norm_narrowed(dir_abs_path_, LONG_NAME_DATABASE_FILE_NAME),
-                true);
+                OSService::concat_and_norm_narrowed(dir_abs_path_, kLongNameTableFileName), true);
             return *long_table_;
         }
 
@@ -867,7 +866,31 @@ int FuseHighLevelOps::vreadlink(const char* path, char* buf, size_t size, const 
 }
 int FuseHighLevelOps::vrename(const char* from, const char* to, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    std::string encrypted_last_from, encrypted_last_to;
+    auto enc_from = name_trans_.encrypt_full_path(from, &encrypted_last_from);
+    auto enc_to = name_trans_.encrypt_full_path(to, &encrypted_last_to);
+
+    if (encrypted_last_from.empty() && encrypted_last_to.empty())
+    {
+        // Neither are long name, so fast path.
+        root_.rename(enc_from, enc_to);
+        return 0;
+    }
+
+    DoubleLongNameLookupTable table(long_name_table_file_name(enc_from),
+                                    long_name_table_file_name(enc_to));
+    LockGuard<decltype(table)> lg(table);
+
+    if (!encrypted_last_from.empty())
+    {
+        table.remove_mapping_in_from_db(name_trans_.get_last_component(enc_from));
+    }
+    if (!encrypted_last_to.empty())
+    {
+        table.add_mapping_in_to_db(name_trans_.get_last_component(enc_to), encrypted_last_to);
+    }
+    root_.rename(enc_from, enc_to);
+    return 0;
 }
 int FuseHighLevelOps::vfsync(const char* path,
                              int datasync,
@@ -953,7 +976,11 @@ std::unique_ptr<File> FuseHighLevelOps::open(std::string_view path, int flags, u
     }
     return fp;
 }
-
+std::string FuseHighLevelOps::long_name_table_file_name(absl::string_view enc_path)
+{
+    return root_.norm_path_narrowed(
+        absl::StrCat(name_trans_.remove_last_component(enc_path), "/", kLongNameTableFileName));
+}
 void FuseHighLevelOps::process_possible_long_name(
     absl::string_view path,
     LongNameComponentAction action,
@@ -972,10 +999,7 @@ void FuseHighLevelOps::process_possible_long_name(
         callback(std::move(enc_path));
         return;
     }
-
-    auto db_path = root_.norm_path_narrowed(
-        absl::StrCat(name_trans_.remove_last_component(enc_path), LONG_NAME_DATABASE_FILE_NAME));
-    LongNameLookupTable table(db_path, false);
+    LongNameLookupTable table(long_name_table_file_name(enc_path), false);
     // Open a transaction so that we will rollback properly if the following operations fail.
     LockGuard<LongNameLookupTable> table_lg(table);
     switch (action)

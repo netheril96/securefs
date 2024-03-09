@@ -1,6 +1,6 @@
 #include "lite_long_name_lookup_table.h"
-#include "crypto.h"
 #include "logger.h"
+#include "sqlite_helper.h"
 
 #include <absl/strings/str_cat.h>
 #include <cryptopp/sha.h>
@@ -8,17 +8,6 @@
 
 namespace securefs
 {
-std::string encrypt_long_name_component(AES_SIV& encryptor, std::string_view long_name)
-{
-    unsigned char sha256[32];
-    CryptoPP::SHA256 calc;
-    calc.Update(reinterpret_cast<const byte*>(long_name.data()), long_name.size());
-    calc.TruncatedFinal(sha256, sizeof(sha256));
-    std::vector<unsigned char> buffer(sizeof(sha256) + AES_SIV::IV_SIZE);
-    encryptor.encrypt_and_authenticate(
-        sha256, sizeof(sha256), nullptr, 0, buffer.data() + AES_SIV::IV_SIZE, buffer.data());
-    return absl::StrCat("_", hexify(buffer), "_");
-}
 
 LongNameLookupTable::LongNameLookupTable(const std::string& filename, bool readonly)
 {
@@ -92,9 +81,9 @@ void LongNameLookupTable::delete_once(std::string_view encrypted_hash)
     q.step();
 }
 
-void LongNameLookupTable::begin() { db_.exec("begin;"); }
+void internal::LookupTableBase::begin() { db_.exec("begin;"); }
 
-void LongNameLookupTable::finish() noexcept
+void internal::LookupTableBase::finish() noexcept
 {
     try
     {
@@ -111,6 +100,56 @@ void LongNameLookupTable::finish() noexcept
     {
         ERROR_LOG("Failed to commit or rollback: %s", e.what());
     }
+}
+
+DoubleLongNameLookupTable::DoubleLongNameLookupTable(const std::string& from_dir_db,
+                                                     const std::string& to_dir_db)
+{
+    db_ = SQLiteDB(from_dir_db.c_str(),
+                   SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE,
+                   nullptr);
+    db_.set_timeout(2000);
+    {
+        SQLiteStatement attacher(db_, "attach database ? as secondary;");
+        attacher.bind_text(1, to_dir_db);
+        attacher.step();
+    }
+    db_.exec(R"(
+                create table if not exists main.encrypted_mappings (
+                    encrypted_hash text not null primary key,
+                    encrypted_name text not null
+                );
+
+                create table if not exists secondary.encrypted_mappings (
+                    encrypted_hash text not null primary key,
+                    encrypted_name text not null
+                );
+            )");
+}
+
+void DoubleLongNameLookupTable::remove_mapping_in_from_db(std::string_view encrypted_hash)
+{
+    SQLiteStatement q(db_, R"(
+            delete from main.encrypted_mappings
+                where encrypted_hash = ?;
+        )");
+    q.reset();
+    q.bind_text(1, encrypted_hash);
+    q.step();
+}
+
+void DoubleLongNameLookupTable::add_mapping_in_to_db(std::string_view encrypted_hash,
+                                                     std::string_view encrypted_long_name)
+{
+    SQLiteStatement q(db_, R"(
+            insert or ignore into secondary.encrypted_mappings
+                (encrypted_hash, encrypted_name)
+                values (?, ?);
+        )");
+    q.reset();
+    q.bind_text(1, encrypted_hash);
+    q.bind_text(2, encrypted_long_name);
+    q.step();
 }
 
 }    // namespace securefs
