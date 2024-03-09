@@ -1068,7 +1068,7 @@ private:
                        [](const std::string& s) { return s.c_str(); });
         return result;
     }
-#ifdef WIN32
+#ifdef _WIN32
     static bool is_letter(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
     static bool is_drive_mount(std::string_view mount_point)
     {
@@ -1252,7 +1252,7 @@ public:
             WARN_LOG("Mounting a directory on itself may cause securefs to hang");
         }
 
-#ifdef WIN32
+#ifdef _WIN32
         bool network_mount = is_network_mount(mount_point.getValue());
 #else
         try
@@ -1389,7 +1389,7 @@ public:
             }
         }
 
-#ifdef WIN32
+#ifdef _WIN32
         if (!network_mount)
 #endif
             fuse_args.emplace_back(mount_point.getValue());
@@ -1612,7 +1612,7 @@ public:
         using namespace CryptoPP;
         absl::PrintF("securefs %s\n", GIT_VERSION);
         absl::PrintF("Crypto++ %g\n", CRYPTOPP_VERSION / 100.0);
-#ifdef WIN32
+#ifdef _WIN32
         HMODULE hd = GetModuleHandleW((sizeof(void*) == 8) ? L"winfsp-x64.dll" : L"winfsp-x86.dll");
         NTSTATUS(*fsp_version_func)
         (uint32_t*) = get_proc_address<decltype(fsp_version_func)>(hd, "FspVersion");

@@ -1,4 +1,4 @@
-#ifndef WIN32
+#ifndef _WIN32
 #define _DARWIN_BETTER_REALPATH 1
 #include "exceptions.h"
 #include "lock_enabled.h"

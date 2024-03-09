@@ -4,7 +4,7 @@
 
 int main(int argc, char** argv)
 {
-#ifdef WIN32
+#ifdef _WIN32
     securefs::windows_init();
 #endif
     securefs::OSService::get_default().ensure_directory("tmp", 0755);

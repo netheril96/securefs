@@ -54,7 +54,7 @@ file(GLOB TEST_SOURCES test/*.h test/*.cpp)
 add_library(securefs-static STATIC ${SOURCES})
 link_libraries(securefs-static)
 
-if(MSVC)
+if(WIN32)
     add_executable(securefs main.cpp securefs.manifest)
 else()
     add_executable(securefs main.cpp)
@@ -144,7 +144,7 @@ else()
         target_link_libraries(securefs-static
                               PUBLIC -DELAYLOAD:winfsp-${ARCH}.dll)
         target_compile_options(securefs-static PUBLIC /utf-8)
-    elseif(MINGW)
+    else()
         target_link_libraries(securefs-static
                               PUBLIC -delayload=winfsp-${ARCH}.dll)
     endif()

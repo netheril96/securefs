@@ -118,7 +118,7 @@ Overload(Ts...) -> Overload<Ts...>;
 
 inline constexpr bool is_windows(void)
 {
-#ifdef WIN32
+#ifdef _WIN32
     return true;
 #else
     return false;

@@ -16,7 +16,7 @@
 #include <fuse.h>
 #include <type_traits>
 
-#ifdef WIN32
+#ifdef _WIN32
 #include <Windows.h>
 
 typedef ptrdiff_t ssize_t;
@@ -93,7 +93,7 @@ using fuse_stat = struct stat;
 using fuse_statvfs = struct statvfs;
 using fuse_flock = struct flock;
 
-#endif    // WIN32
+#endif    // _WIN32
 
 namespace securefs
 {
@@ -126,13 +126,13 @@ public:
     virtual void rewind() = 0;
 };
 
-#ifdef WIN32
+#ifdef _WIN32
 using native_string_type = std::wstring;
 #else
 using native_string_type = std::string;
 #endif
 
-#ifdef WIN32
+#ifdef _WIN32
 std::wstring widen_string(const char* str, size_t size);
 inline std::wstring widen_string(std::string_view str)
 {
@@ -151,7 +151,7 @@ void windows_init(void);
 class OSService
 {
 private:
-#if defined(WIN32)
+#if defined(_WIN32)
     void* m_root_handle;
 #else
     int m_dir_fd;
@@ -164,7 +164,7 @@ public:
 
     static std::string concat_and_norm_narrowed(std::string_view base_dir, std::string_view path)
     {
-#ifdef WIN32
+#ifdef _WIN32
         return narrow_string(concat_and_norm(base_dir, path));
 #else
         return concat_and_norm(base_dir, path);
