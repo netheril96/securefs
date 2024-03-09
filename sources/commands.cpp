@@ -1098,6 +1098,10 @@ private:
     fruit::Component<FuseHighLevelOpsBase> get_fuse_high_ops_component()
     {
         auto name_norm_flags = std::make_shared<lite_format::NameNormalizationFlags>();
+        if (plain_text_names.getValue())
+        {
+            name_norm_flags->no_op = true;
+        }
         if (normalization.getValue() == "nfc")
         {
             name_norm_flags->should_normalize_nfc = true;
