@@ -1,5 +1,4 @@
 #pragma once
-#include "crypto.h"
 #include "platform.h"
 #include "sqlite_helper.h"
 

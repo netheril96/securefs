@@ -1,7 +1,6 @@
 #pragma once
 
 #include "fuse_high_level_ops_base.h"
-#include "lite_long_name_lookup_table.h"
 #include "lite_stream.h"
 #include "lock_guard.h"
 #include "myutils.h"
