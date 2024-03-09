@@ -97,7 +97,7 @@ jobs:
           name: securefs-macos-arm64
 
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2019
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v3
@@ -115,7 +115,7 @@ jobs:
           manifest-dir: ${{ github.workspace }}
           triplet: x64-windows-static-md
           token: ${{ github.token }}
-          cache-key: windows
+          cache-key: windows-2019
           github-binarycache: true
       - name: build-test
         run: python3 build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build
