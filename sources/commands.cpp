@@ -4,7 +4,6 @@
 #include "fuse_high_level_ops_base.h"
 #include "git-version.h"
 #include "lite_format.h"
-#include "lite_operations.h"
 #include "lock_enabled.h"
 #include "logger.h"
 #include "myutils.h"
@@ -1531,14 +1530,7 @@ public:
 #endif
 
         struct fuse_operations operations;
-        if (config.version <= 3)
-        {
-            operations::init_fuse_operations(&operations, native_xattr);
-        }
-        else
-        {
-            lite::init_fuse_operations(&operations, native_xattr);
-        }
+        operations::init_fuse_operations(&operations, native_xattr);
         VERBOSE_LOG("Calling fuse_main with arguments: %s", escape_args(fuse_args));
         recreate_logger();
         return fuse_main(static_cast<int>(fuse_args.size()),
