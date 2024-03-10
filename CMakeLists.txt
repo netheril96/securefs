@@ -23,6 +23,7 @@ set(CMAKE_FIND_FRAMEWORK NEVER)
 
 if(APPLE)
     add_link_options(-Wl,-dead_strip)
+    add_compile_options(-fvisibility=hidden -fvisibility-inlines-hidden)
 endif()
 
 execute_process(COMMAND bash -c "uname -m" OUTPUT_VARIABLE architecture)
