@@ -397,6 +397,10 @@ def make_test_case(
                         ).st_nlink,
                         2,
                     )
+                    all_names = os.listdir(os.path.join(self.mount_point, "k" * 200))
+                    self.assertIn("✅" * 60, all_names)
+                    self.assertIn("🎈" * 2, all_names)
+                    self.assertIn("🔼" * 64, all_names)
                 shutil.rmtree(os.path.join(self.mount_point, "k" * 200))
 
         if xattr is not None:
