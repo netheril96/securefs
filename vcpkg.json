@@ -14,6 +14,7 @@
             "features": [
                 "cxx17"
             ]
-        }
+        },
+        "asio"
     ]
 }

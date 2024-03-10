@@ -321,7 +321,7 @@ public:
 class RegularFile : public FileBase
 {
 public:
-    static int class_type() { return FileBase::REGULAR_FILE; }
+    constexpr static int class_type() { return FileBase::REGULAR_FILE; }
 
     template <class... Args>
     explicit RegularFile(Args&&... args) : FileBase(std::forward<Args>(args)...)
@@ -359,7 +359,7 @@ public:
 class Symlink : public FileBase
 {
 public:
-    static int class_type() { return FileBase::SYMLINK; }
+    constexpr static int class_type() { return FileBase::SYMLINK; }
 
     template <class... Args>
     explicit Symlink(Args&&... args) : FileBase(std::forward<Args>(args)...)
@@ -389,7 +389,7 @@ public:
     static const size_t MAX_FILENAME_LENGTH = 255;
 
 public:
-    static int class_type() { return FileBase::DIRECTORY; }
+    constexpr static int class_type() { return FileBase::DIRECTORY; }
 
     template <class... Args>
     explicit Directory(Args&&... args) : FileBase(std::forward<Args>(args)...)

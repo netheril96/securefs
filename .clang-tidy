@@ -8,4 +8,5 @@ Checks: >
         -modernize-deprecated-headers,
         -modernize-use-nodiscard,
         -bugprone-easily-swappable-parameters,
-        -bugprone-switch-missing-default-case
+        -bugprone-switch-missing-default-case,
+        bugprone-use-after-move
