@@ -16,10 +16,12 @@
 #include <absl/utility/utility.h>
 #include <cryptopp/sha.h>
 #include <doctest/doctest.h>
+#include <fruit/component.h>
 #include <fruit/fruit.h>
 
 #include <algorithm>
 #include <array>
+#include <fruit/injector.h>
 #include <iterator>
 #include <memory>
 #include <string>
@@ -51,17 +53,53 @@ namespace
         CHECK(NameTranslator::remove_last_component("/cc/abcde") == "/cc/");
     }
 
-    fruit::Component<StreamOpener> get_test_component()
+    fruit::Component<StreamOpener, fruit::Annotated<tNameMasterKey, key_type>> get_test_component()
     {
         return fruit::createComponent()
             .registerProvider<fruit::Annotated<tContentMasterKey, key_type>()>(
                 []() { return key_type(100); })
             .registerProvider<fruit::Annotated<tPaddingMasterKey, key_type>()>(
                 []() { return key_type(111); })
+            .registerProvider<fruit::Annotated<tNameMasterKey, key_type>()>(
+                []() { return key_type(122); })
             .registerProvider<fruit::Annotated<tSkipVerification, bool>()>([]() { return false; })
             .registerProvider<fruit::Annotated<tBlockSize, unsigned>()>([]() { return 64u; })
             .registerProvider<fruit::Annotated<tIvSize, unsigned>()>([]() { return 12u; })
             .registerProvider<fruit::Annotated<tMaxPaddingSize, unsigned>()>([]() { return 24u; });
+    }
+
+    TEST_CASE("case folding name translator")
+    {
+        auto flags = std::make_shared<NameNormalizationFlags>();
+        flags->should_case_fold = true;
+        fruit::Injector<NameTranslator> injector(
+            +[](std::shared_ptr<NameNormalizationFlags> flags) -> fruit::Component<NameTranslator>
+            {
+                return fruit::createComponent()
+                    .install(get_name_translator_component, flags)
+                    .install(get_test_component);
+            },
+            std::move(flags));
+        auto t = injector.get<NameTranslator*>();
+        CHECK(t->encrypt_full_path("/abCDe/ß", nullptr)
+              == t->encrypt_full_path("/ABCde/ss", nullptr));
+    }
+
+    TEST_CASE("Unicode normalizing name translator")
+    {
+        auto flags = std::make_shared<NameNormalizationFlags>();
+        flags->should_normalize_nfc = true;
+        fruit::Injector<NameTranslator> injector(
+            +[](std::shared_ptr<NameNormalizationFlags> flags) -> fruit::Component<NameTranslator>
+            {
+                return fruit::createComponent()
+                    .install(get_name_translator_component, flags)
+                    .install(get_test_component);
+            },
+            std::move(flags));
+        auto t = injector.get<NameTranslator*>();
+        CHECK(t->encrypt_full_path("/aaa/ÄÄÄ", nullptr)
+              == t->encrypt_full_path("/aaa/A\u0308A\u0308Ä", nullptr));
     }
 
     using ListDirResult = std::vector<std::pair<std::string, fuse_stat>>;
@@ -122,8 +160,7 @@ namespace
             return fruit::createComponent()
                 .install(get_name_translator_component, flags)
                 .install(get_test_component)
-                .registerProvider<fruit::Annotated<tNameMasterKey, key_type>()>(
-                    []() { return key_type(122); })
+
                 .bindInstance(*os);
         };
 

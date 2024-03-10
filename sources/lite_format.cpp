@@ -19,6 +19,7 @@
 #include <cryptopp/blake2.h>
 #include <cryptopp/sha.h>
 #include <fruit/fruit.h>
+#include <utf8proc.h>
 
 #include <array>
 #include <cerrno>
@@ -475,6 +476,67 @@ namespace
         {
             return physical_path_component_size;
         }
+    };
+
+    struct tInnerTranslator
+    {
+    };
+
+    struct tPathNormOption
+    {
+    };
+
+    class PathNormalizingNameTranslator : public NameTranslator
+    {
+    public:
+        INJECT(PathNormalizingNameTranslator(ANNOTATED(tInnerTranslator, NameTranslator&) delegate,
+                                             ANNOTATED(tPathNormOption, utf8proc_option_t)
+                                                 map_option))
+            : delegate_(delegate), map_option_(map_option)
+        {
+        }
+
+        std::string encrypt_full_path(std::string_view path,
+                                      std::string* out_encrypted_last_component) override
+        {
+            uint8_t* normed_path = nullptr;
+            DEFER(free(normed_path));
+            auto normed_length = utf8proc_map(reinterpret_cast<const uint8_t*>(path.data()),
+                                              path.size(),
+                                              &normed_path,
+                                              map_option_);
+            if (normed_length <= 0)
+            {
+                return delegate_.encrypt_full_path(path, out_encrypted_last_component);
+            }
+            return delegate_.encrypt_full_path(
+                std::string_view(reinterpret_cast<const char*>(normed_path), normed_length),
+                out_encrypted_last_component);
+        }
+
+        absl::variant<InvalidNameTag, LongNameTag, std::string>
+        decrypt_path_component(std::string_view path) override
+        {
+            return delegate_.decrypt_path_component(path);
+        }
+
+        std::string encrypt_path_for_symlink(std::string_view path) override
+        {
+            return delegate_.encrypt_path_for_symlink(path);
+        }
+        std::string decrypt_path_from_symlink(std::string_view path) override
+        {
+            return delegate_.decrypt_path_from_symlink(path);
+        }
+
+        unsigned max_virtual_path_component_size(unsigned physical_path_component_size) override
+        {
+            return delegate_.max_virtual_path_component_size(physical_path_component_size);
+        }
+
+    private:
+        NameTranslator& delegate_;
+        utf8proc_option_t map_option_;
     };
 
     class DirectoryImpl : public Directory
@@ -1028,19 +1090,49 @@ void FuseHighLevelOps::process_possible_long_name(
     callback(std::move(enc_path));
 }
 
+namespace
+{
+    fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>,
+                     fruit::Annotated<tInnerTranslator, NameTranslator>>
+    get_inner_translator(bool supports_long_name)
+    {
+        if (supports_long_name)
+        {
+            return fruit::createComponent()
+                .bind<fruit::Annotated<tInnerTranslator, NameTranslator>, NewStyleNameTranslator>();
+        }
+        return fruit::createComponent()
+            .bind<fruit::Annotated<tInnerTranslator, NameTranslator>, LegacyNameTranslator>();
+    }
+}    // namespace
+
 fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
 get_name_translator_component(std::shared_ptr<NameNormalizationFlags> flags)
 {
-    // TODO: handle case folding and unicode normalization.
     if (flags->no_op)
     {
         return fruit::createComponent().bind<NameTranslator, NoOpNameTranslator>();
     }
-    if (flags->supports_long_name)
+    if (!flags->should_case_fold && !flags->should_normalize_nfc)
     {
-        return fruit::createComponent().bind<NameTranslator, NewStyleNameTranslator>();
+        if (flags->supports_long_name)
+        {
+            return fruit::createComponent().bind<NameTranslator, NewStyleNameTranslator>();
+        }
+        return fruit::createComponent().bind<NameTranslator, LegacyNameTranslator>();
     }
-    return fruit::createComponent().bind<NameTranslator, LegacyNameTranslator>();
+    return fruit::createComponent()
+        .bind<NameTranslator, PathNormalizingNameTranslator>()
+        .install(get_inner_translator, flags->supports_long_name)
+        .bindInstance(*flags)
+        .registerProvider<fruit::Annotated<tPathNormOption, utf8proc_option_t>(
+            const NameNormalizationFlags&)>(
+            [](const NameNormalizationFlags& flags)
+            {
+                return static_cast<utf8proc_option_t>(
+                    UTF8PROC_STABLE | (flags.should_case_fold ? UTF8PROC_CASEFOLD : 0)
+                    | (flags.should_normalize_nfc ? UTF8PROC_COMPOSE : 0));
+            });
 }
 
 std::string_view NameTranslator::get_last_component(std::string_view path)
