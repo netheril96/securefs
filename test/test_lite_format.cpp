@@ -98,8 +98,15 @@ namespace
             },
             std::move(flags));
         auto t = injector.get<NameTranslator*>();
-        CHECK(t->encrypt_full_path("/aaa/ÄÄÄ", nullptr)
-              == t->encrypt_full_path("/aaa/A\u0308A\u0308Ä", nullptr));
+
+        // NFC form of "/aaa/ÄÄÄ"
+        constexpr unsigned char kAAA1[] = {47, 97, 97, 97, 47, 195, 132, 195, 132, 195, 132, 0};
+        // NFD form of "/aaa/ÄÄÄ"
+        constexpr unsigned char kAAA2[]
+            = {47, 97, 97, 97, 47, 65, 204, 136, 65, 204, 136, 65, 204, 136, 0};
+
+        CHECK(t->encrypt_full_path(reinterpret_cast<const char*>(kAAA1), nullptr)
+              == t->encrypt_full_path(reinterpret_cast<const char*>(kAAA2), nullptr));
     }
 
     using ListDirResult = std::vector<std::pair<std::string, fuse_stat>>;
