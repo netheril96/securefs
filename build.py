@@ -82,6 +82,9 @@ def main():
         help="Additional CMake definitions. Example: FOO=BAR",
     )
     parser.add_argument("--build_type", default="Release", help="CMake build type")
+    parser.add_argument(
+        "--clang_cl", help="Use clang-cl on Windows for building", action="store_true"
+    )
     args = parser.parse_args()
 
     if args.enable_test:  # For backwards compat
@@ -95,6 +98,8 @@ def main():
         "-DCMAKE_BUILD_TYPE=" + args.build_type,
         f"-DCMAKE_TOOLCHAIN_FILE={get_vcpkg_cmake_file(args.vcpkg_root)}",
     ]
+    if args.clang_cl:
+        configure_args += ["-T", "ClangCL"]
     if args.triplet:
         configure_args.append("-DVCPKG_TARGET_TRIPLET=" + args.triplet)
     if not args.enable_unit_test:
