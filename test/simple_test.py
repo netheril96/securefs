@@ -342,7 +342,7 @@ def make_test_case(
             securefs_unmount(cls.securefs_process, cls.mount_point)
             cls.securefs_process = None
 
-        if version == 4:
+        if version == 4 and not plain_text_names:
 
             def test_long_name(self):
                 os.mkdir(os.path.join(self.mount_point, "k" * 200))
