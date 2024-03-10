@@ -91,10 +91,9 @@ namespace
         explicit AESSIVBasedNameTranslator(const key_type& name_master_key)
             : name_master_key_(name_master_key)
             , name_aes_siv_(
-                  [this]()
-                  {
-                      return std::make_unique<decltype(name_aes_siv_)::Holder>(
-                          name_master_key_.data(), name_master_key_.size());
+                  [this]() {
+                      return std::make_unique<AES_SIV>(name_master_key_.data(),
+                                                       name_master_key_.size());
                   })
         {
         }

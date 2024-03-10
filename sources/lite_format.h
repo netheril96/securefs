@@ -37,16 +37,14 @@ public:
         , max_padding_size_(max_padding_size)
         , skip_verification_(skip_verfication)
         , content_ecb(
-              [this]()
-              {
-                  return std::make_unique<decltype(content_ecb)::Holder>(
-                      content_master_key_.data(), content_master_key_.size());
+              [this]() {
+                  return std::make_unique<AES_ECB>(content_master_key_.data(),
+                                                   content_master_key_.size());
               })
         , padding_ecb(
-              [this]()
-              {
-                  return std::make_unique<decltype(padding_ecb)::Holder>(
-                      padding_master_key_.data(), padding_master_key_.size());
+              [this]() {
+                  return std::make_unique<AES_ECB>(padding_master_key_.data(),
+                                                   padding_master_key_.size());
               })
     {
         validate();
