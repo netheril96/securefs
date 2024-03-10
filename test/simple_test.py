@@ -346,34 +346,35 @@ def make_test_case(
 
             def test_long_name(self):
                 os.mkdir(os.path.join(self.mount_point, "k" * 200))
-                os.mkdir(os.path.join(self.mount_point, "k" * 200, "✅" * 70))
                 with open(
-                    os.path.join(self.mount_point, "k" * 200, "✅" * 70, "c" * 222), "w"
+                    os.path.join(self.mount_point, "k" * 200, "✅" * 70), "w"
                 ) as f:
                     f.write("test" * 70)
                 os.rename(
-                    os.path.join(self.mount_point, "k" * 200, "✅" * 70, "c" * 222),
-                    os.path.join(self.mount_point, "k" * 200, "✅" * 70, "d" * 222),
+                    os.path.join(self.mount_point, "k" * 200, "✅" * 70),
+                    os.path.join(self.mount_point, "k" * 200, "d" * 222),
                 )
                 self.assertSetEqual(
-                    set(
-                        os.listdir(os.path.join(self.mount_point, "k" * 200, "✅" * 70))
-                    ),
+                    set(os.listdir(os.path.join(self.mount_point, "k" * 200))),
                     {"d" * 222},
                 )
                 os.rename(
-                    os.path.join(self.mount_point, "k" * 200, "✅" * 70, "d" * 222),
-                    os.path.join(self.mount_point, "k" * 200, "🎈" * 70),
+                    os.path.join(self.mount_point, "k" * 200, "d" * 222),
+                    os.path.join(self.mount_point, "🎈" * 70),
                 )
                 self.assertIn(
                     "🎈" * 70,
-                    set(os.listdir(os.path.join(self.mount_point, "k" * 200))),
+                    set(os.listdir(os.path.join(self.mount_point))),
                 )
-                st = os.stat(os.path.join(self.mount_point, "k" * 200, "🎈" * 70))
+                st = os.stat(os.path.join(self.mount_point, "🎈" * 70))
                 self.assertEqual(st.st_size, 4 * 70)
                 os.rename(
-                    os.path.join(self.mount_point, "k" * 200, "🎈" * 70),
+                    os.path.join(self.mount_point, "🎈" * 70),
                     os.path.join(self.mount_point, "k" * 200, "🎈" * 2),
+                )
+                self.assertSetEqual(
+                    set(os.listdir(os.path.join(self.mount_point, "k" * 200))),
+                    {"🎈" * 2},
                 )
                 if sys.platform != "win32":
                     os.symlink(
@@ -387,7 +388,7 @@ def make_test_case(
                         ),
                     )
                     os.link(
-                        os.path.join(self.mount_point, "k" * 200, "✅" * 70, "d" * 222),
+                        os.path.join(self.mount_point, "k" * 200, "🎈" * 2),
                         os.path.join(self.mount_point, "k" * 200, "✅" * 60),
                     )
                     self.assertEqual(
