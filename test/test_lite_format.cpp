@@ -222,6 +222,22 @@ namespace
             CHECK(names(listdir(ops, "/cbd"))
                   == std::vector<std::string>{".", "..", std::string(kLongFileNameExample2)});
         }
+        {
+            REQUIRE(ops.vrename(absl::StrCat("/cbd/", kLongFileNameExample2).c_str(),
+                                absl::StrCat("/cbd/", kLongFileNameExample1).c_str(),
+                                nullptr)
+                    == 0);
+            CHECK(names(listdir(ops, "/cbd"))
+                  == std::vector<std::string>{".", "..", std::string(kLongFileNameExample1)});
+        }
+        {
+            REQUIRE(
+                ops.vrename(absl::StrCat("/cbd/", kLongFileNameExample1).c_str(), "/000", nullptr)
+                == 0);
+            REQUIRE(
+                ops.vrename("/000", absl::StrCat("/cbd/", kLongFileNameExample1).c_str(), nullptr)
+                == 0);
+        }
 
         if (!is_windows())
         {

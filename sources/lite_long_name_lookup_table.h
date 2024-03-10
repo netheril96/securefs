@@ -66,5 +66,8 @@ public:
 
     void update_mapping_to_to_db(std::string_view keyed_hash, std::string_view encrypted_long_name)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+
+private:
+    bool is_same_db_;
 };
 }    // namespace securefs

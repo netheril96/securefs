@@ -8,7 +8,35 @@
 
 namespace securefs
 {
-
+namespace
+{
+    constexpr const char* kCreateTableInMainDb = R"(
+                    create table if not exists main.encrypted_mappings (
+                        keyed_hash text not null primary key,
+                        encrypted_name text not null
+                    );
+                )";
+    constexpr const char* kCreateTableInSecondaryDb = R"(
+                    create table if not exists secondary.encrypted_mappings (
+                        keyed_hash text not null primary key,
+                        encrypted_name text not null
+                    );
+                )";
+    constexpr const char* kUpdateMainMapping = R"(
+            insert or ignore into main.encrypted_mappings
+                (keyed_hash, encrypted_name)
+                values (?, ?);
+        )";
+    constexpr const char* kUpdateSecondaryMapping = R"(
+            insert or ignore into secondary.encrypted_mappings
+                (keyed_hash, encrypted_name)
+                values (?, ?);
+        )";
+    constexpr const char* kDeleteFromMainMapping = R"(
+            delete from main.encrypted_mappings
+                where keyed_hash = ?;
+        )";
+}    // namespace
 LongNameLookupTable::LongNameLookupTable(const std::string& filename, bool readonly)
 {
     db_ = SQLiteDB(
@@ -18,12 +46,7 @@ LongNameLookupTable::LongNameLookupTable(const std::string& filename, bool reado
         nullptr);
     if (!readonly)
     {
-        db_.exec(R"(
-                create table if not exists encrypted_mappings (
-                    keyed_hash text not null primary key,
-                    encrypted_name text not null
-                );
-            )");
+        db_.exec(kCreateTableInMainDb);
     }
     db_.set_timeout(2000);
 }
@@ -58,11 +81,7 @@ std::vector<std::string> LongNameLookupTable::list_hashes()
 void LongNameLookupTable::update_mapping(std::string_view keyed_hash,
                                          std::string_view encrypted_long_name)
 {
-    SQLiteStatement q(db_, R"(
-            insert or ignore into encrypted_mappings
-                (keyed_hash, encrypted_name)
-                values (?, ?);
-        )");
+    SQLiteStatement q(db_, kUpdateMainMapping);
     q.reset();
     q.bind_text(1, keyed_hash);
     q.bind_text(2, encrypted_long_name);
@@ -71,10 +90,7 @@ void LongNameLookupTable::update_mapping(std::string_view keyed_hash,
 
 void LongNameLookupTable::remove_mapping(std::string_view keyed_hash)
 {
-    SQLiteStatement q(db_, R"(
-            delete from encrypted_mappings
-                where keyed_hash = ?;
-        )");
+    SQLiteStatement q(db_, kDeleteFromMainMapping);
     q.reset();
     q.bind_text(1, keyed_hash);
     q.step();
@@ -103,35 +119,28 @@ void internal::LookupTableBase::finish() noexcept
 
 DoubleLongNameLookupTable::DoubleLongNameLookupTable(const std::string& from_dir_db,
                                                      const std::string& to_dir_db)
+    : is_same_db_(from_dir_db == to_dir_db)
 {
     db_ = SQLiteDB(from_dir_db.c_str(),
                    SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE,
                    nullptr);
     db_.set_timeout(2000);
+    if (is_same_db_)
+    {
+        db_.exec(kCreateTableInMainDb);
+        return;
+    }
     {
         SQLiteStatement attacher(db_, "attach database ? as secondary;");
         attacher.bind_text(1, to_dir_db);
         attacher.step();
     }
-    db_.exec(R"(
-                create table if not exists main.encrypted_mappings (
-                    keyed_hash text not null primary key,
-                    encrypted_name text not null
-                );
-
-                create table if not exists secondary.encrypted_mappings (
-                    keyed_hash text not null primary key,
-                    encrypted_name text not null
-                );
-            )");
+    db_.exec(absl::StrCat(kCreateTableInMainDb, ";\n", kCreateTableInSecondaryDb).c_str());
 }
 
 void DoubleLongNameLookupTable::remove_mapping_from_from_db(std::string_view keyed_hash)
 {
-    SQLiteStatement q(db_, R"(
-            delete from main.encrypted_mappings
-                where keyed_hash = ?;
-        )");
+    SQLiteStatement q(db_, kDeleteFromMainMapping);
     q.reset();
     q.bind_text(1, keyed_hash);
     q.step();
@@ -140,11 +149,7 @@ void DoubleLongNameLookupTable::remove_mapping_from_from_db(std::string_view key
 void DoubleLongNameLookupTable::update_mapping_to_to_db(std::string_view keyed_hash,
                                                         std::string_view encrypted_long_name)
 {
-    SQLiteStatement q(db_, R"(
-            insert or ignore into secondary.encrypted_mappings
-                (keyed_hash, encrypted_name)
-                values (?, ?);
-        )");
+    SQLiteStatement q(db_, is_same_db_ ? kUpdateMainMapping : kUpdateSecondaryMapping);
     q.reset();
     q.bind_text(1, keyed_hash);
     q.bind_text(2, encrypted_long_name);
