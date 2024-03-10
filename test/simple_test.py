@@ -91,9 +91,9 @@ def securefs_mount(
     logging.info("Start mounting, command:\n%s", " ".join(command))
     p = subprocess.Popen(
         command,
-        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
-        if sys.platform == "win32"
-        else 0,
+        creationflags=(
+            subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
+        ),
     )
     try:
         for _ in range(300):
@@ -343,11 +343,53 @@ def make_test_case(
             cls.securefs_process = None
 
         def test_long_name(self):
-            with self.assertRaises(EnvironmentError) as context:
-                os.mkdir(os.path.join(self.mount_point, "k" * 256))
-                self.fail("mkdir should fail")
+            os.mkdir(os.path.join(self.mount_point, "k" * 200))
+            os.mkdir(os.path.join(self.mount_point, "k" * 200, "✅" * 70))
+            with open(
+                os.path.join(self.mount_point, "k" * 200, "✅" * 70, "c" * 222), "w"
+            ) as f:
+                f.write("test" * 70)
+            os.rename(
+                os.path.join(self.mount_point, "k" * 200, "✅" * 70, "c" * 222),
+                os.path.join(self.mount_point, "k" * 200, "✅" * 70, "d" * 222),
+            )
+            self.assertSetEqual(
+                set(os.listdir(os.path.join(self.mount_point, "k" * 200, "✅" * 70))),
+                {"d" * 222},
+            )
+            os.rename(
+                os.path.join(self.mount_point, "k" * 200, "✅" * 70, "d" * 222),
+                os.path.join(self.mount_point, "k" * 200, "🎈" * 70),
+            )
+            self.assertIn(
+                "🎈" * 70,
+                set(os.listdir(os.path.join(self.mount_point, "k" * 200))),
+            )
+            st = os.stat(os.path.join(self.mount_point, "k" * 200, "🎈" * 70))
+            self.assertEquals(st.st_size, 4 * 70)
+            os.rename(
+                os.path.join(self.mount_point, "k" * 200, "🎈" * 70),
+                os.path.join(self.mount_point, "k" * 200, "🎈" * 2),
+            )
             if sys.platform != "win32":
-                self.assertEqual(context.exception.errno, errno.ENAMETOOLONG)
+                os.symlink(
+                    "/bcd" * 20, os.path.join(self.mount_point, "k" * 200, "🔼" * 64)
+                )
+                self.assertEquals(
+                    "/bcd" * 20,
+                    os.readlink(os.path.join(self.mount_point, "k" * 200, "🔼" * 64)),
+                )
+                os.link(
+                    os.path.join(self.mount_point, "k" * 200, "✅" * 70, "d" * 222),
+                    os.path.join(self.mount_point, "k" * 200, "✅" * 60),
+                )
+                self.assertEquals(
+                    os.stat(
+                        os.path.join(self.mount_point, "k" * 200, "✅" * 60)
+                    ).st_nlink,
+                    2,
+                )
+            shutil.rmtree(os.path.join(self.mount_point, "k" * 200))
 
         if xattr is not None:
 
@@ -609,9 +651,11 @@ def make_regression_test(version: int, pbkdf: str, mode: SecretInputMode, padded
                 os.path.join(reference_data_dir, data_dir),
                 mount_point,
                 password="abc" if mode & SecretInputMode.PASSWORD else None,
-                keyfile=os.path.join(reference_data_dir, "keyfile")
-                if mode & SecretInputMode.KEYFILE
-                else None,
+                keyfile=(
+                    os.path.join(reference_data_dir, "keyfile")
+                    if mode & SecretInputMode.KEYFILE
+                    else None
+                ),
                 config_filename=config_filename,
             )
             try:

@@ -820,7 +820,12 @@ int FuseHighLevelOps::vrmdir(const char* path, const fuse_context* ctx)
 {
     process_possible_long_name(path,
                                LongNameComponentAction::kDelete,
-                               [&](std::string&& enc_path) { root_.remove_directory(enc_path); });
+                               [&](std::string&& enc_path)
+                               {
+                                   root_.remove_file_nothrow(
+                                       absl::StrCat(enc_path, "/", kLongNameTableFileName));
+                                   root_.remove_directory(enc_path);
+                               });
     return 0;
 }
 int FuseHighLevelOps::vchmod(const char* path, fuse_mode_t mode, const fuse_context* ctx)
