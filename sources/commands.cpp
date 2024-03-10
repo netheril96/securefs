@@ -1416,7 +1416,8 @@ public:
 #ifdef __APPLE__
             if (native_xattr)
             {
-                auto rc = OSService::get_default().listxattr(data_dir.getValue(), nullptr, 0);
+                auto rc
+                    = OSService::get_default().listxattr(data_dir.getValue().c_str(), nullptr, 0);
                 if (rc < 0)
                 {
                     absl::FPrintF(stderr,

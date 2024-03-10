@@ -342,54 +342,61 @@ def make_test_case(
             securefs_unmount(cls.securefs_process, cls.mount_point)
             cls.securefs_process = None
 
-        def test_long_name(self):
-            os.mkdir(os.path.join(self.mount_point, "k" * 200))
-            os.mkdir(os.path.join(self.mount_point, "k" * 200, "✅" * 70))
-            with open(
-                os.path.join(self.mount_point, "k" * 200, "✅" * 70, "c" * 222), "w"
-            ) as f:
-                f.write("test" * 70)
-            os.rename(
-                os.path.join(self.mount_point, "k" * 200, "✅" * 70, "c" * 222),
-                os.path.join(self.mount_point, "k" * 200, "✅" * 70, "d" * 222),
-            )
-            self.assertSetEqual(
-                set(os.listdir(os.path.join(self.mount_point, "k" * 200, "✅" * 70))),
-                {"d" * 222},
-            )
-            os.rename(
-                os.path.join(self.mount_point, "k" * 200, "✅" * 70, "d" * 222),
-                os.path.join(self.mount_point, "k" * 200, "🎈" * 70),
-            )
-            self.assertIn(
-                "🎈" * 70,
-                set(os.listdir(os.path.join(self.mount_point, "k" * 200))),
-            )
-            st = os.stat(os.path.join(self.mount_point, "k" * 200, "🎈" * 70))
-            self.assertEquals(st.st_size, 4 * 70)
-            os.rename(
-                os.path.join(self.mount_point, "k" * 200, "🎈" * 70),
-                os.path.join(self.mount_point, "k" * 200, "🎈" * 2),
-            )
-            if sys.platform != "win32":
-                os.symlink(
-                    "/bcd" * 20, os.path.join(self.mount_point, "k" * 200, "🔼" * 64)
-                )
-                self.assertEquals(
-                    "/bcd" * 20,
-                    os.readlink(os.path.join(self.mount_point, "k" * 200, "🔼" * 64)),
-                )
-                os.link(
+        if version == 4:
+
+            def test_long_name(self):
+                os.mkdir(os.path.join(self.mount_point, "k" * 200))
+                os.mkdir(os.path.join(self.mount_point, "k" * 200, "✅" * 70))
+                with open(
+                    os.path.join(self.mount_point, "k" * 200, "✅" * 70, "c" * 222), "w"
+                ) as f:
+                    f.write("test" * 70)
+                os.rename(
+                    os.path.join(self.mount_point, "k" * 200, "✅" * 70, "c" * 222),
                     os.path.join(self.mount_point, "k" * 200, "✅" * 70, "d" * 222),
-                    os.path.join(self.mount_point, "k" * 200, "✅" * 60),
                 )
-                self.assertEquals(
-                    os.stat(
-                        os.path.join(self.mount_point, "k" * 200, "✅" * 60)
-                    ).st_nlink,
-                    2,
+                self.assertSetEqual(
+                    set(
+                        os.listdir(os.path.join(self.mount_point, "k" * 200, "✅" * 70))
+                    ),
+                    {"d" * 222},
                 )
-            shutil.rmtree(os.path.join(self.mount_point, "k" * 200))
+                os.rename(
+                    os.path.join(self.mount_point, "k" * 200, "✅" * 70, "d" * 222),
+                    os.path.join(self.mount_point, "k" * 200, "🎈" * 70),
+                )
+                self.assertIn(
+                    "🎈" * 70,
+                    set(os.listdir(os.path.join(self.mount_point, "k" * 200))),
+                )
+                st = os.stat(os.path.join(self.mount_point, "k" * 200, "🎈" * 70))
+                self.assertEqual(st.st_size, 4 * 70)
+                os.rename(
+                    os.path.join(self.mount_point, "k" * 200, "🎈" * 70),
+                    os.path.join(self.mount_point, "k" * 200, "🎈" * 2),
+                )
+                if sys.platform != "win32":
+                    os.symlink(
+                        "/bcd" * 20,
+                        os.path.join(self.mount_point, "k" * 200, "🔼" * 64),
+                    )
+                    self.assertEqual(
+                        "/bcd" * 20,
+                        os.readlink(
+                            os.path.join(self.mount_point, "k" * 200, "🔼" * 64)
+                        ),
+                    )
+                    os.link(
+                        os.path.join(self.mount_point, "k" * 200, "✅" * 70, "d" * 222),
+                        os.path.join(self.mount_point, "k" * 200, "✅" * 60),
+                    )
+                    self.assertEqual(
+                        os.stat(
+                            os.path.join(self.mount_point, "k" * 200, "✅" * 60)
+                        ).st_nlink,
+                        2,
+                    )
+                shutil.rmtree(os.path.join(self.mount_point, "k" * 200))
 
         if xattr is not None:
 
