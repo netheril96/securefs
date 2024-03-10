@@ -302,7 +302,7 @@ namespace
             auto link_target = absl::StrCat("/cbd/", kLongFileNameExample2, kLongFileNameExample1);
             fuse_file_info info{};
             REQUIRE(ops.vcreate(link_target.c_str(), 0644, &info, nullptr) == 0);
-            REQUIRE(ops.vlink("/check-mark", link_target.c_str(), nullptr) == 0);
+            REQUIRE(ops.vlink(link_target.c_str(), "/check-mark", nullptr) == 0);
             fuse_stat st{};
             REQUIRE(ops.vfgetattr(nullptr, &st, &info, nullptr) == 0);
             CHECK(st.st_nlink == 2);
