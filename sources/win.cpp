@@ -1099,38 +1099,6 @@ std::string OSService::stringify_system_error(int errcode)
     return buffer;
 }
 
-std::wstring widen_string(const char* str, size_t size)
-{
-    if (size <= 0)
-    {
-        return {};
-    }
-    if (size >= std::numeric_limits<int>::max())
-        throwInvalidArgumentException("String too long");
-    int sz = MultiByteToWideChar(CP_UTF8, 0, str, static_cast<int>(size), nullptr, 0);
-    if (sz <= 0)
-        THROW_WINDOWS_EXCEPTION(GetLastError(), L"MultiByteToWideChar");
-    std::wstring result(sz, 0);
-    MultiByteToWideChar(CP_UTF8, 0, str, static_cast<int>(size), &result[0], sz);
-    return result;
-}
-
-std::string narrow_string(const wchar_t* str, size_t size)
-{
-    if (size <= 0)
-    {
-        return {};
-    }
-    if (size >= std::numeric_limits<int>::max())
-        throwInvalidArgumentException("String too long");
-    int sz = WideCharToMultiByte(CP_UTF8, 0, str, static_cast<int>(size), nullptr, 0, 0, 0);
-    if (sz <= 0)
-        THROW_WINDOWS_EXCEPTION(GetLastError(), L"WideCharToMultiByte");
-    std::string result(sz, 0);
-    WideCharToMultiByte(CP_UTF8, 0, str, static_cast<int>(size), &result[0], sz, 0, 0);
-    return result;
-}
-
 namespace
 {
     struct ConsoleTestResult

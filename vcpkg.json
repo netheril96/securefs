@@ -15,6 +15,7 @@
                 "cxx17"
             ]
         },
-        "asio"
+        "asio",
+        "uni-algo"
     ]
 }

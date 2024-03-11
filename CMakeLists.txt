@@ -67,10 +67,12 @@ find_path(TCLAP_INCLUDE_DIRS "tclap/Arg.h")
 target_include_directories(securefs-static PUBLIC ${TCLAP_INCLUDE_DIRS})
 find_package(absl CONFIG REQUIRED)
 find_package(asio CONFIG REQUIRED)
+find_package(uni-algo CONFIG REQUIRED)
 
 target_link_libraries(
     securefs-static
     PUBLIC asio::asio
+           uni-algo::uni-algo
            absl::base
            absl::inlined_vector
            absl::flat_hash_map

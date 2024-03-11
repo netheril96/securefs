@@ -5,6 +5,7 @@
 #include "streams.h"
 
 #include <absl/base/thread_annotations.h>
+#include <uni_algo/conv.h>
 
 #include <functional>
 #include <memory>
@@ -12,9 +13,10 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string>
+#include <string_view>
+#include <type_traits>
 
 #include <fuse.h>
-#include <type_traits>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -133,17 +135,8 @@ using native_string_type = std::string;
 #endif
 
 #ifdef _WIN32
-std::wstring widen_string(const char* str, size_t size);
-inline std::wstring widen_string(std::string_view str)
-{
-    return widen_string(str.data(), str.size());
-}
-std::string narrow_string(const wchar_t* str, size_t size);
-inline std::string narrow_string(const std::wstring& str)
-{
-    return narrow_string(str.data(), str.size());
-}
-inline std::string narrow_string(const wchar_t* str) { return narrow_string(str, wcslen(str)); }
+inline std::wstring widen_string(std::string_view view) { return una::utf8to16(view); }
+inline std::string narrow_string(std::wstring_view view) { return una::utf16to8(view); }
 [[noreturn]] void throw_windows_exception(const wchar_t* func_name);
 void windows_init(void);
 #endif
