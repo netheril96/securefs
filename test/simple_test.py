@@ -124,7 +124,7 @@ def securefs_unmount(p: subprocess.Popen, mount_point: str):
             subprocess.check_call(["umount", mount_point])
         p.wait(timeout=5)
         if p.returncode:
-            logging.warn("securefs exited with non-zero code: %d", p.returncode)
+            logging.error("securefs exited with non-zero code: %d", p.returncode)
         if ismount(mount_point):
             raise RuntimeError(f"{mount_point} still mounted")
 
@@ -215,7 +215,7 @@ def securefs_chpass(
             raise subprocess.CalledProcessError(p.returncode, args, out, err)
 
 
-def get_data_dir(format_version=4):
+def get_data_dir(format_version):
     return tempfile.mkdtemp(
         prefix=f"securefs.format{format_version}.data_dir", dir="tmp"
     )
@@ -800,7 +800,7 @@ def make_chpass_test(
 
     class ChpassTestBase(unittest.TestCase):
         def test_chpass(self):
-            data_dir = get_data_dir()
+            data_dir = get_data_dir(version)
             mount_point = get_mount_point()
             test_dir_path = os.path.join(mount_point, "test")
             test_file_path = os.path.join(mount_point, "aaa")
@@ -876,7 +876,7 @@ def randomly_act_on_file(filename: str, barrier) -> None:
 def make_concurrency_test(version: int):
     class ConcurrencyTestBase(unittest.TestCase):
         def test_concurrent_access(self):
-            data_dir = get_data_dir()
+            data_dir = get_data_dir(version)
             mount_point = get_mount_point()
 
             securefs_create(
