@@ -82,8 +82,6 @@ target_link_libraries(
 if(SECUREFS_USE_VCPKG)
     find_package(cryptopp CONFIG REQUIRED)
     target_link_libraries(securefs-static PUBLIC cryptopp::cryptopp)
-    find_package(unofficial-utf8proc CONFIG REQUIRED)
-    target_link_libraries(securefs-static PUBLIC utf8proc)
     find_package(unofficial-argon2 CONFIG REQUIRED)
     target_link_libraries(securefs-static PUBLIC unofficial::argon2::libargon2)
     find_package(jsoncpp CONFIG REQUIRED)
@@ -92,18 +90,16 @@ if(SECUREFS_USE_VCPKG)
     target_link_libraries(securefs-static PUBLIC unofficial::sqlite3::sqlite3)
 else()
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(UTF8PROC REQUIRED libutf8proc)
     pkg_check_modules(ARGON2 REQUIRED libargon2)
     pkg_check_modules(JSONCPP REQUIRED jsoncpp)
     pkg_check_modules(SQLITE sqlite3 REQUIRED)
     target_include_directories(
         securefs-static SYSTEM
-        PUBLIC ${UTF8PROC_INCLUDE_DIRS} ${ARGON2_INCLUDE_DIRS}
-               ${JSONCPP_INCLUDE_DIRS} ${SQLITE_INCLUDE_DIRS})
+        PUBLIC ${ARGON2_INCLUDE_DIRS} ${JSONCPP_INCLUDE_DIRS}
+               ${SQLITE_INCLUDE_DIRS})
     target_link_libraries(
-        securefs-static
-        PUBLIC ${CRYPTOPP_LDFLAGS} ${UTF8PROC_LDFLAGS} ${ARGON2_LDFLAGS}
-               ${JSONCPP_LDFLAGS} ${SQLITE_LDFLAGS})
+        securefs-static PUBLIC ${CRYPTOPP_LDFLAGS} ${ARGON2_LDFLAGS}
+                               ${JSONCPP_LDFLAGS} ${SQLITE_LDFLAGS})
     find_library(CRYPTOPP_FLAGS NAMES cryptopp crypto++)
     target_link_libraries(securefs-static PUBLIC ${CRYPTOPP_FLAGS})
 endif()

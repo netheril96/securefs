@@ -19,13 +19,15 @@
 #include <cryptopp/blake2.h>
 #include <cryptopp/sha.h>
 #include <fruit/fruit.h>
-#include <utf8proc.h>
+#include <uni_algo/case.h>
+#include <uni_algo/norm.h>
 
 #include <array>
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <exception>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -482,36 +484,44 @@ namespace
     {
     };
 
-    struct tPathNormOption
-    {
-    };
-
     class PathNormalizingNameTranslator : public NameTranslator
     {
     public:
         INJECT(PathNormalizingNameTranslator(ANNOTATED(tInnerTranslator, NameTranslator&) delegate,
-                                             ANNOTATED(tPathNormOption, utf8proc_option_t)
-                                                 map_option))
-            : delegate_(delegate), map_option_(map_option)
+                                             const NameNormalizationFlags& flags))
+            : delegate_(delegate), flags_(flags)
         {
         }
 
         std::string encrypt_full_path(std::string_view path,
                                       std::string* out_encrypted_last_component) override
         {
-            uint8_t* normed_path = nullptr;
-            DEFER(free(normed_path));
-            auto normed_length = utf8proc_map(reinterpret_cast<const uint8_t*>(path.data()),
-                                              path.size(),
-                                              &normed_path,
-                                              map_option_);
-            if (normed_length <= 0)
+            try
             {
+                std::string normed_string;
+                if (flags_.should_case_fold && flags_.should_normalize_nfc)
+                {
+                    normed_string = una::norm::to_nfc_utf8(una::cases::to_casefold_utf8(path));
+                }
+                else if (flags_.should_normalize_nfc)
+                {
+                    normed_string = una::norm::to_nfc_utf8(path);
+                }
+                else if (flags_.should_case_fold)
+                {
+                    normed_string = una::cases::to_casefold_utf8(path);
+                }
+                else
+                {
+                    return delegate_.encrypt_full_path(path, out_encrypted_last_component);
+                }
+                return delegate_.encrypt_full_path(normed_string, out_encrypted_last_component);
+            }
+            catch (const std::exception& e)
+            {
+                WARN_LOG("Failed to normalize path %s: %s", path, e.what());
                 return delegate_.encrypt_full_path(path, out_encrypted_last_component);
             }
-            return delegate_.encrypt_full_path(
-                std::string_view(reinterpret_cast<const char*>(normed_path), normed_length),
-                out_encrypted_last_component);
         }
 
         absl::variant<InvalidNameTag, LongNameTag, std::string>
@@ -536,7 +546,7 @@ namespace
 
     private:
         NameTranslator& delegate_;
-        utf8proc_option_t map_option_;
+        NameNormalizationFlags flags_;
     };
 
     class DirectoryImpl : public Directory
@@ -1124,15 +1134,7 @@ get_name_translator_component(std::shared_ptr<NameNormalizationFlags> flags)
     return fruit::createComponent()
         .bind<NameTranslator, PathNormalizingNameTranslator>()
         .install(get_inner_translator, flags->supports_long_name)
-        .bindInstance(*flags)
-        .registerProvider<fruit::Annotated<tPathNormOption, utf8proc_option_t>(
-            const NameNormalizationFlags&)>(
-            [](const NameNormalizationFlags& flags)
-            {
-                return static_cast<utf8proc_option_t>(
-                    UTF8PROC_STABLE | (flags.should_case_fold ? UTF8PROC_CASEFOLD : 0)
-                    | (flags.should_normalize_nfc ? UTF8PROC_COMPOSE : 0));
-            });
+        .bindInstance(*flags);
 }
 
 std::string_view NameTranslator::get_last_component(std::string_view path)

@@ -71,11 +71,8 @@ namespace internal
 
     FileGuard open_base_dir(FileSystemContext* fs, const char* path, std::string& last_component)
     {
-        absl::InlinedVector<std::string, 32> components = absl::StrSplit(
-            transform(path, fs->flags & kOptionCaseFoldFileName, fs->flags & kOptionNFCFileName)
-                .view(),
-            absl::ByChar('/'),
-            absl::SkipEmpty());
+        absl::InlinedVector<std::string, 32> components
+            = absl::StrSplit(path, absl::ByChar('/'), absl::SkipEmpty());
 
         FileGuard result(&fs->table, fs->table.open_as(fs->root_id, FileBase::DIRECTORY));
         if (components.empty())

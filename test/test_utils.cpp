@@ -88,31 +88,6 @@ TEST_CASE("our base32 against CryptoPP")
     }
 }
 
-TEST_CASE("case fold")
-{
-    auto case_fold
-        = [](const char* str) { return std::string(securefs::transform(str, true, false).view()); };
-
-    REQUIRE(case_fold("abCdEfG") == "abcdefg");
-    REQUIRE(case_fold("\xc8\xba") == "\xe2\xb1\xa5");
-    REQUIRE(case_fold(
-                "AabC\xce\xa3\xce\xaf\xcf\x83\xcf\x85\xcf\x86\xce\xbf\xcf\x82\xef\xac\x81\xc3\x86")
-            == "\x61\x61\x62\x63\xcf\x83\xce\xaf\xcf\x83\xcf\x85\xcf\x86\xce\xbf\xcf\x83\x66\x69"
-               "\xc3\xa6");
-}
-
-TEST_CASE("NFC")
-{
-    auto nfc
-        = [](const char* str) { return std::string(securefs::transform(str, false, true).view()); };
-
-    REQUIRE(nfc("\x41\xcc\x88\x66\x66\x69\x6e") == "\xc3\x84\x66\x66\x69\x6e");
-    REQUIRE(nfc("Henry IV") == "Henry IV");
-    REQUIRE(nfc("") == "");
-    REQUIRE(nfc("abc") == "abc");
-    REQUIRE(nfc("\xe8\xb0\xb7\xe6\xad\x8c") == "\xe8\xb0\xb7\xe6\xad\x8c");
-}
-
 TEST_CASE("is_ascii")
 {
     REQUIRE(securefs::is_ascii(""));

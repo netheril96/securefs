@@ -11,6 +11,7 @@
 #include "platform.h"
 #include "win_get_proc.h"    // IWYU pragma: keep
 
+#include <absl/strings/escaping.h>
 #include <absl/strings/match.h>
 #include <absl/strings/str_format.h>
 #include <argon2.h>
@@ -23,7 +24,6 @@
 #include <json/json.h>
 #include <optional>
 #include <tclap/CmdLine.h>
-#include <utf8proc.h>
 
 #include <algorithm>
 #include <iostream>
@@ -1083,7 +1083,9 @@ private:
         std::string result;
         for (const auto& a : args)
         {
-            result.append(securefs::escape_nonprintable(a.data(), a.size()));
+            result.push_back('\"');
+            result.append(absl::Utf8SafeCEscape(a));
+            result.push_back('\"');
             result.push_back(' ');
         }
         if (!result.empty())
@@ -1651,8 +1653,6 @@ public:
             = reinterpret_cast<version_function*>(::dlsym(RTLD_DEFAULT, "fuse_version"));
         absl::PrintF("libfuse %d\n", fuse_version_func());
 #endif
-
-        absl::PrintF("utf8proc %s\n", utf8proc_version());
 
 #ifdef CRYPTOPP_DISABLE_ASM
         fputs("\nBuilt without hardware acceleration\n", stdout);

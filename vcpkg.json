@@ -4,7 +4,6 @@
         "argon2",
         "cryptopp",
         "tclap",
-        "utf8proc",
         "doctest",
         "jsoncpp",
         "sqlite3",

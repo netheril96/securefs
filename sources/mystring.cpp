@@ -1,12 +1,6 @@
 #include "mystring.h"
 #include "exceptions.h"
-#include "logger.h"
 #include "myutils.h"
-
-#include <utf8proc.h>
-
-#include <ctype.h>
-#include <stdint.h>
 
 namespace securefs
 {
@@ -268,27 +262,6 @@ void base32_decode(const char* input, size_t size, std::string& output)
     }
 }
 
-std::string escape_nonprintable(const char* str, size_t size)
-{
-    std::string result;
-    result.reserve(size + size / 16);
-    for (size_t i = 0; i < size; ++i)
-    {
-        char c = str[i];
-        if (isprint(static_cast<unsigned char>(c)))
-        {
-            result.push_back(c);
-        }
-        else
-        {
-            char tmp[10];
-            snprintf(tmp, sizeof(tmp), "\\x%02x", static_cast<unsigned char>(c));
-            result.append(tmp);
-        }
-    }
-    return result;
-}
-
 bool is_ascii(std::string_view str)
 {
     for (char c : str)
@@ -299,35 +272,5 @@ bool is_ascii(std::string_view str)
         }
     }
     return true;
-}
-
-MultipleOwnershipString transform(std::string_view str, bool case_fold, bool nfc)
-{
-    if (!case_fold && (!nfc || is_ascii(str)))
-    {
-        return MultipleOwnershipString(str);
-    }
-    utf8proc_uint8_t* result = nullptr;
-    int options = UTF8PROC_STABLE;
-    if (case_fold)
-    {
-        options |= UTF8PROC_CASEFOLD;
-    }
-    if (nfc)
-    {
-        options |= UTF8PROC_COMPOSE;
-    }
-    auto rc = utf8proc_map(reinterpret_cast<const utf8proc_uint8_t*>(str.data()),
-                           static_cast<utf8proc_ssize_t>(str.size()),
-                           &result,
-                           static_cast<utf8proc_option_t>(options));
-    if (rc < 0 || !result)
-    {
-        ERROR_LOG("Failed to transform string \"%s\": %s",
-                  escape_nonprintable(str.data(), str.size()).c_str(),
-                  utf8proc_errmsg(rc));
-        return MultipleOwnershipString(str);
-    }
-    return MultipleOwnershipString(reinterpret_cast<char*>(result));
 }
 }    // namespace securefs
