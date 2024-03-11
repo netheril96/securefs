@@ -136,7 +136,10 @@ void FileTable::close(FileBase* fb)
             should_unlink = fb->is_unlinked();
             auto holder = std::move(it->second);
             s.live_map.erase(it);
-            s.cache.emplace_back(std::move(holder));
+            if (!should_unlink)
+            {
+                s.cache.emplace_back(std::move(holder));
+            }
             should_gc = s.cache.size() > kMaxCached;
         }
         else
@@ -188,6 +191,7 @@ void FileTable::close(FileBase* fb)
 }
 FileTable::~FileTable()
 {
+    INFO_LOG("Flushing all opened and cached file descriptors, please wait...");
     root_->flush();
     for (auto&& s : shards)
     {
