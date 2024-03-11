@@ -584,24 +584,5 @@ std::unique_ptr<const char, void (*)(const char*)> get_type_name(const std::exce
 
 const char* PATH_SEPARATOR_STRING = "/";
 const char PATH_SEPARATOR_CHAR = '/';
-
-Mutex::Mutex() {}
-Mutex::~Mutex() {}
-
-void Mutex::lock() { m_std.lock(); }
-
-void Mutex::unlock() noexcept
-{
-    try
-    {
-        m_std.unlock();
-    }
-    catch (const std::exception& e)
-    {
-        ERROR_LOG("std::mutex::unlock() throws %s: %s", get_type_name(e).get(), e.what());
-    }
-}
-bool Mutex::try_lock() { return m_std.try_lock(); }
-
 }    // namespace securefs
 #endif

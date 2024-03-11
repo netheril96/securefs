@@ -93,8 +93,8 @@ private:
     securefs::Mutex m_lock;
 
 public:
-    void lock(bool exclusive = true) override ABSL_EXCLUSIVE_LOCK_FUNCTION() { m_lock.lock(); }
-    void unlock() noexcept override ABSL_UNLOCK_FUNCTION() { m_lock.unlock(); }
+    void lock(bool exclusive = true) override ABSL_EXCLUSIVE_LOCK_FUNCTION() { m_lock.Lock(); }
+    void unlock() noexcept override ABSL_UNLOCK_FUNCTION() { m_lock.Unlock(); }
     Directory* as_dir() noexcept override { return this; }
 
     // Redeclare the methods in `DirectoryTraverser` to add thread safe annotations.
@@ -151,21 +151,21 @@ public:
     }
     void lock(bool exclusive = true) override ABSL_EXCLUSIVE_LOCK_FUNCTION()
     {
-        m_lock.lock();
+        m_lock.Lock();
         try
         {
             m_file_stream->lock(exclusive);
         }
         catch (...)
         {
-            m_lock.unlock();
+            m_lock.Unlock();
             throw;
         }
     }
     void unlock() noexcept override ABSL_UNLOCK_FUNCTION()
     {
         m_file_stream->unlock();
-        m_lock.unlock();
+        m_lock.Unlock();
     }
     File* as_file() noexcept override { return this; }
 };

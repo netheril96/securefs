@@ -19,14 +19,14 @@ namespace internal
     public:
         void lock() ABSL_EXCLUSIVE_LOCK_FUNCTION(*this) ABSL_NO_THREAD_SAFETY_ANALYSIS
         {
-            db_.mutex().lock();
+            db_.mutex().Lock();
             begin();
         }
 
         void unlock() ABSL_UNLOCK_FUNCTION(*this) ABSL_NO_THREAD_SAFETY_ANALYSIS
         {
             finish();
-            db_.mutex().unlock();
+            db_.mutex().Unlock();
         }
 
     protected:

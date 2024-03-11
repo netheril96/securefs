@@ -1181,15 +1181,6 @@ void windows_init(void)
     if (best_get_time_func == nullptr)
         best_get_time_func = &GetSystemTimeAsFileTime;
 }
-
-Mutex::Mutex() { ::InitializeCriticalSectionAndSpinCount(&m_cs, 4000); }
-Mutex::~Mutex() { ::DeleteCriticalSection(&m_cs); }
-
-void Mutex::lock() { ::EnterCriticalSection(&m_cs); }
-
-void Mutex::unlock() noexcept { ::LeaveCriticalSection(&m_cs); }
-
-bool Mutex::try_lock() { return ::TryEnterCriticalSection(&m_cs); }
 }    // namespace securefs
 
 #endif

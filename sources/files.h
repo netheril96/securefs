@@ -142,9 +142,9 @@ public:
     virtual ~FileBase();
     DISABLE_COPY_MOVE(FileBase)
 
-    void lock() ABSL_EXCLUSIVE_LOCK_FUNCTION() { m_lock.lock(); }
-    void unlock() ABSL_UNLOCK_FUNCTION() { m_lock.unlock(); }
-    bool try_lock() ABSL_EXCLUSIVE_TRYLOCK_FUNCTION(true) { return m_lock.try_lock(); }
+    void lock() ABSL_EXCLUSIVE_LOCK_FUNCTION() { m_lock.Lock(); }
+    void unlock() ABSL_UNLOCK_FUNCTION() { m_lock.Unlock(); }
+    bool try_lock() ABSL_EXCLUSIVE_TRYLOCK_FUNCTION(true) { return m_lock.TryLock(); }
 
     void initialize_empty(uint32_t mode, uint32_t uid, uint32_t gid)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);

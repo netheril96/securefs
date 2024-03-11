@@ -74,6 +74,7 @@ target_link_libraries(
     PUBLIC asio::asio
            uni-algo::uni-algo
            absl::base
+           absl::synchronization
            absl::inlined_vector
            absl::flat_hash_map
            absl::strings

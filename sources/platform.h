@@ -5,6 +5,7 @@
 #include "streams.h"
 
 #include <absl/base/thread_annotations.h>
+#include <absl/synchronization/mutex.h>
 #include <uni_algo/conv.h>
 
 #include <functional>
@@ -295,24 +296,6 @@ private:
     FILE* m_fp;
     void setColour(const char* _escapeCode) noexcept;
 };
-
-class ABSL_LOCKABLE Mutex
-{
-public:
-    Mutex();
-    ~Mutex();
-    void lock() ABSL_EXCLUSIVE_LOCK_FUNCTION();
-    void unlock() noexcept ABSL_UNLOCK_FUNCTION();
-    bool try_lock() ABSL_EXCLUSIVE_TRYLOCK_FUNCTION(true);
-
-private:
-#ifdef _WIN32
-    // MSVC implementation of std::mutex is too slow.
-    // So we reimplment it.
-    CRITICAL_SECTION m_cs;
-#else
-    std::mutex m_std;
-#endif
-};
+using absl::Mutex;
 
 }    // namespace securefs
