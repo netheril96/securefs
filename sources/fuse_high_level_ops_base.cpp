@@ -261,8 +261,7 @@ fuse_operations FuseHighLevelOpsBase::build_ops(bool enable_xattr)
 
     opt.init = [](fuse_conn_info* info) -> void*
     {
-        void* args = fuse_get_context()->private_data;
-        auto op = (*static_cast<InitialDataType*>(args))();
+        auto op = static_cast<FuseHighLevelOpsBase*>(fuse_get_context()->private_data);
         op->initialize(info);
         TRACE_LOG("Initalize with fuse op class %s", typeid(*op).name());
         return op;

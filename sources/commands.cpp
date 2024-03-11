@@ -1249,6 +1249,12 @@ public:
 
     int execute() override
     {
+        recreate_logger();
+        if (background.getValue())
+        {
+            OSService::enter_background();
+        }
+
         if (data_dir.getValue() == mount_point.getValue())
         {
             WARN_LOG("Mounting a directory on itself may cause securefs to hang");
@@ -1347,8 +1353,8 @@ public:
                 absl::StrFormat("ThreadCount=%d", 2 * std::thread::hardware_concurrency()));
 #endif
         }
-        if (!background.getValue())
-            fuse_args.emplace_back("-f");
+        // Handling `daemon` ourselves, as FUSE's version interferes with our initialization.
+        fuse_args.emplace_back("-f");
 
 #ifdef __APPLE__
         const char* copyfile_disable = ::getenv("COPYFILE_DISABLE");
@@ -1410,8 +1416,6 @@ public:
         {
             fruit::Injector<FuseHighLevelOpsBase> injector(
                 +[](MountCommand* cmd) { return cmd->get_fuse_high_ops_component(); }, this);
-            FuseHighLevelOpsBase::InitialDataType init
-                = [&]() { return injector.get<FuseHighLevelOpsBase*>(); };
 
             bool native_xattr = !noxattr.getValue();
 #ifdef __APPLE__
@@ -1435,7 +1439,7 @@ public:
             return fuse_main(static_cast<int>(fuse_args.size()),
                              const_cast<char**>(to_c_style_args(fuse_args).data()),
                              &op,
-                             &init);
+                             injector.get<FuseHighLevelOpsBase*>());
         }
         operations::MountOptions fsopt;
         fsopt.root = std::make_shared<OSService>(data_dir.getValue());
@@ -1534,7 +1538,6 @@ public:
         struct fuse_operations operations;
         operations::init_fuse_operations(&operations, native_xattr);
         VERBOSE_LOG("Calling fuse_main with arguments: %s", escape_args(fuse_args));
-        recreate_logger();
         return fuse_main(static_cast<int>(fuse_args.size()),
                          const_cast<char**>(to_c_style_args(fuse_args).data()),
                          &operations,

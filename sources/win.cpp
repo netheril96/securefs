@@ -942,6 +942,11 @@ int64_t OSService::raise_fd_limit() noexcept
     return std::numeric_limits<int32_t>::max();
 }
 
+void OSService::enter_background()
+{
+    WARN_LOG("Entering background mode is not allowed on Windows, because you can't unmount then");
+}
+
 class WindowsDirectoryTraverser final : public DirectoryTraverser
 {
 private:

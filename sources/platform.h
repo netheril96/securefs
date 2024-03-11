@@ -235,6 +235,7 @@ public:
     static void read_password_with_confirmation(const char* prompt,
                                                 CryptoPP::AlignedSecByteBlock* output);
     static std::string stringify_system_error(int errcode);
+    static void enter_background();
 };
 
 struct Colour

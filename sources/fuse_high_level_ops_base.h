@@ -8,10 +8,6 @@ namespace securefs
 class FuseHighLevelOpsBase : public Object
 {
 public:
-    // The initial data should be lazy initializing a class of this type.
-    // The owner of the class should extend beyond `destroy`.
-    using InitialDataType = std::function<FuseHighLevelOpsBase*()>;
-
     static fuse_operations build_ops(bool enable_xattr);
 
     virtual void initialize(fuse_conn_info* info) = 0;

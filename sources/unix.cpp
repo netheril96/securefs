@@ -541,6 +541,8 @@ void OSService::read_password_with_confirmation(const char* prompt,
         throw_runtime_error("Password mismatch");
 }
 
+void OSService::enter_background() { daemon(true, false); }
+
 // These two overloads are used to distinguish the GNU and XSI version of strerror_r
 
 // GNU
