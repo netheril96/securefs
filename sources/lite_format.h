@@ -313,12 +313,3 @@ private:
     std::string long_name_table_file_name(absl::string_view enc_path);
 };
 }    // namespace securefs::lite_format
-
-template <>
-struct std::hash<securefs::lite_format::NameNormalizationFlags>
-{
-    std::size_t operator()(const securefs::lite_format::NameNormalizationFlags& args) const noexcept
-    {
-        return args.should_case_fold + args.should_normalize_nfc + args.supports_long_name;
-    }
-};
