@@ -1,17 +1,16 @@
 #include "full_format.h"
 #include "exceptions.h"
 #include "files.h"
-#include "lock_guard.h"
 #include "logger.h"
 #include "myutils.h"
 #include "platform.h"
 
 #include <absl/container/inlined_vector.h>
 #include <absl/strings/str_split.h>
+
 #include <cerrno>
 #include <cstdint>
 #include <string>
-#include <winfsp_fuse.h>
 
 namespace securefs::full_format
 {

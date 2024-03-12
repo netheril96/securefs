@@ -5,6 +5,8 @@ Checks: >
         bugprone-*,
         -bugprone-implicit-widening-of-multiplication-result,
         -bugprone-narrowing-conversions,
+        -bugprone-not-null-terminated-result,
+        -performance-unnecessary-value-param,
         -modernize-deprecated-headers,
         -modernize-use-nodiscard,
         -bugprone-easily-swappable-parameters,

@@ -2,9 +2,10 @@
 #include "files.h"
 #include "fuse_high_level_ops_base.h"
 #include "platform.h"
+
 #include <absl/strings/string_view.h>
+
 #include <cstdint>
-#include <fuse_common.h>
 #include <optional>
 
 namespace securefs::full_format
