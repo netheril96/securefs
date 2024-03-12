@@ -383,8 +383,9 @@ public:
         return result;
     }
 
-    void set(const std::string& path) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
+    void set(std::string_view path) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
+        update_mtime_helper();
         m_stream->write(path.data(), 0, path.size());
     }
 };

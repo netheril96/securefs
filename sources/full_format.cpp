@@ -1,10 +1,13 @@
 #include "full_format.h"
+#include "exceptions.h"
 #include "files.h"
 #include "lock_guard.h"
 #include "logger.h"
 #include "myutils.h"
 #include "platform.h"
+
 #include <cerrno>
+#include <cstdint>
 
 namespace securefs::full_format
 {
@@ -111,6 +114,11 @@ int FuseHighLevelOps::vopen(const char* path, fuse_file_info* info, const fuse_c
     {
         return -ENOENT;
     }
+    if (info->flags & O_TRUNC)
+    {
+        FileLockGuard lg(**opened);
+        (**opened).cast_as<RegularFile>()->truncate(0);
+    }
     set_file(info, opened->release());
     return 0;
 };
@@ -132,7 +140,9 @@ int FuseHighLevelOps::vread(const char* path,
                             fuse_file_info* info,
                             const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto fp = get_file(info);
+    FileLockGuard lg(*fp);
+    return static_cast<int>(fp->cast_as<RegularFile>()->read(buf, offset, size));
 };
 int FuseHighLevelOps::vwrite(const char* path,
                              const char* buf,
@@ -141,66 +151,200 @@ int FuseHighLevelOps::vwrite(const char* path,
                              fuse_file_info* info,
                              const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto fp = get_file(info);
+    FileLockGuard lg(*fp);
+    fp->cast_as<RegularFile>()->write(buf, offset, size);
+    return static_cast<int>(size);
 };
 int FuseHighLevelOps::vflush(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto fp = get_file(info);
+    FileLockGuard lg(*fp);
+    fp->flush();
+    return 0;
 };
 int FuseHighLevelOps::vftruncate(const char* path,
                                  fuse_off_t len,
                                  fuse_file_info* info,
                                  const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto fp = get_file(info);
+    FileLockGuard lg(*fp);
+    fp->cast_as<RegularFile>()->truncate(len);
+    return 0;
 };
-int FuseHighLevelOps::vunlink(const char* path, const fuse_context* ctx) { return -ENOSYS; };
+int FuseHighLevelOps::vunlink(const char* path, const fuse_context* ctx)
+{
+    auto [dirholder, last_component] = open_base(path);
+    id_type id;
+    int type;
+
+    {
+        FileLockGuard lg(*dirholder);
+        if (!dirholder->cast_as<Directory>()->remove_entry(last_component, id, type))
+        {
+            return -ENOENT;
+        }
+    }
+
+    auto fp = ft_.open_as(id, type);
+    FileLockGuard lg(*fp);
+    fp->unlink();
+    return 0;
+};
 int FuseHighLevelOps::vmkdir(const char* path, fuse_mode_t mode, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    create(path, mode, Directory::class_type());
+    return 0;
 };
-int FuseHighLevelOps::vrmdir(const char* path, const fuse_context* ctx) { return -ENOSYS; };
+int FuseHighLevelOps::vrmdir(const char* path, const fuse_context* ctx)
+{
+    auto [dirholder, last_component] = open_base(path);
+    id_type id;
+    int type;
+
+    {
+        FileLockGuard lg(*dirholder);
+        if (!dirholder->cast_as<Directory>()->remove_entry(last_component, id, type))
+        {
+            return -ENOENT;
+        }
+    }
+
+    auto fp = ft_.open_as(id, type);
+    FileLockGuard lg(*fp);
+    fp->cast_as<Directory>()->iterate_over_entries(
+        [](const std::string& name, const id_type& id, int type) -> bool
+        { throwVFSException(ENOTEMPTY); });
+    fp->unlink();
+    return 0;
+};
 int FuseHighLevelOps::vchmod(const char* path, fuse_mode_t mode, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto opened = open_all(path);
+    if (!opened)
+    {
+        return -ENOENT;
+    }
+    FileLockGuard fg(**opened);
+    (**opened).set_mode((**opened).type() | (mode & 0777));
+    return 0;
 };
 int FuseHighLevelOps::vchown(const char* path,
                              fuse_uid_t uid,
                              fuse_gid_t gid,
                              const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto opened = open_all(path);
+    if (!opened)
+    {
+        return -ENOENT;
+    }
+    FileLockGuard fg(**opened);
+    (**opened).set_uid(uid);
+    (**opened).set_gid(gid);
+    return 0;
 };
 int FuseHighLevelOps::vsymlink(const char* to, const char* from, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto holder = create(from, 0644, Symlink::class_type());
+    FileLockGuard fg(*holder);
+    holder->cast_as<Symlink>()->set(to);
+    return 0;
 };
 int FuseHighLevelOps::vlink(const char* src, const char* dest, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto opened = open_all(src);
+    if (!opened)
+    {
+        return -ENOENT;
+    }
+    auto [base_dir, last_component] = open_base(dest);
+    DoubleFileLockGuard lg(*base_dir, **opened);
+    if (base_dir->cast_as<Directory>()->add_entry(
+            last_component, (**opened).get_id(), (**opened).get_real_type()))
+    {
+        (**opened).set_nlink((**opened).get_nlink() + 1);
+        return 0;
+    }
+    return -EEXIST;
 };
 int FuseHighLevelOps::vreadlink(const char* path, char* buf, size_t size, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    if (!size)
+    {
+        return -EFAULT;
+    }
+    auto opened = open_all(path);
+    if (!opened)
+    {
+        return -ENOENT;
+    }
+    FileLockGuard fg(**opened);
+    auto destination = (**opened).cast_as<Symlink>()->get();
+    memset(buf, 0, size);
+    memcpy(buf, destination.data(), std::min(destination.size(), size - 1));
+    return 0;
 };
 int FuseHighLevelOps::vrename(const char* from, const char* to, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto [base_from, last_from] = open_base(from);
+    auto [base_to, last_to] = open_base(to);
+
+    id_type id, removed_id;
+    int type, removed_type;
+    bool should_unlink = false;
+
+    {
+        DoubleFileLockGuard lg(*base_from, *base_to);
+
+        if (!base_from->cast_as<Directory>()->get_entry(last_from, id, type))
+        {
+            return -ENOENT;
+        }
+        should_unlink
+            = base_to->cast_as<Directory>()->remove_entry(last_to, removed_id, removed_type);
+        base_to->cast_as<Directory>()->add_entry(last_to, id, type);
+    }
+    if (should_unlink)
+    {
+        auto holder = ft_.open_as(removed_id, removed_type);
+        FileLockGuard lg(*holder);
+        holder->unlink();
+    }
+    return 0;
 };
 int FuseHighLevelOps::vfsync(const char* path,
                              int datasync,
                              fuse_file_info* info,
                              const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto fp = get_file(info);
+    FileLockGuard lg(*fp);
+    fp->fsync();
+    return 0;
 };
 int FuseHighLevelOps::vtruncate(const char* path, fuse_off_t len, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto opened = open_all(path);
+    if (!opened)
+    {
+        return -ENOENT;
+    }
+    FileLockGuard fg(**opened);
+    (**opened).cast_as<RegularFile>()->truncate(len);
+    return 0;
 };
 int FuseHighLevelOps::vutimens(const char* path, const fuse_timespec* ts, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto opened = open_all(path);
+    if (!opened)
+    {
+        return -ENOENT;
+    }
+    FileLockGuard fg(**opened);
+    (**opened).utimens(ts);
+    return 0;
 };
 int FuseHighLevelOps::vlistxattr(const char* path, char* list, size_t size, const fuse_context* ctx)
 {
