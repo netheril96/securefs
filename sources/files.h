@@ -4,6 +4,7 @@
 #include "object.h"
 #include "platform.h"
 #include "streams.h"
+#include "tags.h"
 
 #include <absl/base/thread_annotations.h>
 #include <absl/container/flat_hash_map.h>
@@ -16,6 +17,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <fruit/macro.h>
 #include <functional>
 #include <memory>
 #include <string>
@@ -339,8 +341,24 @@ class RegularFile : public FileBase
 public:
     constexpr static int class_type() { return FileBase::REGULAR_FILE; }
 
-    template <class... Args>
-    explicit RegularFile(Args&&... args) : FileBase(std::forward<Args>(args)...)
+    INJECT(RegularFile(ASSISTED(std::shared_ptr<FileStream>) data_stream,
+                       ASSISTED(std::shared_ptr<FileStream>) meta_stream,
+                       ANNOTATED(tMasterKey, const key_type&) key_,
+                       ASSISTED(const id_type&) id_,
+                       ANNOTATED(tVerify, bool) check,
+                       ANNOTATED(tBlockSize, unsigned) block_size,
+                       ANNOTATED(tIvSize, unsigned) iv_size,
+                       ANNOTATED(tMaxPaddingSize, unsigned) max_padding_size,
+                       ANNOTATED(tStoreTimeWithinFs, bool) store_time))
+        : FileBase(std::move(data_stream),
+                   std::move(meta_stream),
+                   key_,
+                   id_,
+                   check,
+                   block_size,
+                   iv_size,
+                   max_padding_size,
+                   store_time)
     {
     }
 
@@ -377,8 +395,24 @@ class Symlink : public FileBase
 public:
     constexpr static int class_type() { return FileBase::SYMLINK; }
 
-    template <class... Args>
-    explicit Symlink(Args&&... args) : FileBase(std::forward<Args>(args)...)
+    INJECT(Symlink(ASSISTED(std::shared_ptr<FileStream>) data_stream,
+                   ASSISTED(std::shared_ptr<FileStream>) meta_stream,
+                   ANNOTATED(tMasterKey, const key_type&) key_,
+                   ASSISTED(const id_type&) id_,
+                   ANNOTATED(tVerify, bool) check,
+                   ANNOTATED(tBlockSize, unsigned) block_size,
+                   ANNOTATED(tIvSize, unsigned) iv_size,
+                   ANNOTATED(tMaxPaddingSize, unsigned) max_padding_size,
+                   ANNOTATED(tStoreTimeWithinFs, bool) store_time))
+        : FileBase(std::move(data_stream),
+                   std::move(meta_stream),
+                   key_,
+                   id_,
+                   check,
+                   block_size,
+                   iv_size,
+                   max_padding_size,
+                   store_time)
     {
     }
 

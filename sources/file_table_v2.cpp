@@ -12,6 +12,7 @@
 #include <absl/base/thread_annotations.h>
 #include <algorithm>
 #include <exception>
+#include <fruit/component.h>
 #include <fruit/macro.h>
 #include <memory>
 
@@ -100,8 +101,8 @@ FilePtrHolder FileTable::create_as(int type)
     return holder;
 }
 std::unique_ptr<FileBase> FileTable::construct(int type,
-                                               std::shared_ptr<StreamBase> data_stream,
-                                               std::shared_ptr<StreamBase> meta_stream,
+                                               std::shared_ptr<FileStream> data_stream,
+                                               std::shared_ptr<FileStream> meta_stream,
                                                const id_type& id)
 {
     switch (type)
@@ -330,4 +331,14 @@ namespace
     };
 
 }    // namespace
+
+fruit::Component<fruit::Required<OSService, fruit::Annotated<tReadOnly, bool>>, FileTableIO>
+get_table_io_component(unsigned format_version)
+{
+    if (format_version == 1)
+    {
+        return fruit::createComponent().bind<FileTableIO, FileTableIOVersion1>();
+    }
+    return fruit::createComponent().bind<FileTableIO, FileTableIOVersion2>();
+}
 }    // namespace securefs::full_format

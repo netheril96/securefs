@@ -32,4 +32,10 @@ struct tSkipVerification
 struct tReadOnly
 {
 };
+struct tVerify
+{
+};
+struct tStoreTimeWithinFs
+{
+};
 }    // namespace securefs

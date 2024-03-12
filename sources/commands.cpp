@@ -1,6 +1,9 @@
 #include "commands.h"
+#include "btree_dir.h"
 #include "crypto.h"
 #include "exceptions.h"
+#include "files.h"
+#include "full_format.h"
 #include "fuse_high_level_ops_base.h"
 #include "git-version.h"
 #include "lite_format.h"
@@ -9,8 +12,10 @@
 #include "myutils.h"
 #include "operations.h"
 #include "platform.h"
+#include "tags.h"
 #include "win_get_proc.h"    // IWYU pragma: keep
 
+#include <BS_thread_pool.hpp>
 #include <absl/strings/escaping.h>
 #include <absl/strings/match.h>
 #include <absl/strings/str_format.h>
@@ -20,6 +25,7 @@
 #include <cryptopp/osrng.h>
 #include <cryptopp/scrypt.h>
 #include <cryptopp/secblock.h>
+#include <fruit/component.h>
 #include <fruit/fruit.h>
 #include <json/json.h>
 #include <optional>
@@ -1121,64 +1127,100 @@ private:
         }
         name_norm_flags->supports_long_name = config.long_name_component;
 
-        return fruit::createComponent()
-            .bind<FuseHighLevelOpsBase, lite_format::FuseHighLevelOps>()
-            .bindInstance(*this)
-            .install(::securefs::lite_format::get_name_translator_component, name_norm_flags)
-            .registerProvider<fruit::Annotated<tSkipVerification, bool>(const MountCommand&)>(
-                [](const MountCommand& cmd) { return cmd.insecure.getValue(); })
-            .bindInstance<fruit::Annotated<tMaxPaddingSize, unsigned>>(config.max_padding)
-            .bindInstance<fruit::Annotated<tIvSize, unsigned>>(config.iv_size)
-            .bindInstance<fruit::Annotated<tBlockSize, unsigned>>(config.block_size)
-            .bindInstance<fruit::Annotated<tMasterKey, CryptoPP::AlignedSecByteBlock>>(
-                config.master_key)
-            .registerProvider<fruit::Annotated<tNameMasterKey, key_type>(
-                fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
-                [](const CryptoPP::AlignedSecByteBlock& master_key)
-                {
-                    if (master_key.size() < key_type::size())
-                    {
-                        throw_runtime_error("Master key too short");
-                    }
-                    return key_type(master_key.data(), key_type::size());
-                })
-            .registerProvider<fruit::Annotated<tContentMasterKey, key_type>(
-                fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
-                [](const CryptoPP::AlignedSecByteBlock& master_key)
-                {
-                    if (master_key.size() < key_type::size() * 2)
-                    {
-                        throw_runtime_error("Master key too short");
-                    }
-                    return key_type(master_key.data() + key_type::size(), key_type::size());
-                })
-            .registerProvider<fruit::Annotated<tXattrMasterKey, key_type>(
-                fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
-                [](const CryptoPP::AlignedSecByteBlock& master_key)
-                {
-                    if (master_key.size() < 3 * key_type::size())
-                    {
-                        throw_runtime_error("Master key too short");
-                    }
-                    return key_type(master_key.data() + 2 * key_type::size(), key_type::size());
-                })
-            .registerProvider<fruit::Annotated<tPaddingMasterKey, key_type>(
-                fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>,
-                fruit::Annotated<tMaxPaddingSize, const unsigned&>)>(
-                [](const CryptoPP::AlignedSecByteBlock& master_key, const unsigned& max_padding)
-                {
-                    if (max_padding <= 0)
-                    {
-                        return key_type{};
-                    }
-                    if (master_key.size() < 4 * key_type::size())
-                    {
-                        throw_runtime_error("Master key too short");
-                    }
-                    return key_type(master_key.data() + 3 * key_type::size(), key_type::size());
-                })
-            .registerProvider([](const MountCommand& cmd)
-                              { return new OSService(cmd.data_dir.getValue()); });
+        auto partial
+            = fruit::createComponent()
+                  .bindInstance(*this)
+                  .install(::securefs::lite_format::get_name_translator_component, name_norm_flags)
+                  .install(full_format::get_table_io_component, config.version)
+                  .registerProvider<fruit::Annotated<tSkipVerification, bool>(const MountCommand&)>(
+                      [](const MountCommand& cmd) { return cmd.insecure.getValue(); })
+                  .registerProvider<fruit::Annotated<tVerify, bool>(const MountCommand&)>(
+                      [](const MountCommand& cmd) { return !cmd.insecure.getValue(); })
+                  .registerProvider<fruit::Annotated<tStoreTimeWithinFs, bool>(
+                      const MountCommand&)>([](const MountCommand& cmd)
+                                            { return cmd.config.version == 3; })
+                  .registerProvider<fruit::Annotated<tReadOnly, bool>(const MountCommand&)>(
+                      [](const MountCommand& cmd)
+                      {
+                          // TODO: Support readonly mounts.
+                          return false;
+                      })
+                  .registerProvider(
+                      []() { return new BS::thread_pool(std::thread::hardware_concurrency() * 2); })
+                  .bind<Directory, BtreeDirectory>()
+                  .bindInstance<fruit::Annotated<tMaxPaddingSize, unsigned>>(config.max_padding)
+                  .bindInstance<fruit::Annotated<tIvSize, unsigned>>(config.iv_size)
+                  .bindInstance<fruit::Annotated<tBlockSize, unsigned>>(config.block_size)
+                  .bindInstance<fruit::Annotated<tMasterKey, CryptoPP::AlignedSecByteBlock>>(
+                      config.master_key)
+                  .registerProvider<fruit::Annotated<tMasterKey, key_type>(
+                      fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
+                      [](const CryptoPP::AlignedSecByteBlock& master_key)
+                      {
+                          if (master_key.size() != key_type::size())
+                          {
+                              throw_runtime_error("Master key size mismatch");
+                          }
+                          return key_type(master_key.data(), key_type::size());
+                      })
+                  .registerProvider<fruit::Annotated<tNameMasterKey, key_type>(
+                      fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
+                      [](const CryptoPP::AlignedSecByteBlock& master_key)
+                      {
+                          if (master_key.size() < key_type::size())
+                          {
+                              throw_runtime_error("Master key too short");
+                          }
+                          return key_type(master_key.data(), key_type::size());
+                      })
+                  .registerProvider<fruit::Annotated<tContentMasterKey, key_type>(
+                      fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
+                      [](const CryptoPP::AlignedSecByteBlock& master_key)
+                      {
+                          if (master_key.size() < key_type::size() * 2)
+                          {
+                              throw_runtime_error("Master key too short");
+                          }
+                          return key_type(master_key.data() + key_type::size(), key_type::size());
+                      })
+                  .registerProvider<fruit::Annotated<tXattrMasterKey, key_type>(
+                      fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
+                      [](const CryptoPP::AlignedSecByteBlock& master_key)
+                      {
+                          if (master_key.size() < 3 * key_type::size())
+                          {
+                              throw_runtime_error("Master key too short");
+                          }
+                          return key_type(master_key.data() + 2 * key_type::size(),
+                                          key_type::size());
+                      })
+                  .registerProvider<fruit::Annotated<tPaddingMasterKey, key_type>(
+                      fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>,
+                      fruit::Annotated<tMaxPaddingSize, const unsigned&>)>(
+                      [](const CryptoPP::AlignedSecByteBlock& master_key,
+                         const unsigned& max_padding)
+                      {
+                          if (max_padding <= 0)
+                          {
+                              return key_type{};
+                          }
+                          if (master_key.size() < 4 * key_type::size())
+                          {
+                              throw_runtime_error("Master key too short");
+                          }
+                          return key_type(master_key.data() + 3 * key_type::size(),
+                                          key_type::size());
+                      })
+                  .registerProvider([](const MountCommand& cmd)
+                                    { return new OSService(cmd.data_dir.getValue()); });
+        if (config.version == 4)
+        {
+            return partial.bind<FuseHighLevelOpsBase, lite_format::FuseHighLevelOps>();
+        }
+        else
+        {
+            return partial.bind<FuseHighLevelOpsBase, full_format::FuseHighLevelOps>();
+        }
     }
 
 public:
@@ -1412,136 +1454,32 @@ public:
         {
             VERBOSE_LOG("Master key: %s", hexify(config.master_key));
         }
-        if (config.version == 4)
-        {
-            fruit::Injector<FuseHighLevelOpsBase> injector(
-                +[](MountCommand* cmd) { return cmd->get_fuse_high_ops_component(); }, this);
 
-            bool native_xattr = !noxattr.getValue();
-#ifdef __APPLE__
-            if (native_xattr)
-            {
-                auto rc
-                    = OSService::get_default().listxattr(data_dir.getValue().c_str(), nullptr, 0);
-                if (rc < 0)
-                {
-                    absl::FPrintF(stderr,
-                                  "Warning: the filesystem under %s has no extended attribute "
-                                  "support.\nXattr is disabled\n",
-                                  data_dir.getValue());
-                    native_xattr = false;
-                }
-            }
-#endif
-            auto op = FuseHighLevelOpsBase::build_ops(native_xattr);
-            VERBOSE_LOG("Calling fuse_main with arguments: %s", escape_args(fuse_args));
-            recreate_logger();
-            return fuse_main(static_cast<int>(fuse_args.size()),
-                             const_cast<char**>(to_c_style_args(fuse_args).data()),
-                             &op,
-                             injector.get<FuseHighLevelOpsBase*>());
-        }
-        operations::MountOptions fsopt;
-        fsopt.root = std::make_shared<OSService>(data_dir.getValue());
-        fsopt.block_size = config.block_size;
-        fsopt.iv_size = config.iv_size;
-        fsopt.version = config.version;
-        fsopt.master_key = config.master_key;
-        fsopt.flags = config.version != 3 ? 0 : kOptionStoreTime;
-        fsopt.max_padding_size = config.max_padding;
-        if (insecure.getValue())
-            fsopt.flags.value() |= kOptionNoAuthentication;
-        bool case_insensitive = false;
-        bool enable_nfc = false;
-        if (normalization.getValue() == "nfc")
-        {
-            enable_nfc = true;
-        }
-        else if (normalization.getValue() == "casefold")
-        {
-            case_insensitive = true;
-        }
-        else if (normalization.getValue() == "casefold+nfc")
-        {
-            case_insensitive = true;
-            enable_nfc = true;
-        }
-        else if (normalization.getValue() != "none")
-        {
-            throw_runtime_error("Invalid flag of --normalization: " + normalization.getValue());
-        }
-        if (case_insensitive)
-        {
-            INFO_LOG("Mounting as a case insensitive filesystem");
-            fsopt.flags.value() |= kOptionCaseFoldFileName;
-        }
-        if (enable_nfc)
-        {
-            INFO_LOG("Mounting as a Unicode normalized filesystem");
-            fsopt.flags.value() |= kOptionNFCFileName;
-        }
-        if (skip_dot_dot.getValue())
-        {
-            fsopt.flags.value() |= kOptionSkipDotDot;
-        }
-        if (plain_text_names.getValue())
-        {
-            if (config_path.getValue().empty())
-            {
-                WARN_LOG("--plain-text-names should be used with out of tree JSON config. Please "
-                         "specify --config-path explicitly.");
-            }
-            fsopt.flags.value() |= kOptionNoNameTranslation;
-        }
-        if (config.long_name_component)
-        {
-            fsopt.flags.value() |= kOptionLongNameComponent;
-        }
-
-        if (config.version < 4)
-        {
-            try
-            {
-                fsopt.lock_stream = fsopt.root->open_file_stream(
-                    securefs::operations::LOCK_FILENAME, O_CREAT | O_EXCL | O_RDONLY, 0644);
-            }
-            catch (const ExceptionBase& e)
-            {
-                ERROR_LOG("Encountering error %s when creating the lock file %s/%s.\n"
-                          "Perhaps multiple securefs instances are trying to operate on a single "
-                          "directory.\n"
-                          "Close other instances, including on other machines, and try again.\n"
-                          "Or remove the lock file manually if you are sure no other instances are "
-                          "holding the lock.",
-                          e.what(),
-                          data_dir.getValue().c_str(),
-                          securefs::operations::LOCK_FILENAME);
-                return 18;
-            }
-        }
+        fruit::Injector<FuseHighLevelOpsBase> injector(
+            +[](MountCommand* cmd) { return cmd->get_fuse_high_ops_component(); }, this);
 
         bool native_xattr = !noxattr.getValue();
 #ifdef __APPLE__
         if (native_xattr)
         {
-            auto rc = fsopt.root->listxattr(".", nullptr, 0);
+            auto rc = OSService::get_default().listxattr(data_dir.getValue().c_str(), nullptr, 0);
             if (rc < 0)
             {
                 absl::FPrintF(stderr,
-                              "Warning: %s has no extended attribute support.\nXattr is disabled\n",
+                              "Warning: the filesystem under %s has no extended attribute "
+                              "support.\nXattr is disabled\n",
                               data_dir.getValue());
                 native_xattr = false;
             }
         }
 #endif
-
-        struct fuse_operations operations;
-        operations::init_fuse_operations(&operations, native_xattr);
+        auto op = FuseHighLevelOpsBase::build_ops(native_xattr);
         VERBOSE_LOG("Calling fuse_main with arguments: %s", escape_args(fuse_args));
+        recreate_logger();
         return fuse_main(static_cast<int>(fuse_args.size()),
                          const_cast<char**>(to_c_style_args(fuse_args).data()),
-                         &operations,
-                         &fsopt);
+                         &op,
+                         injector.get<FuseHighLevelOpsBase*>());
     }
 
     const char* long_name() const noexcept override { return "mount"; }

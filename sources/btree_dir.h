@@ -174,10 +174,27 @@ protected:
     void subflush() override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
 public:
-    template <class... Args>
-    explicit BtreeDirectory(Args&&... args) : Directory(std::forward<Args>(args)...)
+    INJECT(BtreeDirectory(ASSISTED(std::shared_ptr<FileStream>) data_stream,
+                          ASSISTED(std::shared_ptr<FileStream>) meta_stream,
+                          ANNOTATED(tMasterKey, const key_type&) key_,
+                          ASSISTED(const id_type&) id_,
+                          ANNOTATED(tVerify, bool) check,
+                          ANNOTATED(tBlockSize, unsigned) block_size,
+                          ANNOTATED(tIvSize, unsigned) iv_size,
+                          ANNOTATED(tMaxPaddingSize, unsigned) max_padding_size,
+                          ANNOTATED(tStoreTimeWithinFs, bool) store_time))
+        : Directory(std::move(data_stream),
+                    std::move(meta_stream),
+                    key_,
+                    id_,
+                    check,
+                    block_size,
+                    iv_size,
+                    max_padding_size,
+                    store_time)
     {
     }
+
     ~BtreeDirectory() override;
 
 protected:

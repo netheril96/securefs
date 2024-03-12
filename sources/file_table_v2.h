@@ -4,6 +4,7 @@
 #include "object.h"
 #include "platform.h"
 #include "streams.h"
+#include "tags.h"
 
 #include <BS_thread_pool.hpp>
 #include <absl/base/thread_annotations.h>
@@ -11,6 +12,8 @@
 
 #include <array>
 #include <cstddef>
+#include <fruit/component.h>
+#include <fruit/fruit_forward_decls.h>
 #include <fruit/macro.h>
 #include <functional>
 #include <memory>
@@ -31,6 +34,9 @@ public:
     virtual void unlink(const id_type& id) noexcept = 0;
 };
 
+fruit::Component<fruit::Required<OSService, fruit::Annotated<tReadOnly, bool>>, FileTableIO>
+get_table_io_component(unsigned format_version);
+
 class FileTable;
 class FileTableCloser;
 
@@ -41,7 +47,7 @@ class FileTable
 public:
     template <class T>
     using Factory = std::function<std::unique_ptr<T>(
-        std::shared_ptr<StreamBase>, std::shared_ptr<StreamBase>, const id_type&)>;
+        std::shared_ptr<FileStream>, std::shared_ptr<FileStream>, const id_type&)>;
 
 public:
     INJECT(FileTable(FileTableIO& io,
@@ -75,8 +81,8 @@ private:
     void init();
     Shard& find_shard(const id_type& id);
     std::unique_ptr<FileBase> construct(int type,
-                                        std::shared_ptr<StreamBase> data_stream,
-                                        std::shared_ptr<StreamBase> meta_stream,
+                                        std::shared_ptr<FileStream> data_stream,
+                                        std::shared_ptr<FileStream> meta_stream,
                                         const id_type& id);
     void close_internal(const id_type& id);
     FilePtrHolder create_holder(FileBase* fb);
