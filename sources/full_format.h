@@ -94,7 +94,7 @@ private:
     };
 
     OpenBaseResult open_base(absl::string_view path);
-    FilePtrHolder create(absl::string_view path, unsigned mode, int type);
+    FilePtrHolder create(absl::string_view path, unsigned mode, int type, int uid, int gid);
     std::optional<FilePtrHolder> open_all(absl::string_view path);
 
     FileBase* get_file(fuse_file_info* info)

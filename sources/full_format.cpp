@@ -6,8 +6,12 @@
 #include "myutils.h"
 #include "platform.h"
 
+#include <absl/container/inlined_vector.h>
+#include <absl/strings/str_split.h>
 #include <cerrno>
 #include <cstdint>
+#include <string>
+#include <winfsp_fuse.h>
 
 namespace securefs::full_format
 {
@@ -103,7 +107,7 @@ int FuseHighLevelOps::vcreate(const char* path,
                               fuse_file_info* info,
                               const fuse_context* ctx)
 {
-    auto holder = create(path, mode, RegularFile::class_type());
+    auto holder = create(path, mode, RegularFile::class_type(), ctx->uid, ctx->gid);
     set_file(info, holder.release());
     return -ENOSYS;
 };
@@ -194,7 +198,7 @@ int FuseHighLevelOps::vunlink(const char* path, const fuse_context* ctx)
 };
 int FuseHighLevelOps::vmkdir(const char* path, fuse_mode_t mode, const fuse_context* ctx)
 {
-    create(path, mode, Directory::class_type());
+    create(path, mode, Directory::class_type(), ctx->uid, ctx->gid);
     return 0;
 };
 int FuseHighLevelOps::vrmdir(const char* path, const fuse_context* ctx)
@@ -247,7 +251,7 @@ int FuseHighLevelOps::vchown(const char* path,
 };
 int FuseHighLevelOps::vsymlink(const char* to, const char* from, const fuse_context* ctx)
 {
-    auto holder = create(from, 0644, Symlink::class_type());
+    auto holder = create(from, 0644, Symlink::class_type(), ctx->uid, ctx->gid);
     FileLockGuard fg(*holder);
     holder->cast_as<Symlink>()->set(to);
     return 0;
@@ -373,4 +377,70 @@ int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fus
 {
     return -ENOSYS;
 };
+
+FuseHighLevelOps::OpenBaseResult FuseHighLevelOps::open_base(absl::string_view path)
+{
+    absl::InlinedVector<std::string, 7> splits = absl::StrSplit(path, '/', absl::SkipEmpty());
+    uint64_t parent_ino = to_inode_number(kRootId);
+    FilePtrHolder holder = ft_.open_as(kRootId, Directory::class_type());
+    for (size_t i = 0; i + 1 < splits.size(); ++i)
+    {
+        id_type id;
+        int type;
+        {
+            FileLockGuard lg(*holder);
+            if (!holder->cast_as<Directory>()->get_entry(splits[i], id, type))
+            {
+                throwVFSException(ENOENT);
+            }
+        }
+        holder = ft_.open_as(id, type);
+        holder->set_parent_ino(parent_ino);
+        parent_ino = holder->get_parent_ino();
+    }
+    return {std::move(holder), splits.empty() ? std::string() : splits.back()};
+}
+FilePtrHolder
+FuseHighLevelOps::create(absl::string_view path, unsigned mode, int type, int uid, int gid)
+{
+    auto [base_dir, last_component] = open_base(path);
+    auto holder = ft_.create_as(type);
+    {
+        FileLockGuard lg(*holder);
+        holder->initialize_empty(mode, uid, gid);
+    }
+    bool success = false;
+    {
+        FileLockGuard lg(*base_dir);
+        success = base_dir->cast_as<Directory>()->add_entry(last_component, holder->get_id(), type);
+    }
+    if (!success)
+    {
+        FileLockGuard lg(*holder);
+        holder->unlink();
+        throwVFSException(EEXIST);
+    }
+    holder->set_parent_ino(to_inode_number(base_dir->get_id()));
+    return holder;
+}
+std::optional<FilePtrHolder> FuseHighLevelOps::open_all(absl::string_view path)
+{
+    auto [base_dir, last_component] = open_base(path);
+    bool success = false;
+    id_type id;
+    int type;
+
+    {
+        FileLockGuard lg(*base_dir);
+        success = base_dir->cast_as<Directory>()->get_entry(last_component, id, type);
+    }
+    if (!success)
+    {
+        return {};
+    }
+    auto holder = ft_.open_as(id, type);
+    holder->set_parent_ino(to_inode_number(base_dir->get_id()));
+    return holder;
+}
+
 }    // namespace securefs::full_format
