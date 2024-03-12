@@ -66,13 +66,11 @@ target_link_libraries(securefs-static PUBLIC Threads::Threads)
 find_path(TCLAP_INCLUDE_DIRS "tclap/Arg.h")
 target_include_directories(securefs-static PUBLIC ${TCLAP_INCLUDE_DIRS})
 find_package(absl CONFIG REQUIRED)
-find_package(asio CONFIG REQUIRED)
 find_package(uni-algo CONFIG REQUIRED)
 
 target_link_libraries(
     securefs-static
-    PUBLIC asio::asio
-           uni-algo::uni-algo
+    PUBLIC uni-algo::uni-algo
            absl::base
            absl::synchronization
            absl::inlined_vector
@@ -111,6 +109,9 @@ find_library(
     HINTS (/usr /usr/local)
     PATH_SUFFIXES lib lib64)
 target_link_libraries(securefs-static PUBLIC ${FRUIT_LIBRARY})
+find_path(BSHOSHANY_THREAD_POOL_INCLUDE_DIRS "BS_thread_pool.hpp")
+target_include_directories(securefs-static
+                           PUBLIC ${BSHOSHANY_THREAD_POOL_INCLUDE_DIRS})
 
 if(CMAKE_DL_LIBS)
     target_link_libraries(securefs-static PUBLIC ${CMAKE_DL_LIBS})

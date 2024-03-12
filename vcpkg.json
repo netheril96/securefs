@@ -15,6 +15,7 @@
             ]
         },
         "asio",
+        "bshoshany-thread-pool",
         "uni-algo"
     ]
 }

@@ -1,4 +1,3 @@
-#include <asio/thread_pool.hpp>
 
 #include "files.h"
 #include "myutils.h"
@@ -6,8 +5,10 @@
 #include "platform.h"
 #include "streams.h"
 
+#include <BS_thread_pool.hpp>
 #include <absl/base/thread_annotations.h>
 #include <absl/container/flat_hash_map.h>
+
 #include <array>
 #include <cstddef>
 #include <fruit/macro.h>
@@ -44,7 +45,7 @@ public:
 
 public:
     INJECT(FileTable(FileTableIO& io,
-                     asio::thread_pool& pool,
+                     BS::thread_pool& pool,
                      Factory<RegularFile> regular_file_factory,
                      Factory<Directory> directory_factory,
                      Factory<Symlink> symlink_factory))
@@ -83,7 +84,7 @@ private:
 
 private:
     FileTableIO& io_;
-    asio::thread_pool& pool_;
+    BS::thread_pool& pool_;
     std::unique_ptr<FileBase> root_;
     Factory<RegularFile> regular_file_factory_;
     Factory<Directory> directory_factory_;

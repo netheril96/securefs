@@ -11,7 +11,6 @@
 
 #include <absl/base/thread_annotations.h>
 #include <algorithm>
-#include <asio/post.hpp>
 #include <exception>
 #include <fruit/macro.h>
 #include <memory>
@@ -119,18 +118,18 @@ std::unique_ptr<FileBase> FileTable::construct(int type,
 }
 void FileTable::close(const id_type& id)
 {
-    asio::post(pool_,
-               [this, id]()
-               {
-                   try
-                   {
-                       close_internal(id);
-                   }
-                   catch (const std::exception& e)
-                   {
-                       ERROR_LOG("Failed background maintanence work: %s", e.what());
-                   }
-               });
+    pool_.detach_task(
+        [this, id]()
+        {
+            try
+            {
+                close_internal(id);
+            }
+            catch (const std::exception& e)
+            {
+                ERROR_LOG("Failed background maintanence work: %s", e.what());
+            }
+        });
 }
 void FileTable::close_internal(const id_type& id)
 {
@@ -195,23 +194,23 @@ FileTable::~FileTable()
     root_->flush();
     for (auto&& s : shards)
     {
-        asio::post(pool_,
-                   [&s]()
-                   {
-                       LockGuard<Mutex> lg(s.mu);
-                       for (auto&& pair : s.live_map)
-                       {
-                           LockGuard<FileBase> inner_lg(*pair.second);
-                           pair.second->flush();
-                       }
-                       for (auto&& p : s.cache)
-                       {
-                           LockGuard<FileBase> inner_lg(*p);
-                           p->flush();
-                       }
-                   });
+        pool_.detach_task(
+            [&s]()
+            {
+                LockGuard<Mutex> lg(s.mu);
+                for (auto&& pair : s.live_map)
+                {
+                    LockGuard<FileBase> inner_lg(*pair.second);
+                    pair.second->flush();
+                }
+                for (auto&& p : s.cache)
+                {
+                    LockGuard<FileBase> inner_lg(*p);
+                    p->flush();
+                }
+            });
     }
-    pool_.join();
+    pool_.wait();
 }
 
 namespace
