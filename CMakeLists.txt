@@ -41,8 +41,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     endif()
 endif()
 
-add_definitions(-D_REENTRANT -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=28
-                -DUTF8PROC_EXPORTS=1)
+add_definitions(-D_REENTRANT -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=28)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -103,11 +102,7 @@ else()
     target_link_libraries(securefs-static PUBLIC ${CRYPTOPP_FLAGS})
 endif()
 
-find_library(
-    FRUIT_LIBRARY
-    NAMES fruit
-    HINTS (/usr /usr/local)
-    PATH_SUFFIXES lib lib64)
+find_library(FRUIT_LIBRARY NAMES fruit)
 target_link_libraries(securefs-static PUBLIC ${FRUIT_LIBRARY})
 find_path(BSHOSHANY_THREAD_POOL_INCLUDE_DIRS "BS_thread_pool.hpp")
 target_include_directories(securefs-static
