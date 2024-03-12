@@ -1,20 +1,68 @@
 #include "file_table_v2.h"
 #include "files.h"
 #include "fuse_high_level_ops_base.h"
+#include "logger.h"
+#include "myutils.h"
 #include "platform.h"
+#include "tags.h"
 
 #include <absl/strings/string_view.h>
 
 #include <cstdint>
+#include <exception>
+#include <fruit/macro.h>
+#include <memory>
 #include <optional>
 
 namespace securefs::full_format
 {
+class RepoLocker
+{
+public:
+    static inline constexpr const char* kLockFileName = ".securefs.lock";
 
+    INJECT(RepoLocker(OSService& root, ANNOTATED(tReadOnly, bool) readonly)) : root_(root)
+    {
+        if (readonly)
+        {
+            return;
+        }
+        try
+        {
+            lock_stream_ = root_.open_file_stream(kLockFileName, O_RDONLY | O_CREAT | O_EXCL, 0644);
+        }
+        catch (const std::exception& e)
+        {
+            ERROR_LOG("Failed to acquire lock file %s. Perhaps another securefs process is holding "
+                      "the lock.",
+                      root_.norm_path_narrowed(kLockFileName));
+            throw;
+        }
+    }
+
+    ~RepoLocker()
+    {
+        if (!lock_stream_)
+        {
+            return;
+        }
+        lock_stream_.reset();
+        root_.remove_file_nothrow(kLockFileName);
+    }
+
+private:
+    DISABLE_COPY_MOVE(RepoLocker)
+
+    OSService& root_;
+    std::shared_ptr<FileStream> lock_stream_;
+};
 class FuseHighLevelOps : public ::securefs::FuseHighLevelOpsBase
 {
 public:
-    INJECT(FuseHighLevelOps(OSService& root, FileTable& ft)) : root_(root), ft_(ft) {}
+    INJECT(FuseHighLevelOps(OSService& root, FileTable& ft, RepoLocker& locker))
+        : root_(root), ft_(ft), locker_(locker)
+    {
+    }
 
     void initialize(fuse_conn_info* info) override {}
     int vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx) override;
@@ -86,6 +134,7 @@ public:
 private:
     OSService& root_;
     FileTable& ft_;
+    RepoLocker& locker_;
 
 private:
     struct OpenBaseResult
