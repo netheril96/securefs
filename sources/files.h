@@ -46,7 +46,7 @@ private:
     std::atomic<ptrdiff_t> m_refcount{};
     std::shared_ptr<HeaderBase> m_header ABSL_GUARDED_BY(*this);
     const id_type m_id{};
-    std::atomic<uint32_t> m_flags[NUM_FLAGS] ABSL_GUARDED_BY(*this){};
+    std::atomic<uint32_t> m_flags[NUM_FLAGS]{};
     std::atomic<uint64_t> parent_ino{};
     fuse_timespec m_atime ABSL_GUARDED_BY(*this){}, m_mtime ABSL_GUARDED_BY(*this){},
         m_ctime ABSL_GUARDED_BY(*this){}, m_birthtime ABSL_GUARDED_BY(*this){};
@@ -65,10 +65,7 @@ private:
 protected:
     std::shared_ptr<StreamBase> m_stream ABSL_GUARDED_BY(*this);
 
-    uint32_t get_root_page() const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
-    {
-        return m_flags[4];
-    }
+    uint32_t get_root_page() const noexcept { return m_flags[4]; }
 
     void set_root_page(uint32_t value) noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
@@ -76,10 +73,7 @@ protected:
         m_dirty = true;
     }
 
-    uint32_t get_start_free_page() const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
-    {
-        return m_flags[5];
-    }
+    uint32_t get_start_free_page() const noexcept { return m_flags[5]; }
 
     void set_start_free_page(uint32_t value) noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
@@ -87,10 +81,7 @@ protected:
         m_dirty = true;
     }
 
-    uint32_t get_num_free_page() const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
-    {
-        return m_flags[6];
-    }
+    uint32_t get_num_free_page() const noexcept { return m_flags[6]; }
 
     void set_num_free_page(uint32_t value) noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
@@ -167,7 +158,7 @@ public:
     void set_parent_ino(uint64_t value) noexcept { parent_ino.store(value); }
 
     // --Begin of getters and setters for stats---
-    uint32_t get_mode() const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) { return m_flags[0]; }
+    uint32_t get_mode() const noexcept { return m_flags[0]; }
 
     void set_mode(uint32_t value) noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
@@ -178,7 +169,7 @@ public:
         m_dirty = true;
     }
 
-    uint32_t get_uid() const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) { return m_flags[1]; }
+    uint32_t get_uid() const noexcept { return m_flags[1]; }
 
     void set_uid(uint32_t value) noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
@@ -189,7 +180,7 @@ public:
         m_dirty = true;
     }
 
-    uint32_t get_gid() const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) { return m_flags[2]; }
+    uint32_t get_gid() const noexcept { return m_flags[2]; }
 
     void set_gid(uint32_t value) noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
@@ -200,7 +191,7 @@ public:
         m_dirty = true;
     }
 
-    uint32_t get_nlink() const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) { return m_flags[3]; }
+    uint32_t get_nlink() const noexcept { return m_flags[3]; }
 
     void set_nlink(uint32_t value) noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
@@ -293,10 +284,7 @@ public:
 
     int get_real_type();
 
-    bool is_unlinked() const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
-    {
-        return get_nlink() <= 0;
-    }
+    bool is_unlinked() const noexcept { return get_nlink() <= 0; }
 
     void unlink() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
@@ -330,6 +318,8 @@ public:
     T* cast_as()
     {
         int type_ = type();
+        if (type_ != FileBase::BASE && mode_for_type(type_) != (get_mode() & S_IFMT))
+            throwFileTypeInconsistencyException();
         if (type_ != T::class_type())
             throw_invalid_cast(T::class_type());
         return static_cast<T*>(this);
