@@ -15,9 +15,17 @@ option(SECUREFS_ENABLE_INTEGRATION_TEST
        "Whether to run integration test over real FUSE mounts" ON)
 option(SECUREFS_USE_FUSET
        "Use FUSE-T instead of MacFUSE (only makes sense on macOS)" OFF)
+option(SECUREFS_ADDRESS_SANITIZE
+       "Enable address sanitizer during building. Mainly for development use."
+       OFF)
 
 project(securefs)
 enable_testing()
+
+if(SECUREFS_ADDRESS_SANITIZE)
+    add_compile_options(-fsanitize=address)
+    add_link_options(-fsanitize=address)
+endif()
 
 set(CMAKE_FIND_FRAMEWORK NEVER)
 
