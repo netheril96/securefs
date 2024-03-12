@@ -9,6 +9,7 @@
 #include "platform.h"
 #include "tags.h"
 
+#include <absl/base/thread_annotations.h>
 #include <algorithm>
 #include <asio/post.hpp>
 #include <exception>
@@ -145,12 +146,21 @@ void FileTable::close_internal(const id_type& id)
     {
         return;    // Already reopened by another thread.
     }
-    bool should_unlink = it->second->is_unlinked();
-    if (!should_unlink)
+
+    // The file descriptor is not referenced anywhere else, so we don't need to lock it.
+    // If we do lock it, then later when it is destroyed, we are still holding the mutex,
+    // which may cause undefined behavior.
+    auto query_link_status = [](FileBase* fb) ABSL_NO_THREAD_SAFETY_ANALYSIS
     {
-        LockGuard<FileBase> file_lg(*it->second);
-        it->second->flush();
-    }
+        bool result = fb->is_unlinked();
+        if (!result)
+        {
+            fb->flush();
+        }
+        return result;
+    };
+
+    bool should_unlink = query_link_status(it->second.get());
     auto holder = std::move(it->second);
     s.live_map.erase(it);
     if (!should_unlink)
