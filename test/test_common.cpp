@@ -7,6 +7,7 @@
 #include <cryptopp/osrng.h>
 
 #include <cstdlib>
+#include <fuse/fuse.h>
 #include <thread>
 
 std::mt19937& get_random_number_engine()
@@ -45,17 +46,13 @@ namespace securefs::testing
 namespace
 {
     constexpr std::string_view kLongFileNameExample1
-        = "✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅"
-          "✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅"
-          "✅✅✅✅✅✅ "
-          "✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅"
-          "✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅"
-          "✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅"
-          "✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅";
+        = u8"✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅"
+          u8"✅"
+          "✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅";
+    static_assert(kLongFileNameExample1.size() > 240 && kLongFileNameExample1.size() < 255);
 
-    constexpr std::string_view kLongFileNameExample2
-        = "🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️"
-          "🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️";
+    constexpr std::string_view kLongFileNameExample2 = u8"🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️";
+    static_assert(kLongFileNameExample2.size() > 240 && kLongFileNameExample2.size() < 255);
 
     using ListDirResult = std::vector<std::pair<std::string, fuse_stat>>;
     ListDirResult listdir(FuseHighLevelOpsBase& op, const char* path)
@@ -96,13 +93,17 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root)
 {
     CHECK(names(listdir(ops, "/")) == std::vector<std::string>{".", ".."});
 
+    fuse_context ctx{};
+    ctx.uid = 2;
+    ctx.gid = 3;
+
     {
         fuse_file_info info{};
-        REQUIRE(ops.vcreate("/hello", 0644, &info, nullptr) == 0);
-        REQUIRE(ops.vrelease(nullptr, &info, nullptr) == 0);
+        REQUIRE(ops.vcreate("/hello", 0644, &info, &ctx) == 0);
+        REQUIRE(ops.vrelease(nullptr, &info, &ctx) == 0);
 
         fuse_stat st{};
-        REQUIRE(ops.vgetattr("/hello", &st, nullptr) == 0);
+        REQUIRE(ops.vgetattr("/hello", &st, &ctx) == 0);
         CHECK((st.st_mode & S_IFMT) == S_IFREG);
         CHECK(st.st_size == 0);
     }
@@ -111,9 +112,9 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root)
 
     {
         fuse_file_info info{};
-        REQUIRE(ops.vcreate(absl::StrCat("/", kLongFileNameExample1).c_str(), 0644, &info, nullptr)
+        REQUIRE(ops.vcreate(absl::StrCat("/", kLongFileNameExample1).c_str(), 0644, &info, &ctx)
                 == 0);
-        REQUIRE(ops.vrelease(nullptr, &info, nullptr) == 0);
+        REQUIRE(ops.vrelease(nullptr, &info, &ctx) == 0);
         CHECK(names(listdir(ops, "/"))
               == std::vector<std::string>{".", "..", "hello", std::string(kLongFileNameExample1)});
     }
@@ -125,13 +126,13 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root)
         generate_random(written.data(), written.size());
         fuse_file_info write_info{};
         write_info.flags = O_WRONLY;
-        REQUIRE(ops.vopen(absl::StrCat("/", kLongFileNameExample1).c_str(), &write_info, nullptr)
+        REQUIRE(ops.vopen(absl::StrCat("/", kLongFileNameExample1).c_str(), &write_info, &ctx)
                 == 0);
-        REQUIRE(ops.vwrite(nullptr, written.data(), written.size(), 1, &write_info, nullptr)
+        REQUIRE(ops.vwrite(nullptr, written.data(), written.size(), 1, &write_info, &ctx)
                 == written.size());
 
         fuse_stat st{};
-        CHECK(ops.vfgetattr(nullptr, &st, &write_info, nullptr) == 0);
+        CHECK(ops.vfgetattr(nullptr, &st, &write_info, &ctx) == 0);
         CHECK(st.st_size == written.size() + 1);
 
         std::thread concurrent_read_thread(
@@ -140,22 +141,22 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root)
                 fuse_file_info read_info{};
                 read_info.flags = O_RDONLY;
                 REQUIRE(
-                    ops.vopen(absl::StrCat("/", kLongFileNameExample1).c_str(), &read_info, nullptr)
+                    ops.vopen(absl::StrCat("/", kLongFileNameExample1).c_str(), &read_info, &ctx)
                     == 0);
-                REQUIRE(ops.vread(nullptr, read.data(), read.size(), 0, &read_info, nullptr)
+                REQUIRE(ops.vread(nullptr, read.data(), read.size(), 0, &read_info, &ctx)
                         == written.size() + 1);
-                REQUIRE(ops.vrelease(nullptr, &read_info, nullptr) == 0);
+                REQUIRE(ops.vrelease(nullptr, &read_info, &ctx) == 0);
                 CHECK(read.front() == 0);
                 CHECK(std::string_view(written.data(), written.size())
                       == std::string_view(read.data() + 1, written.size()));
             });
         concurrent_read_thread.join();
 
-        REQUIRE(ops.vrelease(nullptr, &write_info, nullptr) == 0);
+        REQUIRE(ops.vrelease(nullptr, &write_info, &ctx) == 0);
     }
 
-    CHECK(ops.vunlink("/hello", nullptr) == 0);
-    CHECK(ops.vunlink(absl::StrCat("/", kLongFileNameExample1).c_str(), nullptr) == 0);
+    CHECK(ops.vunlink("/hello", &ctx) == 0);
+    CHECK(ops.vunlink(absl::StrCat("/", kLongFileNameExample1).c_str(), &ctx) == 0);
     CHECK(names(listdir(ops, "/")) == std::vector<std::string>{".", ".."});
 
     // Lite format specific test case
@@ -167,15 +168,13 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root)
         CHECK(root_long_name_table.list_hashes() == std::vector<std::string>{});
     }
 
-    REQUIRE(ops.vmkdir("/cbd", 0755, nullptr) == 0);
-    REQUIRE(ops.vmkdir("/abc", 0755, nullptr) == 0);
-    REQUIRE(ops.vrename("/abc", absl::StrCat("/cbd/", kLongFileNameExample2).c_str(), nullptr)
-            == 0);
+    REQUIRE(ops.vmkdir("/cbd", 0755, &ctx) == 0);
+    REQUIRE(ops.vmkdir("/abc", 0755, &ctx) == 0);
+    REQUIRE(ops.vrename("/abc", absl::StrCat("/cbd/", kLongFileNameExample2).c_str(), &ctx) == 0);
     {
         fuse_stat st{};
-        REQUIRE(ops.vgetattr("/abc", &st, nullptr) == -ENOENT);
-        REQUIRE(ops.vgetattr(absl::StrCat("/cbd/", kLongFileNameExample2).c_str(), &st, nullptr)
-                == 0);
+        REQUIRE(ops.vgetattr("/abc", &st, &ctx) == -ENOENT);
+        REQUIRE(ops.vgetattr(absl::StrCat("/cbd/", kLongFileNameExample2).c_str(), &st, &ctx) == 0);
         CHECK((st.st_mode & S_IFMT) == S_IFDIR);
         CHECK(names(listdir(ops, "/cbd"))
               == std::vector<std::string>{".", "..", std::string(kLongFileNameExample2)});
@@ -183,27 +182,27 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root)
     {
         REQUIRE(ops.vrename(absl::StrCat("/cbd/", kLongFileNameExample2).c_str(),
                             absl::StrCat("/cbd/", kLongFileNameExample1).c_str(),
-                            nullptr)
+                            &ctx)
                 == 0);
         CHECK(names(listdir(ops, "/cbd"))
               == std::vector<std::string>{".", "..", std::string(kLongFileNameExample1)});
     }
     {
-        REQUIRE(ops.vrename(absl::StrCat("/cbd/", kLongFileNameExample1).c_str(), "/000", nullptr)
+        REQUIRE(ops.vrename(absl::StrCat("/cbd/", kLongFileNameExample1).c_str(), "/000", &ctx)
                 == 0);
-        REQUIRE(ops.vrename("/000", absl::StrCat("/cbd/", kLongFileNameExample1).c_str(), nullptr)
+        REQUIRE(ops.vrename("/000", absl::StrCat("/cbd/", kLongFileNameExample2).c_str(), &ctx)
                 == 0);
     }
 
     if (!is_windows())
     {
-        auto symlink_location = absl::StrCat("/cbd/", kLongFileNameExample2, "sym");
+        auto symlink_location = absl::StrCat("/cbd/", kLongFileNameExample2, "/", "sym");
         constexpr const char* symlink_target
             = "/888888888888888888888888888888/9999999999999999999/66666666666666666";
-        REQUIRE(ops.vsymlink(symlink_target, symlink_location.c_str(), nullptr) == 0);
+        REQUIRE(ops.vsymlink(symlink_target, symlink_location.c_str(), &ctx) == 0);
 
         fuse_stat st{};
-        REQUIRE(ops.vgetattr(symlink_location.c_str(), &st, nullptr) == 0);
+        REQUIRE(ops.vgetattr(symlink_location.c_str(), &st, &ctx) == 0);
         CHECK((st.st_mode & S_IFMT) == S_IFLNK);
         CHECK(st.st_size == strlen(symlink_target));
 
@@ -211,23 +210,23 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root)
         REQUIRE(ops.vreadlink(symlink_location.c_str(),
                               read_symlink_target.data(),
                               read_symlink_target.size() + 1,
-                              nullptr)
+                              &ctx)
                 == 0);
         CHECK(read_symlink_target == symlink_target);
     }
 
     if (!is_windows())
     {
-        auto link_target = absl::StrCat("/cbd/", kLongFileNameExample2, kLongFileNameExample1);
+        auto link_target = absl::StrCat("/cbd/", kLongFileNameExample2, "/", kLongFileNameExample1);
         fuse_file_info info{};
-        REQUIRE(ops.vcreate(link_target.c_str(), 0644, &info, nullptr) == 0);
-        REQUIRE(ops.vlink(link_target.c_str(), "/check-mark", nullptr) == 0);
+        REQUIRE(ops.vcreate(link_target.c_str(), 0644, &info, &ctx) == 0);
+        REQUIRE(ops.vlink(link_target.c_str(), "/check-mark", &ctx) == 0);
         fuse_stat st{};
-        REQUIRE(ops.vfgetattr(nullptr, &st, &info, nullptr) == 0);
+        REQUIRE(ops.vfgetattr(nullptr, &st, &info, &ctx) == 0);
         CHECK(st.st_nlink == 2);
-        CHECK(ops.vrelease(nullptr, &info, nullptr) == 0);
-        CHECK(ops.vunlink(link_target.c_str(), nullptr) == 0);
-        REQUIRE(ops.vgetattr("/check-mark", &st, nullptr) == 0);
+        CHECK(ops.vrelease(nullptr, &info, &ctx) == 0);
+        CHECK(ops.vunlink(link_target.c_str(), &ctx) == 0);
+        REQUIRE(ops.vgetattr("/check-mark", &st, &ctx) == 0);
         CHECK(st.st_nlink == 1);
     }
 }

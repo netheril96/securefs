@@ -108,7 +108,7 @@ int FuseHighLevelOps::vcreate(const char* path,
 {
     auto holder = create(path, mode, RegularFile::class_type(), ctx->uid, ctx->gid);
     set_file(info, holder.release());
-    return -ENOSYS;
+    return 0;
 };
 int FuseHighLevelOps::vopen(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
@@ -294,24 +294,30 @@ int FuseHighLevelOps::vrename(const char* from, const char* to, const fuse_conte
     auto [base_from, last_from] = open_base(from);
     auto [base_to, last_to] = open_base(to);
 
-    id_type id, removed_id;
-    int type, removed_type;
-    bool should_unlink = false;
+    id_type from_id, to_id;
+    int from_type, to_type;
+    bool has_to_item = false;
 
     {
         DoubleFileLockGuard lg(*base_from, *base_to);
 
-        if (!base_from->cast_as<Directory>()->get_entry(last_from, id, type))
+        if (!base_from->cast_as<Directory>()->remove_entry(last_from, from_id, from_type))
         {
             return -ENOENT;
         }
-        should_unlink
-            = base_to->cast_as<Directory>()->remove_entry(last_to, removed_id, removed_type);
-        base_to->cast_as<Directory>()->add_entry(last_to, id, type);
+        has_to_item = base_to->cast_as<Directory>()->remove_entry(last_to, to_id, to_type);
+        if (has_to_item && from_id == to_id)
+        {
+            // Cannot rename a hardlink onto itself
+            base_from->cast_as<Directory>()->add_entry(last_from, from_id, from_type);
+            base_to->cast_as<Directory>()->add_entry(last_to, to_id, to_type);
+            return 0;
+        }
+        base_to->cast_as<Directory>()->add_entry(last_to, from_id, from_type);
     }
-    if (should_unlink)
+    if (has_to_item)
     {
-        auto holder = ft_.open_as(removed_id, removed_type);
+        auto holder = ft_.open_as(to_id, to_type);
         FileLockGuard lg(*holder);
         holder->unlink();
     }
@@ -406,7 +412,7 @@ FuseHighLevelOps::create(absl::string_view path, unsigned mode, int type, int ui
     auto holder = ft_.create_as(type);
     {
         FileLockGuard lg(*holder);
-        holder->initialize_empty(mode, uid, gid);
+        holder->initialize_empty((mode & 0777) | FileBase::mode_for_type(type), uid, gid);
     }
     bool success = false;
     {
@@ -424,6 +430,10 @@ FuseHighLevelOps::create(absl::string_view path, unsigned mode, int type, int ui
 }
 std::optional<FilePtrHolder> FuseHighLevelOps::open_all(absl::string_view path)
 {
+    if (path.empty() || path == "/")
+    {
+        return ft_.open_as(kRootId, Directory::class_type());
+    }
     auto [base_dir, last_component] = open_base(path);
     bool success = false;
     id_type id;
