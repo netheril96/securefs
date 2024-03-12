@@ -1,6 +1,11 @@
 #include "file_table_v2.h"
+#include "files.h"
 #include "fuse_high_level_ops_base.h"
 #include "platform.h"
+#include <absl/strings/string_view.h>
+#include <cstdint>
+#include <fuse_common.h>
+#include <optional>
 
 namespace securefs::full_format
 {
@@ -80,5 +85,26 @@ public:
 private:
     OSService& root_;
     FileTable& ft_;
+
+private:
+    struct OpenBaseResult
+    {
+        FilePtrHolder file;
+        std::string last_component;
+    };
+
+    OpenBaseResult open_base(absl::string_view path);
+    FilePtrHolder create(absl::string_view path, unsigned mode, int type);
+    std::optional<FilePtrHolder> open_all(absl::string_view path);
+
+    FileBase* get_file(fuse_file_info* info)
+    {
+        return reinterpret_cast<FileBase*>(static_cast<uintptr_t>(info->fh));
+    }
+
+    void set_file(fuse_file_info* info, FileBase* fb)
+    {
+        info->fh = reinterpret_cast<uintptr_t>(fb);
+    }
 };
 }    // namespace securefs::full_format

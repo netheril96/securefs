@@ -1,29 +1,63 @@
 #include "full_format.h"
+#include "files.h"
+#include "lock_guard.h"
+#include "logger.h"
+#include "myutils.h"
+#include "platform.h"
+#include <cerrno>
 
 namespace securefs::full_format
 {
 int FuseHighLevelOps::vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    root_.statfs(buf);
+    return 0;
 };
 int FuseHighLevelOps::vgetattr(const char* path, fuse_stat* st, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto opened = open_all(path);
+    if (!opened)
+    {
+        return -ENOENT;
+    }
+    FileLockGuard lg(**opened);
+    (**opened).stat(st);
+    return 0;
 };
 int FuseHighLevelOps::vfgetattr(const char* path,
                                 fuse_stat* st,
                                 fuse_file_info* info,
                                 const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto fp = get_file(info);
+    FileLockGuard lg(*fp);
+    fp->stat(st);
+    return 0;
 };
 int FuseHighLevelOps::vopendir(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto opened = open_all(path);
+    if (!opened)
+    {
+        return -ENOENT;
+    }
+    if ((**opened).type() != Directory::class_type())
+    {
+        return -ENOTDIR;
+    }
+    set_file(info, opened->release());
+    return 0;
 };
 int FuseHighLevelOps::vreleasedir(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto fp = get_file(info);
+    if (fp->type() != Directory::class_type())
+    {
+        return -ENOTDIR;
+    }
+    FilePtrHolder holder(fp, FileTableCloser(&ft_));
+    // Let destructor does its job.
+    return 0;
 };
 int FuseHighLevelOps::vreaddir(const char* path,
                                void* buf,
@@ -32,22 +66,64 @@ int FuseHighLevelOps::vreaddir(const char* path,
                                fuse_file_info* info,
                                const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto fp = get_file(info);
+    if (fp->type() != Directory::class_type())
+    {
+        return -ENOTDIR;
+    }
+    fuse_stat st{};
+    FileLockGuard lg(*fp);
+
+    st.st_ino = to_inode_number(fp->get_id());
+    st.st_mode = S_IFDIR;
+    filler(buf, ".", &st, 0);
+
+    st.st_ino = fp->get_parent_ino();
+    filler(buf, "..", &st, 0);
+
+    fp->cast_as<Directory>()->iterate_over_entries(
+        [&](const std::string& name, const id_type& id, int type) -> bool
+        {
+            st.st_mode = FileBase::mode_for_type(type);
+            st.st_ino = to_inode_number(id);
+            bool success = filler(buf, name.c_str(), &st, 0) == 0;
+            if (!success)
+            {
+                WARN_LOG("Filling directory buffer failed");
+            }
+            return success;
+        });
+    return 0;
 };
 int FuseHighLevelOps::vcreate(const char* path,
                               fuse_mode_t mode,
                               fuse_file_info* info,
                               const fuse_context* ctx)
 {
+    auto holder = create(path, mode, RegularFile::class_type());
+    set_file(info, holder.release());
     return -ENOSYS;
 };
 int FuseHighLevelOps::vopen(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto opened = open_all(path);
+    if (!opened)
+    {
+        return -ENOENT;
+    }
+    set_file(info, opened->release());
+    return 0;
 };
 int FuseHighLevelOps::vrelease(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto fp = get_file(info);
+    if (fp->type() != RegularFile::class_type())
+    {
+        return -EINVAL;
+    }
+    FilePtrHolder holder(fp, FileTableCloser(&ft_));
+    // Let destructor does its job.
+    return 0;
 };
 int FuseHighLevelOps::vread(const char* path,
                             char* buf,

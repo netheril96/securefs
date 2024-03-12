@@ -14,6 +14,8 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -39,18 +41,19 @@ private:
 
 private:
     securefs::Mutex m_lock;
-    ptrdiff_t m_refcount;
+    std::atomic<ptrdiff_t> m_refcount{};
     std::shared_ptr<HeaderBase> m_header ABSL_GUARDED_BY(*this);
-    const id_type m_id;
-    std::atomic<uint32_t> m_flags[NUM_FLAGS];
-    fuse_timespec m_atime ABSL_GUARDED_BY(*this), m_mtime ABSL_GUARDED_BY(*this),
-        m_ctime ABSL_GUARDED_BY(*this), m_birthtime ABSL_GUARDED_BY(*this);
+    const id_type m_id{};
+    std::atomic<uint32_t> m_flags[NUM_FLAGS]{};
+    std::atomic<uint64_t> parent_ino{};
+    fuse_timespec m_atime ABSL_GUARDED_BY(*this){}, m_mtime ABSL_GUARDED_BY(*this){},
+        m_ctime ABSL_GUARDED_BY(*this){}, m_birthtime ABSL_GUARDED_BY(*this){};
     std::shared_ptr<FileStream>
-        m_data_stream ABSL_GUARDED_BY(*this), m_meta_stream ABSL_GUARDED_BY(*this);
-    CryptoPP::GCM<CryptoPP::AES>::Encryption m_xattr_enc ABSL_GUARDED_BY(*this);
-    CryptoPP::GCM<CryptoPP::AES>::Decryption m_xattr_dec ABSL_GUARDED_BY(*this);
-    bool m_dirty ABSL_GUARDED_BY(*this);
-    const bool m_check, m_store_time;
+        m_data_stream ABSL_GUARDED_BY(*this){}, m_meta_stream ABSL_GUARDED_BY(*this){};
+    CryptoPP::GCM<CryptoPP::AES>::Encryption m_xattr_enc ABSL_GUARDED_BY(*this){};
+    CryptoPP::GCM<CryptoPP::AES>::Decryption m_xattr_dec ABSL_GUARDED_BY(*this){};
+    bool m_dirty ABSL_GUARDED_BY(*this){};
+    const bool m_check{}, m_store_time{};
 
 private:
     void read_header() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
@@ -148,6 +151,9 @@ public:
 
     void initialize_empty(uint32_t mode, uint32_t uid, uint32_t gid)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+
+    uint64_t get_parent_ino() const noexcept { return parent_ino; }
+    void set_parent_ino(uint64_t value) noexcept { parent_ino.store(value); }
 
     // --Begin of getters and setters for stats---
     uint32_t get_mode() const noexcept { return m_flags[0]; }
