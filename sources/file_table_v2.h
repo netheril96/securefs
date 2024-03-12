@@ -59,7 +59,7 @@ public:
     ~FileTable();
     FilePtrHolder open_as(const id_type& id, int type);
     FilePtrHolder create_as(int type);
-    void close(FileBase* fb);
+    void close(const id_type& id);
 
 private:
     struct Shard
@@ -77,6 +77,9 @@ private:
                                         std::shared_ptr<StreamBase> data_stream,
                                         std::shared_ptr<StreamBase> meta_stream,
                                         const id_type& id);
+    void close_internal(const id_type& id);
+    FilePtrHolder create_holder(FileBase* fb);
+    FilePtrHolder create_holder(std::unique_ptr<FileBase>& fb);
 
 private:
     FileTableIO& io_;
@@ -93,7 +96,13 @@ class FileTableCloser
 public:
     explicit FileTableCloser(FileTable* table) : table_(table) {}
 
-    void operator()(FileBase* fb) const { table_->close(fb); }
+    void operator()(FileBase* fb) const
+    {
+        if (fb && table_ && fb->decref() <= 0)
+        {
+            table_->close(fb->get_id());
+        }
+    }
 
 private:
     FileTable* table_;

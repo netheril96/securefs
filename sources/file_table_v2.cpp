@@ -38,6 +38,16 @@ void FileTable::init()
         root_->initialize_empty(0755, OSService::getuid(), OSService::getgid());
     }
 }
+FilePtrHolder FileTable::create_holder(FileBase* fb)
+{
+    fb->incref();
+    return {fb, FileTableCloser(this)};
+}
+FilePtrHolder FileTable::create_holder(std::unique_ptr<FileBase>& fb)
+{
+    return create_holder(fb.get());
+}
+
 FilePtrHolder FileTable::open_as(const id_type& id, int type)
 {
     if (id == kRootId)
@@ -52,8 +62,7 @@ FilePtrHolder FileTable::open_as(const id_type& id, int type)
     LockGuard<Mutex> lg(s.mu);
     if (auto it = s.live_map.find(id); it != s.live_map.end())
     {
-        it->second->incref();
-        return {it->second.get(), FileTableCloser(this)};
+        return create_holder(it->second);
     }
     if (auto it
         = std::find_if(s.cache.begin(),
@@ -61,19 +70,17 @@ FilePtrHolder FileTable::open_as(const id_type& id, int type)
                        [&](const std::unique_ptr<FileBase>& p) { return p->get_id() == id; });
         it != s.cache.end())
     {
-        (**it).incref();
-        auto holder = std::move(*it);
-        FileBase* fp = holder.get();
+        auto holder = create_holder(*it);
+        auto unique_base = std::move(*it);
         s.cache.erase(it);
-        s.live_map.emplace(id, std::move(holder));
-        return {fp, FileTableCloser(this)};
+        s.live_map.emplace(id, std::move(unique_base));
+        return holder;
     }
     auto [data, meta] = io_.open(id);
-    auto holder = construct(type, std::move(data), std::move(meta), id);
-    holder->setref(1);
-    FileBase* fp = holder.get();
-    s.live_map.emplace(id, std::move(holder));
-    return {fp, FileTableCloser(this)};
+    auto unique_base = construct(type, std::move(data), std::move(meta), id);
+    auto holder = create_holder(unique_base);
+    s.live_map.emplace(id, std::move(unique_base));
+    return holder;
 }
 FileTable::Shard& FileTable::find_shard(const id_type& id)
 {
@@ -87,10 +94,10 @@ FilePtrHolder FileTable::create_as(int type)
     LockGuard<Mutex> lg(s.mu);
     auto [data, meta] = io_.create(id);
     auto fp = construct(type, std::move(data), std::move(meta), id);
-    fp->setref(1);
-    FilePtrHolder result(fp.get(), FileTableCloser(this));
+    fp->setref(0);
+    auto holder = create_holder(fp);
     s.live_map.emplace(id, std::move(fp));
-    return result;
+    return holder;
 }
 std::unique_ptr<FileBase> FileTable::construct(int type,
                                                std::shared_ptr<StreamBase> data_stream,
@@ -109,86 +116,69 @@ std::unique_ptr<FileBase> FileTable::construct(int type,
         throw_runtime_error("Invalid file type");
     }
 }
-void FileTable::close(FileBase* fb)
+void FileTable::close(const id_type& id)
 {
-    if (fb == root_.get())
-    {
-        return;
-    }
-    if (fb->decref() > 0)
-    {
-        return;
-    }
-    auto id = fb->get_id();    // Copy the ID because the pointer may be invalidated later.
-    auto& s = find_shard(id);
-    bool should_unlink = false;
-    bool should_gc = false;
-    {
-        LockGuard<Mutex> lg(s.mu);
-        if (fb->getref() > 0)
-        {
-            // Because we didn't lock the sharded mutex before, the refcount may have changed, and
-            // therefore we need to double check.
-            return;
-        }
-        if (auto it = s.live_map.find(id); it != s.live_map.end())
-        {
-            should_unlink = fb->is_unlinked();
-            auto holder = std::move(it->second);
-            s.live_map.erase(it);
-            if (!should_unlink)
-            {
-                s.cache.emplace_back(std::move(holder));
-            }
-            should_gc = s.cache.size() > kMaxCached;
-        }
-        else
-        {
-            ERROR_LOG("Closing a file descriptor with id %s not within the table", hexify(id));
-            return;
-        }
-    }
-    if (should_unlink)
-    {
-        asio::post(pool_, [this, id]() { io_.unlink(id); });
-    }
-    if (should_gc)
-    {
-        asio::post(
-            pool_,
-            [&s]()
-            {
-                try
-                {
-                    LockGuard<Mutex> lg(s.mu);
-                    if (s.cache.size() < kEjectNumber)
-                    {
-                        return;
-                    }
-                    auto begin = s.cache.begin();
-                    auto end = s.cache.begin() + kEjectNumber;
-                    for (auto it = begin; it != end; ++it)
-                    {
-                        LockGuard<FileBase> inner_lg(**it);
-                        it->get()->flush();
-                        if (it->get()->getref() > 0)
-                        {
-                            ERROR_LOG(
-                                "A file descriptor in the closed pool has outstanding references");
-                            return;
-                        }
-                    }
-                    s.cache.erase(begin, end);
-                }
-                catch (const std::exception& e)
-                {
-                    ERROR_LOG(
-                        "Exception during background maintenance of closed file descriptors: %s",
-                        e.what());
-                }
-            });
-    }
+    asio::post(pool_,
+               [this, id]()
+               {
+                   try
+                   {
+                       close_internal(id);
+                   }
+                   catch (const std::exception& e)
+                   {
+                       ERROR_LOG("Failed background maintanence work: %s", e.what());
+                   }
+               });
 }
+void FileTable::close_internal(const id_type& id)
+{
+    auto& s = find_shard(id);
+
+    LockGuard<Mutex> lg(s.mu);
+    auto it = s.live_map.find(id);
+    if (it == s.live_map.end())
+    {
+        return;
+    }
+    if (it->second->getref() > 0)
+    {
+        return;    // Already reopened by another thread.
+    }
+    bool should_unlink = it->second->is_unlinked();
+    if (!should_unlink)
+    {
+        LockGuard<FileBase> file_lg(*it->second);
+        it->second->flush();
+    }
+    auto holder = std::move(it->second);
+    s.live_map.erase(it);
+    if (!should_unlink)
+    {
+        s.cache.emplace_back(std::move(holder));
+    }
+    else
+    {
+        holder.reset();
+        io_.unlink(id);
+    }
+    if (s.cache.size() > kMaxCached)
+    {
+        static_assert(kEjectNumber < kMaxCached);
+        auto begin = s.cache.begin();
+        auto end = s.cache.begin() + kEjectNumber;
+        for (auto it = begin; it != end; ++it)
+        {
+            if (it->get()->getref() > 0)
+            {
+                ERROR_LOG("A file descriptor in the closed pool has outstanding references");
+                return;
+            }
+        }
+        s.cache.erase(begin, end);
+    }
+};
+
 FileTable::~FileTable()
 {
     INFO_LOG("Flushing all opened and cached file descriptors, please wait...");
