@@ -1,5 +1,8 @@
 #pragma once
 
+#include "fuse_high_level_ops_base.h"
+#include "platform.h"
+
 #include <absl/strings/escaping.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
@@ -34,3 +37,8 @@ struct doctest::StringMaker<std::vector<std::string>>
         return to_doc_str(absl::StrCat("[", absl::StrJoin(value, ", "), "]"));
     }
 };
+
+namespace securefs::testing
+{
+void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root);
+}
