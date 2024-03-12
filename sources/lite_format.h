@@ -211,7 +211,7 @@ struct NameNormalizationFlags
 };
 
 fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
-get_name_translator_component(std::shared_ptr<NameNormalizationFlags> args);
+get_name_translator_component(const NameNormalizationFlags* args);
 
 class FuseHighLevelOps : public ::securefs::FuseHighLevelOpsBase
 {

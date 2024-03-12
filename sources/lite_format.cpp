@@ -18,7 +18,9 @@
 #include <absl/utility/utility.h>
 #include <cryptopp/blake2.h>
 #include <cryptopp/sha.h>
+#include <fruit/component.h>
 #include <fruit/fruit.h>
+#include <fruit/fruit_forward_decls.h>
 #include <uni_algo/case.h>
 #include <uni_algo/norm.h>
 
@@ -1117,7 +1119,7 @@ namespace
 }    // namespace
 
 fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
-get_name_translator_component(std::shared_ptr<NameNormalizationFlags> flags)
+get_name_translator_component(const NameNormalizationFlags* flags)
 {
     if (flags->no_op)
     {

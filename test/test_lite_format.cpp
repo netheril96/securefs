@@ -62,16 +62,16 @@ namespace
 
     TEST_CASE("case folding name translator")
     {
-        auto flags = std::make_shared<NameNormalizationFlags>();
-        flags->should_case_fold = true;
+        NameNormalizationFlags flags{};
+        flags.should_case_fold = true;
         fruit::Injector<NameTranslator> injector(
-            +[](std::shared_ptr<NameNormalizationFlags> flags) -> fruit::Component<NameTranslator>
+            +[](const NameNormalizationFlags* flags) -> fruit::Component<NameTranslator>
             {
                 return fruit::createComponent()
                     .install(get_name_translator_component, flags)
                     .install(get_test_component);
             },
-            std::move(flags));
+            &flags);
         auto t = injector.get<NameTranslator*>();
         CHECK(t->encrypt_full_path(u8"/abCDe/ß", nullptr)
               == t->encrypt_full_path(u8"/ABCde/ss", nullptr));
@@ -79,16 +79,16 @@ namespace
 
     TEST_CASE("Unicode normalizing name translator")
     {
-        auto flags = std::make_shared<NameNormalizationFlags>();
-        flags->should_normalize_nfc = true;
+        NameNormalizationFlags flags{};
+        flags.should_normalize_nfc = true;
         fruit::Injector<NameTranslator> injector(
-            +[](std::shared_ptr<NameNormalizationFlags> flags) -> fruit::Component<NameTranslator>
+            +[](const NameNormalizationFlags* flags) -> fruit::Component<NameTranslator>
             {
                 return fruit::createComponent()
                     .install(get_name_translator_component, flags)
                     .install(get_test_component);
             },
-            std::move(flags));
+            &flags);
         auto t = injector.get<NameTranslator*>();
 
         CHECK(t->encrypt_full_path(u8"/aaa/ÄÄÄ", nullptr)
@@ -101,24 +101,24 @@ namespace
     TEST_CASE("Lite FuseHighLevelOps")
     {
         auto whole_component
-            = [](std::shared_ptr<OSService> os) -> fruit::Component<FuseHighLevelOps>
+            = [](OSService* os,
+                 const NameNormalizationFlags* flags) -> fruit::Component<FuseHighLevelOps>
         {
-            auto flags = std::make_shared<NameNormalizationFlags>();
-            flags->supports_long_name = true;
             return fruit::createComponent()
                 .install(get_name_translator_component, flags)
                 .install(get_test_component)
-
                 .bindInstance(*os);
         };
 
         auto temp_dir_name = OSService::temp_name("tmp/lite", "dir");
         OSService::get_default().ensure_directory(temp_dir_name, 0755);
-        auto root = std::make_shared<OSService>(temp_dir_name);
+        OSService root(temp_dir_name);
+        NameNormalizationFlags flags{};
+        flags.supports_long_name = true;
 
-        fruit::Injector<FuseHighLevelOps> injector(+whole_component, root);
+        fruit::Injector<FuseHighLevelOps> injector(+whole_component, &root, &flags);
         auto& ops = injector.get<FuseHighLevelOps&>();
-        testing::test_fuse_ops(ops, *root);
+        testing::test_fuse_ops(ops, root);
     }
 }    // namespace
 }    // namespace securefs::lite_format
