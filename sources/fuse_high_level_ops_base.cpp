@@ -297,6 +297,17 @@ int FuseHighLevelOpsBase::static_removexattr(const char* path, const char* name)
                                           {{"path", {path}}, {"name", {name}}});
 }
 
+namespace
+{
+    void enable_if_capable(fuse_conn_info* info, int cap)
+    {
+        if (info->capable & cap)
+        {
+            info->want |= cap;
+        }
+    }
+}    // namespace
+
 fuse_operations FuseHighLevelOpsBase::build_ops(bool enable_xattr)
 {
     fuse_operations opt{};
@@ -306,6 +317,21 @@ fuse_operations FuseHighLevelOpsBase::build_ops(bool enable_xattr)
 
     opt.init = [](fuse_conn_info* info) -> void*
     {
+#ifdef FUSE_CAP_ASYNC_READ
+        enable_if_capable(info, FUSE_CAP_ASYNC_READ);
+#endif
+#ifdef FUSE_CAP_ATOMIC_O_TRUNC
+        enable_if_capable(info, FUSE_CAP_ATOMIC_O_TRUNC);
+#endif
+#ifdef FUSE_CAP_BIG_WRITES
+        enable_if_capable(info, FUSE_CAP_BIG_WRITES);
+#endif
+#ifdef FUSE_CAP_CACHE_SYMLINKS
+        enable_if_capable(info, FUSE_CAP_CACHE_SYMLINKS);
+#endif
+#ifdef FUSE_CAP_WRITEBACK_CACHE
+        enable_if_capable(info, FUSE_CAP_WRITEBACK_CACHE);
+#endif
         auto op = static_cast<FuseHighLevelOpsBase*>(fuse_get_context()->private_data);
         op->initialize(info);
         TRACE_LOG("Initalize with fuse op class %s", typeid(*op).name());
