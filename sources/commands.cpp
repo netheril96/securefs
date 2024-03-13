@@ -10,7 +10,6 @@
 #include "lock_enabled.h"
 #include "logger.h"
 #include "myutils.h"
-#include "operations.h"
 #include "platform.h"
 #include "tags.h"
 #include "win_get_proc.h"    // IWYU pragma: keep
@@ -29,7 +28,6 @@
 #include <fruit/fruit.h>
 #include <fruit/fruit_forward_decls.h>
 #include <json/json.h>
-#include <optional>
 #include <tclap/CmdLine.h>
 
 #include <algorithm>
@@ -85,212 +83,6 @@ std::unique_ptr<Json::CharReader> create_json_reader()
     Json::CharReaderBuilder builder;
     builder["rejectDupKeys"] = true;
     return std::unique_ptr<Json::CharReader>(builder.newCharReader());
-}
-
-enum class NLinkFixPhase : unsigned char
-{
-    CollectingNLink,
-    FixingNLink
-};
-
-void fix_hardlink_count(operations::FileSystemContext* fs,
-                        Directory* dir,
-                        absl::flat_hash_map<id_type, int, id_hash>* nlink_map,
-                        NLinkFixPhase phase)
-{
-    std::vector<std::pair<id_type, int>> listings;
-    {
-        FileLockGuard file_lock_guard(*dir);
-        dir->iterate_over_entries(
-            [&listings](const std::string&, const id_type& id, int type)
-            {
-                listings.emplace_back(id, type);
-                return true;
-            });
-    }
-
-    for (auto&& entry : listings)
-    {
-        id_type& id = std::get<0>(entry);
-        int type = std::get<1>(entry);
-
-        AutoClosedFileBase base(nullptr, nullptr);
-        try
-        {
-            base = open_as(fs->table, id, FileBase::BASE);
-        }
-        catch (...)
-        {
-            continue;
-        }
-        switch (phase)
-        {
-        case NLinkFixPhase::FixingNLink:
-        {
-            auto& fp = *base;
-            FileLockGuard file_lock_guard(fp);
-            fp.set_nlink(nlink_map->at(id));
-        }
-        break;
-
-        case NLinkFixPhase::CollectingNLink:
-            nlink_map->operator[](id)++;
-            break;
-
-        default:
-            UNREACHABLE();
-        }
-        base.reset(nullptr);
-        if (type == FileBase::DIRECTORY)
-        {
-            fix_hardlink_count(
-                fs, open_as(fs->table, id, type).get_as<Directory>(), nlink_map, phase);
-        }
-    }
-}
-
-void fix_helper(operations::FileSystemContext* fs,
-                Directory* dir,
-                const std::string& dir_name,
-                std::unordered_set<id_type, id_hash>* all_ids)
-{
-    std::vector<std::tuple<std::string, id_type, int>> listings;
-    {
-        FileLockGuard file_lock_guard(*dir);
-        dir->iterate_over_entries(
-            [&listings](const std::string& name, const id_type& id, int type)
-            {
-                listings.emplace_back(name, id, type);
-                return true;
-            });
-    }
-
-    for (auto&& entry : listings)
-    {
-        const std::string& name = std::get<0>(entry);
-        id_type& id = std::get<1>(entry);
-        int type = std::get<2>(entry);
-
-        AutoClosedFileBase base(nullptr, nullptr);
-        try
-        {
-            base = open_as(fs->table, id, FileBase::BASE);
-        }
-        catch (const std::exception& e)
-        {
-            absl::FPrintF(
-                stderr,
-                "Encounter exception when opening %s: %s\nDo you want to remove the entry? "
-                "(Yes/No, default: no)\n",
-                absl::StrCat(dir_name, "/", name),
-                e.what());
-            auto remove = [&]()
-            {
-                FileLockGuard file_lock_guard(*dir);
-                dir->remove_entry(name, id, type);
-            };
-            auto ignore = []() {};
-            respond_to_user_action({{"\n", ignore},
-                                    {"y\n", remove},
-                                    {"yes\n", remove},
-                                    {"n\n", ignore},
-                                    {"no\n", ignore}});
-            continue;
-        }
-
-        int real_type = base->get_real_type();
-        if (type != real_type)
-        {
-            absl::PrintF(
-                "Mismatch type for %s (inode has type %s, directory entry has type %s). Do you "
-                "want to fix it? (Yes/No default: yes)\n",
-                absl::StrCat(dir_name, "/", name),
-                FileBase::type_name(real_type),
-                FileBase::type_name(type));
-            fflush(stdout);
-
-            auto fix_type = [&]()
-            {
-                FileLockGuard file_lock_guard(*dir);
-                dir->remove_entry(name, id, type);
-                dir->add_entry(name, id, real_type);
-            };
-
-            auto ignore = []() {};
-
-            respond_to_user_action({{"\n", fix_type},
-                                    {"y\n", fix_type},
-                                    {"yes\n", fix_type},
-                                    {"n\n", ignore},
-                                    {"no\n", ignore}});
-        }
-        all_ids->insert(id);
-        base.reset(nullptr);
-
-        if (real_type == FileBase::DIRECTORY)
-        {
-            fix_helper(fs,
-                       open_as(fs->table, id, FileBase::DIRECTORY).get_as<Directory>(),
-                       absl::StrCat(dir_name, "/", name),
-                       all_ids);
-        }
-    }
-}
-
-void fix(const std::string& basedir, operations::FileSystemContext* fs)
-{
-    std::unordered_set<id_type, id_hash> all_ids{fs->root_id};
-    AutoClosedFileBase root_dir = open_as(fs->table, fs->root_id, FileBase::DIRECTORY);
-    fix_helper(fs, root_dir.get_as<Directory>(), "", &all_ids);
-    auto all_underlying_ids = find_all_ids(basedir);
-
-    for (const id_type& id : all_underlying_ids)
-    {
-        if (all_ids.find(id) == all_ids.end())
-        {
-            absl::PrintF(
-                "%s is not referenced anywhere in the filesystem, do you want to recover it? "
-                "([r]ecover/[d]elete/[i]gnore default: recover)\n",
-                hexify(id));
-            fflush(stdout);
-
-            auto recover = [&]()
-            {
-                auto base = open_as(fs->table, id, FileBase::BASE);
-                auto& root_dir_fp = *root_dir;
-                FileLockGuard file_lock_guard(root_dir_fp);
-                root_dir_fp.cast_as<Directory>()->add_entry(hexify(id), id, base->get_real_type());
-            };
-
-            auto remove = [&]()
-            {
-                FileBase* base = fs->table.open_as(id, FileBase::BASE);
-                int real_type = base->get_real_type();
-                fs->table.close(base);
-                auto real_file_handle = open_as(fs->table, id, real_type);
-                auto& fp = *real_file_handle;
-                FileLockGuard file_lock_guard(fp);
-                fp.unlink();
-            };
-
-            auto ignore = []() {};
-
-            respond_to_user_action({{"\n", recover},
-                                    {"r\n", recover},
-                                    {"recover\n", recover},
-                                    {"i\n", ignore},
-                                    {"ignore\n", ignore},
-                                    {"d\n", remove},
-                                    {"delete\n", remove}});
-        }
-    }
-
-    absl::flat_hash_map<id_type, int, id_hash> nlink_map;
-    puts("Fixing hardlink count ...");
-    fix_hardlink_count(
-        fs, root_dir.get_as<Directory>(), &nlink_map, NLinkFixPhase::CollectingNLink);
-    fix_hardlink_count(fs, root_dir.get_as<Directory>(), &nlink_map, NLinkFixPhase::FixingNLink);
-    puts("Fix complete");
 }
 
 void hmac_sha256(const securefs::key_type& base_key,
@@ -837,28 +629,6 @@ public:
                      password.data(),
                      password.size(),
                      rounds.getValue());
-        config_stream.reset();
-
-        if (format_version < 4)
-        {
-            operations::MountOptions opt;
-            opt.version = format_version;
-            opt.root = std::make_shared<OSService>(data_dir.getValue());
-            opt.master_key = config.master_key;
-            opt.flags = format_version < 3 ? 0 : kOptionStoreTime;
-            opt.block_size = config.block_size;
-            opt.iv_size = config.iv_size;
-
-            operations::FileSystemContext fs(opt);
-            auto root = fs.table.create_as(fs.root_id, FileBase::DIRECTORY);
-            auto& root_fp = *root;
-            FileLockGuard file_lock_guard(root_fp);
-            root_fp.set_uid(securefs::OSService::getuid());
-            root_fp.set_gid(securefs::OSService::getgid());
-            root_fp.set_mode(S_IFDIR | 0755);
-            root_fp.set_nlink(1);
-            root_fp.flush();
-        }
         return 0;
     }
 
@@ -1491,79 +1261,6 @@ public:
     const char* help_message() const noexcept override { return "Mount an existing filesystem"; }
 };
 
-class FixCommand : public SinglePasswordCommandBase
-{
-public:
-    std::unique_ptr<TCLAP::CmdLine> cmdline() override
-    {
-        auto result = make_unique<TCLAP::CmdLine>(help_message());
-        add_all_args_from_base(*result);
-        return result;
-    }
-
-    void parse_cmdline(int argc, const char* const* argv) override
-    {
-        SinglePasswordCommandBase::parse_cmdline(argc, argv);
-
-        fflush(stdout);
-        fflush(stderr);
-        puts("You should backup your repository before running this command. Are you sure you want "
-             "to continue? (yes/no)");
-        fflush(stdout);
-        char answer[100] = {};
-        if (fgets(answer, 100, stdin) == nullptr)
-        {
-            THROW_POSIX_EXCEPTION(errno, "fgets");
-        }
-        if (strcmp(answer, "yes\n") != 0)
-        {
-            throw_runtime_error("User aborted operation");
-        }
-        get_password(false);
-    }
-
-    int execute() override
-    {
-        auto config_stream = open_config_stream(get_real_config_path(), O_RDONLY);
-        auto config = read_config(
-            config_stream.get(), password.data(), password.size(), keyfile.getValue());
-        config_stream.reset();
-
-        if (config.version >= 4)
-        {
-            absl::FPrintF(stderr,
-                          "The filesystem has format version %u which cannot be fixed\n",
-                          config.version);
-            return 3;
-        }
-        generate_random(password.data(), password.size());    // Erase user input
-
-        operations::MountOptions fsopt;
-        fsopt.root = std::make_shared<OSService>(data_dir.getValue());
-        fsopt.root->lock();
-        fsopt.block_size = config.block_size;
-        fsopt.iv_size = config.iv_size;
-        fsopt.version = config.version;
-        fsopt.master_key = config.master_key;
-        fsopt.flags = config.version != 3 ? 0 : kOptionStoreTime;
-
-        operations::FileSystemContext fs(fsopt);
-        fix(data_dir.getValue(), &fs);
-        return 0;
-    }
-
-    const char* long_name() const noexcept override { return "fix"; }
-
-    char short_name() const noexcept override { return 0; }
-
-    const char* help_message() const noexcept override
-    {
-        return "Try to fix errors in an existing filesystem";
-    }
-};
-
-static inline const char* true_or_false(bool v) { return v ? "true" : "false"; }
-
 class VersionCommand : public CommandBase
 {
 public:
@@ -1847,7 +1544,6 @@ int commands_main(int argc, const char* const* argv)
         std::unique_ptr<CommandBase> cmds[] = {make_unique<MountCommand>(),
                                                make_unique<CreateCommand>(),
                                                make_unique<ChangePasswordCommand>(),
-                                               make_unique<FixCommand>(),
                                                make_unique<VersionCommand>(),
                                                make_unique<InfoCommand>(),
                                                make_unique<DocCommand>()};
