@@ -11,4 +11,5 @@ Checks: >
         -modernize-use-nodiscard,
         -bugprone-easily-swappable-parameters,
         -bugprone-switch-missing-default-case,
-        bugprone-use-after-move
+        bugprone-use-after-move,
+        clang-analyzer*

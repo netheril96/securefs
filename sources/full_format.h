@@ -134,7 +134,7 @@ public:
 private:
     OSService& root_;
     FileTable& ft_;
-    RepoLocker& locker_;
+    [[maybe_unused]] RepoLocker& locker_;    // We only needs this to construct and destruct.
 
 private:
     struct OpenBaseResult

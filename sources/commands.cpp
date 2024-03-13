@@ -646,7 +646,7 @@ void CommandBase::write_config(FileStream* stream,
 }
 
 /// A base class for all commands that require a data dir to be present.
-class _DataDirCommandBase : public CommandBase
+class DataDirCommandBase : public CommandBase
 {
 protected:
     TCLAP::UnlabeledValueArg<std::string> data_dir{
@@ -680,7 +680,7 @@ static void secure_wipe(char* buffer, size_t size)
 
 void CommandBase::parse_cmdline(int argc, const char* const* argv) { cmdline()->parse(argc, argv); }
 
-class _SinglePasswordCommandBase : public _DataDirCommandBase
+class SinglePasswordCommandBase : public DataDirCommandBase
 {
 protected:
     TCLAP::ValueArg<std::string> pass{
@@ -743,7 +743,7 @@ static const std::string message_for_setting_pbkdf = absl::StrFormat(
     PBKDF_ALGO_ARGON2ID,
     PBKDF_ALGO_PKCS5);
 
-class CreateCommand : public _SinglePasswordCommandBase
+class CreateCommand : public SinglePasswordCommandBase
 {
 private:
     TCLAP::ValueArg<unsigned> rounds{
@@ -792,7 +792,7 @@ public:
 
     void parse_cmdline(int argc, const char* const* argv) override
     {
-        _SinglePasswordCommandBase::parse_cmdline(argc, argv);
+        SinglePasswordCommandBase::parse_cmdline(argc, argv);
         get_password(true);
     }
 
@@ -869,7 +869,7 @@ public:
     const char* help_message() const noexcept override { return "Create a new filesystem"; }
 };
 
-class ChangePasswordCommand : public _DataDirCommandBase
+class ChangePasswordCommand : public DataDirCommandBase
 {
 private:
     CryptoPP::AlignedSecByteBlock old_password, new_password;
@@ -937,7 +937,7 @@ public:
 
     void parse_cmdline(int argc, const char* const* argv) override
     {
-        _DataDirCommandBase::parse_cmdline(argc, argv);
+        DataDirCommandBase::parse_cmdline(argc, argv);
 
         if (oldpass.isSet())
         {
@@ -1002,7 +1002,7 @@ public:
     }
 };
 
-class MountCommand : public _SinglePasswordCommandBase
+class MountCommand : public SinglePasswordCommandBase
 {
 private:
     TCLAP::SwitchArg single_threaded{"s", "single", "Single threaded mode"};
@@ -1254,7 +1254,7 @@ public:
 
     void parse_cmdline(int argc, const char* const* argv) override
     {
-        _SinglePasswordCommandBase::parse_cmdline(argc, argv);
+        SinglePasswordCommandBase::parse_cmdline(argc, argv);
 
         get_password(false);
 
@@ -1491,7 +1491,7 @@ public:
     const char* help_message() const noexcept override { return "Mount an existing filesystem"; }
 };
 
-class FixCommand : public _SinglePasswordCommandBase
+class FixCommand : public SinglePasswordCommandBase
 {
 public:
     std::unique_ptr<TCLAP::CmdLine> cmdline() override
@@ -1503,7 +1503,7 @@ public:
 
     void parse_cmdline(int argc, const char* const* argv) override
     {
-        _SinglePasswordCommandBase::parse_cmdline(argc, argv);
+        SinglePasswordCommandBase::parse_cmdline(argc, argv);
 
         fflush(stdout);
         fflush(stderr);
