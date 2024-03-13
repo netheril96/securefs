@@ -95,29 +95,24 @@ namespace
     {
         auto time = absl::TimeFromTimespec(
             {value.value->tv_sec, static_cast<long>(value.value->tv_nsec)});
-        static const absl::ParsedFormat<'v'> fmt("%v");
-        absl::Format(&sink, fmt, time);
+        absl::Format(&sink, "%v", time);
     }
     template <typename Sink>
     void AbslStringify(Sink& sink, Wrapped<const char*> value)
     {
-        static const absl::ParsedFormat<'s'> fmt("\"%s\"");
-        absl::Format(&sink, fmt, absl::Utf8SafeCEscape(value.value));
+        absl::Format(&sink, "\"%s\"", absl::Utf8SafeCEscape(value.value));
     }
     template <typename Sink>
     void AbslStringify(Sink& sink, Wrapped<const void*> value)
     {
-        static const absl::ParsedFormat<'p'> fmt("%p");
-        absl::Format(&sink, fmt, value.value);
+        absl::Format(&sink, "%p", value.value);
     }
     template <typename Sink>
     void AbslStringify(Sink& sink, Wrapped<const fuse_stat*> value)
     {
-        static const absl::ParsedFormat<'d', 'o', 'd', 'd', 'd', 'd', 'd'> fmt(
-            "{st_size=%d, st_mode=%#o, st_nlink=%d, st_uid=%d, st_gid=%d, "
-            "st_blksize=%d, st_blocks=%d");
         absl::Format(&sink,
-                     fmt,
+                     "{st_size=%lld, st_mode=%#o, st_nlink=%lld, st_uid=%lld, st_gid=%lld, "
+                     "st_blksize=%lld, st_blocks=%lld",
                      value.value->st_size,
                      value.value->st_mode,
                      value.value->st_nlink,
@@ -127,41 +122,37 @@ namespace
                      value.value->st_blocks);
         if (auto atim = get_atim_helper(value.value, 0); atim)
         {
-            static const absl::ParsedFormat<'v'> fmt(", st_atim=%v");
-            absl::Format(&sink, fmt, Wrapped<const fuse_timespec*>{atim});
+            absl::Format(&sink, ", st_atim=%v", Wrapped<const fuse_timespec*>{atim});
         }
         if (auto mtim = get_mtim_helper(value.value, 0); mtim)
         {
-            static const absl::ParsedFormat<'v'> fmt(", st_mtim=%v");
-            absl::Format(&sink, fmt, Wrapped<const fuse_timespec*>{mtim});
+            absl::Format(&sink, ", st_mtim=%v", Wrapped<const fuse_timespec*>{mtim});
         }
         if (auto ctim = get_ctim_helper(value.value, 0); ctim)
         {
-            static const absl::ParsedFormat<'v'> fmt(", st_ctim=%v");
-            absl::Format(&sink, fmt, Wrapped<const fuse_timespec*>{ctim});
+            absl::Format(&sink, ", st_ctim=%v", Wrapped<const fuse_timespec*>{ctim});
         }
         if (auto btim = get_birthtim_helper(value.value, 0); btim)
         {
-            static const absl::ParsedFormat<'v'> fmt(", st_birthtim=%v");
-            absl::Format(&sink, fmt, Wrapped<const fuse_timespec*>{btim});
+            absl::Format(&sink, ", st_birthtim=%v", Wrapped<const fuse_timespec*>{btim});
         }
-        static const absl::ParsedFormat<'c'> c("%c");
-        absl::Format(&sink, c, '}');
+        absl::Format(&sink, "%c", '}');
     }
     template <typename Sink>
     void AbslStringify(Sink& sink, Wrapped<const fuse_file_info*> value)
     {
-        static const absl::ParsedFormat<'p', 'o'> fmt("{fh=0x%p, flags=%#o}");
-        absl::Format(
-            &sink, fmt, reinterpret_cast<const void*>(value.value->fh), value.value->flags);
+        absl::Format(&sink,
+                     "{fh=0x%p, flags=%#o}",
+                     reinterpret_cast<const void*>(value.value->fh),
+                     value.value->flags);
     }
     template <typename Sink>
     void AbslStringify(Sink& sink, Wrapped<const fuse_statvfs*> value)
     {
         absl::Format(&sink,
-                     "{f_bsize=%d, f_frsize=%d, f_blocks=%d, f_bfree=%d, f_bavail=%d, "
-                     "f_files=%d, f_ffree=%d, f_favail=%d, f_fsid=%d, f_flag=%d, "
-                     "f_namemax=%d}",
+                     "{f_bsize=%lld, f_frsize=%lld, f_blocks=%lld, f_bfree=%lld, f_bavail=%lld, "
+                     "f_files=%lld, f_ffree=%lld, f_favail=%lld, f_fsid=%lld, f_flag=%lld, "
+                     "f_namemax=%lld}",
                      value.value->f_bsize,
                      value.value->f_frsize,
                      value.value->f_blocks,
@@ -174,6 +165,11 @@ namespace
                      value.value->f_flag,
                      value.value->f_namemax);
     }
+    template <typename Sink, typename T>
+    void AbslStringify(Sink& sink, Wrapped<T> value)
+    {
+        absl::Format(&sink, "%v", value.value);
+    }
 }    // namespace
 
 void FuseTracer::print(FILE* fp, const WrappedFuseArg& arg)
@@ -182,27 +178,24 @@ void FuseTracer::print(FILE* fp, const WrappedFuseArg& arg)
     std::visit(
         [fp](auto value)
         {
-            static const absl::ParsedFormat<'v'> vfmt("%v");
-            static const absl::ParsedFormat<'p'> pfmt("%p");
-
             if constexpr (std::is_convertible_v<decltype(value), fuse_fill_dir_t>)
             {
-                absl::FPrintF(fp, pfmt, value);
+                absl::FPrintF(fp, "%p", value);
             }
             else if constexpr (std::is_pointer_v<decltype(value)>)
             {
                 if (value == nullptr)
                 {
-                    absl::FPrintF(fp, pfmt, nullptr);
+                    absl::FPrintF(fp, "%p", nullptr);
                 }
                 else
                 {
-                    absl::FPrintF(fp, vfmt, Wrapped<decltype(value)>{value});
+                    absl::FPrintF(fp, "%v", Wrapped<decltype(value)>{value});
                 }
             }
             else
             {
-                absl::FPrintF(fp, vfmt, value);
+                absl::FPrintF(fp, "%v", value);
             }
         },
         arg.value);
@@ -248,7 +241,7 @@ void FuseTracer::print_function_returns(Logger* logger,
 
         fputs("Function ends with arguments ", logger->m_fp);
         print(logger->m_fp, args, arg_size);
-        absl::FPrintF(logger->m_fp, " and return code %d", rc);
+        absl::FPrintF(logger->m_fp, " and return code %lld", rc);
     }
 }
 
