@@ -95,7 +95,7 @@ namespace
     {
         auto time = absl::TimeFromTimespec(
             {value.value->tv_sec, static_cast<long>(value.value->tv_nsec)});
-        absl::Format(&sink, "%v", time);
+        absl::Format(&sink, "%s", absl::FormatTime(absl::RFC3339_full, time, absl::UTCTimeZone()));
     }
     template <typename Sink>
     void AbslStringify(Sink& sink, Wrapped<const char*> value)
