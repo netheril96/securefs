@@ -36,7 +36,7 @@ void FileTable::init()
     if (newly)
     {
         LockGuard<FileBase> lg(*root_);
-        root_->initialize_empty(0755, OSService::getuid(), OSService::getgid());
+        root_->initialize_empty(0755 | S_IFDIR, OSService::getuid(), OSService::getgid());
     }
 }
 FilePtrHolder FileTable::create_holder(FileBase* fb)
