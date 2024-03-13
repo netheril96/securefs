@@ -37,12 +37,18 @@ inline const char* stringify(LoggingLevel lvl)
     return "UNKNOWN";
 }
 
+namespace trace
+{
+    class FuseTracer;
+}
+
 class FuseTracer;
 
 class Logger
 {
     DISABLE_COPY_MOVE(Logger)
     friend class FuseTracer;
+    friend class trace::FuseTracer;
 
 private:
     LoggingLevel m_level;

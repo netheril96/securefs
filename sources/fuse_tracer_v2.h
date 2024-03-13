@@ -1,20 +1,28 @@
 #pragma once
 #include "logger.h"
+#include "platform.h"    // IWYU pragma: keep
 
+#include <cstdint>
 #include <cstdio>
-#include <typeindex>
+#include <variant>
 
-namespace securefs
+namespace securefs::trace
 {
 struct WrappedFuseArg
 {
-    std::type_index type_index;
-    const void* value;
-
-    template <class T>
-    WrappedFuseArg(T* value) : type_index(typeid(T)), value(value)
-    {
-    }
+    absl::string_view name;
+    std::variant<int,
+                 unsigned,
+                 int64_t,
+                 uint64_t,
+                 const void*,
+                 const char*,
+                 const fuse_timespec*,
+                 const fuse_stat*,
+                 const fuse_file_info*,
+                 const fuse_statvfs*,
+                 fuse_fill_dir_t>
+        value;
 };
 
 class FuseTracer
@@ -34,7 +42,7 @@ private:
                                        int lineno,
                                        const WrappedFuseArg* args,
                                        size_t arg_size,
-                                       long long rc);
+                                       int rc);
 
     static void print_function_exception(Logger* logger,
                                          const char* funcsig,
@@ -79,4 +87,4 @@ public:
         }
     }
 };
-}    // namespace securefs
+}    // namespace securefs::trace

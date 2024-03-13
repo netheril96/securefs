@@ -79,6 +79,7 @@ target_link_libraries(
     securefs-static
     PUBLIC uni-algo::uni-algo
            absl::base
+           absl::time
            absl::synchronization
            absl::inlined_vector
            absl::flat_hash_map
