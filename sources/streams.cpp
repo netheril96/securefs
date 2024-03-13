@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <array>
 #include <assert.h>
+#include <cstdint>
+#include <cstring>
 #include <memory>
 #include <stdint.h>
 #include <string.h>
@@ -580,4 +582,59 @@ PaddedStream::PaddedStream(std::shared_ptr<StreamBase> delegate, unsigned paddin
 }
 
 PaddedStream::~PaddedStream() {}
+
+length_type WriteCachedStream::read(void* output, offset_type offset, length_type length)
+{
+    if (cached_length_ == 0)
+    {
+        return delegate_->read(output, offset, length);
+    }
+    if (offset >= cached_length_ + cached_start_ || offset + length <= cached_start_)
+    {
+        return delegate_->read(output, offset, length);
+    }
+    if (offset >= cached_start_ && offset + length <= cached_start_ + cached_length_)
+    {
+        memcpy(output, buffer_.data() + (offset - cached_start_), length);
+        return length;
+    }
+    if (offset >= cached_start_)
+    {
+        auto copy_length = cached_length_ - (offset - cached_start_);
+        memcpy(output, buffer_.data() + (offset - cached_start_), copy_length);
+        return copy_length
+            + delegate_->read(static_cast<char*>(output) + copy_length,
+                              offset + copy_length,
+                              length - copy_length);
+    }
+    auto copy_length = offset + length - cached_start_;
+    memset(output, 0, length);
+    [[maybe_unused]] auto read_amount = delegate_->read(output, offset, length - copy_length);
+    memcpy(static_cast<char*>(output) + (length - copy_length), buffer_.data(), copy_length);
+    return length;
+}
+void WriteCachedStream::write(const void* input, offset_type offset, length_type length)
+{
+    if (cached_length_ == 0)
+    {
+        return delegate_->write(input, offset, length);
+    }
+    if (offset >= cached_start_ && offset + length <= cached_start_ + buffer_.size())
+    {
+        memcpy(buffer_.data() + (offset - cached_start_), input, length);
+        return;
+    }
+    flush_cache();
+    delegate_->write(input, offset, length);
+}
+void WriteCachedStream::flush_cache()
+{
+    if (cached_length_ == 0)
+    {
+        return;
+    }
+    delegate_->write(buffer_.data(), cached_start_, cached_length_);
+    cached_length_ = 0;
+    cached_start_ = 0;
+}
 }    // namespace securefs

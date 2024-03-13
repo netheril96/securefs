@@ -3,6 +3,7 @@
 #include "myutils.h"
 #include "object.h"
 
+#include <absl/container/fixed_array.h>
 #include <memory>
 #include <utility>
 
@@ -211,5 +212,42 @@ public:
 private:
     std::shared_ptr<StreamBase> m_delegate;
     unsigned m_padding_size;
+};
+
+class WriteCachedStream final : public StreamBase
+{
+public:
+    WriteCachedStream(std::shared_ptr<StreamBase> delegate, length_type cache_size)
+        : delegate_(std::move(delegate)), buffer_(cache_size, 0)
+    {
+    }
+    ~WriteCachedStream() override { flush_cache(); }
+    length_type read(void* output, offset_type offset, length_type length) override;
+    void write(const void* input, offset_type offset, length_type length) override;
+    length_type size() const override
+    {
+        return std::max(cached_length_ + cached_start_, delegate_->size());
+    }
+    void flush() override
+    {
+        flush_cache();
+        delegate_->flush();
+    }
+    void resize(length_type size) override
+    {
+        flush_cache();
+        delegate_->resize(size);
+    }
+    bool is_sparse() const noexcept override { return delegate_->is_sparse(); }
+    length_type optimal_block_size() const noexcept override { return buffer_.size(); }
+
+private:
+    std::shared_ptr<StreamBase> delegate_;
+    absl::FixedArray<unsigned char> buffer_;
+    offset_type cached_start_ = 0;
+    length_type cached_length_ = 0;
+
+private:
+    void flush_cache();
 };
 }    // namespace securefs

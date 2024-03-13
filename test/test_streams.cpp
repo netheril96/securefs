@@ -283,6 +283,10 @@ TEST_CASE("Test streams")
         securefs::PaddedStream ps(std::make_shared<securefs::MemoryStream>(), 16);
         test(ps, 1000);
     }
+    {
+        securefs::WriteCachedStream ws(std::make_shared<securefs::MemoryStream>(), 4000);
+        test(ws, 1000);
+    }
     CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption padding_aes(key.data(), key.size());
     auto test_lite_stream = [&](unsigned block_size, unsigned iv_size, unsigned padding_size)
     {
