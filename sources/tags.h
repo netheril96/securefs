@@ -38,4 +38,7 @@ struct tVerify
 struct tStoreTimeWithinFs
 {
 };
+struct tCacheSize
+{
+};
 }    // namespace securefs

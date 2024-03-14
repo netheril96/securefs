@@ -7,6 +7,7 @@
 #include "mystring.h"
 #include "myutils.h"
 #include "platform.h"
+#include "streams.h"
 
 #include <absl/base/thread_annotations.h>
 #include <absl/container/inlined_vector.h>
@@ -39,9 +40,15 @@
 
 namespace securefs::lite_format
 {
-std::unique_ptr<securefs::lite::AESGCMCryptStream>
-StreamOpener::open(std::shared_ptr<StreamBase> base)
+std::unique_ptr<StreamBase> StreamOpener::open(std::shared_ptr<StreamBase> base)
 {
+    if (cache_size_ > 0)
+    {
+        return std::make_unique<WriteCachedStream>(
+            std::make_shared<securefs::lite::AESGCMCryptStream>(
+                std::move(base), *this, block_size_, iv_size_, !skip_verification_),
+            cache_size_);
+    }
     return std::make_unique<securefs::lite::AESGCMCryptStream>(
         std::move(base), *this, block_size_, iv_size_, !skip_verification_);
 }
