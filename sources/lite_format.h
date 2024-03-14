@@ -5,7 +5,6 @@
 #include "lock_guard.h"
 #include "myutils.h"
 #include "platform.h"
-#include "streams.h"
 #include "tags.h"
 #include "thread_local.h"
 
@@ -15,7 +14,6 @@
 #include <cryptopp/modes.h>
 #include <cstddef>
 #include <fruit/fruit.h>
-#include <fruit/macro.h>
 #include <memory>
 #include <string_view>
 #include <variant>
@@ -31,8 +29,7 @@ public:
                         ANNOTATED(tBlockSize, unsigned) block_size,
                         ANNOTATED(tIvSize, unsigned) iv_size,
                         ANNOTATED(tMaxPaddingSize, unsigned) max_padding_size,
-                        ANNOTATED(tSkipVerification, bool) skip_verfication,
-                        ANNOTATED(tCacheSize, length_type) cache_size))
+                        ANNOTATED(tSkipVerification, bool) skip_verfication))
         : content_master_key_(content_master_key)
         , padding_master_key_(padding_master_key)
         , block_size_(block_size)
@@ -49,12 +46,11 @@ public:
                   return std::make_unique<AES_ECB>(padding_master_key_.data(),
                                                    padding_master_key_.size());
               })
-        , cache_size_(cache_size)
     {
         validate();
     }
 
-    std::unique_ptr<StreamBase> open(std::shared_ptr<StreamBase> base);
+    std::unique_ptr<securefs::lite::AESGCMCryptStream> open(std::shared_ptr<StreamBase> base);
 
     length_type compute_virtual_size(length_type physical_size) const noexcept
     {
@@ -76,7 +72,6 @@ private:
     unsigned block_size_, iv_size_, max_padding_size_;
     bool skip_verification_;
     ThreadLocal<AES_ECB> content_ecb, padding_ecb;
-    length_type cache_size_;
 };
 
 class File;
@@ -110,7 +105,7 @@ public:
 class ABSL_LOCKABLE File final : public Base
 {
 private:
-    std::unique_ptr<StreamBase> m_crypt_stream ABSL_GUARDED_BY(*this);
+    std::unique_ptr<lite::AESGCMCryptStream> m_crypt_stream ABSL_GUARDED_BY(*this);
     std::shared_ptr<securefs::FileStream> m_file_stream ABSL_GUARDED_BY(*this);
     securefs::Mutex m_lock;
 

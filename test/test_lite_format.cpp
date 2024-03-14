@@ -57,9 +57,7 @@ namespace
             .registerProvider<fruit::Annotated<tSkipVerification, bool>()>([]() { return false; })
             .registerProvider<fruit::Annotated<tBlockSize, unsigned>()>([]() { return 64u; })
             .registerProvider<fruit::Annotated<tIvSize, unsigned>()>([]() { return 12u; })
-            .registerProvider<fruit::Annotated<tMaxPaddingSize, unsigned>()>([]() { return 24u; })
-            .registerProvider<fruit::Annotated<tCacheSize, length_type>()>([]() -> length_type
-                                                                           { return 2; });
+            .registerProvider<fruit::Annotated<tMaxPaddingSize, unsigned>()>([]() { return 24u; });
     }
 
     TEST_CASE("case folding name translator")

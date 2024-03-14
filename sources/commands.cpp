@@ -37,7 +37,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <tclap/ValueArg.h>
 #include <typeinfo>
 #include <vector>
 
@@ -831,13 +830,6 @@ private:
                                       "When enabled, securefs does not encrypt or decrypt file "
                                       "names. Use it at your own risk. No effect on full format.",
                                       false};
-    TCLAP::ValueArg<length_type> cache_size{
-        "",
-        "cache-size",
-        "The per file cache size to speed up writing, in units of KiB",
-        false,
-        64,
-        "KiB"};
 
     FSConfig config{};
     lite_format::NameNormalizationFlags name_norm_flags{};
@@ -937,8 +929,6 @@ private:
                     // TODO: Support readonly mounts.
                     return false;
                 })
-            .registerProvider<fruit::Annotated<tCacheSize, length_type>(const MountCommand&)>(
-                [](const MountCommand& cmd) { return cmd.cache_size.getValue() * 1024; })
             .registerProvider(
                 []() { return new BS::thread_pool(std::thread::hardware_concurrency() * 2); })
             .bind<Directory, BtreeDirectory>()
