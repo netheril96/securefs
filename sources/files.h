@@ -8,6 +8,7 @@
 
 #include <absl/base/thread_annotations.h>
 #include <absl/container/flat_hash_map.h>
+#include <absl/functional/function_ref.h>
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
 #include <cryptopp/osrng.h>
@@ -18,7 +19,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <fruit/macro.h>
-#include <functional>
+#include <json/config.h>
 #include <memory>
 #include <string>
 #include <thread>
@@ -440,7 +441,7 @@ public:
     int type() const noexcept override { return class_type(); }
 
 public:
-    typedef std::function<bool(const std::string&, const id_type&, int)> callback;
+    using callback = absl::FunctionRef<void(const std::string&, const id_type&, int)>;
 
     bool get_entry(const std::string& name, id_type& id, int& type)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
@@ -523,8 +524,7 @@ public:
     {
         for (const auto& pair : m_table)
         {
-            if (!cb(pair.first, pair.second.first, pair.second.second))
-                break;
+            cb(pair.first, pair.second.first, pair.second.second);
         }
     }
 

@@ -31,19 +31,11 @@ static void test(securefs::BtreeDirectory& dir,
     std::uniform_int_distribution<int> name_dist(0, 65535);
     std::vector<std::string> filenames, filenames_prime;
 
-    securefs::Directory::callback inserter
-        = [&](const std::string& name, const securefs::id_type&, int) -> bool
-    {
-        filenames.push_back(name);
-        return true;
-    };
+    auto inserter = [&](const std::string& name, const securefs::id_type&, int)
+    { filenames.push_back(name); };
 
-    securefs::Directory::callback inserter_prime
-        = [&](const std::string& name, const securefs::id_type&, int) -> bool
-    {
-        filenames_prime.push_back(name);
-        return true;
-    };
+    auto inserter_prime = [&](const std::string& name, const securefs::id_type&, int)
+    { filenames_prime.push_back(name); };
 
     dir.iterate_over_entries(inserter);
     reference.iterate_over_entries(inserter_prime);

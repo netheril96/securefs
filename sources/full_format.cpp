@@ -10,6 +10,7 @@
 
 #include <cerrno>
 #include <cstdint>
+#include <cstdlib>
 #include <string>
 
 namespace securefs::full_format
@@ -88,16 +89,17 @@ int FuseHighLevelOps::vreaddir(const char* path,
     filler(buf, "..", &st, 0);
 
     fp->cast_as<Directory>()->iterate_over_entries(
-        [&](const std::string& name, const id_type& id, int type) -> bool
+        [&](const std::string& name, const id_type& id, int type)
         {
             st.st_mode = FileBase::mode_for_type(type);
             st.st_ino = to_inode_number(id);
-            bool success = filler(buf, name.c_str(), &st, 0) == 0;
-            if (!success)
+            int rc = std::abs(filler(buf, name.c_str(), &st, 0));
+            if (rc != 0)
             {
-                WARN_LOG("Filling directory buffer failed");
+                VERBOSE_LOG("Filling directory buffer failed: %s",
+                            OSService::stringify_system_error(rc));
+                throwVFSException(rc);
             }
-            return success;
         });
     return 0;
 };
