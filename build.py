@@ -4,6 +4,7 @@ import os
 import tempfile
 import argparse
 import shutil
+import pathlib
 
 
 def check_call(*args):
@@ -85,6 +86,11 @@ def main():
     parser.add_argument(
         "--clang_cl", help="Use clang-cl on Windows for building", action="store_true"
     )
+    parser.add_argument(
+        "--lto",
+        help="Build with link time optimization. Only works on some platforms",
+        action="store_true",
+    )
     args = parser.parse_args()
 
     if args.enable_test:  # For backwards compat
@@ -106,6 +112,11 @@ def main():
         configure_args.append("-DSECUREFS_ENABLE_UNIT_TEST=OFF")
     if not args.enable_integration_test:
         configure_args.append("-DSECUREFS_ENABLE_INTEGRATION_TEST=OFF")
+    if args.lto:
+        configure_args += [
+            "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON",
+            f"-DVCPKG_OVERLAY_TRIPLETS={pathlib.Path(__file__).absolute().parent/'overlay_triplets'}",
+        ]
     for pair in args.cmake_defines:
         configure_args.append("-D" + pair)
     configure_args.append(source_dir)
