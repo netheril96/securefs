@@ -14,13 +14,11 @@
 #include <doctest/doctest.h>
 #include <fruit/component.h>
 #include <fruit/fruit.h>
+#include <fruit/injector.h>
 
 #include <array>
-#include <fruit/injector.h>
-#include <memory>
 #include <string>
 #include <string_view>
-#include <utility>
 
 namespace securefs::lite_format
 {
@@ -91,10 +89,10 @@ namespace
             &flags);
         auto t = injector.get<NameTranslator*>();
 
-        CHECK(t->encrypt_full_path(u8"/aaa/ÄÄÄ", nullptr)
-              == t->encrypt_full_path(u8"/aaa/A\xcc\x88"
+        CHECK(t->encrypt_full_path("/aaa/\xc3\x84\xc3\x84\xc3\x84", nullptr)
+              == t->encrypt_full_path("/aaa/A\xcc\x88"
                                       "A\xcc\x88"
-                                      "Ä",
+                                      "\xc3\x84",
                                       nullptr));
     }
 
