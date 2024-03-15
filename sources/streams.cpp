@@ -1,9 +1,11 @@
 #include "streams.h"
 #include "crypto.h"
+#include "myutils.h"
 
 #include <algorithm>
 #include <array>
 #include <assert.h>
+#include <cryptopp/secblockfwd.h>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -19,6 +21,9 @@
 #include <cryptopp/salsa.h>
 #include <cryptopp/secblock.h>
 #include <cryptopp/sha.h>
+#include <variant>
+#include <vector>
+#include <winbase.h>
 
 namespace securefs
 {
@@ -169,28 +174,6 @@ length_type CryptStream::read_block(offset_type block_number, void* output)
     return rc;
 }
 
-length_type BlockBasedStream::read_block(offset_type block_number,
-                                         void* output,
-                                         offset_type begin,
-                                         offset_type end)
-{
-    assert(begin <= m_block_size && end <= m_block_size);
-
-    if (begin == 0 && end == m_block_size)
-        return read_block(block_number, output);
-
-    if (begin >= end)
-        return 0;
-
-    CryptoPP::AlignedSecByteBlock buffer(m_block_size);
-    auto rc = read_block(block_number, buffer.data());
-    if (rc <= begin)
-        return 0;
-    end = std::min<offset_type>(end, rc);
-    memcpy(output, buffer.data() + begin, end - begin);
-    return end - begin;
-}
-
 void CryptStream::write_block(offset_type block_number, const void* input, length_type length)
 {
     assert(length <= m_block_size);
@@ -199,50 +182,66 @@ void CryptStream::write_block(offset_type block_number, const void* input, lengt
     m_stream->write(buffer.get(), block_number * m_block_size, length);
 }
 
-void BlockBasedStream::read_then_write_block(offset_type block_number,
-                                             const void* input,
-                                             offset_type begin,
-                                             offset_type end)
+namespace
 {
-    assert(begin <= m_block_size && end <= m_block_size);
-
-    if (begin == 0 && end == m_block_size)
-        return write_block(block_number, input, m_block_size);
-    if (begin >= end)
-        return;
-
-    CryptoPP::AlignedSecByteBlock buffer(m_block_size);
-    auto rc = read_block(block_number, buffer.data());
-    memcpy(buffer.data() + begin, input, end - begin);
-    write_block(block_number, buffer.data(), std::max<length_type>(rc, end));
-}
+    template <typename T>
+    std::pair<T, T> divmod(T x, T y)
+    {
+        return std::make_pair(x / y, x % y);
+    }
+}    // namespace
 
 length_type BlockBasedStream::read(void* output, offset_type offset, length_type length)
 {
-    length_type total = 0;
-
-    while (length > 0)
+    if (length <= 0)
     {
-        auto block_num = offset / m_block_size;
-        auto start_of_block = block_num * m_block_size;
-        auto begin = offset - start_of_block;
-        auto end = std::min<offset_type>(m_block_size, offset + length - start_of_block);
-        auto rc = read_block(block_num, output, begin, end);
-        total += rc;
-        if (rc < end - begin)
-            return total;
-        output = static_cast<byte*>(output) + rc;
-        offset += rc;
-        length -= rc;
+        return length;
+    }
+    auto [start_block, start_residue] = divmod(offset, m_block_size);
+    auto [end_block, end_residue] = divmod(offset + length, m_block_size);
+    if (start_residue == 0 && end_residue == 0)
+    {
+        return read_multi_blocks(start_block, end_block, output);
     }
 
-    return total;
+    CryptoPP::AlignedSecByteBlock buffer((end_block - start_block + (end_residue > 0))
+                                         * m_block_size);
+    auto read_len = read_multi_blocks(start_block, end_block + (end_residue > 0), buffer.data());
+    if (read_len <= start_residue)
+    {
+        return 0;
+    }
+    auto copy_len = std::min(read_len - start_residue, length);
+    memcpy(output, buffer.data() + start_residue, copy_len);
+    return copy_len;
+}
+
+length_type
+BlockBasedStream::read_multi_blocks(offset_type start_block, offset_type end_block, void* output)
+{
+    length_type result = 0;
+    for (offset_type b = start_block; b < end_block; ++b)
+    {
+        length_type read_len = read_block(b, output);
+        result += read_len;
+        if (read_len < m_block_size)
+        {
+            return result;
+        }
+        output = static_cast<char*>(output) + m_block_size;
+    }
+    return result;
 }
 
 void BlockBasedStream::write(const void* input, offset_type offset, length_type length)
 {
     if (length <= 0)
     {
+        return;
+    }
+    if (is_sparse())
+    {
+        unchecked_write(input, offset, length);
         return;
     }
     auto current_size = this->size();
@@ -252,36 +251,57 @@ void BlockBasedStream::write(const void* input, offset_type offset, length_type 
     unchecked_write(input, offset, length);
 }
 
-void BlockBasedStream::unchecked_write(const void* input, offset_type offset, length_type length)
+void BlockBasedStream::unchecked_write(std::variant<const void*, ZeroFillTag> input,
+                                       offset_type offset,
+                                       length_type length)
 {
-    while (length > 0)
+    if (length <= 0)
     {
-        auto block_num = offset / m_block_size;
-        auto start_of_block = block_num * m_block_size;
-        auto begin = offset - start_of_block;
-        auto end = std::min<offset_type>(m_block_size, offset + length - start_of_block);
-        read_then_write_block(block_num, input, begin, end);
-        auto rc = end - begin;
-        input = static_cast<const byte*>(input) + rc;
-        offset += rc;
-        length -= rc;
+        return;
     }
+    auto [start_block, start_residue] = divmod(offset, m_block_size);
+    auto [end_block, end_residue] = divmod(offset + length, m_block_size);
+    if (start_residue == 0 && end_residue == 0)
+    {
+        std::visit(
+            Overload{[this, start_block = start_block, end_block = end_block](const ZeroFillTag&)
+                     {
+                         std::vector<unsigned char> buffer((end_block - start_block) * m_block_size,
+                                                           0);
+                         write_multi_blocks(start_block, end_block, 0, buffer.data());
+                     },
+                     [this, start_block = start_block, end_block = end_block](const void* data)
+                     { write_multi_blocks(start_block, end_block, 0, data); }},
+            input);
+        return;
+    }
+    CryptoPP::AlignedSecByteBlock buffer((end_block - start_block + (end_residue > 0))
+                                         * m_block_size);
+    std::fill(buffer.begin(), buffer.end(), 0);
+    if (start_residue > 0 && start_block < end_block)
+    {
+        (void)read_multi_blocks(start_block, start_block + 1, buffer.data());
+    }
+    length_type effective_end_residue = 0;
+    if (end_residue > 0)
+    {
+        effective_end_residue
+            = std::max(end_residue,
+                       read_multi_blocks(end_block,
+                                         end_block + 1,
+                                         buffer.data() + (end_block - start_block) * m_block_size));
+    }
+    assert(start_residue + length <= buffer.size());
+    std::visit(Overload{[](const ZeroFillTag&) {},
+                        [&buffer, start_residue = start_residue, length](const void* data)
+                        { memcpy(buffer.data() + start_residue, data, length); }},
+               input);
+    write_multi_blocks(start_block, end_block, effective_end_residue, buffer.data());
 }
 
 void BlockBasedStream::zero_fill(offset_type offset, offset_type finish)
 {
-    auto zeros = make_unique_array<byte>(m_block_size);
-    memset(zeros.get(), 0, m_block_size);
-    while (offset < finish)
-    {
-        auto block_num = offset / m_block_size;
-        auto start_of_block = block_num * m_block_size;
-        auto begin = offset - start_of_block;
-        auto end = std::min<offset_type>(m_block_size, finish - start_of_block);
-        read_then_write_block(block_num, zeros.get(), begin, end);
-        auto rc = end - begin;
-        offset += rc;
-    }
+    unchecked_write(ZeroFillTag(), offset, finish - offset);
 }
 
 void BlockBasedStream::resize(length_type new_size) { unchecked_resize(size(), new_size); }

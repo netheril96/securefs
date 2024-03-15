@@ -6,6 +6,7 @@
 #include <absl/container/fixed_array.h>
 #include <memory>
 #include <utility>
+#include <variant>
 
 namespace securefs
 {
@@ -88,17 +89,33 @@ protected:
 protected:
     virtual length_type read_block(offset_type block_number, void* output) = 0;
     virtual void write_block(offset_type block_number, const void* input, length_type length) = 0;
+    virtual length_type
+    read_multi_blocks(offset_type start_block, offset_type end_block, void* output);
+    virtual void write_multi_blocks(offset_type start_block,
+                                    offset_type end_block,
+                                    offset_type end_residue,
+                                    const void* input)
+    {
+        for (offset_type b = start_block; b < end_block; ++b)
+        {
+            write_block(b, input, m_block_size);
+            input = static_cast<const char*>(input) + m_block_size;
+        }
+        if (end_residue > 0)
+        {
+            write_block(end_block, input, end_residue);
+        }
+    }
     virtual void adjust_logical_size(length_type length) = 0;
 
 private:
-    length_type
-    read_block(offset_type block_number, void* output, offset_type begin, offset_type end);
-    void read_then_write_block(offset_type block_number,
-                               const void* input,
-                               offset_type begin,
-                               offset_type end);
+    struct ZeroFillTag
+    {
+    };
 
-    void unchecked_write(const void* input, offset_type offset, length_type length);
+    void unchecked_write(std::variant<const void*, ZeroFillTag> input,
+                         offset_type offset,
+                         length_type length);
     void zero_fill(offset_type offset, length_type length);
     void unchecked_resize(length_type current_size, length_type new_size);
 
