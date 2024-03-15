@@ -1,8 +1,10 @@
+#include <cstring>
 #include <doctest/doctest.h>
 
 #include "crypto.h"
 #include "lite_stream.h"
 #include "logger.h"
+#include "myutils.h"
 #include "platform.h"
 #include "streams.h"
 #include "test_common.h"
@@ -184,24 +186,50 @@ namespace dummy
         bool is_sparse() const noexcept override { return false; }
 
     protected:
-        length_type read_block(offset_type block_number, void* output) override
+        length_type
+        read_multi_blocks(offset_type start_block, offset_type end_block, void* output) override
         {
-            if (block_number >= m_buffer.size())
-                return 0;
-            memcpy(output, m_buffer[block_number].data(), m_buffer[block_number].size());
-            return m_buffer[block_number].size();
+            length_type result = 0;
+            for (offset_type b = start_block; b < end_block; ++b)
+            {
+                if (b >= m_buffer.size())
+                {
+                    return result;
+                }
+                memcpy(output, m_buffer[b].data(), m_buffer[b].size());
+                result += m_buffer[b].size();
+                output = static_cast<char*>(output) + m_buffer[b].size();
+            }
+            return result;
         }
-
-        void write_block(offset_type block_number, const void* input, length_type length) override
+        void write_multi_blocks(offset_type start_block,
+                                offset_type end_block,
+                                offset_type end_residue,
+                                const void* input) override
         {
-            for (size_t i = m_buffer.size(); i <= block_number; ++i)
+            for (size_t i = m_buffer.size(); i < end_block; ++i)
             {
                 m_buffer.emplace_back(BLOCK_SIZE, static_cast<byte>(0));
             }
-            m_buffer[block_number].resize(length);
-            memcpy(m_buffer[block_number].data(), input, length);
+            for (offset_type b = start_block; b < end_block; ++b)
+            {
+                memcpy(m_buffer[b].data(), input, BLOCK_SIZE);
+                input = static_cast<const char*>(input) + BLOCK_SIZE;
+            }
+            if (end_residue > 0)
+            {
+                if (m_buffer.size() < end_block)
+                {
+                    m_buffer.emplace_back(end_residue, static_cast<byte>(0));
+                }
+                auto&& end_buffer = m_buffer[end_block];
+                if (end_buffer.size() < end_residue)
+                {
+                    end_buffer.resize(end_residue);
+                }
+                memcpy(end_buffer.data(), input, end_residue);
+            }
         }
-
         void adjust_logical_size(length_type length) override
         {
             if (length == 0)

@@ -87,8 +87,8 @@ protected:
     length_type m_block_size;
 
 protected:
-    virtual length_type read_block(offset_type block_number, void* output) = 0;
-    virtual void write_block(offset_type block_number, const void* input, length_type length) = 0;
+    virtual length_type read_block(offset_type block_number, void* output) { return 0; }
+    virtual void write_block(offset_type block_number, const void* input, length_type length) {}
     virtual length_type
     read_multi_blocks(offset_type start_block, offset_type end_block, void* output);
     virtual void write_multi_blocks(offset_type start_block,
