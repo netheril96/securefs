@@ -1,13 +1,16 @@
 #include "lite_stream.h"
 #include "crypto.h"
 #include "logger.h"
+#include "myutils.h"
 
+#include <algorithm>
 #include <cryptopp/aes.h>
 #include <cryptopp/integer.h>
 #include <cryptopp/modes.h>
 #include <cryptopp/osrng.h>
 
 #include <utility>
+#include <vector>
 
 namespace securefs::lite
 {
@@ -142,45 +145,54 @@ void AESGCMCryptStream::flush() { m_stream->flush(); }
 
 bool AESGCMCryptStream::is_sparse() const noexcept { return m_stream->is_sparse(); }
 
-length_type AESGCMCryptStream::read_block(offset_type block_number, void* output)
+length_type
+AESGCMCryptStream::read_multi_blocks(offset_type start_block, offset_type end_block, void* output)
 {
-    if (block_number > MAX_BLOCKS)
-        throw StreamTooLongException(MAX_BLOCKS * get_block_size(),
-                                     block_number * get_block_size());
+    if (end_block > MAX_BLOCKS)
+        throw StreamTooLongException(MAX_BLOCKS * get_block_size(), end_block * get_block_size());
+    std::vector<unsigned char> buffer((end_block - start_block) * get_underlying_block_size());
+    length_type rc = m_stream->read(buffer.data(),
+                                    get_header_size() + get_underlying_block_size() * start_block,
+                                    buffer.size());
+    length_type transformed_read_len = 0;
 
-    length_type rc = m_stream->read(m_buffer.get(),
-                                    get_header_size() + get_underlying_block_size() * block_number,
-                                    get_underlying_block_size());
-    if (rc <= get_mac_size() + get_iv_size())
-        return 0;
-
-    if (rc > get_underlying_block_size())
-        throwInvalidArgumentException("Invalid read");
-
-    auto out_size = rc - get_iv_size() - get_mac_size();
-
-    if (is_all_zeros(m_buffer.get(), rc))
+    for (length_type i = 0; i < rc; i += get_underlying_block_size())
     {
-        memset(output, 0, get_block_size());
-        return out_size;
+        if (i + get_mac_size() + get_iv_size() <= rc)
+        {
+            return transformed_read_len;
+        }
+
+        auto this_block_underlying_size = std::min(get_underlying_block_size(), rc - i);
+        auto this_block_virtual_size = this_block_underlying_size - get_mac_size() - get_iv_size();
+        auto* start_data = buffer.data() + i;
+        auto* end_data = start_data + this_block_underlying_size;
+
+        transformed_read_len += this_block_virtual_size;
+
+        if (std::all_of(start_data, end_data, [](byte b) { return b == 0; }))
+        {
+            output = memset(output, 0, this_block_virtual_size);
+            continue;
+        }
+
+        to_little_endian(static_cast<std::uint32_t>(i / get_underlying_block_size() + start_block),
+                         m_auxiliary.get());
+        bool success = m_decryptor.DecryptAndVerify(static_cast<byte*>(output),
+                                                    end_data - get_mac_size(),
+                                                    get_mac_size(),
+                                                    start_data,
+                                                    static_cast<int>(get_iv_size()),
+                                                    m_auxiliary.get(),
+                                                    sizeof(std::uint32_t) + m_padding_size,
+                                                    start_data + get_iv_size(),
+                                                    this_block_virtual_size);
+
+        if (m_check && !success)
+            throw LiteMessageVerificationException();
+        output = static_cast<byte*>(output) + this_block_virtual_size;
     }
-
-    to_little_endian(static_cast<std::uint32_t>(block_number), m_auxiliary.get());
-
-    bool success = m_decryptor.DecryptAndVerify(static_cast<byte*>(output),
-                                                m_buffer.get() + rc - get_mac_size(),
-                                                get_mac_size(),
-                                                m_buffer.get(),
-                                                static_cast<int>(get_iv_size()),
-                                                m_auxiliary.get(),
-                                                sizeof(std::uint32_t) + m_padding_size,
-                                                m_buffer.get() + get_iv_size(),
-                                                out_size);
-
-    if (m_check && !success)
-        throw LiteMessageVerificationException();
-
-    return out_size;
+    return transformed_read_len;
 }
 
 void AESGCMCryptStream::write_block(offset_type block_number, const void* input, length_type size)
