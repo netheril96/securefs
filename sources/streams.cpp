@@ -1,10 +1,12 @@
 #include "streams.h"
 #include "crypto.h"
+#include "exceptions.h"
 #include "myutils.h"
 
 #include <algorithm>
 #include <array>
 #include <assert.h>
+#include <cryptopp/secblockfwd.h>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -163,23 +165,6 @@ std::shared_ptr<StreamBase> make_stream_hmac(const key_type& key_,
     return std::make_shared<internal::HMACStream>(key_, id_, std::move(stream), check);
 }
 
-length_type CryptStream::read_block(offset_type block_number, void* output)
-{
-    auto rc = m_stream->read(output, block_number * m_block_size, m_block_size);
-    if (rc == 0)
-        return 0;
-    decrypt(block_number, output, output, rc);
-    return rc;
-}
-
-void CryptStream::write_block(offset_type block_number, const void* input, length_type length)
-{
-    assert(length <= m_block_size);
-    auto buffer = make_unique_array<byte>(length);
-    encrypt(block_number, input, buffer.get(), length);
-    m_stream->write(buffer.get(), block_number * m_block_size, length);
-}
-
 namespace
 {
     template <typename T>
@@ -331,7 +316,7 @@ void BlockBasedStream::unchecked_resize(length_type current_size, length_type ne
 
 namespace internal
 {
-    class AESGCMCryptStream final : public CryptStream, public HeaderBase
+    class AESGCMCryptStream final : public BlockBasedStream, public HeaderBase
     {
     public:
         int get_iv_size() const noexcept { return m_iv_size; }
@@ -352,6 +337,7 @@ namespace internal
     private:
         CryptoPP::GCM<CryptoPP::AES>::Encryption m_enc;
         CryptoPP::GCM<CryptoPP::AES>::Decryption m_dec;
+        std::shared_ptr<StreamBase> m_stream;
         HMACStream m_metastream;
         id_type m_id;
         unsigned m_iv_size, m_header_size;
@@ -382,7 +368,8 @@ namespace internal
                                    unsigned block_size,
                                    unsigned iv_size,
                                    unsigned header_size)
-            : CryptStream(std::move(data_stream), block_size)
+            : BlockBasedStream(block_size)
+            , m_stream(std::move(data_stream))
             , m_metastream(meta_key, id_, std::move(meta_stream), check)
             , m_id(id_)
             , m_iv_size(iv_size)
@@ -397,74 +384,110 @@ namespace internal
         }
 
     protected:
-        void encrypt(offset_type block_number,
-                     const void* input,
-                     void* output,
-                     length_type length) override
+        void write_multi_blocks(offset_type start_block,
+                                offset_type end_block,
+                                offset_type end_residue,
+                                const void* input) override
         {
-            if (length == 0)
-                return;
-            check_block_number(block_number);
+            check_block_number(end_block);
 
-            auto buffer = make_unique_array<byte>(get_meta_size());
-            byte* iv = buffer.get();
-            byte* mac = iv + get_iv_size();
-
-            do
+            std::vector<byte> buffer((m_block_size + get_meta_size()) * (end_block - start_block)
+                                     + (end_residue <= 0 ? 0 : end_residue + get_meta_size()));
+            auto* data_buffer = buffer.data();
+            auto data_buffer_size = m_block_size * (end_block - start_block) + end_residue;
+            auto* meta_buffer = buffer.data() + data_buffer_size;
+            for (length_type i = 0; i < data_buffer_size;)
             {
-                generate_random(iv, get_iv_size());
-            } while (is_all_zeros(iv, get_iv_size()));    // Null IVs are markers for sparse blocks
-            m_enc.EncryptAndAuthenticate(static_cast<byte*>(output),
-                                         mac,
-                                         get_mac_size(),
-                                         iv,
-                                         get_iv_size(),
-                                         id().data(),
-                                         id().size(),
-                                         static_cast<const byte*>(input),
-                                         length);
-            auto pos = meta_position_for_iv(block_number);
-            m_metastream.write(buffer.get(), pos, get_meta_size());
+                assert(data_buffer <= buffer.data() + data_buffer_size);
+                assert(data_buffer <= buffer.data() + buffer.size());
+                assert(meta_buffer <= buffer.data() + buffer.size());
+                do
+                {
+                    generate_random(meta_buffer, get_iv_size());
+                } while (is_all_zeros(meta_buffer, get_iv_size()));
+                auto this_block_size = std::min(m_block_size, data_buffer_size - i);
+                assert(data_buffer + this_block_size <= buffer.data() + buffer.size());
+                assert(meta_buffer + get_meta_size() <= buffer.data() + buffer.size());
+                m_enc.EncryptAndAuthenticate(data_buffer,
+                                             meta_buffer + get_iv_size(),
+                                             get_mac_size(),
+                                             meta_buffer,
+                                             static_cast<int>(get_iv_size()),
+                                             id().data(),
+                                             id().size(),
+                                             static_cast<const byte*>(input),
+                                             this_block_size);
+                data_buffer += this_block_size;
+                meta_buffer += get_meta_size();
+                input = static_cast<const byte*>(input) + this_block_size;
+                i += this_block_size;
+            }
+            m_stream->write(buffer.data(), start_block * m_block_size, data_buffer_size);
+            m_metastream.write(buffer.data() + data_buffer_size,
+                               meta_position_for_iv(start_block),
+                               buffer.size() - data_buffer_size);
         }
 
-        void decrypt(offset_type block_number,
-                     const void* input,
-                     void* output,
-                     length_type length) override
+        length_type
+        read_multi_blocks(offset_type start_block, offset_type end_block, void* output) override
         {
-            if (length == 0)
-                return;
-            check_block_number(block_number);
+            if (start_block == end_block)
+                return 0;
+            check_block_number(end_block);
+            std::vector<byte> buffer((end_block - start_block) * (m_block_size + get_meta_size()));
+            auto* data_buffer = buffer.data();
+            auto data_buffer_size = (end_block - start_block) * m_block_size;
+            auto* meta_buffer = data_buffer + data_buffer_size;
+            auto meta_buffer_size = buffer.size() - data_buffer_size;
 
-            auto buffer = make_unique_array<byte>(get_meta_size());
-            auto pos = meta_position_for_iv(block_number);
-            if (m_metastream.read(buffer.get(), pos, get_meta_size()) != get_meta_size())
-                throw CorruptedMetaDataException(id(), "MAC/IV not found");
-
-            const byte* iv = buffer.get();
-            byte* mac = buffer.get() + get_iv_size();
-
-            if (is_all_zeros(buffer.get(), get_meta_size()) && is_all_zeros(input, length))
+            auto data_read_len
+                = m_stream->read(data_buffer, start_block * m_block_size, data_buffer_size);
+            auto meta_read_len = m_metastream.read(
+                meta_buffer, meta_position_for_iv(start_block), meta_buffer_size);
+            if (data_read_len <= 0)
             {
-                memset(output, 0, length);
-                return;
+                return 0;
             }
-            bool success = m_dec.DecryptAndVerify(static_cast<byte*>(output),
-                                                  mac,
-                                                  get_mac_size(),
-                                                  iv,
-                                                  get_iv_size(),
-                                                  id().data(),
-                                                  id().size(),
-                                                  static_cast<const byte*>(input),
-                                                  length);
-            if (m_check && !success)
-                throw MessageVerificationException(id(), block_number * m_block_size);
+            if (meta_read_len % get_meta_size() != 0)
+            {
+                throw MessageVerificationException(id(), start_block * m_block_size);
+            }
+            memset(output, 0, data_buffer_size);
+
+            for (length_type i = 0; i < data_read_len;)
+            {
+                auto this_block_size = std::min(m_block_size, data_read_len - i);
+                DEFER({
+                    i += this_block_size;
+                    data_buffer += this_block_size;
+                    meta_buffer += get_meta_size();
+                    output = static_cast<byte*>(output) + this_block_size;
+                });
+                if (is_all_zeros(meta_buffer, get_meta_size())
+                    && is_all_zeros(data_buffer, this_block_size))
+                {
+                    continue;
+                }
+                bool success = m_dec.DecryptAndVerify(static_cast<byte*>(output),
+                                                      meta_buffer + get_iv_size(),
+                                                      get_mac_size(),
+                                                      meta_buffer,
+                                                      static_cast<int>(get_iv_size()),
+                                                      id().data(),
+                                                      id().size(),
+                                                      data_buffer,
+                                                      this_block_size);
+                if (!success & m_check)
+                {
+                    throw MessageVerificationException(id(), i + start_block * m_block_size);
+                }
+            }
+            return data_read_len;
         }
 
         void adjust_logical_size(length_type length) override
         {
-            CryptStream::adjust_logical_size(length);
+            m_stream->resize(length);
             auto block_num = (length + this->m_block_size - 1) / this->m_block_size;
             m_metastream.resize(meta_position_for_iv(block_num));
         }
@@ -477,9 +500,11 @@ namespace internal
 
         void flush() override
         {
-            CryptStream::flush();
+            m_stream->flush();
             m_metastream.flush();
         }
+
+        length_type size() const override { return m_stream->size(); }
 
     private:
         length_type unchecked_read_header(void* output)
@@ -560,7 +585,7 @@ namespace internal
     };
 }    // namespace internal
 
-std::pair<std::shared_ptr<CryptStream>, std::shared_ptr<HeaderBase>>
+std::pair<std::shared_ptr<StreamBase>, std::shared_ptr<HeaderBase>>
 make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
                          std::shared_ptr<StreamBase> meta_stream,
                          const key_type& data_key,

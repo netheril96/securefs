@@ -1,4 +1,5 @@
 #pragma once
+#include "exceptions.h"
 #include "files.h"
 #include "myutils.h"
 

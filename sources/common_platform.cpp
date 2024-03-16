@@ -1,4 +1,5 @@
 #include "crypto.h"
+#include "exceptions.h"
 #include "myutils.h"
 #include "platform.h"
 

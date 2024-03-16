@@ -1,5 +1,6 @@
 #pragma once
 
+#include "exceptions.h"
 #include "myutils.h"
 #include "object.h"
 #include "platform.h"

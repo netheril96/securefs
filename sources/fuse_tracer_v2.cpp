@@ -1,4 +1,5 @@
 #include "fuse_tracer_v2.h"
+#include "exceptions.h"
 
 #include <absl/strings/escaping.h>
 #include <absl/strings/str_format.h>

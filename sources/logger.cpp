@@ -1,4 +1,5 @@
 #include "logger.h"
+#include "exceptions.h"
 #include "myutils.h"
 #include "platform.h"
 

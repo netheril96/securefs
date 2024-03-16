@@ -1,5 +1,6 @@
 #include "files.h"
 #include "crypto.h"
+#include "exceptions.h"
 #include "myutils.h"
 
 #include <cryptopp/integer.h>

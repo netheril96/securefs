@@ -1,4 +1,5 @@
 #pragma once
+#include "exceptions.h"
 #include "platform.h"
 
 #include <absl/types/span.h>

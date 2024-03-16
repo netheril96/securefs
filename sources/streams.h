@@ -1,5 +1,4 @@
 #pragma once
-#include "exceptions.h"
 #include "myutils.h"
 #include "object.h"
 
@@ -130,57 +129,12 @@ public:
 };
 
 /**
- * Base classes for streams that encrypt and decrypt data transparently
- * The transformation is done in blocks,
- * and must always output data of the same length as input.
- *
- * Subclasses should use additional storage, such as another stream, to store IVs and MACs.
- *
- * The CryptStream supports sparse streams if the subclass can tell whether all zero block
- * are ciphertext or sparse parts of the underlying stream.
- */
-class CryptStream : public BlockBasedStream
-{
-protected:
-    std::shared_ptr<StreamBase> m_stream;
-
-    // Both encrypt/decrypt should not change the length of the block.
-    // input/output may alias.
-    virtual void
-    encrypt(offset_type block_number, const void* input, void* output, length_type length)
-        = 0;
-
-    virtual void
-    decrypt(offset_type block_number, const void* input, void* output, length_type length)
-        = 0;
-
-    void adjust_logical_size(length_type length) override { m_stream->resize(length); }
-
-private:
-    length_type read_block(offset_type block_number, void* output) override;
-    void write_block(offset_type block_number, const void* input, length_type length) override;
-
-public:
-    explicit CryptStream(std::shared_ptr<StreamBase> stream, length_type block_size)
-        : BlockBasedStream(block_size), m_stream(std::move(stream))
-    {
-        if (!m_stream)
-            throwVFSException(EFAULT);
-        if (m_block_size < 1)
-            throwInvalidArgumentException("Too small block size");
-    }
-
-    void flush() override { m_stream->flush(); }
-    length_type size() const override { return m_stream->size(); }
-};
-
-/**
- * AESGCMCryptStream is both a CryptStream and a HeaderBase.
+ * AESGCMCryptStream is both a Stream and a HeaderBase.
  *
  * Returns a pair because the client does not need to know whether the two interfaces are
  * implemented by the same class.
  */
-std::pair<std::shared_ptr<CryptStream>, std::shared_ptr<HeaderBase>>
+std::pair<std::shared_ptr<StreamBase>, std::shared_ptr<HeaderBase>>
 make_cryptstream_aes_gcm(std::shared_ptr<StreamBase> data_stream,
                          std::shared_ptr<StreamBase> meta_stream,
                          const key_type& data_key,

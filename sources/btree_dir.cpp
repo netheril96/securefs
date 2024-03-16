@@ -1,9 +1,9 @@
 #include "btree_dir.h"
+#include "exceptions.h"
 
 #include <absl/strings/str_format.h>
 
 #include <algorithm>
-#include <assert.h>
 #include <iterator>
 #include <stdio.h>
 #include <type_traits>

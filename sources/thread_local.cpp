@@ -1,4 +1,5 @@
 #include "thread_local.h"
+#include "exceptions.h"
 #include "lock_guard.h"
 #include "platform.h"
 #include <cstdint>

@@ -1,4 +1,5 @@
 #pragma once
+#include "exceptions.h"
 #include "logger.h"
 #include "platform.h"    // IWYU pragma: keep
 

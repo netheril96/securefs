@@ -1,3 +1,4 @@
+#include "exceptions.h"
 #ifdef _WIN32
 #include "lock_enabled.h"
 #include "logger.h"
@@ -12,7 +13,6 @@
 #include <cerrno>
 #include <limits>
 #include <memory>
-#include <mutex>
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/utime.h>

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "exceptions.h"
 #include "mystring.h"
 #include "streams.h"
 

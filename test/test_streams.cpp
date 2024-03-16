@@ -10,9 +10,7 @@
 #include "test_common.h"
 
 #include <algorithm>
-#include <array>
 #include <random>
-#include <stdint.h>
 #include <string.h>
 #include <vector>
 
@@ -128,136 +126,102 @@ static void test(securefs::StreamBase& stream, unsigned times)
     }
 }
 
-namespace securefs
+namespace securefs::dummy
 {
-namespace dummy
+
+class DummyBlockStream : public BlockBasedStream
 {
-    // The "encryption" scheme of this class is horribly insecure
-    // Only for testing the algorithms in CryptStream
-    class DummpyCryptStream : public CryptStream
+private:
+    static const size_t BLOCK_SIZE;
+    std::vector<std::vector<byte>> m_buffer;
+
+public:
+    explicit DummyBlockStream() : BlockBasedStream(BLOCK_SIZE) {}
+    ~DummyBlockStream() {}
+
+    length_type size() const override
     {
-    protected:
-        void encrypt(offset_type block_number,
-                     const void* input,
-                     void* output,
-                     length_type length) override
-        {
-            auto a = static_cast<byte>(block_number);
-            for (length_type i = 0; i < length; ++i)
-            {
-                static_cast<byte*>(output)[i] = (static_cast<const byte*>(input)[i]) ^ a;
-            }
-        }
+        if (m_buffer.empty())
+            return 0;
+        return (m_buffer.size() - 1) * BLOCK_SIZE + m_buffer.back().size();
+    }
 
-        void decrypt(offset_type block_number,
-                     const void* input,
-                     void* output,
-                     length_type length) override
-        {
-            return encrypt(block_number, input, output, length);
-        }
+    void flush() override { return; }
 
-    public:
-        explicit DummpyCryptStream(std::shared_ptr<StreamBase> stream, length_type block_size)
-            : CryptStream(std::move(stream), block_size)
-        {
-        }
-    };
+    bool is_sparse() const noexcept override { return false; }
 
-    class DummyBlockStream : public BlockBasedStream
+protected:
+    length_type
+    read_multi_blocks(offset_type start_block, offset_type end_block, void* output) override
     {
-    private:
-        static const size_t BLOCK_SIZE;
-        std::vector<std::vector<byte>> m_buffer;
-
-    public:
-        explicit DummyBlockStream() : BlockBasedStream(BLOCK_SIZE) {}
-        ~DummyBlockStream() {}
-
-        length_type size() const override
+        length_type result = 0;
+        for (offset_type b = start_block; b < end_block; ++b)
         {
-            if (m_buffer.empty())
-                return 0;
-            return (m_buffer.size() - 1) * BLOCK_SIZE + m_buffer.back().size();
+            if (b >= m_buffer.size())
+            {
+                return result;
+            }
+            memcpy(output, m_buffer[b].data(), m_buffer[b].size());
+            result += m_buffer[b].size();
+            output = static_cast<char*>(output) + m_buffer[b].size();
         }
-
-        void flush() override { return; }
-
-        bool is_sparse() const noexcept override { return false; }
-
-    protected:
-        length_type
-        read_multi_blocks(offset_type start_block, offset_type end_block, void* output) override
+        return result;
+    }
+    void write_multi_blocks(offset_type start_block,
+                            offset_type end_block,
+                            offset_type end_residue,
+                            const void* input) override
+    {
+        for (size_t i = m_buffer.size(); i < end_block; ++i)
         {
-            length_type result = 0;
-            for (offset_type b = start_block; b < end_block; ++b)
-            {
-                if (b >= m_buffer.size())
-                {
-                    return result;
-                }
-                memcpy(output, m_buffer[b].data(), m_buffer[b].size());
-                result += m_buffer[b].size();
-                output = static_cast<char*>(output) + m_buffer[b].size();
-            }
-            return result;
+            m_buffer.emplace_back(BLOCK_SIZE, static_cast<byte>(0));
         }
-        void write_multi_blocks(offset_type start_block,
-                                offset_type end_block,
-                                offset_type end_residue,
-                                const void* input) override
+        for (offset_type b = start_block; b < end_block; ++b)
         {
-            for (size_t i = m_buffer.size(); i < end_block; ++i)
+            m_buffer.at(b).resize(BLOCK_SIZE);
+            memcpy(m_buffer[b].data(), input, BLOCK_SIZE);
+            input = static_cast<const char*>(input) + BLOCK_SIZE;
+        }
+        if (end_residue > 0)
+        {
+            if (m_buffer.size() <= end_block)
             {
-                m_buffer.emplace_back(BLOCK_SIZE, static_cast<byte>(0));
+                m_buffer.emplace_back(end_residue, static_cast<byte>(0));
             }
-            for (offset_type b = start_block; b < end_block; ++b)
+            auto&& end_buffer = m_buffer[end_block];
+            if (end_buffer.size() < end_residue)
             {
-                m_buffer.at(b).resize(BLOCK_SIZE);
-                memcpy(m_buffer[b].data(), input, BLOCK_SIZE);
-                input = static_cast<const char*>(input) + BLOCK_SIZE;
+                end_buffer.resize(end_residue);
             }
-            if (end_residue > 0)
+            memcpy(end_buffer.data(), input, end_residue);
+        }
+    }
+    void adjust_logical_size(length_type length) override
+    {
+        if (length == 0)
+        {
+            m_buffer.clear();
+            return;
+        }
+        auto num_blocks = (length + (BLOCK_SIZE - 1)) / BLOCK_SIZE;
+        auto residue = length % BLOCK_SIZE;
+        if (num_blocks > m_buffer.size())
+        {
+            for (auto i = m_buffer.size(); i < num_blocks; ++i)
             {
-                if (m_buffer.size() <= end_block)
-                {
-                    m_buffer.emplace_back(end_residue, static_cast<byte>(0));
-                }
-                auto&& end_buffer = m_buffer[end_block];
-                if (end_buffer.size() < end_residue)
-                {
-                    end_buffer.resize(end_residue);
-                }
-                memcpy(end_buffer.data(), input, end_residue);
+                m_buffer.emplace_back(BLOCK_SIZE, 0);
             }
         }
-        void adjust_logical_size(length_type length) override
+        else if (num_blocks < m_buffer.size())
         {
-            if (length == 0)
-            {
-                m_buffer.clear();
-                return;
-            }
-            auto num_blocks = (length + (BLOCK_SIZE - 1)) / BLOCK_SIZE;
-            auto residue = length % BLOCK_SIZE;
-            if (num_blocks > m_buffer.size())
-            {
-                for (auto i = m_buffer.size(); i < num_blocks; ++i)
-                {
-                    m_buffer.emplace_back(BLOCK_SIZE, 0);
-                }
-            }
-            else if (num_blocks < m_buffer.size())
-            {
-                m_buffer.resize(num_blocks);
-            }
-            m_buffer.back().resize(residue ? residue : BLOCK_SIZE);
+            m_buffer.resize(num_blocks);
         }
-    };
+        m_buffer.back().resize(residue ? residue : BLOCK_SIZE);
+    }
+};
 
-    const size_t DummyBlockStream::BLOCK_SIZE = 1000;
-}    // namespace dummy
-}    // namespace securefs
+const size_t DummyBlockStream::BLOCK_SIZE = 1000;
+}    // namespace securefs::dummy
 
 // Used for debugging
 void dump_contents(const std::vector<byte>& bytes, const char* filename, size_t max_size)
@@ -281,10 +245,6 @@ TEST_CASE("Test streams")
         auto hmac_stream
             = securefs::make_stream_hmac(key, id, std::make_shared<securefs::MemoryStream>(), true);
         test(*hmac_stream, 5000);
-    }
-    {
-        securefs::dummy::DummpyCryptStream ds(std::make_shared<securefs::MemoryStream>(), 8000);
-        test(ds, 5000);
     }
     {
         auto aes_gcm_stream
