@@ -1,7 +1,9 @@
 #pragma once
 
+#include "mystring.h"
 #include "streams.h"
 
+#include <absl/container/inlined_vector.h>
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
 #include <cryptopp/osrng.h>
@@ -27,7 +29,7 @@ private:
     CryptoPP::GCM<CryptoPP::AES>::Encryption m_encryptor;
     CryptoPP::GCM<CryptoPP::AES>::Decryption m_decryptor;
     std::shared_ptr<StreamBase> m_stream;
-    std::unique_ptr<byte[]> m_buffer, m_auxiliary;
+    absl::InlinedVector<byte, 32> m_auxiliary;
     unsigned m_iv_size, m_padding_size;
     bool m_check;
 
@@ -61,7 +63,10 @@ protected:
     length_type
     read_multi_blocks(offset_type start_block, offset_type end_block, void* output) override;
 
-    void write_block(offset_type block_number, const void* input, length_type size) override;
+    void write_multi_blocks(offset_type start_block,
+                            offset_type end_block,
+                            offset_type end_residue,
+                            const void* input) override;
 
     void adjust_logical_size(length_type length) override;
 

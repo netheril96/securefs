@@ -66,7 +66,7 @@ namespace
 
 static void test(securefs::StreamBase& stream, unsigned times)
 {
-    const char* stream_type_name = typeid(stream).name();
+    std::string_view stream_type_name = typeid(stream).name();
     CAPTURE(stream_type_name);
     securefs::MemoryStream memory_stream;
     stream.resize(0);

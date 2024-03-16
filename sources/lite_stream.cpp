@@ -9,6 +9,7 @@
 #include <cryptopp/modes.h>
 #include <cryptopp/osrng.h>
 
+#include <cstdint>
 #include <utility>
 #include <vector>
 
@@ -101,11 +102,11 @@ AESGCMCryptStream::AESGCMCryptStream(std::shared_ptr<StreamBase> stream,
         generate_random(id.data(), id.size());
         m_stream->write(id.data(), 0, id.size());
         m_padding_size = calc.compute_padding(id);
-        m_auxiliary.reset(new byte[sizeof(std::uint32_t) + m_padding_size]);
+        m_auxiliary.resize(sizeof(std::uint32_t) + m_padding_size, 0);
         if (m_padding_size)
         {
-            generate_random(m_auxiliary.get(), sizeof(std::uint32_t) + m_padding_size);
-            m_stream->write(m_auxiliary.get() + sizeof(std::uint32_t), id.size(), m_padding_size);
+            generate_random(m_auxiliary.data(), m_auxiliary.size());
+            m_stream->write(m_auxiliary.data() + sizeof(std::uint32_t), id.size(), m_padding_size);
         }
     }
     else if (rc != id.size())
@@ -115,9 +116,9 @@ AESGCMCryptStream::AESGCMCryptStream(std::shared_ptr<StreamBase> stream,
     else
     {
         m_padding_size = calc.compute_padding(id);
-        m_auxiliary.reset(new byte[sizeof(std::uint32_t) + m_padding_size]);
+        m_auxiliary.resize(sizeof(std::uint32_t) + m_padding_size, 0);
         if (m_padding_size
-            && m_stream->read(m_auxiliary.get() + sizeof(std::uint32_t), id.size(), m_padding_size)
+            && m_stream->read(m_auxiliary.data() + sizeof(std::uint32_t), id.size(), m_padding_size)
                 != m_padding_size)
             throwInvalidArgumentException("Invalid padding in the underlying file");
     }
@@ -128,9 +129,6 @@ AESGCMCryptStream::AESGCMCryptStream(std::shared_ptr<StreamBase> stream,
     }
 
     calc.compute_session_key(id, session_key);
-
-    m_buffer.reset(new byte[get_underlying_block_size()]);
-
     // The null iv is only a placeholder; it will replaced during encryption and decryption
     const byte null_iv[12] = {0};
     m_encryptor.SetKeyWithIV(
@@ -175,16 +173,21 @@ AESGCMCryptStream::read_multi_blocks(offset_type start_block, offset_type end_bl
         }
         else
         {
+            if (is_all_zeros(start_data, get_iv_size()))
+            {
+                WARN_LOG("Null IV for block number %d indicates a potential bug in securefs",
+                         i / get_underlying_block_size() + start_block);
+            }
             to_little_endian(
                 static_cast<std::uint32_t>(i / get_underlying_block_size() + start_block),
-                m_auxiliary.get());
+                m_auxiliary.data());
             bool success = m_decryptor.DecryptAndVerify(static_cast<byte*>(output),
                                                         end_data - get_mac_size(),
                                                         get_mac_size(),
                                                         start_data,
                                                         static_cast<int>(get_iv_size()),
-                                                        m_auxiliary.get(),
-                                                        sizeof(std::uint32_t) + m_padding_size,
+                                                        m_auxiliary.data(),
+                                                        m_auxiliary.size(),
                                                         start_data + get_iv_size(),
                                                         this_block_virtual_size);
 
@@ -196,40 +199,50 @@ AESGCMCryptStream::read_multi_blocks(offset_type start_block, offset_type end_bl
     return transformed_read_len;
 }
 
-void AESGCMCryptStream::write_block(offset_type block_number, const void* input, length_type size)
+void AESGCMCryptStream::write_multi_blocks(offset_type start_block,
+                                           offset_type end_block,
+                                           offset_type end_residue,
+                                           const void* input)
 {
-    if (block_number > MAX_BLOCKS)
-        throw StreamTooLongException(MAX_BLOCKS * get_block_size(),
-                                     block_number * get_block_size());
+    if (end_block > MAX_BLOCKS)
+        throw StreamTooLongException(MAX_BLOCKS * get_block_size(), end_block * get_block_size());
 
-    auto underlying_offset = block_number * get_underlying_block_size() + get_header_size();
-    auto underlying_size = size + get_iv_size() + get_mac_size();
-
-    if (is_all_zeros(input, size))
+    std::vector<unsigned char> buffer(
+        (end_block - start_block) * get_underlying_block_size()
+        + (end_residue <= 0 ? 0 : end_residue + get_iv_size() + get_mac_size()));
+    for (length_type i = 0; i < buffer.size();)
     {
-        memset(m_buffer.get(), 0, underlying_size);
-        m_stream->write(m_buffer.get(), underlying_offset, underlying_size);
-        return;
+        auto this_block_underlying_size = std::min(get_underlying_block_size(), buffer.size() - i);
+        auto this_block_virtual_size = this_block_underlying_size - get_mac_size() - get_iv_size();
+        if (this_block_virtual_size > 0)
+        {
+            auto* start_data = buffer.data() + i;
+            auto* end_data = start_data + this_block_underlying_size;
+            auto* iv = start_data;
+            auto* ciphertext = iv + get_iv_size();
+            auto* mac = end_data - get_mac_size();
+            to_little_endian(static_cast<uint32_t>(start_block + i / get_underlying_block_size()),
+                             m_auxiliary.data());
+            do
+            {
+                generate_random(iv, get_iv_size());
+            } while (is_all_zeros(iv, get_iv_size()));
+            m_encryptor.EncryptAndAuthenticate(ciphertext,
+                                               mac,
+                                               get_mac_size(),
+                                               iv,
+                                               static_cast<int>(get_iv_size()),
+                                               m_auxiliary.data(),
+                                               m_auxiliary.size(),
+                                               static_cast<const byte*>(input),
+                                               this_block_virtual_size);
+        }
+        input = static_cast<const byte*>(input) + this_block_virtual_size;
+        i += this_block_underlying_size;
     }
-
-    to_little_endian(static_cast<std::uint32_t>(block_number), m_auxiliary.get());
-
-    do
-    {
-        generate_random(m_buffer.get(), get_iv_size());
-    } while (is_all_zeros(m_buffer.get(), get_iv_size()));
-
-    m_encryptor.EncryptAndAuthenticate(m_buffer.get() + get_iv_size(),
-                                       m_buffer.get() + get_iv_size() + size,
-                                       get_mac_size(),
-                                       m_buffer.get(),
-                                       static_cast<int>(get_iv_size()),
-                                       m_auxiliary.get(),
-                                       sizeof(std::uint32_t) + m_padding_size,
-                                       static_cast<const byte*>(input),
-                                       size);
-
-    m_stream->write(m_buffer.get(), underlying_offset, underlying_size);
+    m_stream->write(buffer.data(),
+                    start_block * get_underlying_block_size() + get_header_size(),
+                    buffer.size());
 }
 
 length_type AESGCMCryptStream::size() const

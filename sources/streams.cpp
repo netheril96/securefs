@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <array>
 #include <assert.h>
-#include <cryptopp/secblockfwd.h>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -23,7 +22,6 @@
 #include <cryptopp/sha.h>
 #include <variant>
 #include <vector>
-#include <winbase.h>
 
 namespace securefs
 {
@@ -314,7 +312,7 @@ void BlockBasedStream::unchecked_resize(length_type current_size, length_type ne
             CryptoPP::AlignedSecByteBlock buffer(m_block_size);
             memset(buffer.data(), 0, buffer.size());
             (void)read_multi_blocks(block_num, block_num + 1, buffer.data());
-            write_block(block_num, buffer.data(), residue);
+            write_multi_blocks(block_num, block_num, residue, buffer.data());
         }
     }
     else
