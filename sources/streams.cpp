@@ -199,23 +199,6 @@ length_type BlockBasedStream::read(void* output, offset_type offset, length_type
     return copy_len;
 }
 
-length_type
-BlockBasedStream::read_multi_blocks(offset_type start_block, offset_type end_block, void* output)
-{
-    length_type result = 0;
-    for (offset_type b = start_block; b < end_block; ++b)
-    {
-        length_type read_len = read_block(b, output);
-        result += read_len;
-        if (read_len < m_block_size)
-        {
-            return result;
-        }
-        output = static_cast<char*>(output) + m_block_size;
-    }
-    return result;
-}
-
 void BlockBasedStream::write(const void* input, offset_type offset, length_type length)
 {
     if (length <= 0)
