@@ -158,12 +158,11 @@ AESGCMCryptStream::read_multi_blocks(offset_type start_block, offset_type end_bl
 
     for (length_type i = 0; i < rc; i += get_underlying_block_size())
     {
-        if (i + get_mac_size() + get_iv_size() <= rc)
+        auto this_block_underlying_size = std::min(get_underlying_block_size(), rc - i);
+        if (this_block_underlying_size <= get_mac_size() + get_iv_size())
         {
             return transformed_read_len;
         }
-
-        auto this_block_underlying_size = std::min(get_underlying_block_size(), rc - i);
         auto this_block_virtual_size = this_block_underlying_size - get_mac_size() - get_iv_size();
         auto* start_data = buffer.data() + i;
         auto* end_data = start_data + this_block_underlying_size;
@@ -172,24 +171,26 @@ AESGCMCryptStream::read_multi_blocks(offset_type start_block, offset_type end_bl
 
         if (std::all_of(start_data, end_data, [](byte b) { return b == 0; }))
         {
-            output = memset(output, 0, this_block_virtual_size);
-            continue;
+            memset(output, 0, this_block_virtual_size);
         }
+        else
+        {
+            to_little_endian(
+                static_cast<std::uint32_t>(i / get_underlying_block_size() + start_block),
+                m_auxiliary.get());
+            bool success = m_decryptor.DecryptAndVerify(static_cast<byte*>(output),
+                                                        end_data - get_mac_size(),
+                                                        get_mac_size(),
+                                                        start_data,
+                                                        static_cast<int>(get_iv_size()),
+                                                        m_auxiliary.get(),
+                                                        sizeof(std::uint32_t) + m_padding_size,
+                                                        start_data + get_iv_size(),
+                                                        this_block_virtual_size);
 
-        to_little_endian(static_cast<std::uint32_t>(i / get_underlying_block_size() + start_block),
-                         m_auxiliary.get());
-        bool success = m_decryptor.DecryptAndVerify(static_cast<byte*>(output),
-                                                    end_data - get_mac_size(),
-                                                    get_mac_size(),
-                                                    start_data,
-                                                    static_cast<int>(get_iv_size()),
-                                                    m_auxiliary.get(),
-                                                    sizeof(std::uint32_t) + m_padding_size,
-                                                    start_data + get_iv_size(),
-                                                    this_block_virtual_size);
-
-        if (m_check && !success)
-            throw LiteMessageVerificationException();
+            if (m_check && !success)
+                throw LiteMessageVerificationException();
+        }
         output = static_cast<byte*>(output) + this_block_virtual_size;
     }
     return transformed_read_len;

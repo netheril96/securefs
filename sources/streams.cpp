@@ -239,11 +239,6 @@ void BlockBasedStream::write(const void* input, offset_type offset, length_type 
     {
         return;
     }
-    if (is_sparse())
-    {
-        unchecked_write(input, offset, length);
-        return;
-    }
     auto current_size = this->size();
     if (offset > current_size)
         unchecked_resize(current_size, offset);
@@ -318,7 +313,7 @@ void BlockBasedStream::unchecked_resize(length_type current_size, length_type ne
         {
             CryptoPP::AlignedSecByteBlock buffer(m_block_size);
             memset(buffer.data(), 0, buffer.size());
-            (void)read_block(block_num, buffer.data());
+            (void)read_multi_blocks(block_num, block_num + 1, buffer.data());
             write_block(block_num, buffer.data(), residue);
         }
     }

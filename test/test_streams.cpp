@@ -213,12 +213,13 @@ namespace dummy
             }
             for (offset_type b = start_block; b < end_block; ++b)
             {
+                m_buffer.at(b).resize(BLOCK_SIZE);
                 memcpy(m_buffer[b].data(), input, BLOCK_SIZE);
                 input = static_cast<const char*>(input) + BLOCK_SIZE;
             }
             if (end_residue > 0)
             {
-                if (m_buffer.size() < end_block)
+                if (m_buffer.size() <= end_block)
                 {
                     m_buffer.emplace_back(end_residue, static_cast<byte>(0));
                 }
