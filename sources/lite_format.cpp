@@ -7,6 +7,7 @@
 #include "mystring.h"
 #include "myutils.h"
 #include "platform.h"
+#include "tags.h"
 
 #include <absl/base/thread_annotations.h>
 #include <absl/container/inlined_vector.h>
@@ -21,6 +22,7 @@
 #include <fruit/component.h>
 #include <fruit/fruit.h>
 #include <fruit/fruit_forward_decls.h>
+#include <fruit/macro.h>
 #include <uni_algo/case.h>
 #include <uni_algo/norm.h>
 
@@ -271,15 +273,18 @@ namespace
 
     class NewStyleNameTranslator : public AESSIVBasedNameTranslator
     {
+    private:
+        unsigned threshold_;
+
     public:
-        static constexpr size_t kMaxNormalFileNameSize = 128;
         static constexpr size_t kHashSize = 32;
         static constexpr size_t kComponentSizeInSymlink = 60;
 
         static constexpr std::string_view kLongNameSuffix = "...";
 
-        INJECT(NewStyleNameTranslator(ANNOTATED(tNameMasterKey, const key_type&) name_master_key))
-            : AESSIVBasedNameTranslator(name_master_key)
+        INJECT(NewStyleNameTranslator(ANNOTATED(tNameMasterKey, const key_type&) name_master_key,
+                                      ANNOTATED(tLongNameThreshold, unsigned) long_name_threshold))
+            : AESSIVBasedNameTranslator(name_master_key), threshold_(long_name_threshold)
         {
         }
 
@@ -291,7 +296,7 @@ namespace
             result.reserve(path.size() * 3);
             result.push_back('.');
 
-            std::array<unsigned char, kMaxNormalFileNameSize + kSIVSize> aes_buffer;
+            absl::InlinedVector<unsigned char, 256> aes_buffer;
             std::string part;
             part.reserve(260);
 
@@ -304,19 +309,21 @@ namespace
                 {
                     continue;
                 }
-                if (view.size() <= kMaxNormalFileNameSize)
+                if (view.size() <= threshold_)
                 {
+                    aes_buffer.resize(view.size() + kSIVSize);
                     siv.encrypt_and_authenticate(view.data(),
                                                  view.size(),
                                                  nullptr,
                                                  0,
                                                  aes_buffer.data() + kSIVSize,
                                                  aes_buffer.data());
-                    base32_encode(aes_buffer.data(), view.size() + kSIVSize, part);
+                    base32_encode(aes_buffer.data(), aes_buffer.size(), part);
                     result.append(part);
                 }
                 else
                 {
+                    aes_buffer.resize(kHashSize + kSIVSize);
                     CryptoPP::BLAKE2b blake(reinterpret_cast<const byte*>(name_master_key_.data()),
                                             name_master_key_.size(),
                                             nullptr,
@@ -334,19 +341,23 @@ namespace
                                                  0,
                                                  aes_buffer.data() + kSIVSize,
                                                  aes_buffer.data());
-                    base32_encode(aes_buffer.data(), digest.size() + kSIVSize, part);
+                    base32_encode(aes_buffer.data(), aes_buffer.size(), part);
                     result.append(part);
                     result.append(kLongNameSuffix);
                 }
             }
             if (out_encrypted_last_component != nullptr && !splits.empty()
-                && splits.back().size() > kMaxNormalFileNameSize)
+                && splits.back().size() > threshold_)
             {
                 auto view = splits.back();
-                std::vector<unsigned char> buffer(view.size() + kSIVSize);
-                siv.encrypt_and_authenticate(
-                    view.data(), view.size(), nullptr, 0, buffer.data() + kSIVSize, buffer.data());
-                base32_encode(buffer.data(), buffer.size(), *out_encrypted_last_component);
+                aes_buffer.resize(view.size() + kSIVSize);
+                siv.encrypt_and_authenticate(view.data(),
+                                             view.size(),
+                                             nullptr,
+                                             0,
+                                             aes_buffer.data() + kSIVSize,
+                                             aes_buffer.data());
+                base32_encode(aes_buffer.data(), aes_buffer.size(), *out_encrypted_last_component);
             }
             return result;
         }
@@ -438,7 +449,7 @@ namespace
 
         unsigned max_virtual_path_component_size(unsigned physical_path_component_size) override
         {
-            if (physical_path_component_size <= (kMaxNormalFileNameSize + kSIVSize) * 8 / 5)
+            if (physical_path_component_size <= (threshold_ + kSIVSize) * 8 / 5)
             {
                 return physical_path_component_size * 5 / 8 - kSIVSize;
             }
@@ -482,16 +493,12 @@ namespace
         }
     };
 
-    struct tInnerTranslator
-    {
-    };
-
     class PathNormalizingNameTranslator : public NameTranslator
     {
     public:
-        INJECT(PathNormalizingNameTranslator(ANNOTATED(tInnerTranslator, NameTranslator&) delegate,
-                                             const NameNormalizationFlags& flags))
-            : delegate_(delegate), flags_(flags)
+        (PathNormalizingNameTranslator(std::unique_ptr<NameTranslator> delegate,
+                                       const NameNormalizationFlags& flags))
+            : delegate_(std::move(delegate)), flags_(flags)
         {
         }
 
@@ -515,39 +522,39 @@ namespace
                 }
                 else
                 {
-                    return delegate_.encrypt_full_path(path, out_encrypted_last_component);
+                    return delegate_->encrypt_full_path(path, out_encrypted_last_component);
                 }
-                return delegate_.encrypt_full_path(normed_string, out_encrypted_last_component);
+                return delegate_->encrypt_full_path(normed_string, out_encrypted_last_component);
             }
             catch (const std::exception& e)
             {
                 WARN_LOG("Failed to normalize path %s: %s", path, e.what());
-                return delegate_.encrypt_full_path(path, out_encrypted_last_component);
+                return delegate_->encrypt_full_path(path, out_encrypted_last_component);
             }
         }
 
         absl::variant<InvalidNameTag, LongNameTag, std::string>
         decrypt_path_component(std::string_view path) override
         {
-            return delegate_.decrypt_path_component(path);
+            return delegate_->decrypt_path_component(path);
         }
 
         std::string encrypt_path_for_symlink(std::string_view path) override
         {
-            return delegate_.encrypt_path_for_symlink(path);
+            return delegate_->encrypt_path_for_symlink(path);
         }
         std::string decrypt_path_from_symlink(std::string_view path) override
         {
-            return delegate_.decrypt_path_from_symlink(path);
+            return delegate_->decrypt_path_from_symlink(path);
         }
 
         unsigned max_virtual_path_component_size(unsigned physical_path_component_size) override
         {
-            return delegate_.max_virtual_path_component_size(physical_path_component_size);
+            return delegate_->max_virtual_path_component_size(physical_path_component_size);
         }
 
     private:
-        NameTranslator& delegate_;
+        std::unique_ptr<NameTranslator> delegate_;
         NameNormalizationFlags flags_;
     };
 
@@ -1102,22 +1109,6 @@ void FuseHighLevelOps::process_possible_long_name(
     callback(std::move(enc_path));
 }
 
-namespace
-{
-    fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>,
-                     fruit::Annotated<tInnerTranslator, NameTranslator>>
-    get_inner_translator(bool supports_long_name)
-    {
-        if (supports_long_name)
-        {
-            return fruit::createComponent()
-                .bind<fruit::Annotated<tInnerTranslator, NameTranslator>, NewStyleNameTranslator>();
-        }
-        return fruit::createComponent()
-            .bind<fruit::Annotated<tInnerTranslator, NameTranslator>, LegacyNameTranslator>();
-    }
-}    // namespace
-
 fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
 get_name_translator_component(const NameNormalizationFlags* flags)
 {
@@ -1125,18 +1116,29 @@ get_name_translator_component(const NameNormalizationFlags* flags)
     {
         return fruit::createComponent().bind<NameTranslator, NoOpNameTranslator>();
     }
-    if (!flags->should_case_fold && !flags->should_normalize_nfc)
-    {
-        if (flags->supports_long_name)
-        {
-            return fruit::createComponent().bind<NameTranslator, NewStyleNameTranslator>();
-        }
-        return fruit::createComponent().bind<NameTranslator, LegacyNameTranslator>();
-    }
     return fruit::createComponent()
-        .bind<NameTranslator, PathNormalizingNameTranslator>()
-        .install(get_inner_translator, flags->supports_long_name)
-        .bindInstance(*flags);
+        .bindInstance(*flags)
+        .registerProvider<NameTranslator*(const NameNormalizationFlags&,
+                                          fruit::Annotated<tNameMasterKey, const key_type&>)>(
+            [](const NameNormalizationFlags& flags, const key_type& key) -> NameTranslator*
+            {
+                std::unique_ptr<NameTranslator> inner;
+                if (flags.long_name_threshold > 0)
+                {
+                    inner
+                        = std::make_unique<NewStyleNameTranslator>(key, flags.long_name_threshold);
+                }
+                else
+                {
+                    inner = std::make_unique<LegacyNameTranslator>(key);
+                }
+                if (!flags.should_case_fold && !flags.should_normalize_nfc)
+                {
+                    return inner.release();
+                }
+                return std::make_unique<PathNormalizingNameTranslator>(std::move(inner), flags)
+                    .release();
+            });
 }
 
 std::string_view NameTranslator::get_last_component(std::string_view path)

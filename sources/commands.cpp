@@ -896,7 +896,7 @@ private:
         {
             throw_runtime_error("Invalid flag of --normalization: " + normalization.getValue());
         }
-        name_norm_flags.supports_long_name = config.long_name_component;
+        name_norm_flags.long_name_threshold = config.long_name_component ? 128 : 0;
 
         auto internal_binder = [](unsigned format_version)
             -> fruit::Component<

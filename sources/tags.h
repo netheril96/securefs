@@ -38,4 +38,7 @@ struct tVerify
 struct tStoreTimeWithinFs
 {
 };
+struct tLongNameThreshold
+{
+};
 }    // namespace securefs

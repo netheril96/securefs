@@ -112,7 +112,7 @@ namespace
         OSService::get_default().ensure_directory(temp_dir_name, 0755);
         OSService root(temp_dir_name);
         NameNormalizationFlags flags{};
-        flags.supports_long_name = true;
+        flags.long_name_threshold = 133;
 
         fruit::Injector<FuseHighLevelOps> injector(+whole_component, &root, &flags);
         auto& ops = injector.get<FuseHighLevelOps&>();

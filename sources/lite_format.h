@@ -207,7 +207,7 @@ struct NameNormalizationFlags
     bool no_op;
     bool should_case_fold;
     bool should_normalize_nfc;
-    bool supports_long_name;
+    unsigned long_name_threshold;
 };
 
 fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
