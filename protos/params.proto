@@ -5,8 +5,8 @@ package securefs;
 message LegacySecurefsJsonParams
 {
     uint32 version = 1;
-    uint32 block_size = 2;
-    uint32 iv_size = 3;
+    optional uint32 block_size = 2;
+    optional uint32 iv_size = 3;
     string salt = 4;
 
     message EncryptedMasterKey
@@ -23,6 +23,9 @@ message LegacySecurefsJsonParams
     uint32 scrypt_p = 9;
     uint32 argon2_m_cost = 10;
     uint32 argon2_p = 11;
+
+    uint32 max_padding = 12;
+    bool long_name_component = 13;
 }
 
 message DecryptedSecurefsParams

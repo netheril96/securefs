@@ -175,7 +175,12 @@ if(SECUREFS_ENABLE_UNIT_TEST)
     find_package(doctest CONFIG REQUIRED)
     target_link_libraries(securefs_test PRIVATE doctest::doctest
                                                 securefs-static)
-    add_test(NAME sec_test COMMAND securefs_test)
+    add_test(
+        NAME sec_test
+        COMMAND
+            ${CMAKE_COMMAND} -E env
+            SECUREFS_TEST_REFERENCE=${PROJECT_SOURCE_DIR}/test/reference
+            securefs_test)
     target_compile_definitions(securefs_test
                                PRIVATE DOCTEST_CONFIG_SUPER_FAST_ASSERTS=1)
 endif()

@@ -1,4 +1,5 @@
 #pragma once
+#include "exceptions.h"
 #include "myutils.h"
 #include "object.h"
 
@@ -48,6 +49,17 @@ public:
      * Certain streams are more efficient when reads and writes are aligned to blocks
      */
     virtual length_type optimal_block_size() const noexcept { return 1; }
+
+    // Convienience methods.
+    std::string as_string()
+    {
+        std::string result(size(), 0);
+        if (read(result.data(), 0, result.size()) != result.size())
+        {
+            throw_runtime_error("Stream changed concurrently during read");
+        }
+        return result;
+    }
 };
 
 /**
@@ -87,11 +99,13 @@ protected:
 
 protected:
     virtual length_type
-    read_multi_blocks(offset_type start_block, offset_type end_block, void* output)=0;
+    read_multi_blocks(offset_type start_block, offset_type end_block, void* output)
+        = 0;
     virtual void write_multi_blocks(offset_type start_block,
                                     offset_type end_block,
                                     offset_type end_residue,
-                                    const void* input)=0;
+                                    const void* input)
+        = 0;
     virtual void adjust_logical_size(length_type length) = 0;
 
 private:
