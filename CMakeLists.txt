@@ -60,21 +60,21 @@ include_directories(BEFORE sources)
 file(GLOB SOURCES sources/*.cpp sources/*.h ${CMAKE_BINARY_DIR}/git-version.cpp)
 file(GLOB TEST_SOURCES test/*.h test/*.cpp)
 add_library(securefs-static STATIC ${SOURCES})
-link_libraries(securefs-static)
 
 if(WIN32)
     add_executable(securefs main.cpp securefs.manifest)
 else()
     add_executable(securefs main.cpp)
 endif()
+target_link_libraries(securefs PRIVATE securefs-static)
 
 find_package(Threads REQUIRED)
 target_link_libraries(securefs-static PUBLIC Threads::Threads)
 find_path(TCLAP_INCLUDE_DIRS "tclap/Arg.h")
-target_include_directories(securefs-static PUBLIC ${TCLAP_INCLUDE_DIRS})
+target_include_directories(securefs-static PUBLIC SYSTEM ${TCLAP_INCLUDE_DIRS})
 find_package(absl CONFIG REQUIRED)
 find_package(uni-algo CONFIG REQUIRED)
-
+find_package(Protobuf CONFIG REQUIRED)
 target_link_libraries(
     securefs-static
     PUBLIC uni-algo::uni-algo
@@ -86,6 +86,14 @@ target_link_libraries(
            absl::strings
            absl::str_format
            absl::span)
+add_library(securefs-proto OBJECT protos/params.proto)
+target_link_libraries(securefs-proto PUBLIC protobuf::libprotobuf)
+set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+target_include_directories(securefs-proto
+                           PUBLIC "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>")
+protobuf_generate(TARGET securefs-proto IMPORT_DIRS "protos" PROTOC_OUT_DIR
+                  "${PROTO_BINARY_DIR}")
+target_link_libraries(securefs-static PUBLIC securefs-proto)
 if(SECUREFS_USE_VCPKG)
     find_package(cryptopp CONFIG REQUIRED)
     target_link_libraries(securefs-static PUBLIC cryptopp::cryptopp)
@@ -165,7 +173,8 @@ endif()
 if(SECUREFS_ENABLE_UNIT_TEST)
     add_executable(securefs_test ${TEST_SOURCES})
     find_package(doctest CONFIG REQUIRED)
-    target_link_libraries(securefs_test PRIVATE doctest::doctest)
+    target_link_libraries(securefs_test PRIVATE doctest::doctest
+                                                securefs-static)
     add_test(NAME sec_test COMMAND securefs_test)
     target_compile_definitions(securefs_test
                                PRIVATE DOCTEST_CONFIG_SUPER_FAST_ASSERTS=1)

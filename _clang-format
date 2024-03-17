@@ -62,3 +62,6 @@ ForEachMacros:   [ foreach, Q_FOREACH, BOOST_FOREACH ]
 SpaceBeforeParens: ControlStatements
 DisableFormat:   false
 ...
+---
+Language: Proto
+BasedOnStyle: WebKit

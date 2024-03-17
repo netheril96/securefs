@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package securefs;
+
+message LegacySecurefsJsonParams
+{
+    uint32 version = 1;
+    uint32 block_size = 2;
+    uint32 iv_size = 3;
+    string salt = 4;
+
+    message EncryptedMasterKey
+    {
+        string iv = 1 [ json_name = "IV" ];
+        string mac = 2 [ json_name = "MAC" ];
+        string ciphertext = 3 [ json_name = "key" ];
+    }
+    EncryptedMasterKey encrypted_key = 5;
+
+    uint32 iterations = 6;
+    string pbkdf = 7;
+    uint32 scrypt_r = 8;
+    uint32 scrypt_p = 9;
+    uint32 argon2_m_cost = 10;
+    uint32 argon2_p = 11;
+}
+
+message DecryptedSecurefsParams
+{
+    message SizeParams
+    {
+        uint32 block_size = 1;
+        uint32 iv_size = 2;
+        uint32 max_padding_size = 3;
+    }
+
+    SizeParams size_params = 1;
+
+    message LiteFormatParams
+    {
+        bytes name_key = 1;
+        bytes content_key = 2;
+        bytes xattr_key = 3;
+        bytes padding_key = 4;
+        optional uint32 long_name_threshold = 5;
+    }
+
+    message FullFormatParams
+    {
+        bytes master_key = 1;
+        bool store_time = 2;
+    }
+
+    oneof format_specific_params
+    {
+        LiteFormatParams lite_format_params = 2;
+        FullFormatParams full_format_params = 3;
+    }
+}

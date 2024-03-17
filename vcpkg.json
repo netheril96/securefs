@@ -15,6 +15,7 @@
             ]
         },
         "bshoshany-thread-pool",
-        "uni-algo"
+        "uni-algo",
+        "protobuf"
     ]
 }
