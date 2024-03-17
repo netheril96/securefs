@@ -180,7 +180,7 @@ if(SECUREFS_ENABLE_UNIT_TEST)
         COMMAND
             ${CMAKE_COMMAND} -E env
             SECUREFS_TEST_REFERENCE=${PROJECT_SOURCE_DIR}/test/reference
-            securefs_test)
+            $<TARGET_FILE:securefs_test>)
     target_compile_definitions(securefs_test
                                PRIVATE DOCTEST_CONFIG_SUPER_FAST_ASSERTS=1)
 endif()

@@ -69,15 +69,28 @@ namespace
                     auto content
                         = root.open_file_stream(absl::StrCat(dir_name, "/", name), O_RDONLY, 0)
                               ->as_string();
-                    auto decrypted = decrypt(content, password, key_stream.get());
+                    try
+                    {
+                        params.emplace_back(decrypt(content, password, key_stream.get()));
+                    }
+                    catch (const PasswordOrKeyfileIncorrectException&)
+                    {
+                        CHECK_MESSAGE(
+                            false,
+                            absl::StrFormat(
+                                "Decryption failed due to password/keyfile mismatch for file %s "
+                                "(password %s, keyfile %v)",
+                                root.norm_path_narrowed(absl::StrCat(dir_name, "/", name)),
+                                password,
+                                bool(key_stream)));
+                    }
                     ++total_cases;
-                    params.emplace_back(std::move(decrypted));
 
                     CHECK_THROWS(decrypt(content, "ABC", key_stream.get()));
                 }
 
                 REQUIRE(params.size() > 1);
-                for (size_t i = 0; i < params.size(); ++i)
+                for (size_t i = 1; i < params.size(); ++i)
                 {
                     REQUIRE(differ.Compare(params[i - 1], params[i]));
                 }

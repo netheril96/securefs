@@ -119,8 +119,8 @@ namespace
 
         if (key_stream == nullptr)
         {
-            return try_func(compute_password_derived_key(
-                legacy, password, as_byte_span(absl::HexStringToBytes(original_salt))));
+            return try_func(
+                compute_password_derived_key(legacy, password, as_byte_span(original_salt)));
         }
         return try_func(compute_password_derived_key(
                    legacy, password, hmac_sha256(as_byte_span(original_salt), *key_stream)))
@@ -190,11 +190,11 @@ DecryptedSecurefsParams decrypt(const LegacySecurefsJsonParams& legacy,
 
     if (!success)
     {
-        throw_runtime_error("Password or keyfile combination is incorrect");
+        throw PasswordOrKeyfileIncorrectException();
     }
     if (legacy.version() == 4)
     {
-        if (master_key.size() != 3 * key_type::size() || master_key.size() != 4 * key_type::size())
+        if (master_key.size() != 3 * key_type::size() && master_key.size() != 4 * key_type::size())
         {
             throw_runtime_error("Invalid master key size");
         }
