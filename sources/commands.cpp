@@ -915,10 +915,10 @@ private:
             {
             case DecryptedSecurefsParams::kLiteFormatParams:
                 return fruit::createComponent()
-                    .bind<FuseHighLevelOpsBase, full_format::FuseHighLevelOps>();
+                    .bind<FuseHighLevelOpsBase, lite_format::FuseHighLevelOps>();
             case DecryptedSecurefsParams::kFullFormatParams:
                 return fruit::createComponent()
-                    .bind<FuseHighLevelOpsBase, lite_format::FuseHighLevelOps>();
+                    .bind<FuseHighLevelOpsBase, full_format::FuseHighLevelOps>();
             default:
                 throwInvalidArgumentException("Unknown format case");
             }
