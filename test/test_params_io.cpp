@@ -1,3 +1,4 @@
+#include "mystring.h"
 #include "params.pb.h"
 #include "params_io.h"
 #include "platform.h"
@@ -71,7 +72,8 @@ namespace
                               ->as_string();
                     try
                     {
-                        params.emplace_back(decrypt(content, password, key_stream.get()));
+                        params.emplace_back(
+                            decrypt(content, as_byte_span(password), key_stream.get()));
                     }
                     catch (const PasswordOrKeyfileIncorrectException&)
                     {
@@ -86,7 +88,7 @@ namespace
                     }
                     ++total_cases;
 
-                    CHECK_THROWS(decrypt(content, "ABC", key_stream.get()));
+                    CHECK_THROWS(decrypt(content, as_byte_span("ABC"), key_stream.get()));
                 }
 
                 REQUIRE(params.size() > 1);

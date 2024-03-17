@@ -16,6 +16,15 @@ std::string to_lower(const std::string& str)
     return result;
 }
 
+std::vector<byte> parse_hex(std::string_view hex)
+{
+    if (hex.size() % 2 != 0)
+        throwInvalidArgumentException("Hex string must have an even length");
+    std::vector<byte> result(hex.size() / 2);
+    parse_hex(hex, result.data(), result.size());
+    return result;
+}
+
 void parse_hex(std::string_view hex, byte* output, size_t len)
 {
     if (hex.size() % 2 != 0)

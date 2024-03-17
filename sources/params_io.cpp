@@ -16,9 +16,8 @@
 #include <cryptopp/pwdbased.h>
 #include <cryptopp/scrypt.h>
 #include <cryptopp/sha.h>
-
-#include <cstdint>
 #include <google/protobuf/util/json_util.h>
+
 #include <string>
 #include <string_view>
 #include <vector>
@@ -31,13 +30,8 @@ namespace
     const char* const PBKDF_ALGO_SCRYPT = "scrypt";
     const char* const PBKDF_ALGO_ARGON2ID = "argon2id";
 
-    absl::Span<const byte> as_byte_span(std::string_view view)
-    {
-        return {reinterpret_cast<const byte*>(view.data()), view.size()};
-    }
-
     key_type compute_password_derived_key(const LegacySecurefsJsonParams& legacy,
-                                          std::string_view password,
+                                          absl::Span<const byte> password,
                                           absl::Span<const byte> effective_salt)
     {
         key_type result;
@@ -62,7 +56,7 @@ namespace
             CryptoPP::Scrypt scrypt;
             scrypt.DeriveKey(result.data(),
                              result.size(),
-                             reinterpret_cast<const byte*>(password.data()),
+                             password.data(),
                              password.size(),
                              effective_salt.data(),
                              effective_salt.size(),
@@ -76,7 +70,7 @@ namespace
             kdf.DeriveKey(result.data(),
                           result.size(),
                           0,
-                          reinterpret_cast<const byte*>(password.data()),
+                          password.data(),
                           password.size(),
                           effective_salt.data(),
                           effective_salt.size(),
@@ -111,22 +105,20 @@ namespace
     // Because we have had two historical ways of key derivation when key file is present, we need
     // to try them in sequence.
     bool try_password_derived_key(const LegacySecurefsJsonParams& legacy,
-                                  std::string_view password,
+                                  absl::Span<const byte> password,
                                   /* nullable */ StreamBase* key_stream,
                                   absl::FunctionRef<bool(const key_type&)> try_func)
     {
-        auto original_salt = absl::HexStringToBytes(legacy.salt());
+        auto original_salt = parse_hex(legacy.salt());
 
         if (key_stream == nullptr)
         {
-            return try_func(
-                compute_password_derived_key(legacy, password, as_byte_span(original_salt)));
+            return try_func(compute_password_derived_key(legacy, password, original_salt));
         }
         return try_func(compute_password_derived_key(
-                   legacy, password, hmac_sha256(as_byte_span(original_salt), *key_stream)))
-            || try_func(hmac_sha256(
-                compute_password_derived_key(legacy, password, as_byte_span(original_salt)),
-                *key_stream));
+                   legacy, password, hmac_sha256(original_salt, *key_stream)))
+            || try_func(hmac_sha256(compute_password_derived_key(legacy, password, original_salt),
+                                    *key_stream));
     }
 
     std::string get_version_header(unsigned version)
@@ -150,7 +142,7 @@ namespace
     }
 }    // namespace
 DecryptedSecurefsParams decrypt(const LegacySecurefsJsonParams& legacy,
-                                std::string_view password,
+                                absl::Span<const byte> password,
                                 /* nullable */ StreamBase* key_stream)
 {
 
@@ -168,23 +160,22 @@ DecryptedSecurefsParams decrypt(const LegacySecurefsJsonParams& legacy,
         key_stream,
         [&](const key_type& wrapping_key)
         {
-            auto iv = absl::HexStringToBytes(legacy.encrypted_key().iv());
-            auto mac = absl::HexStringToBytes(legacy.encrypted_key().mac());
-            auto ciphertext = absl::HexStringToBytes(legacy.encrypted_key().ciphertext());
+            auto iv = parse_hex(legacy.encrypted_key().iv());
+            auto mac = parse_hex(legacy.encrypted_key().mac());
+            auto ciphertext = parse_hex(legacy.encrypted_key().ciphertext());
             auto header = get_version_header(legacy.version());
 
             CryptoPP::GCM<CryptoPP::AES>::Decryption dec;
-            dec.SetKeyWithIV(
-                wrapping_key.data(), wrapping_key.size(), as_byte_span(iv).data(), iv.size());
+            dec.SetKeyWithIV(wrapping_key.data(), wrapping_key.size(), iv.data(), iv.size());
             master_key.resize(ciphertext.size());
             return dec.DecryptAndVerify(master_key.data(),
-                                        as_byte_span(mac).data(),
+                                        mac.data(),
                                         mac.size(),
-                                        as_byte_span(iv).data(),
+                                        iv.data(),
                                         static_cast<int>(iv.size()),
-                                        as_byte_span(header).data(),
+                                        reinterpret_cast<const byte*>(header.data()),
                                         header.size(),
-                                        as_byte_span(ciphertext).data(),
+                                        ciphertext.data(),
                                         ciphertext.size());
         });
 
@@ -250,7 +241,7 @@ DecryptedSecurefsParams decrypt(const LegacySecurefsJsonParams& legacy,
 }
 
 DecryptedSecurefsParams decrypt(std::string_view content,
-                                std::string_view password,
+                                absl::Span<const byte> password,
                                 /* nullable */ StreamBase* key_stream)
 {
     LegacySecurefsJsonParams legacy;

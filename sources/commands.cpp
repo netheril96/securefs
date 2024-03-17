@@ -1083,7 +1083,7 @@ public:
         }
         fsparams = decrypt(
             config_content,
-            {reinterpret_cast<const char*>(password.data()), password.size()},
+            {password.data(), password.size()},
             keyfile.getValue().empty()
                 ? nullptr
                 : OSService::get_default().open_file_stream(keyfile.getValue(), O_RDONLY, 0).get());
