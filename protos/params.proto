@@ -61,3 +61,23 @@ message DecryptedSecurefsParams
         FullFormatParams full_format_params = 3;
     }
 }
+
+message EncryptedSecurefsParams
+{
+    bytes salt = 1;
+    bytes iv = 2;
+    bytes mac = 3;
+    bytes ciphertext = 4;
+
+    message Argon2idParams
+    {
+        uint32 time_cost = 1;
+        uint32 memory_cost = 2;
+        uint32 parallelism = 3;
+    }
+
+    oneof pbkdf_params
+    {
+        Argon2idParams argon2id_params = 5;
+    }
+}

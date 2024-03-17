@@ -1,5 +1,6 @@
 #include "params_io.h"
 
+#include "crypto.h"
 #include "exceptions.h"
 #include "mystring.h"
 #include "myutils.h"
@@ -10,12 +11,14 @@
 #include <absl/strings/escaping.h>
 #include <absl/strings/str_format.h>
 #include <absl/types/span.h>
+#include <algorithm>
 #include <argon2.h>
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
 #include <cryptopp/pwdbased.h>
 #include <cryptopp/scrypt.h>
 #include <cryptopp/sha.h>
+#include <cstdint>
 #include <google/protobuf/util/json_util.h>
 
 #include <string>
@@ -29,10 +32,11 @@ namespace
     const char* const PBKDF_ALGO_PKCS5 = "pkcs5-pbkdf2-hmac-sha256";
     const char* const PBKDF_ALGO_SCRYPT = "scrypt";
     const char* const PBKDF_ALGO_ARGON2ID = "argon2id";
+    constexpr size_t kParamIvSize = 12, kParamMacSize = 16, kParamSaltSize = 32;
 
-    key_type compute_password_derived_key(const LegacySecurefsJsonParams& legacy,
-                                          absl::Span<const byte> password,
-                                          absl::Span<const byte> effective_salt)
+    key_type legacy_compute_password_derived_key(const LegacySecurefsJsonParams& legacy,
+                                                 absl::Span<const byte> password,
+                                                 absl::Span<const byte> effective_salt)
     {
         key_type result;
         if (legacy.pbkdf() == PBKDF_ALGO_ARGON2ID)
@@ -104,21 +108,21 @@ namespace
 
     // Because we have had two historical ways of key derivation when key file is present, we need
     // to try them in sequence.
-    bool try_password_derived_key(const LegacySecurefsJsonParams& legacy,
-                                  absl::Span<const byte> password,
-                                  /* nullable */ StreamBase* key_stream,
-                                  absl::FunctionRef<bool(const key_type&)> try_func)
+    bool try_legacy_password_derived_key(const LegacySecurefsJsonParams& legacy,
+                                         absl::Span<const byte> password,
+                                         /* nullable */ StreamBase* key_stream,
+                                         absl::FunctionRef<bool(const key_type&)> try_func)
     {
         auto original_salt = parse_hex(legacy.salt());
 
         if (key_stream == nullptr)
         {
-            return try_func(compute_password_derived_key(legacy, password, original_salt));
+            return try_func(legacy_compute_password_derived_key(legacy, password, original_salt));
         }
-        return try_func(compute_password_derived_key(
+        return try_func(legacy_compute_password_derived_key(
                    legacy, password, hmac_sha256(original_salt, *key_stream)))
-            || try_func(hmac_sha256(compute_password_derived_key(legacy, password, original_salt),
-                                    *key_stream));
+            || try_func(hmac_sha256(
+                legacy_compute_password_derived_key(legacy, password, original_salt), *key_stream));
     }
 
     std::string get_version_header(unsigned version)
@@ -140,6 +144,39 @@ namespace
     {
         str->assign(reinterpret_cast<const char*>(span.data()), span.size());
     }
+    void randomize(std::string* str, size_t size)
+    {
+        str->resize(size);
+        generate_random(str->data(), str->size());
+    }
+    key_type compute_password_derived_key(const EncryptedSecurefsParams& encparams,
+                                          absl::Span<const byte> password,
+                                          /* nullable */ StreamBase* key_stream)
+    {
+        key_type key,
+            effective_salt(reinterpret_cast<const byte*>(encparams.salt().data()),
+                           encparams.salt().size());
+        if (key_stream)
+        {
+            effective_salt = hmac_sha256(as_byte_span(encparams.salt()), *key_stream);
+        }
+
+        int rc = ::argon2id_hash_raw(encparams.argon2id_params().time_cost(),
+                                     encparams.argon2id_params().memory_cost(),
+                                     encparams.argon2id_params().parallelism(),
+                                     password.data(),
+                                     password.size(),
+                                     effective_salt.data(),
+                                     effective_salt.size(),
+                                     key.data(),
+                                     key.size());
+        if (rc)
+        {
+            throw_runtime_error(
+                absl::StrFormat("argon2id key derivation fails with error code %d", rc));
+        }
+        return key;
+    }
 }    // namespace
 DecryptedSecurefsParams decrypt(const LegacySecurefsJsonParams& legacy,
                                 absl::Span<const byte> password,
@@ -154,7 +191,7 @@ DecryptedSecurefsParams decrypt(const LegacySecurefsJsonParams& legacy,
 
     std::vector<byte> master_key;
 
-    bool success = try_password_derived_key(
+    bool success = try_legacy_password_derived_key(
         legacy,
         password,
         key_stream,
@@ -239,16 +276,84 @@ DecryptedSecurefsParams decrypt(const LegacySecurefsJsonParams& legacy,
     }
     return result;
 }
+DecryptedSecurefsParams decrypt(const EncryptedSecurefsParams& encparams,
+                                absl::Span<const byte> password,
+                                /* nullable */ StreamBase* key_stream)
+{
+    auto wrapping_key = compute_password_derived_key(encparams, password, key_stream);
+    CryptoPP::GCM<CryptoPP::AES>::Decryption dec;
+    dec.SetKeyWithIV(wrapping_key.data(),
+                     wrapping_key.size(),
+                     reinterpret_cast<const byte*>(encparams.iv().data()),
+                     encparams.iv().size());
+    std::vector<byte> plaintext(encparams.ciphertext().size());
+    if (!dec.DecryptAndVerify(plaintext.data(),
+                              reinterpret_cast<const byte*>(encparams.mac().data()),
+                              encparams.mac().size(),
+                              reinterpret_cast<const byte*>(encparams.iv().data()),
+                              static_cast<int>(encparams.iv().size()),
+                              nullptr,
+                              0,
+                              reinterpret_cast<const byte*>(encparams.ciphertext().data()),
+                              encparams.ciphertext().size()))
+    {
+        throw PasswordOrKeyfileIncorrectException();
+    }
+    DecryptedSecurefsParams result;
+    if (!result.ParseFromArray(plaintext.data(), plaintext.size()))
+    {
+        throw_runtime_error(
+            "The config file has an invalid format, even though it decrypted successfully");
+    }
+    return result;
+}
+
+EncryptedSecurefsParams encrypt(const DecryptedSecurefsParams& decparams,
+                                const EncryptedSecurefsParams::Argon2idParams& argon2id_params,
+                                absl::Span<const byte> password,
+                                /* nullable */ StreamBase* key_stream)
+{
+    EncryptedSecurefsParams result;
+    randomize(result.mutable_iv(), kParamIvSize);
+    randomize(result.mutable_salt(), kParamSaltSize);
+    result.mutable_mac()->resize(kParamMacSize);
+    result.mutable_argon2id_params()->CopyFrom(argon2id_params);
+
+    auto plaintext = decparams.SerializeAsString();
+    result.mutable_ciphertext()->resize(plaintext.size());
+
+    auto wrapping_key = compute_password_derived_key(result, password, key_stream);
+    CryptoPP::GCM<CryptoPP::AES>::Encryption enc;
+    enc.SetKeyWithIV(wrapping_key.data(),
+                     wrapping_key.size(),
+                     reinterpret_cast<const byte*>(result.iv().data()),
+                     result.iv().size());
+    enc.EncryptAndAuthenticate(reinterpret_cast<byte*>(result.mutable_ciphertext()->data()),
+                               reinterpret_cast<byte*>(result.mutable_mac()->data()),
+                               kParamMacSize,
+                               reinterpret_cast<const byte*>(result.iv().data()),
+                               kParamIvSize,
+                               nullptr,
+                               0,
+                               reinterpret_cast<const byte*>(plaintext.data()),
+                               plaintext.size());
+    return result;
+}
 
 DecryptedSecurefsParams decrypt(std::string_view content,
                                 absl::Span<const byte> password,
                                 /* nullable */ StreamBase* key_stream)
 {
+    EncryptedSecurefsParams encparams;
+    if (encparams.ParseFromString({content.data(), content.size()}))
+    {
+        return decrypt(encparams, password, key_stream);
+    }
     LegacySecurefsJsonParams legacy;
     auto status = google::protobuf::util::JsonStringToMessage(content, &legacy);
     if (!status.ok())
     {
-        throw_runtime_error("Parse JSON config fails: " + status.ToString());
+        throw_runtime_error("The configuration file can neither be parsed as protobuf nor as JSON");
     }
     return decrypt(legacy, password, key_stream);
 }

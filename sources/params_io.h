@@ -19,7 +19,14 @@ public:
 DecryptedSecurefsParams decrypt(const LegacySecurefsJsonParams& legacy,
                                 absl::Span<const byte> password,
                                 /* nullable */ StreamBase* key_stream);
+DecryptedSecurefsParams decrypt(const EncryptedSecurefsParams& encparams,
+                                absl::Span<const byte> password,
+                                /* nullable */ StreamBase* key_stream);
 DecryptedSecurefsParams decrypt(std::string_view content,
+                                absl::Span<const byte> password,
+                                /* nullable */ StreamBase* key_stream);
+EncryptedSecurefsParams encrypt(const DecryptedSecurefsParams& decparams,
+                                const EncryptedSecurefsParams::Argon2idParams& argon2id_params,
                                 absl::Span<const byte> password,
                                 /* nullable */ StreamBase* key_stream);
 }    // namespace securefs

@@ -32,6 +32,10 @@ namespace
     {
         OSService root(refdir());
         google::protobuf::util::MessageDifferencer differ;
+        EncryptedSecurefsParams::Argon2idParams argon2id_params;
+        argon2id_params.set_memory_cost(64);
+        argon2id_params.set_parallelism(2);
+        argon2id_params.set_time_cost(2);
 
         unsigned total_cases = 0;
         for (int version = 1; version <= 4; ++version)
@@ -87,6 +91,12 @@ namespace
                                 bool(key_stream)));
                     }
                     ++total_cases;
+
+                    auto encparams = encrypt(
+                        params.back(), argon2id_params, as_byte_span(password), key_stream.get());
+                    auto decrypted_again
+                        = decrypt(encparams, as_byte_span(password), key_stream.get());
+                    CHECK(differ.Compare(decrypted_again, params.back()));
 
                     CHECK_THROWS(decrypt(content, as_byte_span("ABC"), key_stream.get()));
                 }
