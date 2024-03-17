@@ -88,7 +88,7 @@ target_link_libraries(
            absl::span)
 add_library(securefs-proto OBJECT protos/params.proto)
 target_link_libraries(securefs-proto PUBLIC protobuf::libprotobuf)
-set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 target_include_directories(securefs-proto
                            PUBLIC "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>")
 protobuf_generate(TARGET securefs-proto IMPORT_DIRS "protos" PROTOC_OUT_DIR
