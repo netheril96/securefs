@@ -967,7 +967,12 @@ private:
                 { return from_byte_string(cmd.fsparams.lite_format_params().xattr_key()); })
             .registerProvider<fruit::Annotated<tPaddingMasterKey, key_type>(const MountCommand&)>(
                 [](const MountCommand& cmd)
-                { return from_byte_string(cmd.fsparams.lite_format_params().padding_key()); })
+                {
+                    if (cmd.fsparams.size_params().max_padding_size() > 0
+                        || !cmd.fsparams.lite_format_params().padding_key().empty())
+                        return from_byte_string(cmd.fsparams.lite_format_params().padding_key());
+                    return key_type();
+                })
             .registerProvider([](const MountCommand& cmd)
                               { return new OSService(cmd.data_dir.getValue()); });
     }
