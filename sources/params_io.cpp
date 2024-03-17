@@ -18,6 +18,7 @@
 #include <cryptopp/sha.h>
 
 #include <cstdint>
+#include <google/protobuf/util/json_util.h>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -152,6 +153,7 @@ DecryptedSecurefsParams decrypt(const LegacySecurefsJsonParams& legacy,
                                 std::string_view password,
                                 /* nullable */ StreamBase* key_stream)
 {
+
     DecryptedSecurefsParams result;
     result.mutable_size_params()->set_block_size(legacy.has_block_size() ? legacy.block_size()
                                                                          : 4096);
@@ -213,7 +215,10 @@ DecryptedSecurefsParams decrypt(const LegacySecurefsJsonParams& legacy,
         assign(result.mutable_full_format_params()->mutable_master_key(),
                {master_key.data(), master_key.size()});
     }
-
+    if (legacy.version() == 1)
+    {
+        result.mutable_full_format_params()->set_legacy_file_table_io(true);
+    }
     if (legacy.version() == 3)
     {
         result.mutable_full_format_params()->set_store_time(true);
@@ -222,6 +227,38 @@ DecryptedSecurefsParams decrypt(const LegacySecurefsJsonParams& legacy,
     {
         result.mutable_lite_format_params()->set_long_name_threshold(128);
     }
+    if (result.has_lite_format_params())
+    {
+        warn_if_key_not_random(
+            as_byte_span(result.lite_format_params().name_key()), __FILE__, __LINE__);
+        warn_if_key_not_random(
+            as_byte_span(result.lite_format_params().content_key()), __FILE__, __LINE__);
+        warn_if_key_not_random(
+            as_byte_span(result.lite_format_params().xattr_key()), __FILE__, __LINE__);
+        if (!result.lite_format_params().padding_key().empty())
+        {
+            warn_if_key_not_random(
+                as_byte_span(result.lite_format_params().padding_key()), __FILE__, __LINE__);
+        }
+    }
+    else
+    {
+        warn_if_key_not_random(
+            as_byte_span(result.full_format_params().master_key()), __FILE__, __LINE__);
+    }
     return result;
+}
+
+DecryptedSecurefsParams decrypt(std::string_view content,
+                                std::string_view password,
+                                /* nullable */ StreamBase* key_stream)
+{
+    LegacySecurefsJsonParams legacy;
+    auto status = google::protobuf::util::JsonStringToMessage(content, &legacy);
+    if (!status.ok())
+    {
+        throw_runtime_error("Parse JSON config fails: " + status.ToString());
+    }
+    return decrypt(legacy, password, key_stream);
 }
 }    // namespace securefs

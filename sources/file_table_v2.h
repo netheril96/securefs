@@ -34,7 +34,7 @@ public:
 };
 
 fruit::Component<fruit::Required<OSService, fruit::Annotated<tReadOnly, bool>>, FileTableIO>
-get_table_io_component(unsigned format_version);
+get_table_io_component(bool legacy);
 
 class FileTable;
 class FileTableCloser;

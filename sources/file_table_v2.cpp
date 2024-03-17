@@ -333,9 +333,9 @@ namespace
 }    // namespace
 
 fruit::Component<fruit::Required<OSService, fruit::Annotated<tReadOnly, bool>>, FileTableIO>
-get_table_io_component(unsigned format_version)
+get_table_io_component(bool legacy)
 {
-    if (format_version == 1)
+    if (legacy)
     {
         return fruit::createComponent().bind<FileTableIO, FileTableIOVersion1>();
     }

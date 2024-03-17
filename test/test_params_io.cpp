@@ -2,6 +2,7 @@
 #include "params_io.h"
 #include "platform.h"
 #include "streams.h"
+#include "tags.h"
 
 #include <absl/strings/match.h>
 #include <absl/strings/str_cat.h>
@@ -51,18 +52,6 @@ namespace
                     {
                         continue;
                     }
-                    auto json
-                        = root.open_file_stream(absl::StrCat(dir_name, "/", name), O_RDONLY, 0)
-                              ->as_string();
-                    LegacySecurefsJsonParams legacy;
-                    auto status = google::protobuf::util::JsonStringToMessage(
-                        json, &legacy, google::protobuf::util::JsonParseOptions());
-                    REQUIRE_MESSAGE(
-                        status.ok(),
-                        absl::StrFormat("Failed to parse config file %s: %s",
-                                        root.norm_path_narrowed(absl::StrCat(dir_name, "/", name)),
-                                        status.message().as_string()));
-
                     std::string password;
                     std::shared_ptr<StreamBase> key_stream;
                     if (absl::StrContainsIgnoreCase(name, "PASSWORD"))
@@ -77,11 +66,14 @@ namespace
                     {
                         password = " ";
                     }
-                    auto decrypted = decrypt(legacy, password, key_stream.get());
+                    auto content
+                        = root.open_file_stream(absl::StrCat(dir_name, "/", name), O_RDONLY, 0)
+                              ->as_string();
+                    auto decrypted = decrypt(content, password, key_stream.get());
                     ++total_cases;
                     params.emplace_back(std::move(decrypted));
 
-                    CHECK_THROWS(decrypt(legacy, "ABC", key_stream.get()));
+                    CHECK_THROWS(decrypt(content, "ABC", key_stream.get()));
                 }
 
                 REQUIRE(params.size() > 1);

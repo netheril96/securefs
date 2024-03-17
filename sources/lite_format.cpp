@@ -497,8 +497,9 @@ namespace
     {
     public:
         (PathNormalizingNameTranslator(std::unique_ptr<NameTranslator> delegate,
-                                       const NameNormalizationFlags& flags))
-            : delegate_(std::move(delegate)), flags_(flags)
+                                       bool case_fold,
+                                       bool nfc))
+            : delegate_(std::move(delegate)), case_fold_(case_fold), nfc_(nfc)
         {
         }
 
@@ -508,21 +509,16 @@ namespace
             try
             {
                 std::string normed_string;
-                if (flags_.should_case_fold && flags_.should_normalize_nfc)
+                std::string_view subject = path;
+                if (nfc_)
                 {
-                    normed_string = una::norm::to_nfc_utf8(una::cases::to_casefold_utf8(path));
+                    normed_string = una::norm::to_nfc_utf8(subject);
+                    subject = normed_string;
                 }
-                else if (flags_.should_normalize_nfc)
+                if (case_fold_)
                 {
-                    normed_string = una::norm::to_nfc_utf8(path);
-                }
-                else if (flags_.should_case_fold)
-                {
-                    normed_string = una::cases::to_casefold_utf8(path);
-                }
-                else
-                {
-                    return delegate_->encrypt_full_path(path, out_encrypted_last_component);
+                    normed_string = una::cases::to_casefold_utf8(subject);
+                    subject = normed_string;
                 }
                 return delegate_->encrypt_full_path(normed_string, out_encrypted_last_component);
             }
@@ -555,7 +551,8 @@ namespace
 
     private:
         std::unique_ptr<NameTranslator> delegate_;
-        NameNormalizationFlags flags_;
+        bool case_fold_;
+        bool nfc_;
     };
 
     class DirectoryImpl : public Directory
@@ -1136,8 +1133,8 @@ get_name_translator_component(const NameNormalizationFlags* flags)
                 {
                     return inner.release();
                 }
-                return std::make_unique<PathNormalizingNameTranslator>(std::move(inner), flags)
-                    .release();
+                return new PathNormalizingNameTranslator(
+                    std::move(inner), flags.should_case_fold, flags.should_normalize_nfc);
             });
 }
 

@@ -10,6 +10,8 @@
 #include "lock_enabled.h"
 #include "logger.h"
 #include "myutils.h"
+#include "params.pb.h"
+#include "params_io.h"
 #include "platform.h"
 #include "tags.h"
 #include "win_get_proc.h"    // IWYU pragma: keep
@@ -28,6 +30,7 @@
 #include <fruit/fruit.h>
 #include <fruit/fruit_forward_decls.h>
 #include <json/json.h>
+#include <string_view>
 #include <tclap/CmdLine.h>
 
 #include <algorithm>
@@ -831,7 +834,7 @@ private:
                                       "names. Use it at your own risk. No effect on full format.",
                                       false};
 
-    FSConfig config{};
+    DecryptedSecurefsParams fsparams{};
     lite_format::NameNormalizationFlags name_norm_flags{};
 
 private:
@@ -873,6 +876,11 @@ private:
         return result;
     }
 
+    static key_type from_byte_string(std::string_view view)
+    {
+        return key_type{reinterpret_cast<const byte*>(view.data()), view.size()};
+    }
+
     fruit::Component<FuseHighLevelOpsBase> get_fuse_high_ops_component()
     {
         if (plain_text_names.getValue())
@@ -896,33 +904,39 @@ private:
         {
             throw_runtime_error("Invalid flag of --normalization: " + normalization.getValue());
         }
-        name_norm_flags.long_name_threshold = config.long_name_component ? 128 : 0;
+        name_norm_flags.long_name_threshold = fsparams.lite_format_params().long_name_threshold();
 
-        auto internal_binder = [](unsigned format_version)
+        auto internal_binder = [](DecryptedSecurefsParams::FormatSpecificParamsCase format_case)
             -> fruit::Component<
                 fruit::Required<lite_format::FuseHighLevelOps, full_format::FuseHighLevelOps>,
                 FuseHighLevelOpsBase>
         {
-            if (format_version < 4)
+            switch (format_case)
             {
+            case DecryptedSecurefsParams::kLiteFormatParams:
                 return fruit::createComponent()
                     .bind<FuseHighLevelOpsBase, full_format::FuseHighLevelOps>();
+            case DecryptedSecurefsParams::kFullFormatParams:
+                return fruit::createComponent()
+                    .bind<FuseHighLevelOpsBase, lite_format::FuseHighLevelOps>();
+            default:
+                throwInvalidArgumentException("Unknown format case");
             }
-            return fruit::createComponent()
-                .bind<FuseHighLevelOpsBase, lite_format::FuseHighLevelOps>();
         };
 
         return fruit::createComponent()
             .bindInstance(*this)
-            .install(+internal_binder, config.version)
+            .install(+internal_binder, fsparams.format_specific_params_case())
             .install(::securefs::lite_format::get_name_translator_component, &name_norm_flags)
-            .install(full_format::get_table_io_component, config.version)
+            .install(full_format::get_table_io_component,
+                     fsparams.full_format_params().legacy_file_table_io())
             .registerProvider<fruit::Annotated<tSkipVerification, bool>(const MountCommand&)>(
                 [](const MountCommand& cmd) { return cmd.insecure.getValue(); })
             .registerProvider<fruit::Annotated<tVerify, bool>(const MountCommand&)>(
                 [](const MountCommand& cmd) { return !cmd.insecure.getValue(); })
             .registerProvider<fruit::Annotated<tStoreTimeWithinFs, bool>(const MountCommand&)>(
-                [](const MountCommand& cmd) { return cmd.config.version == 3; })
+                [](const MountCommand& cmd)
+                { return cmd.fsparams.full_format_params().store_time(); })
             .registerProvider<fruit::Annotated<tReadOnly, bool>(const MountCommand&)>(
                 [](const MountCommand& cmd)
                 {
@@ -932,66 +946,28 @@ private:
             .registerProvider(
                 []() { return new BS::thread_pool(std::thread::hardware_concurrency() * 2); })
             .bind<Directory, BtreeDirectory>()
-            .bindInstance<fruit::Annotated<tMaxPaddingSize, unsigned>>(config.max_padding)
-            .bindInstance<fruit::Annotated<tIvSize, unsigned>>(config.iv_size)
-            .bindInstance<fruit::Annotated<tBlockSize, unsigned>>(config.block_size)
-            .bindInstance<fruit::Annotated<tMasterKey, CryptoPP::AlignedSecByteBlock>>(
-                config.master_key)
-            .registerProvider<fruit::Annotated<tMasterKey, key_type>(
-                fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
-                [](const CryptoPP::AlignedSecByteBlock& master_key)
-                {
-                    if (master_key.size() != key_type::size())
-                    {
-                        throw_runtime_error("Master key size mismatch");
-                    }
-                    return key_type(master_key.data(), key_type::size());
-                })
-            .registerProvider<fruit::Annotated<tNameMasterKey, key_type>(
-                fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
-                [](const CryptoPP::AlignedSecByteBlock& master_key)
-                {
-                    if (master_key.size() < key_type::size())
-                    {
-                        throw_runtime_error("Master key too short");
-                    }
-                    return key_type(master_key.data(), key_type::size());
-                })
-            .registerProvider<fruit::Annotated<tContentMasterKey, key_type>(
-                fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
-                [](const CryptoPP::AlignedSecByteBlock& master_key)
-                {
-                    if (master_key.size() < key_type::size() * 2)
-                    {
-                        throw_runtime_error("Master key too short");
-                    }
-                    return key_type(master_key.data() + key_type::size(), key_type::size());
-                })
-            .registerProvider<fruit::Annotated<tXattrMasterKey, key_type>(
-                fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>)>(
-                [](const CryptoPP::AlignedSecByteBlock& master_key)
-                {
-                    if (master_key.size() < 3 * key_type::size())
-                    {
-                        throw_runtime_error("Master key too short");
-                    }
-                    return key_type(master_key.data() + 2 * key_type::size(), key_type::size());
-                })
-            .registerProvider<fruit::Annotated<tPaddingMasterKey, key_type>(
-                fruit::Annotated<tMasterKey, const CryptoPP::AlignedSecByteBlock&>,
-                fruit::Annotated<tMaxPaddingSize, const unsigned&>)>(
-                [](const CryptoPP::AlignedSecByteBlock& master_key, const unsigned& max_padding)
-                {
-                    if (max_padding <= 0)
-                    {
-                        return key_type{};
-                    }
-                    if (master_key.size() < 4 * key_type::size())
-                    {
-                        throw_runtime_error("Master key too short");
-                    }
-                    return key_type(master_key.data() + 3 * key_type::size(), key_type::size());
-                })
+            .registerProvider<fruit::Annotated<tMaxPaddingSize, unsigned>(const MountCommand&)>(
+                [](const MountCommand& cmd)
+                { return cmd.fsparams.size_params().max_padding_size(); })
+            .registerProvider<fruit::Annotated<tIvSize, unsigned>(const MountCommand&)>(
+                [](const MountCommand& cmd) { return cmd.fsparams.size_params().iv_size(); })
+            .registerProvider<fruit::Annotated<tBlockSize, unsigned>(const MountCommand&)>(
+                [](const MountCommand& cmd) { return cmd.fsparams.size_params().block_size(); })
+            .registerProvider<fruit::Annotated<tMasterKey, key_type>(const MountCommand&)>(
+                [](const MountCommand& cmd)
+                { return from_byte_string(cmd.fsparams.full_format_params().master_key()); })
+            .registerProvider<fruit::Annotated<tNameMasterKey, key_type>(const MountCommand&)>(
+                [](const MountCommand& cmd)
+                { return from_byte_string(cmd.fsparams.lite_format_params().name_key()); })
+            .registerProvider<fruit::Annotated<tContentMasterKey, key_type>(const MountCommand&)>(
+                [](const MountCommand& cmd)
+                { return from_byte_string(cmd.fsparams.lite_format_params().content_key()); })
+            .registerProvider<fruit::Annotated<tXattrMasterKey, key_type>(const MountCommand&)>(
+                [](const MountCommand& cmd)
+                { return from_byte_string(cmd.fsparams.lite_format_params().xattr_key()); })
+            .registerProvider<fruit::Annotated<tPaddingMasterKey, key_type>(const MountCommand&)>(
+                [](const MountCommand& cmd)
+                { return from_byte_string(cmd.fsparams.lite_format_params().padding_key()); })
             .registerProvider([](const MountCommand& cmd)
                               { return new OSService(cmd.data_dir.getValue()); });
     }
@@ -1087,10 +1063,10 @@ public:
             VERBOSE_LOG("%s (ignore this error if mounting succeeds eventually)", e.what());
         }
 #endif
-        std::shared_ptr<FileStream> config_stream;
+        std::string config_content;
         try
         {
-            config_stream = open_config_stream(get_real_config_path(), O_RDONLY);
+            config_content = open_config_stream(get_real_config_path(), O_RDONLY)->as_string();
         }
         catch (const ExceptionBase& e)
         {
@@ -1105,25 +1081,13 @@ public:
             }
             throw;
         }
-        config = read_config(
-            config_stream.get(), password.data(), password.size(), keyfile.getValue());
-        config_stream.reset();
+        fsparams = decrypt(
+            config_content,
+            {reinterpret_cast<const char*>(password.data()), password.size()},
+            keyfile.getValue().empty()
+                ? nullptr
+                : OSService::get_default().open_file_stream(keyfile.getValue(), O_RDONLY, 0).get());
         CryptoPP::SecureWipeBuffer(password.data(), password.size());
-
-        bool is_vulnerable = popcount(config.master_key.data(), config.master_key.size())
-            <= config.master_key.size();
-        if (is_vulnerable)
-        {
-            WARN_LOG(
-                "%s",
-                "Your filesystem is created by a vulnerable version of securefs.\n"
-                "Please immediate migrate your old data to a newly created securefs filesystem,\n"
-                "and remove all traces of old data to avoid information leakage!");
-            fputs("Do you wish to continue with mounting? (y/n)", stdout);
-            fflush(stdout);
-            if (getchar() != 'y')
-                return 110;
-        }
 
         try
         {
@@ -1216,17 +1180,6 @@ public:
         if (!network_mount)
 #endif
             fuse_args.emplace_back(mount_point.getValue());
-
-        VERBOSE_LOG("Filesystem parameters: format version %d, block size %u (bytes), iv size %u "
-                    "(bytes)",
-                    config.version,
-                    config.block_size,
-                    config.iv_size);
-
-        if (!is_vulnerable)
-        {
-            VERBOSE_LOG("Master key: %s", hexify(config.master_key));
-        }
 
         fruit::Injector<FuseHighLevelOpsBase> injector(
             +[](MountCommand* cmd) { return cmd->get_fuse_high_ops_component(); }, this);

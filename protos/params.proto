@@ -52,6 +52,7 @@ message DecryptedSecurefsParams
     {
         bytes master_key = 1;
         bool store_time = 2;
+        bool legacy_file_table_io = 3;
     }
 
     oneof format_specific_params
