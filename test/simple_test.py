@@ -129,27 +129,38 @@ def securefs_unmount(p: subprocess.Popen, mount_point: str):
             raise RuntimeError(f"{mount_point} still mounted")
 
 
+class RepoFormat(enum.Enum):
+    LITE = 4
+    FULL = 2
+
+
 def securefs_create(
     data_dir: str,
-    version: int,
-    pbkdf: str,
+    fmt: RepoFormat,
     password: Optional[str],
     keyfile: Optional[str] = None,
     max_padding: int = 0,
-    json_config_destination: Optional[str] = None,
+    config_destination: Optional[str] = None,
 ):
+    if config_destination:
+        try:
+            os.remove(config_destination)
+        except FileNotFoundError:
+            pass
     command = [
         SECUREFS_BINARY,
         "create",
-        "--format",
-        str(version),
         data_dir,
-        "--rounds",
-        "2",
-        "--pbkdf",
-        pbkdf,
         "--max-padding",
         str(max_padding),
+        "--argon2-t",
+        "2",
+        "--argon2-m",
+        "16",
+        "--argon2-p",
+        "2",
+        "-f",
+        fmt.name,
     ]
     if password:
         command.append("--pass")
@@ -157,15 +168,15 @@ def securefs_create(
     if keyfile:
         command.append("--keyfile")
         command.append(keyfile)
+    if config_destination:
+        command.append("--config")
+        command.append(config_destination)
     logging.info("Creating securefs repo with command %s", command)
     subprocess.check_call(command)
-    if json_config_destination:
-        os.replace(os.path.join(data_dir, ".securefs.json"), json_config_destination)
 
 
 def securefs_chpass(
     data_dir,
-    pbkdf: str,
     old_pass: Optional[str] = None,
     new_pass: Optional[str] = None,
     old_keyfile: Optional[str] = None,
@@ -177,7 +188,17 @@ def securefs_chpass(
     if not new_pass and not new_keyfile:
         raise ValueError("At least one of new_pass and new_keyfile must be specified")
 
-    args = [SECUREFS_BINARY, "chpass", data_dir, "--rounds", "2", "--pbkdf", pbkdf]
+    args = [
+        SECUREFS_BINARY,
+        "chpass",
+        data_dir,
+        "--argon2-t",
+        "3",
+        "--argon2-m",
+        "16",
+        "--argon2-p",
+        "2",
+    ]
     if old_pass:
         if use_stdin:
             args.append("--askoldpass")
@@ -215,10 +236,8 @@ def securefs_chpass(
             raise subprocess.CalledProcessError(p.returncode, args, out, err)
 
 
-def get_data_dir(format_version):
-    return tempfile.mkdtemp(
-        prefix=f"securefs.format{format_version}.data_dir", dir="tmp"
-    )
+def get_data_dir(fmt: RepoFormat):
+    return tempfile.mkdtemp(prefix=f"securefs.{fmt}.data_dir", dir="tmp")
 
 
 def get_mount_point():
@@ -259,14 +278,10 @@ def parametrize(possible_args: Sequence[Sequence]):
     return real_parametrize
 
 
-ALL_PBKDFS = ("scrypt", "pkcs5-pbkdf2-hmac-sha256", "argon2id")
-
-
 @parametrize(
     list(
         itertools.product(
-            range(1, 5),
-            ALL_PBKDFS,
+            [RepoFormat.LITE, RepoFormat.FULL],
             [
                 SecretInputMode.PASSWORD,
                 SecretInputMode.KEYFILE2,
@@ -278,8 +293,7 @@ ALL_PBKDFS = ("scrypt", "pkcs5-pbkdf2-hmac-sha256", "argon2id")
     )
     + [
         (
-            4,
-            "argon2id",
+            RepoFormat.LITE,
             SecretInputMode.KEYFILE2,
             3,
             True,
@@ -287,8 +301,7 @@ ALL_PBKDFS = ("scrypt", "pkcs5-pbkdf2-hmac-sha256", "argon2id")
     ]
 )
 def make_test_case(
-    version: int,
-    pbkdf: str,
+    fmt: RepoFormat,
     mode: SecretInputMode,
     max_padding: int,
     plain_text_names: bool,
@@ -304,7 +317,7 @@ def make_test_case(
         @classmethod
         def setUpClass(cls):
             os.makedirs("tmp", exist_ok=True)
-            cls.data_dir = get_data_dir(format_version=version)
+            cls.data_dir = get_data_dir(fmt)
             cls.mount_point = get_mount_point()
             cls.password = "pvj8lRgrrsqzlr" if mode & SecretInputMode.PASSWORD else None
             cls.keyfile = generate_keyfile() if mode & SecretInputMode.KEYFILE else None
@@ -312,11 +325,10 @@ def make_test_case(
             securefs_create(
                 data_dir=cls.data_dir,
                 password=cls.password,
-                version=version,
+                fmt=fmt,
                 keyfile=cls.keyfile,
-                pbkdf=pbkdf,
                 max_padding=max_padding,
-                json_config_destination=cls.config_file,
+                config_destination=cls.config_file,
             )
             cls.mount()
 
@@ -342,7 +354,7 @@ def make_test_case(
             securefs_unmount(cls.securefs_process, cls.mount_point)
             cls.securefs_process = None
 
-        if version == 4 and not plain_text_names:
+        if fmt == RepoFormat.LITE and not plain_text_names:
 
             def test_long_name(self):
                 os.mkdir(os.path.join(self.mount_point, "k" * 200))
@@ -425,7 +437,7 @@ def make_test_case(
                     except EnvironmentError:
                         pass
 
-        if version < 4 and sys.platform != "win32":
+        if sys.platform != "win32":
 
             def test_hardlink(self):
                 data = os.urandom(16)
@@ -587,27 +599,6 @@ def make_test_case(
                 except EnvironmentError:
                     pass
 
-        if version == 3:
-
-            def test_time(self):
-                rand_dirname = os.path.join(self.mount_point, str(uuid.uuid4()))
-                os.mkdir(rand_dirname)
-                st = os.stat(rand_dirname)
-                self.assertTrue(
-                    st.st_atime == st.st_ctime and st.st_ctime == st.st_mtime
-                )
-                self.assertAlmostEqual(st.st_atime, time.time(), delta=10)
-                rand_filename = os.path.join(rand_dirname, "abc")
-                with open(rand_filename, "w") as f:
-                    f.write("1")
-                os.utime(rand_filename, (1000.0, 1000.0))
-                st = os.stat(rand_filename)
-                self.assertEqual(st.st_mtime, 1000)
-                with open(rand_filename, "w") as f:
-                    f.write("1")
-                st = os.stat(rand_filename)
-                self.assertAlmostEqual(st.st_ctime, time.time(), delta=10)
-
     return SimpleSecureFSTestBase
 
 
@@ -642,7 +633,14 @@ def _compare_directory(self: unittest.TestCase, dir1: str, dir2: str):
 
 
 @parametrize(
-    tuple(itertools.product(range(1, 5), ALL_PBKDFS, SecretInputMode, [False, True]))
+    tuple(
+        itertools.product(
+            range(1, 5),
+            ("scrypt", "pkcs5-pbkdf2-hmac-sha256", "argon2id"),
+            SecretInputMode,
+            [False, True],
+        )
+    )
 )
 def make_regression_test(version: int, pbkdf: str, mode: SecretInputMode, padded: bool):
     class RegressionTestBase(unittest.TestCase):
@@ -784,14 +782,13 @@ def compute_file_statistics(
             [None, generate_keyfile()],
             [None, generate_keyfile()],
             [True, False],
-            range(1, 5),
-            ALL_PBKDFS,
+            [RepoFormat.LITE, RepoFormat.FULL],
             [0, 32],
         )
     )
 )
 def make_chpass_test(
-    old_pass, new_pass, old_keyfile, new_keyfile, use_stdin, version, pbkdf, max_padding
+    old_pass, new_pass, old_keyfile, new_keyfile, use_stdin, fmt, max_padding
 ):
     if not old_pass and not old_keyfile:
         return
@@ -800,7 +797,7 @@ def make_chpass_test(
 
     class ChpassTestBase(unittest.TestCase):
         def test_chpass(self):
-            data_dir = get_data_dir(version)
+            data_dir = get_data_dir(fmt)
             mount_point = get_mount_point()
             test_dir_path = os.path.join(mount_point, "test")
             test_file_path = os.path.join(mount_point, "aaa")
@@ -809,8 +806,7 @@ def make_chpass_test(
                 data_dir=data_dir,
                 password=old_pass,
                 keyfile=old_keyfile,
-                version=version,
-                pbkdf=pbkdf,
+                fmt=fmt,
                 max_padding=max_padding,
             )
 
@@ -833,7 +829,6 @@ def make_chpass_test(
                 old_keyfile=old_keyfile,
                 new_keyfile=new_keyfile,
                 use_stdin=use_stdin,
-                pbkdf=pbkdf,
             )
 
             p = securefs_mount(data_dir, mount_point, new_pass, new_keyfile)
@@ -872,19 +867,14 @@ def randomly_act_on_file(filename: str, barrier) -> None:
                 run_once(f)
 
 
-@parametrize([[2], [4]])
-def make_concurrency_test(version: int):
+@parametrize([[RepoFormat.LITE], [RepoFormat.FULL]])
+def make_concurrency_test(fmt: RepoFormat):
     class ConcurrencyTestBase(unittest.TestCase):
         def test_concurrent_access(self):
-            data_dir = get_data_dir(version)
+            data_dir = get_data_dir(fmt)
             mount_point = get_mount_point()
 
-            securefs_create(
-                data_dir=data_dir,
-                password="xxxx",
-                version=version,
-                pbkdf=ALL_PBKDFS[-1],
-            )
+            securefs_create(data_dir=data_dir, password="xxxx", fmt=fmt)
             test_filename = os.path.join(mount_point, "a" * 10)
             p = securefs_mount(data_dir, mount_point, "xxxx")
             try:
@@ -914,7 +904,5 @@ def make_concurrency_test(version: int):
 
 
 if __name__ == "__main__":
-    os.environ["SECUREFS_ARGON2_M_COST"] = "16"
-    os.environ["SECUREFS_ARGON2_P"] = "2"
     logging.getLogger().setLevel(logging.INFO)
     unittest.main()

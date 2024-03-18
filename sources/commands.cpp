@@ -31,6 +31,7 @@
 #include <fruit/fruit.h>
 #include <fruit/fruit_forward_decls.h>
 #include <google/protobuf/util/json_util.h>
+#include <string>
 #include <tclap/CmdLine.h>
 #include <tclap/SwitchArg.h>
 #include <tclap/ValueArg.h>
@@ -201,15 +202,15 @@ struct Argon2idArgsHolder
 class CreateCommand : public SinglePasswordCommandBase
 {
 private:
-    TCLAP::SwitchArg lite_format{
-        "",
+    TCLAP::ValueArg<std::string> format{
+        "f",
+        "format",
+        "The format type of the repository. Either lite or full. Lite repos are faster and more "
+        "reliable, but the directory structure itself is visible. Full repos offer more privacy at "
+        "the cost of performance and ease of synchronization.",
+        false,
         "lite",
-        "Create a lite filesystem. Faster and more reliable, but the directory structure itself is "
-        "visible (although file/dir names are encrypted)."};
-    TCLAP::SwitchArg full_format{"",
-                                 "full",
-                                 "Create a full filesystem. More security at the expense of "
-                                 "performance and ease of synchronization."};
+        "lite/full"};
     TCLAP::ValueArg<unsigned int> iv_size{
         "", "iv-size", "The IV size (ignored for fs format 1)", false, 12, "integer"};
     TCLAP::ValueArg<unsigned int> block_size{
@@ -248,7 +249,7 @@ public:
         result->add(&iv_size);
         result->add(&block_size);
         result->add(&max_padding);
-        result->xorAdd(lite_format, full_format);
+        result->add(&format);
         argon2.add_to(*result);
         return result;
     }
@@ -268,7 +269,7 @@ public:
         params.mutable_size_params()->set_block_size(block_size.getValue());
         params.mutable_size_params()->set_max_padding_size(max_padding.getValue());
 
-        if (lite_format.getValue())
+        if (absl::EqualsIgnoreCase(format.getValue(), "lite") || format.getValue() == "4")
         {
             randomize(params.mutable_lite_format_params()->mutable_name_key(), 32);
             randomize(params.mutable_lite_format_params()->mutable_content_key(), 32);
@@ -281,14 +282,13 @@ public:
                     long_name_threshold.getValue());
             }
         }
-        else if (full_format.getValue())
+        else if (absl::EqualsIgnoreCase(format.getValue(), "full") || format.getValue() == "2")
         {
             randomize(params.mutable_full_format_params()->mutable_master_key(), 32);
         }
         else
         {
-            throw_runtime_error(
-                "One of --lite or --full must be specified. Run --help to see their meanings.");
+            throw_runtime_error("--format lite/full must be specified");
         }
 
         auto encrypted_data = encrypt(params,
