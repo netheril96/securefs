@@ -19,6 +19,7 @@
 #include <BS_thread_pool.hpp>
 #include <absl/strings/escaping.h>
 #include <absl/strings/match.h>
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <argon2.h>
 #include <cryptopp/cpu.h>
@@ -29,9 +30,11 @@
 #include <fruit/component.h>
 #include <fruit/fruit.h>
 #include <fruit/fruit_forward_decls.h>
+#include <google/protobuf/util/json_util.h>
 #include <json/json.h>
-#include <string_view>
 #include <tclap/CmdLine.h>
+#include <tclap/SwitchArg.h>
+#include <tclap/ValueArg.h>
 
 #include <algorithm>
 #include <iostream>
@@ -40,6 +43,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string_view>
 #include <typeinfo>
 #include <vector>
 
@@ -53,393 +57,13 @@ using namespace securefs;
 
 namespace
 {
-
-const char* const CONFIG_FILE_NAME = ".securefs.json";
-const unsigned MIN_ITERATIONS = 20000;
-const unsigned MIN_DERIVE_SECONDS = 1;
-const size_t CONFIG_IV_LENGTH = 32, CONFIG_MAC_LENGTH = 16;
-
-const char* const PBKDF_ALGO_PKCS5 = "pkcs5-pbkdf2-hmac-sha256";
-const char* const PBKDF_ALGO_SCRYPT = "scrypt";
-const char* const PBKDF_ALGO_ARGON2ID = "argon2id";
-
-const char* const EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED = " ";
-
-const char* get_version_header(unsigned version)
-{
-    switch (version)
-    {
-    case 1:
-    case 2:
-    case 3:
-        return "version=1";    // These headers are all the same for backwards compatible behavior
-                               // with old mistakes
-    case 4:
-        return "version=4";
-    default:
-        throwInvalidArgumentException("Unknown format version");
-    }
-}
-
-std::unique_ptr<Json::CharReader> create_json_reader()
-{
-    Json::CharReaderBuilder builder;
-    builder["rejectDupKeys"] = true;
-    return std::unique_ptr<Json::CharReader>(builder.newCharReader());
-}
-
-void hmac_sha256(const securefs::key_type& base_key,
-                 const std::string& maybe_key_file_path,
-                 securefs::key_type& out_key)
-{
-    if (maybe_key_file_path.empty())
-    {
-        out_key = base_key;
-        return;
-    }
-    auto file_stream = OSService::get_default().open_file_stream(maybe_key_file_path, O_RDONLY, 0);
-    byte buffer[4096];
-    CryptoPP::HMAC<CryptoPP::SHA256> hmac(base_key.data(), base_key.size());
-    while (true)
-    {
-        auto sz = file_stream->sequential_read(buffer, sizeof(buffer));
-        if (sz <= 0)
-        {
-            break;
-        }
-        hmac.Update(buffer, sz);
-    }
-    hmac.TruncatedFinal(out_key.data(), out_key.size());
-}
-
-Json::Value generate_config(const std::string& pbkdf_algorithm,
-                            const std::string& maybe_key_file_path,
-                            const securefs::key_type& salt,
-                            const void* password,
-                            size_t pass_len,
-                            unsigned rounds,
-                            const FSConfig& fsconfig)
-{
-    securefs::key_type effective_salt;
-    hmac_sha256(salt, maybe_key_file_path, effective_salt);
-
-    Json::Value config;
-    config["version"] = fsconfig.version;
-    key_type password_derived_key;
-    CryptoPP::AlignedSecByteBlock encrypted_master_key(nullptr, fsconfig.master_key.size());
-
-    if (pbkdf_algorithm == PBKDF_ALGO_PKCS5)
-    {
-        config["iterations"] = pbkdf_hmac_sha256(password,
-                                                 pass_len,
-                                                 effective_salt.data(),
-                                                 effective_salt.size(),
-                                                 rounds ? rounds : MIN_ITERATIONS,
-                                                 rounds ? 0 : MIN_DERIVE_SECONDS,
-                                                 password_derived_key.data(),
-                                                 password_derived_key.size());
-    }
-    else if (pbkdf_algorithm == PBKDF_ALGO_SCRYPT)
-    {
-        uint32_t n = rounds > 0 ? rounds : (1u << 18u), r = 8, p = 1;
-        config["iterations"] = n;
-        config["scrypt_r"] = r;
-        config["scrypt_p"] = p;
-        CryptoPP::Scrypt scrypt;
-        scrypt.DeriveKey(password_derived_key.data(),
-                         password_derived_key.size(),
-                         static_cast<const byte*>(password),
-                         pass_len,
-                         effective_salt.data(),
-                         effective_salt.size(),
-                         n,
-                         r,
-                         p);
-    }
-    else if (pbkdf_algorithm == PBKDF_ALGO_ARGON2ID)
-    {
-        const char* env_m_cost = getenv("SECUREFS_ARGON2_M_COST");
-        const char* env_p = getenv("SECUREFS_ARGON2_P");
-        uint32_t t_cost = rounds > 0 ? rounds : 9,
-                 m_cost = env_m_cost ? std::stoi(env_m_cost) : (1u << 18u),
-                 p = env_p ? std::stoi(env_p) : 4;
-        config["iterations"] = t_cost;
-        config["argon2_m_cost"] = m_cost;
-        config["argon2_p"] = p;
-        int rc = argon2id_hash_raw(t_cost,
-                                   m_cost,
-                                   p,
-                                   password,
-                                   pass_len,
-                                   effective_salt.data(),
-                                   effective_salt.size(),
-                                   password_derived_key.data(),
-                                   password_derived_key.size());
-        if (rc)
-        {
-            throw_runtime_error("Argon2 hashing failed with status code " + std::to_string(rc));
-        }
-    }
-    else
-    {
-        throw_runtime_error("Unknown pbkdf algorithm " + pbkdf_algorithm);
-    }
-    config["pbkdf"] = pbkdf_algorithm;
-    config["salt"] = hexify(salt);
-
-    byte iv[CONFIG_IV_LENGTH];
-    byte mac[CONFIG_MAC_LENGTH];
-    generate_random(iv, array_length(iv));
-
-    CryptoPP::GCM<CryptoPP::AES>::Encryption encryptor;
-    encryptor.SetKeyWithIV(
-        password_derived_key.data(), password_derived_key.size(), iv, array_length(iv));
-    encryptor.EncryptAndAuthenticate(
-        encrypted_master_key.data(),
-        mac,
-        array_length(mac),
-        iv,
-        array_length(iv),
-        reinterpret_cast<const byte*>(get_version_header(fsconfig.version)),
-        strlen(get_version_header(fsconfig.version)),
-        fsconfig.master_key.data(),
-        fsconfig.master_key.size());
-
-    Json::Value encrypted_key;
-    encrypted_key["IV"] = hexify(iv, array_length(iv));
-    encrypted_key["MAC"] = hexify(mac, array_length(mac));
-    encrypted_key["key"] = hexify(encrypted_master_key);
-
-    config["encrypted_key"] = std::move(encrypted_key);
-
-    if (fsconfig.version >= 2)
-    {
-        config["block_size"] = fsconfig.block_size;
-        config["iv_size"] = fsconfig.iv_size;
-    }
-    if (fsconfig.max_padding > 0)
-    {
-        config["max_padding"] = fsconfig.max_padding;
-    }
-    if (fsconfig.long_name_component)
-    {
-        config["long_name_component"] = true;
-    }
-    return config;
-}
-
-void compute_password_derived_key(const Json::Value& config,
-                                  const void* password,
-                                  size_t pass_len,
-                                  key_type& salt,
-                                  key_type& password_derived_key)
-{
-    unsigned iterations = config["iterations"].asUInt();
-    std::string pbkdf_algorithm = config.get("pbkdf", PBKDF_ALGO_PKCS5).asString();
-    VERBOSE_LOG("Setting the password key derivation function to %s", pbkdf_algorithm);
-
-    if (pbkdf_algorithm == PBKDF_ALGO_PKCS5)
-    {
-        pbkdf_hmac_sha256(password,
-                          pass_len,
-                          salt.data(),
-                          salt.size(),
-                          iterations,
-                          0,
-                          password_derived_key.data(),
-                          password_derived_key.size());
-    }
-    else if (pbkdf_algorithm == PBKDF_ALGO_SCRYPT)
-    {
-        auto r = config["scrypt_r"].asUInt();
-        auto p = config["scrypt_p"].asUInt();
-        CryptoPP::Scrypt scrypt;
-        scrypt.DeriveKey(password_derived_key.data(),
-                         password_derived_key.size(),
-                         static_cast<const byte*>(password),
-                         pass_len,
-                         salt.data(),
-                         salt.size(),
-                         iterations,
-                         r,
-                         p);
-    }
-    else if (pbkdf_algorithm == PBKDF_ALGO_ARGON2ID)
-    {
-        auto m_cost = config["argon2_m_cost"].asUInt();
-        auto p = config["argon2_p"].asUInt();
-        int rc = argon2id_hash_raw(iterations,
-                                   m_cost,
-                                   p,
-                                   password,
-                                   pass_len,
-                                   salt.data(),
-                                   salt.size(),
-                                   password_derived_key.data(),
-                                   password_derived_key.size());
-        if (rc)
-        {
-            throw_runtime_error("Argon2 hashing failed with status code " + std::to_string(rc));
-        }
-    }
-    else
-    {
-        throw_runtime_error("Unknown pbkdf algorithm " + pbkdf_algorithm);
-    }
-}
-
-FSConfig parse_config(const Json::Value& config,
-                      const std::string& maybe_key_file_path,
-                      const void* password,
-                      size_t pass_len)
-{
-    using namespace securefs;
-    FSConfig fsconfig{};
-
-    fsconfig.version = config["version"].asUInt();
-    fsconfig.max_padding = config.get("max_padding", 0u).asUInt();
-    fsconfig.long_name_component = config.get("long_name_component", false).asBool();
-
-    if (fsconfig.version == 1)
-    {
-        fsconfig.block_size = 4096;
-        fsconfig.iv_size = 32;
-    }
-    else if (fsconfig.version == 2 || fsconfig.version == 3 || fsconfig.version == 4)
-    {
-        fsconfig.block_size = config["block_size"].asUInt();
-        fsconfig.iv_size = config["iv_size"].asUInt();
-    }
-    else
-    {
-        throwInvalidArgumentException(absl::StrFormat("Unsupported version %u", fsconfig.version));
-    }
-
-    byte iv[CONFIG_IV_LENGTH];
-    byte mac[CONFIG_MAC_LENGTH];
-    key_type salt;
-    CryptoPP::AlignedSecByteBlock encrypted_key;
-
-    std::string salt_hex = config["salt"].asString();
-    const auto& encrypted_key_json_value = config["encrypted_key"];
-    std::string iv_hex = encrypted_key_json_value["IV"].asString();
-    std::string mac_hex = encrypted_key_json_value["MAC"].asString();
-    std::string ekey_hex = encrypted_key_json_value["key"].asString();
-
-    parse_hex(salt_hex, salt.data(), salt.size());
-    parse_hex(iv_hex, iv, array_length(iv));
-    parse_hex(mac_hex, mac, array_length(mac));
-
-    encrypted_key.resize(ekey_hex.size() / 2);
-    parse_hex(ekey_hex, encrypted_key.data(), encrypted_key.size());
-    fsconfig.master_key.resize(encrypted_key.size());
-
-    auto decrypt_and_verify = [&](const securefs::key_type& wrapping_key) -> bool
-    {
-        CryptoPP::GCM<CryptoPP::AES>::Decryption decryptor;
-        decryptor.SetKeyWithIV(wrapping_key.data(), wrapping_key.size(), iv, array_length(iv));
-        return decryptor.DecryptAndVerify(
-            fsconfig.master_key.data(),
-            mac,
-            array_length(mac),
-            iv,
-            array_length(iv),
-            reinterpret_cast<const byte*>(get_version_header(fsconfig.version)),
-            strlen(get_version_header(fsconfig.version)),
-            encrypted_key.data(),
-            encrypted_key.size());
-    };
-
-    {
-        securefs::key_type new_salt;
-        hmac_sha256(salt, maybe_key_file_path, new_salt);
-
-        securefs::key_type password_derived_key;
-        compute_password_derived_key(config, password, pass_len, new_salt, password_derived_key);
-        if (decrypt_and_verify(password_derived_key))
-        {
-            return fsconfig;
-        }
-    }
-
-    // `securefs` used to derive keyfile based key in another way. Try it here for compatibility.
-    {
-        securefs::key_type wrapping_key;
-        securefs::key_type password_derived_key;
-        compute_password_derived_key(config, password, pass_len, salt, password_derived_key);
-        hmac_sha256(password_derived_key, maybe_key_file_path, wrapping_key);
-        if (decrypt_and_verify(wrapping_key))
-        {
-            return fsconfig;
-        }
-    }
-    throw std::runtime_error("Invalid password or keyfile combination");
-}
+constexpr std::string_view const kLegacyConfigFileName = ".securefs.json";
+constexpr std::string_view const kConfigFileName = ".config.pb";
+constexpr std::string_view EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED = " ";
 }    // namespace
 
 namespace securefs
 {
-
-std::shared_ptr<FileStream> CommandBase::open_config_stream(const std::string& path, int flags)
-{
-    return OSService::get_default().open_file_stream(path, flags, 0644);
-}
-
-FSConfig CommandBase::read_config(FileStream* stream,
-                                  const void* password,
-                                  size_t pass_len,
-                                  const std::string& maybe_key_file_path)
-{
-    FSConfig result;
-
-    std::vector<char> str;
-    str.reserve(4000);
-    while (true)
-    {
-        char buffer[4000];
-        auto sz = stream->sequential_read(buffer, sizeof(buffer));
-        if (sz <= 0)
-            break;
-        str.insert(str.end(), buffer, buffer + sz);
-    }
-
-    Json::Value value;
-    std::string error_message;
-    if (!create_json_reader()->parse(str.data(), str.data() + str.size(), &value, &error_message))
-        throw_runtime_error(absl::StrFormat("Failure to parse the config file: %s", error_message));
-
-    return parse_config(value, maybe_key_file_path, password, pass_len);
-}
-
-static void copy_key(const CryptoPP::AlignedSecByteBlock& in_key, key_type* out_key)
-{
-    if (in_key.size() != out_key->size())
-        throw_runtime_error("Invalid key size");
-    memcpy(out_key->data(), in_key.data(), out_key->size());
-}
-
-static void copy_key(const CryptoPP::AlignedSecByteBlock& in_key, optional<key_type>* out_key)
-{
-    out_key->emplace();
-    copy_key(in_key, &(out_key->value()));
-}
-
-void CommandBase::write_config(FileStream* stream,
-                               const std::string& maybe_key_file_path,
-                               const std::string& pbdkf_algorithm,
-                               const FSConfig& config,
-                               const void* password,
-                               size_t pass_len,
-                               unsigned rounds)
-{
-    key_type salt;
-    generate_random(salt.data(), salt.size());
-    auto str = generate_config(
-                   pbdkf_algorithm, maybe_key_file_path, salt, password, pass_len, rounds, config)
-                   .toStyledString();
-    stream->sequential_write(str.data(), str.size());
-}
-
 /// A base class for all commands that require a data dir to be present.
 class DataDirCommandBase : public CommandBase
 {
@@ -449,17 +73,30 @@ protected:
     TCLAP::ValueArg<std::string> config_path{
         "",
         "config",
-        "Full path name of the config file. ${data_dir}/.securefs.json by default",
+        "Full path name of the config file. ${data_dir}/.config.pb by default",
         false,
         "",
         "config_path"};
 
 protected:
-    std::string get_real_config_path()
+    std::string get_real_config_path_for_reading()
     {
-        return !config_path.getValue().empty()
-            ? config_path.getValue()
-            : data_dir.getValue() + PATH_SEPARATOR_CHAR + CONFIG_FILE_NAME;
+        if (!config_path.getValue().empty())
+        {
+            return config_path.getValue();
+        }
+        OSService root(data_dir.getValue());
+        fuse_stat st{};
+        if (root.stat(std::string(kConfigFileName), &st))
+        {
+            return root.norm_path_narrowed(kConfigFileName);
+        }
+        if (root.stat(std::string(kLegacyConfigFileName), &st))
+        {
+            return root.norm_path_narrowed(kLegacyConfigFileName);
+        }
+        throw_runtime_error("No params file found. Please verify if the data dir is correct, or if "
+                            "you should manually specify the params file.");
     }
 };
 
@@ -511,8 +148,9 @@ protected:
         }
         if (keyfile.isSet() && !keyfile.getValue().empty() && !askpass.getValue())
         {
-            password.Assign(reinterpret_cast<const byte*>(EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED),
-                            strlen(EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED));
+            password.Assign(
+                reinterpret_cast<const byte*>(EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED.data()),
+                EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED.size());
             return;
         }
         if (require_confirmation)
@@ -521,7 +159,6 @@ protected:
         }
         return OSService::read_password_no_confirmation("Enter password:", &password);
     }
-
     void add_all_args_from_base(TCLAP::CmdLine& cmd_line)
     {
         cmd_line.add(&data_dir);
@@ -532,34 +169,52 @@ protected:
     }
 };
 
-static const std::string message_for_setting_pbkdf = absl::StrFormat(
-    "The algorithm to stretch passwords. Use %s for maximum protection (default), or "
-    "%s for compatibility with old versions of securefs",
-    PBKDF_ALGO_ARGON2ID,
-    PBKDF_ALGO_PKCS5);
+struct Argon2idArgsHolder
+{
+    TCLAP::ValueArg<unsigned> t{
+        "", "argon2-t", "The time cost for argon2 algorithm", false, 30, "integer"};
+    TCLAP::ValueArg<unsigned> m{"",
+                                "argon2-m",
+                                "The memory cost for argon2 algorithm (in terms of KiB)",
+                                false,
+                                1 << 18,
+                                "integer"};
+    TCLAP::ValueArg<unsigned> p{
+        "", "argon2-p", "The parallelism for argon2 algorithm", false, 4, "integer"};
+
+    void add_to(TCLAP::CmdLine& cmdline)
+    {
+        cmdline.add(&t);
+        cmdline.add(&m);
+        cmdline.add(&p);
+    }
+
+    EncryptedSecurefsParams::Argon2idParams to_params()
+    {
+        EncryptedSecurefsParams::Argon2idParams result;
+        result.set_time_cost(t.getValue());
+        result.set_memory_cost(m.getValue());
+        result.set_parallelism(p.getValue());
+        return result;
+    }
+};
 
 class CreateCommand : public SinglePasswordCommandBase
 {
 private:
-    TCLAP::ValueArg<unsigned> rounds{
-        "r",
-        "rounds",
-        "Specify how many rounds of key derivation are applied (0 for automatic)",
-        false,
-        0,
-        "integer"};
-    TCLAP::ValueArg<unsigned int> format{
-        "", "format", "The filesystem format version (1,2,3,4)", false, 4, "integer"};
+    TCLAP::SwitchArg lite_format{
+        "",
+        "lite",
+        "Create a lite filesystem. Faster and more reliable, but the directory structure itself is "
+        "visible (although file/dir names are encrypted)."};
+    TCLAP::SwitchArg full_format{"",
+                                 "full",
+                                 "Create a full filesystem. More security at the expense of "
+                                 "performance and ease of synchronization."};
     TCLAP::ValueArg<unsigned int> iv_size{
         "", "iv-size", "The IV size (ignored for fs format 1)", false, 12, "integer"};
     TCLAP::ValueArg<unsigned int> block_size{
         "", "block-size", "Block size for files (ignored for fs format 1)", false, 4096, "integer"};
-    TCLAP::SwitchArg store_time{
-        "",
-        "store_time",
-        "alias for \"--format 3\", enables the extension where timestamp are stored and encrypted"};
-    TCLAP::ValueArg<std::string> pbkdf{
-        "", "pbkdf", message_for_setting_pbkdf, false, PBKDF_ALGO_ARGON2ID, "string"};
     TCLAP::ValueArg<unsigned> max_padding{
         "",
         "max-padding",
@@ -569,6 +224,22 @@ private:
         false,
         0,
         "int"};
+    TCLAP::ValueArg<unsigned int> long_name_threshold{
+        "",
+        "long-name-threshold",
+        "(For lite format only) when the filename component exceeds this length, it will be stored "
+        "encrypted in a SQLite database.",
+        false,
+        128,
+        "integer"};
+    Argon2idArgsHolder argon2;
+
+private:
+    static void randomize(std::string* str, size_t size)
+    {
+        str->resize(size);
+        generate_random(str->data(), str->size());
+    }
 
 public:
     std::unique_ptr<TCLAP::CmdLine> cmdline() override
@@ -576,12 +247,10 @@ public:
         auto result = make_unique<TCLAP::CmdLine>(help_message());
         add_all_args_from_base(*result);
         result->add(&iv_size);
-        result->add(&rounds);
-        result->add(&format);
-        result->add(&store_time);
         result->add(&block_size);
-        result->add(&pbkdf);
         result->add(&max_padding);
+        result->xorAdd(lite_format, full_format);
+        argon2.add_to(*result);
         return result;
     }
 
@@ -593,45 +262,47 @@ public:
 
     int execute() override
     {
-        if (format.isSet() && store_time.isSet())
-        {
-            absl::FPrintF(stderr,
-                          "Conflicting flags --format and --store_time are specified together\n");
-            return 1;
-        }
-
-        if (format.isSet() && format.getValue() == 1 && (iv_size.isSet() || block_size.isSet()))
-        {
-            absl::FPrintF(stderr,
-                          "IV and block size options are not available for filesystem format 1\n");
-            return 1;
-        }
-
-        unsigned format_version = store_time.isSet() ? 3 : format.getValue();
-
         OSService::get_default().ensure_directory(data_dir.getValue(), 0755);
 
-        FSConfig config;
-        config.master_key.resize(format_version < 4 ? KEY_LENGTH : 4 * KEY_LENGTH);
-        CryptoPP::OS_GenerateRandomBlock(false, config.master_key.data(), config.master_key.size());
+        DecryptedSecurefsParams params;
+        params.mutable_size_params()->set_iv_size(iv_size.getValue());
+        params.mutable_size_params()->set_block_size(block_size.getValue());
+        params.mutable_size_params()->set_max_padding_size(max_padding.getValue());
 
-        config.iv_size = format_version == 1 ? 32 : iv_size.getValue();
-        config.version = format_version;
-        config.block_size = block_size.getValue();
-        config.max_padding = max_padding.getValue();
+        if (lite_format.getValue())
+        {
+            randomize(params.mutable_lite_format_params()->mutable_name_key(), 32);
+            randomize(params.mutable_lite_format_params()->mutable_content_key(), 32);
+            randomize(params.mutable_lite_format_params()->mutable_xattr_key(), 32);
+            randomize(params.mutable_lite_format_params()->mutable_padding_key(), 32);
 
-        auto config_stream
-            = open_config_stream(get_real_config_path(), O_WRONLY | O_CREAT | O_EXCL);
-        DEFER(if (has_uncaught_exceptions()) {
-            OSService::get_default().remove_file(get_real_config_path());
-        });
-        write_config(config_stream.get(),
-                     keyfile.getValue(),
-                     pbkdf.getValue(),
-                     config,
-                     password.data(),
-                     password.size(),
-                     rounds.getValue());
+            if (long_name_threshold.getValue() > 0)
+            {
+                params.mutable_lite_format_params()->set_long_name_threshold(
+                    long_name_threshold.getValue());
+            }
+        }
+        else if (full_format.getValue())
+        {
+            randomize(params.mutable_full_format_params()->mutable_master_key(), 32);
+        }
+        else
+        {
+            throw_runtime_error(
+                "One of --lite or --full must be specified. Run --help to see their meanings.");
+        }
+
+        auto encrypted_data = encrypt(params,
+                                      argon2.to_params(),
+                                      {password.data(), password.size()},
+                                      maybe_open_key_stream(keyfile.getValue()).get())
+                                  .SerializeAsString();
+        auto config_stream = OSService::get_default().open_file_stream(
+            config_path.getValue().empty() ? absl::StrCat(data_dir.getValue(), "/", kConfigFileName)
+                                           : config_path.getValue(),
+            O_WRONLY | O_EXCL | O_CREAT,
+            0644);
+        config_stream->write(encrypted_data.data(), 0, encrypted_data.size());
         return 0;
     }
 
@@ -646,15 +317,6 @@ class ChangePasswordCommand : public DataDirCommandBase
 {
 private:
     CryptoPP::AlignedSecByteBlock old_password, new_password;
-    TCLAP::ValueArg<unsigned> rounds{
-        "r",
-        "rounds",
-        "Specify how many rounds of key derivation are applied (0 for automatic)",
-        false,
-        0,
-        "integer"};
-    TCLAP::ValueArg<std::string> pbkdf{
-        "", "pbkdf", message_for_setting_pbkdf, false, PBKDF_ALGO_ARGON2ID, "string"};
     TCLAP::ValueArg<std::string> old_key_file{
         "", "oldkeyfile", "Path to original key file", false, "", "path"};
     TCLAP::ValueArg<std::string> new_key_file{
@@ -685,6 +347,7 @@ private:
         false,
         "",
         "string"};
+    Argon2idArgsHolder argon2;
 
     static void assign(std::string_view value, CryptoPP::AlignedSecByteBlock& output)
     {
@@ -696,7 +359,6 @@ public:
     {
         auto result = make_unique<TCLAP::CmdLine>(help_message());
         result->add(&data_dir);
-        result->add(&rounds);
         result->add(&config_path);
         result->add(&old_key_file);
         result->add(&new_key_file);
@@ -704,7 +366,7 @@ public:
         result->add(&asknewpass);
         result->add(&oldpass);
         result->add(&newpass);
-        result->add(&pbkdf);
+        argon2.add_to(*result);
         return result;
     }
 
@@ -741,25 +403,26 @@ public:
 
     int execute() override
     {
-        auto original_path = get_real_config_path();
+        auto original_path = get_real_config_path_for_reading();
         byte buffer[16];
         generate_random(buffer, array_length(buffer));
         auto tmp_path = original_path + hexify(buffer, array_length(buffer));
         auto stream = OSService::get_default().open_file_stream(original_path, O_RDONLY, 0644);
-        auto config = read_config(
-            stream.get(), old_password.data(), old_password.size(), old_key_file.getValue());
+        auto params = decrypt(
+            OSService::get_default().open_file_stream(original_path, O_RDONLY, 0644)->as_string(),
+            {old_password.data(), old_password.size()},
+            maybe_open_key_stream(old_key_file).get());
+        auto encrypted_data = encrypt(params,
+                                      argon2.to_params(),
+                                      {new_password.data(), new_password.size()},
+                                      maybe_open_key_stream(new_key_file).get())
+                                  .SerializeAsString();
         stream = OSService::get_default().open_file_stream(
             tmp_path, O_WRONLY | O_CREAT | O_EXCL, 0644);
         DEFER(if (has_uncaught_exceptions()) {
             OSService::get_default().remove_file_nothrow(tmp_path);
         });
-        write_config(stream.get(),
-                     new_key_file.getValue(),
-                     pbkdf.getValue(),
-                     config,
-                     new_password.data(),
-                     new_password.size(),
-                     rounds.getValue());
+        stream->write(encrypted_data.data(), 0, encrypted_data.size());
         stream.reset();
         OSService::get_default().rename(tmp_path, original_path);
         return 0;
@@ -1078,7 +741,9 @@ public:
         std::string config_content;
         try
         {
-            config_content = open_config_stream(get_real_config_path(), O_RDONLY)->as_string();
+            config_content = OSService::get_default()
+                                 .open_file_stream(get_real_config_path_for_reading(), O_RDONLY, 0)
+                                 ->as_string();
         }
         catch (const ExceptionBase& e)
         {
@@ -1088,17 +753,14 @@ public:
                 ERROR_LOG(
                     "Config file %s does not exist. Perhaps you forget to run `create` command "
                     "first?",
-                    get_real_config_path().c_str());
+                    get_real_config_path_for_reading().c_str());
                 return 19;
             }
             throw;
         }
-        fsparams = decrypt(
-            config_content,
-            {password.data(), password.size()},
-            keyfile.getValue().empty()
-                ? nullptr
-                : OSService::get_default().open_file_stream(keyfile.getValue(), O_RDONLY, 0).get());
+        fsparams = decrypt(config_content,
+                           {password.data(), password.size()},
+                           maybe_open_key_stream(keyfile.getValue()).get());
         CryptoPP::SecureWipeBuffer(password.data(), password.size());
 
         try
@@ -1283,17 +945,13 @@ public:
     const char* help_message() const noexcept override { return "Show version of the program"; }
 };
 
-class InfoCommand : public CommandBase
+class InfoCommand : public SinglePasswordCommandBase
 {
-private:
-    TCLAP::UnlabeledValueArg<std::string> path{
-        "path", "Directory or the filename of the config file", true, "", "path"};
-
 public:
     std::unique_ptr<TCLAP::CmdLine> cmdline() override
     {
         auto result = make_unique<TCLAP::CmdLine>(help_message());
-        result->add(&path);
+        add_all_args_from_base(*result);
         return result;
     }
 
@@ -1308,58 +966,24 @@ public:
 
     int execute() override
     {
-        std::shared_ptr<FileStream> fs;
-        fuse_stat st;
-        if (!OSService::get_default().stat(path.getValue(), &st))
+        auto real_config_path = get_real_config_path_for_reading();
+        auto params = decrypt(OSService::get_default()
+                                  .open_file_stream(get_real_config_path_for_reading(), O_RDONLY, 0)
+                                  ->as_string(),
+                              {password.data(), password.size()},
+                              maybe_open_key_stream(keyfile.getValue()).get());
+        std::string json;
+        google::protobuf::util::JsonPrintOptions options{};
+        options.preserve_proto_field_names = true;
+        options.add_whitespace = true;
+        auto status = google::protobuf::util::MessageToJsonString(params, &json, options);
+        if (!status.ok())
         {
-            ERROR_LOG("The path %s does not exist.", path.getValue());
+            throw_runtime_error("Failed to convert params to JSON: " + status.ToString());
         }
 
-        std::string real_config_path = path.getValue();
-        if ((st.st_mode & S_IFMT) == S_IFDIR)
-            real_config_path.append("/.securefs.json");
-        fs = OSService::get_default().open_file_stream(real_config_path, O_RDONLY, 0);
-
-        Json::Value config_json;
-
-        // Open a new scope to limit the lifetime of `buffer`.
-        {
-            std::vector<char> buffer(fs->size(), 0);
-            fs->read(buffer.data(), 0, buffer.size());
-            std::string error_message;
-            if (!create_json_reader()->parse(
-                    buffer.data(), buffer.data() + buffer.size(), &config_json, &error_message))
-            {
-                throw_runtime_error(
-                    absl::StrFormat("Failure to parse the config file: %s", error_message));
-            }
-        }
-
-        unsigned format_version = config_json["version"].asUInt();
-        if (format_version < 1 || format_version > 4)
-        {
-            ERROR_LOG("Unknown filesystem format version %u", format_version);
-            return 44;
-        }
         absl::PrintF("Config file path: %s\n", real_config_path);
-        absl::PrintF("Filesystem format version: %u\n", format_version);
-        absl::PrintF("Is full or lite format: %s\n", (format_version < 4) ? "full" : "lite");
-        absl::PrintF("Is underlying directory flattened: %v\n", format_version < 4);
-        absl::PrintF("Is multiple mounts allowed: %v\n", format_version >= 4);
-        absl::PrintF("Is timestamp stored within the fs: %v\n\n", format_version == 3);
-
-        absl::PrintF("Content block size: %u bytes\n",
-                     format_version == 1 ? 4096 : config_json["block_size"].asUInt());
-        absl::PrintF("Content IV size: %u bits\n",
-                     format_version == 1 ? 256 : config_json["iv_size"].asUInt() * 8);
-        absl::PrintF("Password derivation algorithm: %s\n",
-                     config_json.get("pbkdf", PBKDF_ALGO_PKCS5).asCString());
-        absl::PrintF("Password derivation iterations: %u\n", config_json["iterations"].asUInt());
-        absl::PrintF("Per file key generation algorithm: %s\n",
-                     format_version < 4 ? "HMAC-SHA256" : "AES");
-        absl::PrintF("Content cipher: %s\n", format_version < 4 ? "AES-256-GCM" : "AES-128-GCM");
-        absl::PrintF("Maximum padding to obfuscate file sizes: %u byte(s)\n",
-                     config_json.get("max_padding", 0u).asUInt());
+        absl::PrintF("JSON representation of config:\n%s\n", json);
         return 0;
     }
 };
