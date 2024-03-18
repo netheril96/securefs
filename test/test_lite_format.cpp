@@ -60,16 +60,19 @@ namespace
 
     TEST_CASE("case folding name translator")
     {
-        NameNormalizationFlags flags{};
-        flags.should_case_fold = true;
-        fruit::Injector<NameTranslator> injector(
-            +[](const NameNormalizationFlags* flags) -> fruit::Component<NameTranslator>
-            {
-                return fruit::createComponent()
-                    .install(get_name_translator_component, flags)
-                    .install(get_test_component);
-            },
-            &flags);
+        fruit::Injector<NameTranslator> injector(+[]() -> fruit::Component<NameTranslator>
+                                                 {
+                                                     return fruit::createComponent()
+                                                         .registerProvider(
+                                                             []()
+                                                             {
+                                                                 NameNormalizationFlags flags{};
+                                                                 flags.should_case_fold = true;
+                                                                 return flags;
+                                                             })
+                                                         .install(get_name_translator_component)
+                                                         .install(get_test_component);
+                                                 });
         auto t = injector.get<NameTranslator*>();
         CHECK(t->encrypt_full_path(u8"/abCDe/ß", nullptr)
               == t->encrypt_full_path(u8"/ABCde/ss", nullptr));
@@ -77,16 +80,19 @@ namespace
 
     TEST_CASE("Unicode normalizing name translator")
     {
-        NameNormalizationFlags flags{};
-        flags.should_normalize_nfc = true;
-        fruit::Injector<NameTranslator> injector(
-            +[](const NameNormalizationFlags* flags) -> fruit::Component<NameTranslator>
-            {
-                return fruit::createComponent()
-                    .install(get_name_translator_component, flags)
-                    .install(get_test_component);
-            },
-            &flags);
+        fruit::Injector<NameTranslator> injector(+[]() -> fruit::Component<NameTranslator>
+                                                 {
+                                                     return fruit::createComponent()
+                                                         .registerProvider(
+                                                             []()
+                                                             {
+                                                                 NameNormalizationFlags flags{};
+                                                                 flags.should_normalize_nfc = true;
+                                                                 return flags;
+                                                             })
+                                                         .install(get_name_translator_component)
+                                                         .install(get_test_component);
+                                                 });
         auto t = injector.get<NameTranslator*>();
 
         CHECK(t->encrypt_full_path("/aaa/\xc3\x84\xc3\x84\xc3\x84", nullptr)
@@ -98,12 +104,17 @@ namespace
 
     TEST_CASE("Lite FuseHighLevelOps")
     {
-        auto whole_component
-            = [](OSService* os,
-                 const NameNormalizationFlags* flags) -> fruit::Component<FuseHighLevelOps>
+        auto whole_component = [](OSService* os) -> fruit::Component<FuseHighLevelOps>
         {
             return fruit::createComponent()
-                .install(get_name_translator_component, flags)
+                .registerProvider(
+                    []()
+                    {
+                        NameNormalizationFlags flags{};
+                        flags.long_name_threshold = 133;
+                        return flags;
+                    })
+                .install(get_name_translator_component)
                 .install(get_test_component)
                 .bindInstance(*os);
         };
@@ -111,10 +122,8 @@ namespace
         auto temp_dir_name = OSService::temp_name("tmp/lite", "dir");
         OSService::get_default().ensure_directory(temp_dir_name, 0755);
         OSService root(temp_dir_name);
-        NameNormalizationFlags flags{};
-        flags.long_name_threshold = 133;
 
-        fruit::Injector<FuseHighLevelOps> injector(+whole_component, &root, &flags);
+        fruit::Injector<FuseHighLevelOps> injector(+whole_component, &root);
         auto& ops = injector.get<FuseHighLevelOps&>();
         testing::test_fuse_ops(ops, root);
     }

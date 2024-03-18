@@ -23,6 +23,7 @@
 #include <fruit/fruit.h>
 #include <fruit/fruit_forward_decls.h>
 #include <fruit/macro.h>
+#include <functional>
 #include <uni_algo/case.h>
 #include <uni_algo/norm.h>
 
@@ -1104,6 +1105,43 @@ void FuseHighLevelOps::process_possible_long_name(
         throw_runtime_error("Unspecified action");
     }
     callback(std::move(enc_path));
+}
+fruit::Component<
+    fruit::Required<const NameNormalizationFlags, fruit::Annotated<tNameMasterKey, key_type>>,
+    NameTranslator>
+get_name_translator_component()
+{
+    return fruit::createComponent()
+        .registerProvider<fruit::Annotated<tLongNameThreshold, unsigned>(
+            const NameNormalizationFlags&)>([](const NameNormalizationFlags& flags)
+                                            { return flags.long_name_threshold; })
+        .registerProvider(
+            [](const NameNormalizationFlags& flags,
+               const std::function<std::unique_ptr<NoOpNameTranslator>()>& no_op_factory,
+               const std::function<std::unique_ptr<NewStyleNameTranslator>()>& new_style_factory,
+               const std::function<std::unique_ptr<LegacyNameTranslator>()>& legacy_factory)
+                -> NameTranslator*
+            {
+                if (flags.no_op)
+                {
+                    return no_op_factory().release();
+                }
+                std::unique_ptr<NameTranslator> inner;
+                if (flags.long_name_threshold > 0)
+                {
+                    inner = new_style_factory();
+                }
+                else
+                {
+                    inner = legacy_factory();
+                }
+                if (!flags.should_case_fold && !flags.should_normalize_nfc)
+                {
+                    return inner.release();
+                }
+                return new PathNormalizingNameTranslator(
+                    std::move(inner), flags.should_case_fold, flags.should_normalize_nfc);
+            });
 }
 
 fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>

@@ -835,7 +835,6 @@ private:
                                       false};
 
     DecryptedSecurefsParams fsparams{};
-    lite_format::NameNormalizationFlags name_norm_flags{};
 
 private:
     std::vector<const char*> to_c_style_args(const std::vector<std::string>& args)
@@ -881,31 +880,9 @@ private:
         return key_type{reinterpret_cast<const byte*>(view.data()), view.size()};
     }
 
-    fruit::Component<FuseHighLevelOpsBase> get_fuse_high_ops_component()
+    static fruit::Component<FuseHighLevelOpsBase>
+    get_fuse_high_ops_component(const MountCommand* cmd)
     {
-        if (plain_text_names.getValue())
-        {
-            name_norm_flags.no_op = true;
-        }
-        if (normalization.getValue() == "nfc")
-        {
-            name_norm_flags.should_normalize_nfc = true;
-        }
-        else if (normalization.getValue() == "casefold")
-        {
-            name_norm_flags.should_case_fold = true;
-        }
-        else if (normalization.getValue() == "casefold+nfc")
-        {
-            name_norm_flags.should_normalize_nfc = true;
-            name_norm_flags.should_case_fold = true;
-        }
-        else if (normalization.getValue() != "none")
-        {
-            throw_runtime_error("Invalid flag of --normalization: " + normalization.getValue());
-        }
-        name_norm_flags.long_name_threshold = fsparams.lite_format_params().long_name_threshold();
-
         auto internal_binder = [](DecryptedSecurefsParams::FormatSpecificParamsCase format_case)
             -> fruit::Component<
                 fruit::Required<lite_format::FuseHighLevelOps, full_format::FuseHighLevelOps>,
@@ -925,11 +902,41 @@ private:
         };
 
         return fruit::createComponent()
-            .bindInstance(*this)
-            .install(+internal_binder, fsparams.format_specific_params_case())
-            .install(::securefs::lite_format::get_name_translator_component, &name_norm_flags)
+            .bindInstance(*cmd)
+            .install(+internal_binder, cmd->fsparams.format_specific_params_case())
+            .install(::securefs::lite_format::get_name_translator_component)
             .install(full_format::get_table_io_component,
-                     fsparams.full_format_params().legacy_file_table_io())
+                     cmd->fsparams.full_format_params().legacy_file_table_io())
+            .registerProvider<lite_format::NameNormalizationFlags(const MountCommand&)>(
+                [](const MountCommand& cmd)
+                {
+                    lite_format::NameNormalizationFlags flags{};
+                    if (cmd.plain_text_names.getValue())
+                    {
+                        flags.no_op = true;
+                    }
+                    else if (cmd.normalization.getValue() == "nfc")
+                    {
+                        flags.should_normalize_nfc = true;
+                    }
+                    else if (cmd.normalization.getValue() == "casefold")
+                    {
+                        flags.should_case_fold = true;
+                    }
+                    else if (cmd.normalization.getValue() == "casefold+nfc")
+                    {
+                        flags.should_normalize_nfc = true;
+                        flags.should_case_fold = true;
+                    }
+                    else if (cmd.normalization.getValue() != "none")
+                    {
+                        throw_runtime_error("Invalid flag of --normalization: "
+                                            + cmd.normalization.getValue());
+                    }
+                    flags.long_name_threshold
+                        = cmd.fsparams.lite_format_params().long_name_threshold();
+                    return flags;
+                })
             .registerProvider<fruit::Annotated<tSkipVerification, bool>(const MountCommand&)>(
                 [](const MountCommand& cmd) { return cmd.insecure.getValue(); })
             .registerProvider<fruit::Annotated<tVerify, bool>(const MountCommand&)>(
@@ -1186,8 +1193,7 @@ public:
 #endif
             fuse_args.emplace_back(mount_point.getValue());
 
-        fruit::Injector<FuseHighLevelOpsBase> injector(
-            +[](MountCommand* cmd) { return cmd->get_fuse_high_ops_component(); }, this);
+        fruit::Injector<FuseHighLevelOpsBase> injector(get_fuse_high_ops_component, this);
 
         bool native_xattr = !noxattr.getValue();
 #ifdef __APPLE__

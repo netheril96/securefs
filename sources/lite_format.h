@@ -210,8 +210,10 @@ struct NameNormalizationFlags
     unsigned long_name_threshold;
 };
 
-fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
-get_name_translator_component(const NameNormalizationFlags* args);
+fruit::Component<
+    fruit::Required<const NameNormalizationFlags, fruit::Annotated<tNameMasterKey, key_type>>,
+    NameTranslator>
+get_name_translator_component();
 
 class FuseHighLevelOps : public ::securefs::FuseHighLevelOpsBase
 {
