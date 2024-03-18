@@ -20,7 +20,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <fruit/macro.h>
-#include <json/config.h>
 #include <memory>
 #include <string>
 #include <thread>

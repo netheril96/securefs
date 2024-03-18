@@ -31,7 +31,6 @@
 #include <fruit/fruit.h>
 #include <fruit/fruit_forward_decls.h>
 #include <google/protobuf/util/json_util.h>
-#include <json/json.h>
 #include <tclap/CmdLine.h>
 #include <tclap/SwitchArg.h>
 #include <tclap/ValueArg.h>
