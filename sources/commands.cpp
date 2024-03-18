@@ -963,6 +963,12 @@ public:
         return "Display information about the filesystem";
     }
 
+    void parse_cmdline(int argc, const char* const* argv) override
+    {
+        SinglePasswordCommandBase::parse_cmdline(argc, argv);
+        get_password(false);
+    }
+
     int execute() override
     {
         auto real_config_path = get_real_config_path_for_reading();
@@ -975,6 +981,7 @@ public:
         google::protobuf::util::JsonPrintOptions options{};
         options.preserve_proto_field_names = true;
         options.add_whitespace = true;
+        options.always_print_primitive_fields = true;
         auto status = google::protobuf::util::MessageToJsonString(params, &json, options);
         if (!status.ok())
         {
