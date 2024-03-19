@@ -10,6 +10,7 @@
 #include "tags.h"
 
 #include <absl/base/thread_annotations.h>
+#include <absl/strings/str_cat.h>
 #include <algorithm>
 #include <exception>
 #include <fruit/component.h>

@@ -2,9 +2,12 @@
 #include "exceptions.h"
 #include "myutils.h"
 #include "platform.h"
+#include <absl/strings/str_cat.h>
 
 namespace securefs
 {
+using absl::StrCat;
+
 const OSService& OSService::get_default()
 {
     static const OSService service;
@@ -75,7 +78,7 @@ void OSService::recursive_traverse(const std::string& dir,
             continue;
         if ((S_IFMT & st.st_mode) == S_IFDIR)
         {
-            recursive_traverse(absl::StrCat(dir, "/", name), callback);
+            recursive_traverse(StrCat(dir, "/", name), callback);
         }
         else
         {
