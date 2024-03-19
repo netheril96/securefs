@@ -75,9 +75,11 @@ target_include_directories(securefs-static PUBLIC SYSTEM ${TCLAP_INCLUDE_DIRS})
 find_package(absl CONFIG REQUIRED)
 find_package(uni-algo CONFIG REQUIRED)
 find_package(Protobuf CONFIG REQUIRED)
+find_package(args CONFIG REQUIRED)
 target_link_libraries(
     securefs-static
-    PUBLIC uni-algo::uni-algo
+    PUBLIC taywee::args
+           uni-algo::uni-algo
            absl::base
            absl::time
            absl::synchronization
