@@ -24,7 +24,7 @@ static const void* current_thread_id(void) { return (void*)(pthread_self()); }
 namespace securefs
 {
 Logger::Logger(FILE* fp, bool close_on_exit)
-    : m_level(kLogInfo), m_fp(fp), m_close_on_exit(close_on_exit)
+    : m_level(LoggingLevel::kLogInfo), m_fp(fp), m_close_on_exit(close_on_exit)
 {
     m_console_color = ConsoleColourSetter::create_setter(m_fp);
 }
@@ -43,10 +43,10 @@ void Logger::prelog(LoggingLevel level, const char* funcsig, int lineno) noexcep
     {
         switch (level)
         {
-        case kLogWarning:
+        case LoggingLevel::kLogWarning:
             m_console_color->use(Colour::Warning);
             break;
-        case kLogError:
+        case LoggingLevel::kLogError:
             m_console_color->use(Colour::Error);
             break;
         default:
@@ -71,7 +71,7 @@ void Logger::prelog(LoggingLevel level, const char* funcsig, int lineno) noexcep
 
 void Logger::postlog(LoggingLevel level) noexcept
 {
-    if (m_console_color && (level == kLogWarning || level == kLogError))
+    if (m_console_color && (level == LoggingLevel::kLogWarning || level == LoggingLevel::kLogError))
     {
         m_console_color->use(Colour::Default);
     }

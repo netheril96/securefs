@@ -10,7 +10,7 @@
 
 namespace securefs
 {
-enum LoggingLevel : unsigned char
+enum class LoggingLevel : unsigned char
 {
     kLogTrace = 0,
     kLogVerbose = 1,
@@ -23,15 +23,15 @@ inline const char* stringify(LoggingLevel lvl)
 {
     switch (lvl)
     {
-    case kLogTrace:
+    case LoggingLevel::kLogTrace:
         return "Trace";
-    case kLogVerbose:
+    case LoggingLevel::kLogVerbose:
         return "Verbose";
-    case kLogInfo:
+    case LoggingLevel::kLogInfo:
         return "Info";
-    case kLogWarning:
+    case LoggingLevel::kLogWarning:
         return "Warning";
-    case kLogError:
+    case LoggingLevel::kLogError:
         return "Error";
     }
     return "UNKNOWN";
@@ -106,9 +106,9 @@ extern Logger* global_logger;
             global_logger->log_v2(log_level, FULL_FUNCTION_NAME, __LINE__, __VA_ARGS__);           \
         }                                                                                          \
     } while (0)
-#define TRACE_LOG(...) GENERIC_LOG(securefs::kLogTrace, __VA_ARGS__)
-#define VERBOSE_LOG(...) GENERIC_LOG(securefs::kLogVerbose, __VA_ARGS__)
-#define INFO_LOG(...) GENERIC_LOG(securefs::kLogInfo, __VA_ARGS__)
-#define WARN_LOG(...) GENERIC_LOG(securefs::kLogWarning, __VA_ARGS__)
-#define ERROR_LOG(...) GENERIC_LOG(securefs::kLogError, __VA_ARGS__)
+#define TRACE_LOG(...) GENERIC_LOG(securefs::LoggingLevel::kLogTrace, __VA_ARGS__)
+#define VERBOSE_LOG(...) GENERIC_LOG(securefs::LoggingLevel::kLogVerbose, __VA_ARGS__)
+#define INFO_LOG(...) GENERIC_LOG(securefs::LoggingLevel::kLogInfo, __VA_ARGS__)
+#define WARN_LOG(...) GENERIC_LOG(securefs::LoggingLevel::kLogWarning, __VA_ARGS__)
+#define ERROR_LOG(...) GENERIC_LOG(securefs::LoggingLevel::kLogError, __VA_ARGS__)
 }    // namespace securefs

@@ -679,9 +679,9 @@ public:
         get_password(false);
 
         if (global_logger && verbose.getValue())
-            global_logger->set_level(kLogVerbose);
+            global_logger->set_level(LoggingLevel::kLogVerbose);
         if (global_logger && trace.getValue())
-            global_logger->set_level(kLogTrace);
+            global_logger->set_level(LoggingLevel::kLogTrace);
 
         set_lock_enabled(!noflock.getValue());
         if (noflock.getValue() && !single_threaded.getValue())
@@ -707,9 +707,9 @@ public:
             global_logger = nullptr;
         }
         if (global_logger && verbose.getValue())
-            global_logger->set_level(kLogVerbose);
+            global_logger->set_level(LoggingLevel::kLogVerbose);
         if (global_logger && trace.getValue())
-            global_logger->set_level(kLogTrace);
+            global_logger->set_level(LoggingLevel::kLogTrace);
     }
 
     int execute() override
