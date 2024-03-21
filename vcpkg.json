@@ -5,10 +5,7 @@
         "cryptopp",
         "tclap",
         "doctest",
-        {
-            "name": "sqlite3",
-            "default-features": false
-        },
+        "sqlite3",
         "fruit",
         {
             "name": "abseil",
@@ -18,7 +15,6 @@
         },
         "bshoshany-thread-pool",
         "uni-algo",
-        "protobuf",
-        "args"
+        "protobuf"
     ]
 }
