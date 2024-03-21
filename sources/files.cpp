@@ -407,7 +407,7 @@ void SimpleDirectory::initialize()
     }
 }
 
-bool SimpleDirectory::get_entry_impl(const std::string& name, id_type& id, int& type)
+bool SimpleDirectory::get_entry_impl(std::string_view name, id_type& id, int& type)
 {
     auto it = m_table.find(name);
     if (it == m_table.end())
@@ -417,7 +417,7 @@ bool SimpleDirectory::get_entry_impl(const std::string& name, id_type& id, int& 
     return true;
 }
 
-bool SimpleDirectory::add_entry_impl(const std::string& name, const id_type& id, int type)
+bool SimpleDirectory::add_entry_impl(std::string_view name, const id_type& id, int type)
 {
     if (name.size() > MAX_FILENAME_LENGTH)
         throwVFSException(ENAMETOOLONG);
@@ -427,7 +427,7 @@ bool SimpleDirectory::add_entry_impl(const std::string& name, const id_type& id,
     return rv.second;
 }
 
-bool SimpleDirectory::remove_entry_impl(const std::string& name, id_type& id, int& type)
+bool SimpleDirectory::remove_entry_impl(std::string_view name, id_type& id, int& type)
 {
     auto it = m_table.find(name);
     if (it == m_table.end())

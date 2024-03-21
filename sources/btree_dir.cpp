@@ -341,7 +341,7 @@ void BtreeDirectory::subflush()
     flush_cache();
 }
 
-std::tuple<BtreeNode*, ptrdiff_t, bool> BtreeDirectory::find_node(const std::string& name)
+std::tuple<BtreeNode*, ptrdiff_t, bool> BtreeDirectory::find_node(std::string_view name)
 {
     BtreeNode* n = get_root_node();
     if (!n)
@@ -366,7 +366,7 @@ BtreeNode* BtreeDirectory::get_root_node()
     return retrieve_node(INVALID_PAGE, pg);
 }
 
-bool BtreeDirectory::get_entry_impl(const std::string& name, id_type& id, int& type)
+bool BtreeDirectory::get_entry_impl(std::string_view name, id_type& id, int& type)
 {
     if (name.size() > MAX_FILENAME_LENGTH)
         throwVFSException(ENAMETOOLONG);
@@ -406,7 +406,7 @@ void BtreeDirectory::write_node(uint32_t num, const BtreeDirectory::Node& n)
     m_stream->write(buffer, num * BLOCK_SIZE, BLOCK_SIZE);
 }
 
-bool BtreeDirectory::add_entry_impl(const std::string& name, const id_type& id, int type)
+bool BtreeDirectory::add_entry_impl(std::string_view name, const id_type& id, int type)
 {
     if (name.size() > MAX_FILENAME_LENGTH)
         throwVFSException(ENAMETOOLONG);
@@ -424,10 +424,12 @@ bool BtreeDirectory::add_entry_impl(const std::string& name, const id_type& id, 
     {
         set_root_page(allocate_page());
         node = get_root_node();
-        node->mutable_entries().emplace_back(Entry{name, id, static_cast<uint32_t>(type)});
+        node->mutable_entries().emplace_back(
+            Entry{std::string(name), id, static_cast<uint32_t>(type)});
         return true;
     }
-    insert_and_balance(node, Entry{name, id, static_cast<uint32_t>(type)}, INVALID_PAGE, 0);
+    insert_and_balance(
+        node, Entry{std::string(name), id, static_cast<uint32_t>(type)}, INVALID_PAGE, 0);
     return true;
 }
 
@@ -616,7 +618,7 @@ void BtreeDirectory::balance_up(BtreeNode* n, int depth)
     balance_up(parent, depth + 1);
 }
 
-bool BtreeDirectory::remove_entry_impl(const std::string& name, id_type& id, int& type)
+bool BtreeDirectory::remove_entry_impl(std::string_view name, id_type& id, int& type)
 {
     if (name.size() > MAX_FILENAME_LENGTH)
         throwVFSException(ENAMETOOLONG);
@@ -745,7 +747,8 @@ void BtreeDirectory::rebuild()
 
     std::vector<DirEntry> entries;
     entries.reserve(this->m_stream->size() / BLOCK_SIZE * BTREE_MAX_NUM_ENTRIES);
-    mutable_recursive_iterate(root, [&](DirEntry&& e) { entries.push_back(std::move(e)); }, 0);
+    mutable_recursive_iterate(
+        root, [&](DirEntry&& e) { entries.push_back(std::move(e)); }, 0);
     clear_cache();    // root is invalid after this line
     m_stream->resize(0);
     set_num_free_page(0);

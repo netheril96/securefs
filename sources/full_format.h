@@ -140,7 +140,7 @@ private:
     struct OpenBaseResult
     {
         FilePtrHolder file;
-        std::string last_component;
+        std::string_view last_component;
     };
 
     OpenBaseResult open_base(absl::string_view path);

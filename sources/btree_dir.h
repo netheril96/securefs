@@ -37,11 +37,11 @@ public:
     uint32_t type;
 
     int compare(const DirEntry& other) const { return filename.compare(other.filename); }
-    int compare(const std::string& name) const { return filename.compare(name); }
+    int compare(std::string_view name) const { return filename.compare(name); }
     bool operator<(const DirEntry& other) const { return compare(other) < 0; }
     bool operator==(const DirEntry& other) const { return compare(other) == 0; }
-    bool operator<(const std::string& other) const { return compare(other) < 0; }
-    bool operator==(const std::string& other) const { return compare(other) == 0; }
+    bool operator<(std::string_view other) const { return compare(other) < 0; }
+    bool operator==(std::string_view other) const { return compare(other) == 0; }
 };
 
 class BtreeNode
@@ -150,7 +150,7 @@ private:
     void merge(BtreeNode* left, BtreeNode* right, BtreeNode* parent, ptrdiff_t entry_index)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
-    std::tuple<Node*, ptrdiff_t, bool> find_node(const std::string& name)
+    std::tuple<Node*, ptrdiff_t, bool> find_node(std::string_view name)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
     std::pair<ptrdiff_t, BtreeNode*> find_sibling(const BtreeNode* parent, const BtreeNode* child)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
@@ -201,11 +201,11 @@ public:
     ~BtreeDirectory() override;
 
 protected:
-    bool get_entry_impl(const std::string& name, id_type& id, int& type) override
+    bool get_entry_impl(std::string_view name, id_type& id, int& type) override
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
-    bool add_entry_impl(const std::string& name, const id_type& id, int type) override
+    bool add_entry_impl(std::string_view name, const id_type& id, int type) override
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
-    bool remove_entry_impl(const std::string& name, id_type& id, int& type) override
+    bool remove_entry_impl(std::string_view name, id_type& id, int& type) override
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
     void iterate_over_entries_impl(const callback&) override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 

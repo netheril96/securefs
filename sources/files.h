@@ -8,7 +8,6 @@
 #include "tags.h"
 
 #include <absl/base/thread_annotations.h>
-#include <absl/container/flat_hash_map.h>
 #include <absl/functional/function_ref.h>
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
@@ -452,14 +451,14 @@ public:
     int type() const noexcept override { return class_type(); }
 
 public:
-    bool get_entry(const std::string& name, id_type& id, int& type)
+    bool get_entry(std::string_view name, id_type& id, int& type)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         update_atime_helper();
         return get_entry_impl(name, id, type);
     }
 
-    bool add_entry(const std::string& name, const id_type& id, int type)
+    bool add_entry(std::string_view name, const id_type& id, int type)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         update_mtime_helper();
@@ -470,7 +469,7 @@ public:
      * Removes the entry while also report the info of said entry.
      * Returns false when the entry is not found.
      */
-    bool remove_entry(const std::string& name, id_type& id, int& type)
+    bool remove_entry(std::string_view name, id_type& id, int& type)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         update_mtime_helper();
@@ -489,15 +488,15 @@ public:
     virtual bool empty() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) = 0;
 
 protected:
-    virtual bool get_entry_impl(const std::string& name, id_type& id, int& type) = 0;
+    virtual bool get_entry_impl(std::string_view name, id_type& id, int& type) = 0;
 
-    virtual bool add_entry_impl(const std::string& name, const id_type& id, int type) = 0;
+    virtual bool add_entry_impl(std::string_view name, const id_type& id, int type) = 0;
 
     /**
      * Removes the entry while also report the info of said entry.
      * Returns false when the entry is not found.
      */
-    virtual bool remove_entry_impl(const std::string& name, id_type& id, int& type) = 0;
+    virtual bool remove_entry_impl(std::string_view name, id_type& id, int& type) = 0;
 
     /**
      * When callback returns false, the iteration will be terminated
@@ -511,18 +510,19 @@ protected:
 class SimpleDirectory final : public Directory
 {
 private:
-    struct Equal
+    struct Less
     {
+        using is_transparent = void;
+
         DirNameComparison cmpfn;
 
-        bool operator()(const std::string& a, const std::string& b) const
+        bool operator()(std::string_view a, std::string_view b) const
         {
-            return cmpfn(a, b) == 0;
+            return cmpfn(a, b) < 0;
         }
     };
 
-    absl::flat_hash_map<std::string, std::pair<id_type, int>, std::hash<std::string>, Equal>
-        m_table{16, {}, Equal{cmpfn_}};
+    std::map<std::string, std::pair<id_type, int>, Less> m_table{Less{this->cmpfn_}};
     bool m_dirty;
 
 private:
@@ -535,11 +535,11 @@ public:
         initialize();
     }
 
-    bool get_entry_impl(const std::string& name, id_type& id, int& type) override;
+    bool get_entry_impl(std::string_view name, id_type& id, int& type) override;
 
-    bool add_entry_impl(const std::string& name, const id_type& id, int type) override;
+    bool add_entry_impl(std::string_view name, const id_type& id, int type) override;
 
-    bool remove_entry_impl(const std::string& name, id_type& id, int& type) override;
+    bool remove_entry_impl(std::string_view name, id_type& id, int& type) override;
 
     void subflush() override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 

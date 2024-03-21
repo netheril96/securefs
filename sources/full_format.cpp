@@ -387,7 +387,7 @@ int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fus
 
 FuseHighLevelOps::OpenBaseResult FuseHighLevelOps::open_base(absl::string_view path)
 {
-    absl::InlinedVector<std::string, 7> splits = absl::StrSplit(path, '/', absl::SkipEmpty());
+    absl::InlinedVector<std::string_view, 7> splits = absl::StrSplit(path, '/', absl::SkipEmpty());
     uint64_t parent_ino = to_inode_number(kRootId);
     FilePtrHolder holder = ft_.open_as(kRootId, Directory::class_type());
     for (size_t i = 0; i + 1 < splits.size(); ++i)
@@ -405,7 +405,7 @@ FuseHighLevelOps::OpenBaseResult FuseHighLevelOps::open_base(absl::string_view p
         holder->set_parent_ino(parent_ino);
         parent_ino = holder->get_parent_ino();
     }
-    return {std::move(holder), splits.empty() ? std::string() : splits.back()};
+    return {std::move(holder), splits.empty() ? std::string_view() : splits.back()};
 }
 FilePtrHolder
 FuseHighLevelOps::create(absl::string_view path, unsigned mode, int type, int uid, int gid)
