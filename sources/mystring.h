@@ -34,4 +34,10 @@ void base32_encode(const byte* input, size_t size, std::string& output);
 void base32_decode(const char* input, size_t size, std::string& output);
 
 bool is_ascii(std::string_view str);
+
+int binary_compare(std::string_view a, std::string_view b);
+int case_insensitive_compare(std::string_view a, std::string_view b);
+int uni_norm_insensitive_compare(std::string_view a, std::string_view b);
+int case_uni_norm_insensitve_compare(std::string_view a, std::string_view b);
+
 }    // namespace securefs

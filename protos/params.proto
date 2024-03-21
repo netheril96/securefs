@@ -53,6 +53,8 @@ message DecryptedSecurefsParams
         bytes master_key = 1;
         bool store_time = 2;
         bool legacy_file_table_io = 3;
+        bool case_insensitive = 4;
+        bool unicode_normalization_agnostic = 5;
     }
 
     oneof format_specific_params

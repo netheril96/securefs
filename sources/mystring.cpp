@@ -2,6 +2,8 @@
 #include "exceptions.h"
 #include "myutils.h"
 
+#include <uni_algo/all.h>
+
 namespace securefs
 {
 
@@ -281,5 +283,18 @@ bool is_ascii(std::string_view str)
         }
     }
     return true;
+}
+int binary_compare(std::string_view a, std::string_view b) { return a.compare(b); }
+int case_insensitive_compare(std::string_view a, std::string_view b)
+{
+    return una::caseless::compare_utf8(a, b);
+}
+int uni_norm_insensitive_compare(std::string_view a, std::string_view b)
+{
+    return una::norm::to_nfc_utf8(a).compare(una::norm::to_nfc_utf8(b));
+}
+int case_uni_norm_insensitve_compare(std::string_view a, std::string_view b)
+{
+    return una::caseless::compare_utf8(una::norm::to_nfc_utf8(a), una::norm::to_nfc_utf8(b));
 }
 }    // namespace securefs

@@ -643,7 +643,25 @@ private:
                     return key_type();
                 })
             .registerProvider([](const MountCommand& cmd)
-                              { return new OSService(cmd.data_dir.getValue()); });
+                              { return new OSService(cmd.data_dir.getValue()); })
+            .registerProvider(
+                [](const MountCommand& cmd)
+                {
+                    const auto& p = cmd.fsparams.full_format_params();
+                    if (p.case_insensitive() && p.unicode_normalization_agnostic())
+                    {
+                        return Directory::DirNameComparison{&case_uni_norm_insensitve_compare};
+                    }
+                    if (p.case_insensitive())
+                    {
+                        return Directory::DirNameComparison{&case_insensitive_compare};
+                    }
+                    if (p.unicode_normalization_agnostic())
+                    {
+                        return Directory::DirNameComparison{&uni_norm_insensitive_compare};
+                    }
+                    return Directory::DirNameComparison{&binary_compare};
+                });
     }
 
 public:

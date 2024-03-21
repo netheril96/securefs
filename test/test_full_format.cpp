@@ -1,6 +1,7 @@
 #include "btree_dir.h"
 #include "full_format.h"
 #include "fuse_high_level_ops_base.h"
+#include "mystring.h"
 #include "platform.h"
 #include "test_common.h"
 
@@ -28,6 +29,7 @@ namespace
             .registerProvider<fruit::Annotated<tBlockSize, unsigned>()>([]() { return 60u; })
             .registerProvider<fruit::Annotated<tMasterKey, key_type>()>([]()
                                                                         { return key_type(0x99); })
+            .registerProvider([]() -> Directory::DirNameComparison { return {&binary_compare}; })
             .bindInstance(*os);
     }
     TEST_CASE("Full format test")

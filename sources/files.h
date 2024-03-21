@@ -22,6 +22,7 @@
 #include <fruit/macro.h>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <thread>
 
 namespace securefs
@@ -432,17 +433,25 @@ public:
 
 public:
     constexpr static int class_type() { return FileBase::DIRECTORY; }
+    using callback = absl::FunctionRef<void(const std::string&, const id_type&, int)>;
+
+    // A wrapper for a function pointer so as to be injectable
+    struct DirNameComparison
+    {
+        int (*fn)(std::string_view, std::string_view);
+
+        int operator()(std::string_view a, std::string_view b) const { return fn(a, b); }
+    };
 
     template <class... Args>
-    explicit Directory(Args&&... args) : FileBase(std::forward<Args>(args)...)
+    explicit Directory(DirNameComparison cmpfn, Args&&... args)
+        : FileBase(std::forward<Args>(args)...), cmpfn_(cmpfn)
     {
     }
 
     int type() const noexcept override { return class_type(); }
 
 public:
-    using callback = absl::FunctionRef<void(const std::string&, const id_type&, int)>;
-
     bool get_entry(const std::string& name, id_type& id, int& type)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
@@ -494,12 +503,26 @@ protected:
      * When callback returns false, the iteration will be terminated
      */
     virtual void iterate_over_entries_impl(const callback& cb) = 0;
+
+protected:
+    DirNameComparison cmpfn_;
 };
 
 class SimpleDirectory final : public Directory
 {
 private:
-    absl::flat_hash_map<std::string, std::pair<id_type, int>> m_table;
+    struct Equal
+    {
+        DirNameComparison cmpfn;
+
+        bool operator()(const std::string& a, const std::string& b) const
+        {
+            return cmpfn(a, b) == 0;
+        }
+    };
+
+    absl::flat_hash_map<std::string, std::pair<id_type, int>, std::hash<std::string>, Equal>
+        m_table{16, {}, Equal{cmpfn_}};
     bool m_dirty;
 
 private:

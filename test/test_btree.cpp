@@ -107,24 +107,28 @@ static void test_btree_dir(unsigned max_padding_size)
     int flags = O_RDWR | O_EXCL | O_CREAT;
 
     {
-        securefs::BtreeDirectory dir(service.open_file_stream(tmp1, flags, 0644),
-                                     service.open_file_stream(tmp2, flags, 0644),
-                                     key,
-                                     null_id,
-                                     true,
-                                     8000,
-                                     12,
-                                     max_padding_size,
-                                     false);
-        securefs::SimpleDirectory ref_dir(service.open_file_stream(tmp3, flags, 0644),
-                                          service.open_file_stream(tmp4, flags, 0644),
-                                          key,
-                                          null_id,
-                                          true,
-                                          8000,
-                                          12,
-                                          max_padding_size,
-                                          false);
+        securefs::BtreeDirectory dir(
+            securefs::Directory::DirNameComparison{securefs::binary_compare},
+            service.open_file_stream(tmp1, flags, 0644),
+            service.open_file_stream(tmp2, flags, 0644),
+            key,
+            null_id,
+            true,
+            8000,
+            12,
+            max_padding_size,
+            false);
+        securefs::SimpleDirectory ref_dir(
+            securefs::Directory::DirNameComparison{securefs::binary_compare},
+            service.open_file_stream(tmp3, flags, 0644),
+            service.open_file_stream(tmp4, flags, 0644),
+            key,
+            null_id,
+            true,
+            8000,
+            12,
+            max_padding_size,
+            false);
         securefs::DoubleFileLockGuard dflg(dir, ref_dir);
         test(dir, ref_dir, 1000, 0.3, 0.5, 0.1, 1);
         test(dir, ref_dir, 1000, 0.3, 0.1, 0.5, 2);
@@ -134,24 +138,28 @@ static void test_btree_dir(unsigned max_padding_size)
     }
     {
         // Test if the data persists on the disk
-        securefs::BtreeDirectory dir(service.open_file_stream(tmp1, O_RDWR, 0),
-                                     service.open_file_stream(tmp2, O_RDWR, 0),
-                                     key,
-                                     null_id,
-                                     true,
-                                     8000,
-                                     12,
-                                     max_padding_size,
-                                     false);
-        securefs::SimpleDirectory ref_dir(service.open_file_stream(tmp3, O_RDWR, 0),
-                                          service.open_file_stream(tmp4, O_RDWR, 0),
-                                          key,
-                                          null_id,
-                                          true,
-                                          8000,
-                                          12,
-                                          max_padding_size,
-                                          false);
+        securefs::BtreeDirectory dir(
+            securefs::Directory::DirNameComparison{securefs::binary_compare},
+            service.open_file_stream(tmp1, O_RDWR, 0),
+            service.open_file_stream(tmp2, O_RDWR, 0),
+            key,
+            null_id,
+            true,
+            8000,
+            12,
+            max_padding_size,
+            false);
+        securefs::SimpleDirectory ref_dir(
+            securefs::Directory::DirNameComparison{securefs::binary_compare},
+            service.open_file_stream(tmp3, O_RDWR, 0),
+            service.open_file_stream(tmp4, O_RDWR, 0),
+            key,
+            null_id,
+            true,
+            8000,
+            12,
+            max_padding_size,
+            false);
         securefs::DoubleFileLockGuard dflg(dir, ref_dir);
         test(dir, ref_dir, 1000, 0.3, 0.3, 0.3, 4);
         dir.flush();

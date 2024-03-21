@@ -175,7 +175,8 @@ protected:
     void subflush() override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
 public:
-    INJECT(BtreeDirectory(ASSISTED(std::shared_ptr<FileStream>) data_stream,
+    INJECT(BtreeDirectory(DirNameComparison cmpfn,
+                          ASSISTED(std::shared_ptr<FileStream>) data_stream,
                           ASSISTED(std::shared_ptr<FileStream>) meta_stream,
                           ANNOTATED(tMasterKey, const key_type&) key_,
                           ASSISTED(const id_type&) id_,
@@ -184,7 +185,8 @@ public:
                           ANNOTATED(tIvSize, unsigned) iv_size,
                           ANNOTATED(tMaxPaddingSize, unsigned) max_padding_size,
                           ANNOTATED(tStoreTimeWithinFs, bool) store_time))
-        : Directory(std::move(data_stream),
+        : Directory(cmpfn,
+                    std::move(data_stream),
                     std::move(meta_stream),
                     key_,
                     id_,
