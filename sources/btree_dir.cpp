@@ -285,7 +285,7 @@ bool BtreeDirectory::validate_node(const BtreeNode* n, int depth)
 {
     if (depth > BTREE_MAX_DEPTH)
         return false;
-    if (!std::is_sorted(n->entries().begin(), n->entries().end()))
+    if (!std::is_sorted(n->entries().begin(), n->entries().end(), dir_entry_cmp()))
         return false;
     if (n->parent_page_number() != INVALID_PAGE
         && (n->entries().size() < BTREE_MAX_NUM_ENTRIES / 2
@@ -300,7 +300,8 @@ bool BtreeDirectory::validate_node(const BtreeNode* n, int depth)
             const Node* rchild = retrieve_node(n->page_number(), n->children()[i + 1]);
             validate_node(lchild, depth + 1);
             validate_node(rchild, depth + 1);
-            if (e < lchild->entries().back() || rchild->entries().front() < e)
+            if (cmpfn_(e.filename, lchild->entries().back().filename) < 0
+                || cmpfn_(rchild->entries().front().filename, e.filename) < 0)
                 return false;
         }
     }
@@ -348,8 +349,12 @@ std::tuple<BtreeNode*, ptrdiff_t, bool> BtreeDirectory::find_node(std::string_vi
         return std::make_tuple(nullptr, 0, false);
     for (int i = 0; i < BTREE_MAX_DEPTH; ++i)
     {
-        auto iter = std::lower_bound(n->entries().begin(), n->entries().end(), name);
-        if (iter != n->entries().end() && name == iter->filename)
+        auto iter = std::lower_bound(n->entries().begin(),
+                                     n->entries().end(),
+                                     name,
+                                     [this](const DirEntry& e, std::string_view n)
+                                     { return cmpfn_(e.filename, n) < 0; });
+        if (iter != n->entries().end() && cmpfn_(name, iter->filename) == 0)
             return std::make_tuple(n, iter - n->entries().begin(), true);
         if (n->is_leaf())
             return std::make_tuple(n, iter - n->entries().begin(), false);
@@ -379,7 +384,7 @@ bool BtreeDirectory::get_entry_impl(std::string_view name, id_type& id, int& typ
     if (!is_equal || !node)
         return false;
     const Entry& e = node->entries().at(entry_index);
-    if (name == e.filename)
+    if (cmpfn_(name, e.filename) == 0)
     {
         id = e.id;
         type = e.type;
@@ -447,7 +452,8 @@ void BtreeDirectory::adjust_children_in_cache(BtreeNode* n, uint32_t parent)
 void BtreeDirectory::insert_and_balance(BtreeNode* n, Entry e, uint32_t additional_child, int depth)
 {
     dir_check(depth < BTREE_MAX_DEPTH);
-    auto iter = std::lower_bound(n->mutable_entries().begin(), n->mutable_entries().end(), e);
+    auto iter = std::lower_bound(
+        n->mutable_entries().begin(), n->mutable_entries().end(), e, dir_entry_cmp());
     if (additional_child != INVALID_PAGE && !n->is_leaf())
         insert(n->mutable_children(), iter - n->entries().begin() + 1, additional_child);
     insert(n->mutable_entries(), iter - n->entries().begin(), std::move(e));
@@ -602,14 +608,14 @@ void BtreeDirectory::balance_up(BtreeNode* n, int depth)
 
     if (n->entries().size() + sibling->entries().size() < BTREE_MAX_NUM_ENTRIES)
     {
-        if (n->entries().back() < sibling->entries().front())
+        if (dir_entry_cmp()(n->entries().back(), sibling->entries().front()))
             merge(n, sibling, parent, entry_index);
         else
             merge(sibling, n, parent, entry_index);
     }
     else
     {
-        if (n->entries().back() < sibling->entries().front())
+        if (dir_entry_cmp()(n->entries().back(), sibling->entries().front()))
             rotate(n, sibling, parent->mutable_entries().at(entry_index));
         else
             rotate(sibling, n, parent->mutable_entries().at(entry_index));

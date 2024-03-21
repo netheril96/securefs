@@ -35,13 +35,6 @@ public:
     std::string filename;
     id_type id;
     uint32_t type;
-
-    int compare(const DirEntry& other) const { return filename.compare(other.filename); }
-    int compare(std::string_view name) const { return filename.compare(name); }
-    bool operator<(const DirEntry& other) const { return compare(other) < 0; }
-    bool operator==(const DirEntry& other) const { return compare(other) == 0; }
-    bool operator<(std::string_view other) const { return compare(other) < 0; }
-    bool operator==(std::string_view other) const { return compare(other) == 0; }
 };
 
 class BtreeNode
@@ -208,6 +201,13 @@ protected:
     bool remove_entry_impl(std::string_view name, id_type& id, int& type) override
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
     void iterate_over_entries_impl(const callback&) override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+
+private:
+    auto dir_entry_cmp()
+    {
+        return [this](const DirEntry& e1, const DirEntry& e2)
+        { return cmpfn_(e1.filename, e2.filename) < 0; };
+    }
 
 public:
     virtual bool empty() override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
