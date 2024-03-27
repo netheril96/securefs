@@ -40,5 +40,5 @@ struct doctest::StringMaker<std::vector<std::string>>
 
 namespace securefs::testing
 {
-void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root);
+void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root, bool case_insensitive = false);
 }

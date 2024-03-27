@@ -41,4 +41,7 @@ struct tStoreTimeWithinFs
 struct tLongNameThreshold
 {
 };
+struct tCaseInsensitive
+{
+};
 }    // namespace securefs

@@ -15,6 +15,19 @@
 
 namespace securefs::full_format
 {
+void FuseHighLevelOps::initialize(struct fuse_conn_info* conn)
+{
+    if (!case_insensitive_)
+    {
+        return;
+    }
+#ifdef FUSE_CAP_CASE_INSENSITIVE
+    if (conn->capable & FUSE_CAP_CASE_INSENSITIVE)
+    {
+        conn->want |= FUSE_CAP_CASE_INSENSITIVE;
+    }
+#endif
+}
 int FuseHighLevelOps::vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx)
 {
     root_.statfs(buf);
@@ -383,6 +396,57 @@ int FuseHighLevelOps::vsetxattr(const char* path,
 int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fuse_context* ctx)
 {
     return -ENOSYS;
+}
+bool FuseHighLevelOps::has_getpath() const { return case_insensitive_; }
+
+int FuseHighLevelOps::vgetpath(
+    const char* path, char* buf, size_t size, fuse_file_info* info, const fuse_context* ctx)
+{
+    auto copy_and_return = [=](std::string_view result)
+    {
+        if (result.size() >= size)
+        {
+            return -ENAMETOOLONG;
+        }
+        std::fill(buf, buf + size, 0);
+        std::copy(result.begin(), result.end(), buf);
+        return 0;
+    };
+
+    if (path[0] == 0 || strcmp(path, "/") == 0)
+    {
+        return copy_and_return(path);
+    }
+    absl::InlinedVector<std::string_view, 7> splits = absl::StrSplit(path, '/', absl::SkipEmpty());
+    uint64_t parent_ino = to_inode_number(kRootId);
+    FilePtrHolder holder = ft_.open_as(kRootId, Directory::class_type());
+    for (size_t i = 0; i < splits.size(); ++i)
+    {
+        id_type id;
+        int type;
+        std::string_view normed_name;
+        {
+            FileLockGuard lg(*holder);
+            auto get_result = holder->cast_as<Directory>()->get_entry(splits[i], id, type);
+            if (!get_result.has_value())
+            {
+                throwVFSException(ENOENT);
+            }
+            normed_name = *get_result;
+        }
+        holder = ft_.open_as(id, type);
+        holder->set_parent_ino(parent_ino);
+        parent_ino = holder->get_parent_ino();
+        splits[i] = normed_name;
+    }
+    std::string result;
+    result.reserve(strlen(path) + 31);
+    for (auto p : splits)
+    {
+        result.push_back('/');
+        result.append(p.data(), p.size());
+    }
+    return copy_and_return(result);
 };
 
 FuseHighLevelOps::OpenBaseResult FuseHighLevelOps::open_base(absl::string_view path)

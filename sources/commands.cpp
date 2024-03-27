@@ -661,7 +661,10 @@ private:
                         return Directory::DirNameComparison{&uni_norm_insensitive_compare};
                     }
                     return Directory::DirNameComparison{&binary_compare};
-                });
+                })
+            .registerProvider<fruit::Annotated<tCaseInsensitive, bool>(const MountCommand&)>(
+                [](const MountCommand& cmd)
+                { return cmd.fsparams.full_format_params().case_insensitive(); });
     }
 
 public:

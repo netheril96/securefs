@@ -88,8 +88,15 @@ namespace
                        [](const auto& pair) { return pair.first; });
         return result;
     }
+    std::string getpath(FuseHighLevelOpsBase& ops, const char* path)
+    {
+        std::string result(strlen(path) * 2, 0);
+        REQUIRE(ops.vgetpath(path, result.data(), result.size() + 1, nullptr, nullptr) == 0);
+        result.resize(strlen(result.c_str()));
+        return result;
+    }
 }    // namespace
-void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root)
+void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root, bool case_insensitive)
 {
     CHECK(names(listdir(ops, "/")) == std::vector<std::string>{".", ".."});
 
@@ -106,6 +113,11 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root)
         REQUIRE(ops.vgetattr("/hello", &st, &ctx) == 0);
         CHECK((st.st_mode & S_IFMT) == S_IFREG);
         CHECK(st.st_size == 0);
+
+        if (case_insensitive)
+        {
+            CHECK(getpath(ops, "/HeLLo") == "/hello");
+        }
     }
 
     CHECK(names(listdir(ops, "/")) == std::vector<std::string>{".", "..", "hello"});
@@ -169,8 +181,15 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root)
     }
 
     REQUIRE(ops.vmkdir("/cbd", 0755, &ctx) == 0);
-    REQUIRE(ops.vmkdir("/abc", 0755, &ctx) == 0);
-    REQUIRE(ops.vrename("/abc", absl::StrCat("/cbd/", kLongFileNameExample2).c_str(), &ctx) == 0);
+    REQUIRE(ops.vmkdir("/aBc", 0755, &ctx) == 0);
+    REQUIRE(ops.vmkdir("/aBc/yyyyY", 0755, &ctx) == 0);
+    if (case_insensitive)
+    {
+        CHECK(getpath(ops, "/ABC/YYYYY") == "/aBc/yyyyY");
+    }
+    CHECK(names(listdir(ops, "/")) == std::vector<std::string>{".", "..", "aBc", "cbd"});
+
+    REQUIRE(ops.vrename("/aBc", absl::StrCat("/cbd/", kLongFileNameExample2).c_str(), &ctx) == 0);
     {
         fuse_stat st{};
         REQUIRE(ops.vgetattr("/abc", &st, &ctx) == -ENOENT);

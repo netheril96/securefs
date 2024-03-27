@@ -3,6 +3,7 @@
 #include "fuse_high_level_ops_base.h"
 #include "mystring.h"
 #include "platform.h"
+#include "tags.h"
 #include "test_common.h"
 
 #include <doctest/doctest.h>
@@ -13,32 +14,52 @@ namespace securefs::full_format
 {
 namespace
 {
+    template <bool CaseInsensitive>
     fruit::Component<FuseHighLevelOpsBase> get_test_component(std::shared_ptr<OSService> os)
     {
         return fruit::createComponent()
             .bind<FuseHighLevelOpsBase, full_format::FuseHighLevelOps>()
             .install(full_format::get_table_io_component, 2)
-            .registerProvider<fruit::Annotated<tSkipVerification, bool>()>([]() { return false; })
-            .registerProvider<fruit::Annotated<tVerify, bool>()>([]() { return true; })
-            .registerProvider<fruit::Annotated<tStoreTimeWithinFs, bool>()>([]() { return false; })
-            .registerProvider<fruit::Annotated<tReadOnly, bool>()>([]() { return false; })
+            .template registerProvider<fruit::Annotated<tSkipVerification, bool>()>(
+                []() { return false; })
+            .template registerProvider<fruit::Annotated<tVerify, bool>()>([]() { return true; })
+            .template registerProvider<fruit::Annotated<tStoreTimeWithinFs, bool>()>(
+                []() { return false; })
+            .template registerProvider<fruit::Annotated<tReadOnly, bool>()>([]() { return false; })
+            .template registerProvider<fruit::Annotated<tCaseInsensitive, bool>()>(
+                []() { return CaseInsensitive; })
             .registerProvider([]() { return new BS::thread_pool(2); })
-            .bind<Directory, BtreeDirectory>()
-            .registerProvider<fruit::Annotated<tMaxPaddingSize, unsigned>()>([]() { return 0u; })
-            .registerProvider<fruit::Annotated<tIvSize, unsigned>()>([]() { return 12u; })
-            .registerProvider<fruit::Annotated<tBlockSize, unsigned>()>([]() { return 60u; })
-            .registerProvider<fruit::Annotated<tMasterKey, key_type>()>([]()
-                                                                        { return key_type(0x99); })
-            .registerProvider([]() -> Directory::DirNameComparison { return {&binary_compare}; })
+            .template bind<Directory, BtreeDirectory>()
+            .template registerProvider<fruit::Annotated<tMaxPaddingSize, unsigned>()>(
+                []() { return 0u; })
+            .template registerProvider<fruit::Annotated<tIvSize, unsigned>()>([]() { return 12u; })
+            .template registerProvider<fruit::Annotated<tBlockSize, unsigned>()>([]()
+                                                                                 { return 60u; })
+            .template registerProvider<fruit::Annotated<tMasterKey, key_type>()>(
+                []() { return key_type(0x99); })
+            .template registerProvider(
+                []()
+                {
+                    return CaseInsensitive ? Directory::DirNameComparison{&case_insensitive_compare}
+                                           : Directory::DirNameComparison{&binary_compare};
+                })
             .bindInstance(*os);
     }
-    TEST_CASE("Full format test")
+    TEST_CASE("Full format test (case sensitive)")
     {
         auto temp_dir_name = OSService::temp_name("tmp/full", "dir");
         OSService::get_default().ensure_directory(temp_dir_name, 0755);
         auto root = std::make_shared<OSService>(temp_dir_name);
-        fruit::Injector<FuseHighLevelOpsBase> injector(get_test_component, root);
-        testing::test_fuse_ops(injector.get<FuseHighLevelOpsBase&>(), *root);
+        fruit::Injector<FuseHighLevelOpsBase> injector(get_test_component<false>, root);
+        testing::test_fuse_ops(injector.get<FuseHighLevelOpsBase&>(), *root, false);
+    }
+    TEST_CASE("Full format test (case insensitive)")
+    {
+        auto temp_dir_name = OSService::temp_name("tmp/full", "dir");
+        OSService::get_default().ensure_directory(temp_dir_name, 0755);
+        auto root = std::make_shared<OSService>(temp_dir_name);
+        fruit::Injector<FuseHighLevelOpsBase> injector(get_test_component<true>, root);
+        testing::test_fuse_ops(injector.get<FuseHighLevelOpsBase&>(), *root, true);
     }
 }    // namespace
 }    // namespace securefs::full_format

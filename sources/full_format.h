@@ -59,12 +59,15 @@ private:
 class FuseHighLevelOps : public ::securefs::FuseHighLevelOpsBase
 {
 public:
-    INJECT(FuseHighLevelOps(OSService& root, FileTable& ft, RepoLocker& locker))
-        : root_(root), ft_(ft), locker_(locker)
+    INJECT(FuseHighLevelOps(OSService& root,
+                            FileTable& ft,
+                            RepoLocker& locker,
+                            ANNOTATED(tCaseInsensitive, bool) case_insensitive))
+        : root_(root), ft_(ft), locker_(locker), case_insensitive_(case_insensitive)
     {
     }
 
-    void initialize(fuse_conn_info* info) override {}
+    void initialize(fuse_conn_info* info) override;
     int vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx) override;
     int vgetattr(const char* path, fuse_stat* st, const fuse_context* ctx) override;
     int vfgetattr(const char* path,
@@ -130,11 +133,18 @@ public:
                   uint32_t position,
                   const fuse_context* ctx) override;
     int vremovexattr(const char* path, const char* name, const fuse_context* ctx) override;
+    bool has_getpath() const override;
+    int vgetpath(const char* path,
+                 char* buf,
+                 size_t size,
+                 fuse_file_info* info,
+                 const fuse_context* ctx) override;
 
 private:
     OSService& root_;
     FileTable& ft_;
     [[maybe_unused]] RepoLocker& locker_;    // We only needs this to construct and destruct.
+    bool case_insensitive_;
 
 private:
     struct OpenBaseResult
