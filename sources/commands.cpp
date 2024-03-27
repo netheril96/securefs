@@ -232,6 +232,22 @@ private:
         false,
         128,
         "integer"};
+    TCLAP::ValueArg<std::string> case_handling{
+        "",
+        "case",
+        "Either sensitive or insensitive. Changes how full format stores its filenames. Not "
+        "applicable to lite format.",
+        false,
+        "insensitive",
+        "sensitive/insensitive"};
+    TCLAP::ValueArg<std::string> uninorm{
+        "",
+        "uninorm",
+        "Either sensitive or insensitive. Changes how full format stores its filenames. Not "
+        "applicable to lite format.",
+        false,
+        "insensitive",
+        "sensitive/insensitive"};
     Argon2idArgsHolder argon2;
 
 private:
@@ -250,6 +266,8 @@ public:
         result->add(&block_size);
         result->add(&max_padding);
         result->add(&format);
+        result->add(&case_handling);
+        result->add(&uninorm);
         argon2.add_to(*result);
         return result;
     }
@@ -285,6 +303,32 @@ public:
         else if (absl::EqualsIgnoreCase(format.getValue(), "full") || format.getValue() == "2")
         {
             randomize(params.mutable_full_format_params()->mutable_master_key(), 32);
+            if (case_handling.getValue() == "insensitive")
+            {
+                params.mutable_full_format_params()->set_case_insensitive(true);
+            }
+            else if (case_handling.getValue() != "sensitive")
+            {
+                throw_runtime_error("Invalid value for --case: " + case_handling.getValue());
+            }
+            else if (is_windows())
+            {
+                WARN_LOG("It is recommended to add --case insensitive on Windows for full format "
+                         "in order to match the default behavior of NTFS.");
+            }
+            if (uninorm.getValue() == "insensitive")
+            {
+                params.mutable_full_format_params()->set_unicode_normalization_agnostic(true);
+            }
+            else if (uninorm.getValue() != "sensitive")
+            {
+                throw_runtime_error("Invalid value for --uninorm: " + uninorm.getValue());
+            }
+            else if (is_apple())
+            {
+                WARN_LOG("It is recommended to add --uninorm insensitive on Apple for full format "
+                         "in order to match the default behavior of APFS/HFS+.");
+            }
         }
         else
         {

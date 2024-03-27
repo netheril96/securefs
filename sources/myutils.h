@@ -116,9 +116,17 @@ struct Overload : Ts...
 template <class... Ts>
 Overload(Ts...) -> Overload<Ts...>;
 
-inline constexpr bool is_windows(void)
+inline constexpr bool is_windows()
 {
 #ifdef _WIN32
+    return true;
+#else
+    return false;
+#endif
+}
+inline constexpr bool is_apple()
+{
+#ifdef __APPLE__
     return true;
 #else
     return false;

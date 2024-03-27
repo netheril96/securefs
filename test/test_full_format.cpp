@@ -37,7 +37,7 @@ namespace
                                                                                  { return 60u; })
             .template registerProvider<fruit::Annotated<tMasterKey, key_type>()>(
                 []() { return key_type(0x99); })
-            .template registerProvider(
+            .registerProvider(
                 []()
                 {
                     return CaseInsensitive ? Directory::DirNameComparison{&case_insensitive_compare}
