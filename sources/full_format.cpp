@@ -443,7 +443,7 @@ std::optional<FilePtrHolder> FuseHighLevelOps::open_all(absl::string_view path)
 
     {
         FileLockGuard lg(*base_dir);
-        success = base_dir->cast_as<Directory>()->get_entry(last_component, id, type);
+        success = base_dir->cast_as<Directory>()->get_entry(last_component, id, type).has_value();
     }
     if (!success)
     {

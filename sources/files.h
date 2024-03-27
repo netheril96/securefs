@@ -13,13 +13,14 @@
 #include <cryptopp/gcm.h>
 #include <cryptopp/osrng.h>
 #include <cryptopp/rng.h>
+#include <fruit/macro.h>
 
 #include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <fruit/macro.h>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -451,7 +452,7 @@ public:
     int type() const noexcept override { return class_type(); }
 
 public:
-    bool get_entry(std::string_view name, id_type& id, int& type)
+    std::optional<std::string_view> get_entry(std::string_view name, id_type& id, int& type)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
         update_atime_helper();
@@ -488,7 +489,8 @@ public:
     virtual bool empty() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) = 0;
 
 protected:
-    virtual bool get_entry_impl(std::string_view name, id_type& id, int& type) = 0;
+    virtual std::optional<std::string_view>
+    get_entry_impl(std::string_view name, id_type& id, int& type) = 0;
 
     virtual bool add_entry_impl(std::string_view name, const id_type& id, int type) = 0;
 
@@ -516,10 +518,7 @@ private:
 
         DirNameComparison cmpfn;
 
-        bool operator()(std::string_view a, std::string_view b) const
-        {
-            return cmpfn(a, b) < 0;
-        }
+        bool operator()(std::string_view a, std::string_view b) const { return cmpfn(a, b) < 0; }
     };
 
     std::map<std::string, std::pair<id_type, int>, Less> m_table{Less{this->cmpfn_}};
@@ -535,7 +534,8 @@ public:
         initialize();
     }
 
-    bool get_entry_impl(std::string_view name, id_type& id, int& type) override;
+    std::optional<std::string_view>
+    get_entry_impl(std::string_view name, id_type& id, int& type) override;
 
     bool add_entry_impl(std::string_view name, const id_type& id, int type) override;
 

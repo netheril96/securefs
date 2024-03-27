@@ -371,7 +371,8 @@ BtreeNode* BtreeDirectory::get_root_node()
     return retrieve_node(INVALID_PAGE, pg);
 }
 
-bool BtreeDirectory::get_entry_impl(std::string_view name, id_type& id, int& type)
+std::optional<std::string_view>
+BtreeDirectory::get_entry_impl(std::string_view name, id_type& id, int& type)
 {
     if (name.size() > MAX_FILENAME_LENGTH)
         throwVFSException(ENAMETOOLONG);
@@ -382,15 +383,15 @@ bool BtreeDirectory::get_entry_impl(std::string_view name, id_type& id, int& typ
     std::tie(node, entry_index, is_equal) = find_node(name);
 
     if (!is_equal || !node)
-        return false;
+        return {};
     const Entry& e = node->entries().at(entry_index);
     if (cmpfn_(name, e.filename) == 0)
     {
         id = e.id;
         type = e.type;
-        return true;
+        return e.filename;
     }
-    return false;
+    return {};
 }
 
 bool BtreeDirectory::read_node(uint32_t num, BtreeDirectory::Node& n)

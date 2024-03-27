@@ -407,14 +407,15 @@ void SimpleDirectory::initialize()
     }
 }
 
-bool SimpleDirectory::get_entry_impl(std::string_view name, id_type& id, int& type)
+std::optional<std::string_view>
+SimpleDirectory::get_entry_impl(std::string_view name, id_type& id, int& type)
 {
     auto it = m_table.find(name);
     if (it == m_table.end())
-        return false;
+        return {};
     memcpy(id.data(), it->second.first.data(), id.size());
     type = it->second.second;
-    return true;
+    return it->first;
 }
 
 bool SimpleDirectory::add_entry_impl(std::string_view name, const id_type& id, int type)

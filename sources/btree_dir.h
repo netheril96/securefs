@@ -194,7 +194,8 @@ public:
     ~BtreeDirectory() override;
 
 protected:
-    bool get_entry_impl(std::string_view name, id_type& id, int& type) override
+    std::optional<std::string_view>
+    get_entry_impl(std::string_view name, id_type& id, int& type) override
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
     bool add_entry_impl(std::string_view name, const id_type& id, int type) override
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
