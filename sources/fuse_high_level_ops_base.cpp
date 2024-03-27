@@ -297,6 +297,23 @@ int FuseHighLevelOpsBase::static_removexattr(const char* path, const char* name)
                                           {{"path", {path}}, {"name", {name}}});
 }
 
+int FuseHighLevelOpsBase::static_getpath(const char* path,
+                                         char* buf,
+                                         size_t size,
+                                         fuse_file_info* info)
+{
+    auto ctx = fuse_get_context();
+    auto op = static_cast<FuseHighLevelOpsBase*>(ctx->private_data);
+    return trace::FuseTracer::traced_call([=]()
+                                          { return op->vgetpath(path, buf, size, info, ctx); },
+                                          "getpath",
+                                          __LINE__,
+                                          {{"path", {path}},
+                                           {"buf", {static_cast<const void*>(buf)}},
+                                           {"size", {size}},
+                                           {"info", {info}}});
+}
+
 namespace
 {
     void enable_if_capable(fuse_conn_info* info, int cap)
@@ -308,7 +325,7 @@ namespace
     }
 }    // namespace
 
-fuse_operations FuseHighLevelOpsBase::build_ops(bool enable_xattr)
+fuse_operations FuseHighLevelOpsBase::build_ops(const FuseHighLevelOpsBase* op, bool enable_xattr)
 {
     fuse_operations opt{};
 
@@ -361,6 +378,11 @@ fuse_operations FuseHighLevelOpsBase::build_ops(bool enable_xattr)
     opt.symlink = &FuseHighLevelOpsBase::static_symlink;
     opt.link = &FuseHighLevelOpsBase::static_link;
     opt.readlink = &FuseHighLevelOpsBase::static_readlink;
+#else
+    if (op->has_getpath())
+    {
+        opt.getpath = &FuseHighLevelOpsBase::static_getpath;
+    }
 #endif
     opt.rename = &FuseHighLevelOpsBase::static_rename;
     opt.fsync = &FuseHighLevelOpsBase::static_fsync;

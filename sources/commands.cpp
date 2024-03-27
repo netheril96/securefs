@@ -889,12 +889,13 @@ public:
             }
         }
 #endif
-        auto op = FuseHighLevelOpsBase::build_ops(native_xattr);
+        auto high_level_ops = injector.get<FuseHighLevelOpsBase*>();
+        auto fuse_callbacks = FuseHighLevelOpsBase::build_ops(high_level_ops, native_xattr);
         VERBOSE_LOG("Calling fuse_main with arguments: %s", escape_args(fuse_args));
         return fuse_main(static_cast<int>(fuse_args.size()),
                          const_cast<char**>(to_c_style_args(fuse_args).data()),
-                         &op,
-                         injector.get<FuseHighLevelOpsBase*>());
+                         &fuse_callbacks,
+                         high_level_ops);
     }
 
     const char* long_name() const noexcept override { return "mount"; }

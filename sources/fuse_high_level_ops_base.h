@@ -8,7 +8,7 @@ namespace securefs
 class FuseHighLevelOpsBase : public Object
 {
 public:
-    static fuse_operations build_ops(bool enable_xattr);
+    static fuse_operations build_ops(const FuseHighLevelOpsBase* op, bool enable_xattr);
 
     virtual void initialize(fuse_conn_info* info) = 0;
     virtual int vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx) = 0;
@@ -80,6 +80,12 @@ public:
                           const fuse_context* ctx)
         = 0;
     virtual int vremovexattr(const char* path, const char* name, const fuse_context* ctx) = 0;
+    virtual bool has_getpath() const { return false; }
+    virtual int vgetpath(
+        const char* path, char* buf, size_t size, fuse_file_info* info, const fuse_context* ctx)
+    {
+        return -ENOSYS;
+    }
 
 private:
     static int static_statfs(const char* path, fuse_statvfs* buf);
@@ -120,5 +126,6 @@ private:
                                int flags,
                                uint32_t position);
     static int static_removexattr(const char* path, const char* name);
+    static int static_getpath(const char* path, char* buf, size_t size, fuse_file_info* info);
 };
 }    // namespace securefs
