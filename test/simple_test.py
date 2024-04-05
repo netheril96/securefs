@@ -20,11 +20,12 @@ import uuid
 from typing import List, Optional, Sequence
 from typing import Set
 import enum
+import unicodedata
+from collections import namedtuple
 import multiprocessing
 import random
 import secrets
 import io
-from collections import namedtuple
 
 faulthandler.enable()
 
@@ -134,6 +135,11 @@ class RepoFormat(enum.Enum):
     FULL = 2
 
 
+class Sensitivity(enum.StrEnum):
+    SENSITIVE = enum.auto()
+    INSENSITIVE = enum.auto()
+
+
 def securefs_create(
     data_dir: str,
     fmt: RepoFormat,
@@ -141,6 +147,8 @@ def securefs_create(
     keyfile: Optional[str] = None,
     max_padding: int = 0,
     config_destination: Optional[str] = None,
+    case: Sensitivity = Sensitivity.SENSITIVE,
+    uninorm: Sensitivity = Sensitivity.SENSITIVE,
 ):
     if config_destination:
         try:
@@ -161,6 +169,10 @@ def securefs_create(
         "2",
         "-f",
         fmt.name,
+        "--case",
+        str(case),
+        "--uninorm",
+        str(uninorm),
     ]
     if password:
         command.append("--pass")
@@ -289,6 +301,8 @@ def parametrize(possible_args: Sequence[Sequence]):
             ],
             [0, 15],
             [False],
+            [Sensitivity.SENSITIVE],
+            [Sensitivity.SENSITIVE],
         )
     )
     + [
@@ -297,7 +311,25 @@ def parametrize(possible_args: Sequence[Sequence]):
             SecretInputMode.KEYFILE2,
             3,
             True,
-        )
+            Sensitivity.SENSITIVE,
+            Sensitivity.SENSITIVE,
+        ),
+        (
+            RepoFormat.FULL,
+            SecretInputMode.KEYFILE2,
+            3,
+            False,
+            Sensitivity.INSENSITIVE,
+            Sensitivity.SENSITIVE,
+        ),
+        (
+            RepoFormat.FULL,
+            SecretInputMode.KEYFILE2,
+            15,
+            False,
+            Sensitivity.SENSITIVE,
+            Sensitivity.INSENSITIVE,
+        ),
     ]
 )
 def make_test_case(
@@ -305,6 +337,8 @@ def make_test_case(
     mode: SecretInputMode,
     max_padding: int,
     plain_text_names: bool,
+    case: Sensitivity = Sensitivity.SENSITIVE,
+    uninorm: Sensitivity = Sensitivity.SENSITIVE,
 ):
     class SimpleSecureFSTestBase(unittest.TestCase):
         data_dir: str
@@ -329,6 +363,8 @@ def make_test_case(
                 keyfile=cls.keyfile,
                 max_padding=max_padding,
                 config_destination=cls.config_file,
+                case=case,
+                uninorm=uninorm,
             )
             cls.mount()
 
@@ -598,6 +634,72 @@ def make_test_case(
                     shutil.rmtree(os.path.join(self.mount_point, dn))
                 except EnvironmentError:
                     pass
+
+        if not plain_text_names and case == Sensitivity.INSENSITIVE:
+
+            def test_case_insensitive(self):
+                try:
+                    os.mkdir(os.path.join(self.mount_point, "AbcDefG"))
+                    os.mkdir(os.path.join(self.mount_point, "abcdefg", "777GGg"))
+                    os.mkdir(os.path.join(self.mount_point, "aBCdEFG", "888llM"))
+                    with open(
+                        os.path.join(
+                            self.mount_point, "abcDefG", "888LLM", "System.txt"
+                        ),
+                        "w",
+                    ) as f:
+                        f.write("hello\n")
+                    self.assertSetEqual(
+                        frozenset(
+                            os.listdir(os.path.join(self.mount_point, "abCdefg"))
+                        ),
+                        {"777GGg", "888llM"},
+                    )
+                    with open(
+                        os.path.join(
+                            self.mount_point, "abcDefg", "888llm", "SYSTEM.txt"
+                        ),
+                        "r",
+                    ) as f:
+                        self.assertEqual(f.read(), "hello\n")
+                finally:
+                    shutil.rmtree(os.path.join(self.mount_point, "AbcDefG"))
+
+        if not plain_text_names and uninorm == Sensitivity.INSENSITIVE:
+
+            def test_uninorm_insensitive(self):
+                names = ["\u212bABV\u212b", "\u2126666", "333\u1e69", "\u1e0b\u0323..."]
+
+                nfd_names: List[str] = [unicodedata.normalize("NFD", n) for n in names]
+                for n, nn in zip(names, nfd_names):
+                    self.assertNotEqual(n, nn)
+
+                try:
+                    os.mkdir(os.path.join(self.mount_point, names[0]))
+                    os.mkdir(os.path.join(self.mount_point, names[0], names[1]))
+                    os.mkdir(os.path.join(self.mount_point, nfd_names[0], names[2]))
+                    with open(
+                        os.path.join(
+                            self.mount_point, nfd_names[0], nfd_names[2], names[3]
+                        ),
+                        "w",
+                    ) as f:
+                        f.write("hello\n")
+                    self.assertSetEqual(
+                        frozenset(
+                            os.listdir(os.path.join(self.mount_point, nfd_names[0]))
+                        ),
+                        {names[1], names[2]},
+                    )
+                    with open(
+                        os.path.join(
+                            self.mount_point, names[0], nfd_names[2], nfd_names[3]
+                        ),
+                        "r",
+                    ) as f:
+                        self.assertEqual(f.read(), "hello\n")
+                finally:
+                    shutil.rmtree(os.path.join(self.mount_point, names[0]))
 
     return SimpleSecureFSTestBase
 
