@@ -312,7 +312,7 @@ public:
             {
                 throw_runtime_error("Invalid value for --case: " + case_handling.getValue());
             }
-            else if (is_windows())
+            else if (is_windows() && !case_handling.isSet())
             {
                 WARN_LOG("It is recommended to add --case %s on Windows for full format "
                          "in order to match the default behavior of NTFS.",
@@ -326,7 +326,7 @@ public:
             {
                 throw_runtime_error("Invalid value for --uninorm: " + uninorm.getValue());
             }
-            else if (is_apple())
+            else if (is_apple() && !uninorm.isSet())
             {
                 WARN_LOG("It is recommended to add --uninorm %s on Apple for full format "
                          "in order to match the default behavior of APFS/HFS+.",
