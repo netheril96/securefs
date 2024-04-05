@@ -202,6 +202,7 @@ struct Argon2idArgsHolder
 class CreateCommand : public SinglePasswordCommandBase
 {
 private:
+    static inline constexpr std::string_view kSensitive = "sensitive", kInsensitive = "insensitive";
     TCLAP::ValueArg<std::string> format{
         "f",
         "format",
@@ -238,16 +239,16 @@ private:
         "Either sensitive or insensitive. Changes how full format stores its filenames. Not "
         "applicable to lite format.",
         false,
-        "insensitive",
-        "sensitive/insensitive"};
+        std::string(kSensitive),
+        absl::StrCat(kSensitive, "/", kInsensitive)};
     TCLAP::ValueArg<std::string> uninorm{
         "",
         "uninorm",
         "Either sensitive or insensitive. Changes how full format stores its filenames. Not "
         "applicable to lite format.",
         false,
-        "insensitive",
-        "sensitive/insensitive"};
+        std::string(kSensitive),
+        absl::StrCat(kSensitive, "/", kInsensitive)};
     Argon2idArgsHolder argon2;
 
 private:
@@ -303,31 +304,40 @@ public:
         else if (absl::EqualsIgnoreCase(format.getValue(), "full") || format.getValue() == "2")
         {
             randomize(params.mutable_full_format_params()->mutable_master_key(), 32);
-            if (case_handling.getValue() == "insensitive")
+            if (case_handling.getValue() == kInsensitive)
             {
                 params.mutable_full_format_params()->set_case_insensitive(true);
             }
-            else if (case_handling.getValue() != "sensitive")
+            else if (case_handling.getValue() != kSensitive)
             {
                 throw_runtime_error("Invalid value for --case: " + case_handling.getValue());
             }
             else if (is_windows())
             {
-                WARN_LOG("It is recommended to add --case insensitive on Windows for full format "
-                         "in order to match the default behavior of NTFS.");
+                WARN_LOG("It is recommended to add --case %s on Windows for full format "
+                         "in order to match the default behavior of NTFS.",
+                         kInsensitive);
             }
-            if (uninorm.getValue() == "insensitive")
+            if (uninorm.getValue() == kInsensitive)
             {
                 params.mutable_full_format_params()->set_unicode_normalization_agnostic(true);
             }
-            else if (uninorm.getValue() != "sensitive")
+            else if (uninorm.getValue() != kSensitive)
             {
                 throw_runtime_error("Invalid value for --uninorm: " + uninorm.getValue());
             }
             else if (is_apple())
             {
-                WARN_LOG("It is recommended to add --uninorm insensitive on Apple for full format "
-                         "in order to match the default behavior of APFS/HFS+.");
+                WARN_LOG("It is recommended to add --uninorm %s on Apple for full format "
+                         "in order to match the default behavior of APFS/HFS+.",
+                         kInsensitive);
+            }
+            if (case_handling.getValue() == kInsensitive && uninorm.getValue() == kInsensitive)
+            {
+                WARN_LOG("When both --case %s and --uninorm %s is specified, the resulting "
+                         "filesystem may encounter problems on Windows.",
+                         kInsensitive,
+                         kInsensitive);
             }
         }
         else
