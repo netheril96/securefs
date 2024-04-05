@@ -1022,6 +1022,10 @@ public:
 
 class InfoCommand : public SinglePasswordCommandBase
 {
+private:
+    TCLAP::SwitchArg unmask{
+        "", "unmask", "Disables the masking of master keys in the output", false};
+
 public:
     std::unique_ptr<TCLAP::CmdLine> cmdline() override
     {
@@ -1036,7 +1040,7 @@ public:
 
     const char* help_message() const noexcept override
     {
-        return "Display information about the filesystem";
+        return "Display information about the filesystem in the JSON format";
     }
 
     void parse_cmdline(int argc, const char* const* argv) override
@@ -1053,6 +1057,20 @@ public:
                                   ->as_string(),
                               {password.data(), password.size()},
                               maybe_open_key_stream(keyfile.getValue()).get());
+        if (!unmask.getValue())
+        {
+            if (params.has_lite_format_params())
+            {
+                params.mutable_lite_format_params()->mutable_content_key()->clear();
+                params.mutable_lite_format_params()->mutable_name_key()->clear();
+                params.mutable_lite_format_params()->mutable_padding_key()->clear();
+                params.mutable_lite_format_params()->mutable_xattr_key()->clear();
+            }
+            if (params.has_full_format_params())
+            {
+                params.mutable_full_format_params()->mutable_master_key()->clear();
+            }
+        }
         std::string json;
         google::protobuf::util::JsonPrintOptions options{};
         options.preserve_proto_field_names = true;
@@ -1063,9 +1081,7 @@ public:
         {
             throw_runtime_error("Failed to convert params to JSON: " + status.ToString());
         }
-
-        absl::PrintF("Config file path: %s\n", real_config_path);
-        absl::PrintF("JSON representation of config:\n%s\n", json);
+        absl::PrintF("%s\n", json);
         return 0;
     }
 };
