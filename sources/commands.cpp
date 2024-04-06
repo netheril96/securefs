@@ -818,7 +818,7 @@ public:
                 ERROR_LOG(
                     "Config file %s does not exist. Perhaps you forget to run `create` command "
                     "first?",
-                    single_pass_holder_.get_real_config_path_for_reading().c_str());
+                    single_pass_holder_.get_real_config_path_for_reading());
                 return 19;
             }
             throw;
@@ -1034,13 +1034,10 @@ public:
     int execute() override
     {
         auto real_config_path = single_pass_holder_.get_real_config_path_for_reading();
-        auto params
-            = decrypt(OSService::get_default()
-                          .open_file_stream(
-                              single_pass_holder_.get_real_config_path_for_reading(), O_RDONLY, 0)
-                          ->as_string(),
-                      {single_pass_holder_.password.data(), single_pass_holder_.password.size()},
-                      maybe_open_key_stream(single_pass_holder_.keyfile.getValue()).get());
+        auto params = decrypt(
+            OSService::get_default().open_file_stream(real_config_path, O_RDONLY, 0)->as_string(),
+            {single_pass_holder_.password.data(), single_pass_holder_.password.size()},
+            maybe_open_key_stream(single_pass_holder_.keyfile.getValue()).get());
         if (!unmask.getValue())
         {
             if (params.has_lite_format_params())
@@ -1066,6 +1063,83 @@ public:
             throw_runtime_error("Failed to convert params to JSON: " + status.ToString());
         }
         absl::PrintF("%s\n", json);
+        return 0;
+    }
+};
+
+class MigrateLongNameCommand : public CommandBase
+{
+private:
+    SinglePasswordHolder single_pass_holder_{cmdline()};
+    Argon2idArgsHolder argon2{cmdline()};
+
+    static constexpr size_t kDefaultLongNameThreshold = 128;
+
+public:
+    const char* long_name() const noexcept override { return "migrate-long-name"; }
+    char short_name() const noexcept override { return 0; }
+    const char* help_message() const noexcept override
+    {
+        return "Migrate a lite format repository without long name support.";
+    }
+    void parse_cmdline(int argc, const char* const* argv) override
+    {
+        CommandBase::parse_cmdline(argc, argv);
+        single_pass_holder_.get_password(false);
+    }
+
+    int execute() override
+    {
+        auto real_config_path = single_pass_holder_.get_real_config_path_for_reading();
+        auto params = decrypt(
+            OSService::get_default().open_file_stream(real_config_path, O_RDONLY, 0)->as_string(),
+            {single_pass_holder_.password.data(), single_pass_holder_.password.size()},
+            maybe_open_key_stream(single_pass_holder_.keyfile.getValue()).get());
+        if (!params.has_lite_format_params())
+        {
+            throw_runtime_error("This command is only available for lite format repositories.");
+        }
+        if (params.lite_format_params().long_name_threshold() > 0)
+        {
+            WARN_LOG("Already supports long name.");
+            return 0;
+        }
+        size_t max_filename_length = 0;
+        OSService::get_default().recursive_traverse(
+            single_pass_holder_.data_dir.getValue(),
+            [&](const std::string& dir, const std::string& name, int type)
+            {
+                if (type == S_IFLNK)
+                {
+                    throw_runtime_error("Cannot migrate when symbolic links are present.");
+                }
+                max_filename_length = std::max(max_filename_length, name.size());
+            });
+        size_t threshold;
+        if (max_filename_length < (kDefaultLongNameThreshold + 16) * 8 / 5)
+        {
+            threshold = kDefaultLongNameThreshold;
+        }
+        else
+        {
+            threshold = max_filename_length * 5 / 8 - 16;
+        }
+        params.mutable_lite_format_params()->set_long_name_threshold(threshold);
+        auto encrypted_data
+            = encrypt(params,
+                      argon2.to_params(),
+                      {single_pass_holder_.password.data(), single_pass_holder_.password.size()},
+                      maybe_open_key_stream(single_pass_holder_.keyfile.getValue()).get())
+                  .SerializeAsString();
+        auto tmp_path = absl::StrCat(real_config_path, ".tmp");
+        auto stream = OSService::get_default().open_file_stream(
+            tmp_path, O_WRONLY | O_CREAT | O_EXCL, 0644);
+        DEFER(if (has_uncaught_exceptions()) {
+            OSService::get_default().remove_file_nothrow(tmp_path);
+        });
+        stream->write(encrypted_data.data(), 0, encrypted_data.size());
+        stream.reset();
+        OSService::get_default().rename(tmp_path, real_config_path);
         return 0;
     }
 };
@@ -1212,6 +1286,7 @@ int commands_main(int argc, const char* const* argv)
                                                make_unique<ChangePasswordCommand>(),
                                                make_unique<VersionCommand>(),
                                                make_unique<InfoCommand>(),
+                                               make_unique<MigrateLongNameCommand>(),
                                                make_unique<DocCommand>()};
 
         const char* const program_name = argv[0];

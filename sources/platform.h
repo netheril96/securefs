@@ -5,6 +5,7 @@
 #include "streams.h"
 
 #include <absl/base/thread_annotations.h>
+#include <absl/functional/function_ref.h>
 #include <absl/synchronization/mutex.h>
 #include <uni_algo/conv.h>
 
@@ -205,7 +206,8 @@ public:
     ssize_t readlink(const std::string& path, char* output, size_t size) const;
     void symlink(const std::string& source, const std::string& dest) const;
 
-    typedef std::function<void(const std::string&, const std::string&)> recursive_traverse_callback;
+    using recursive_traverse_callback
+        = absl::FunctionRef<void(const std::string&, const std::string&, int)>;
     void recursive_traverse(const std::string& dir,
                             const recursive_traverse_callback& callback) const;
 

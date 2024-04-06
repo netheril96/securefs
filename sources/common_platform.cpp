@@ -76,13 +76,10 @@ void OSService::recursive_traverse(const std::string& dir,
     {
         if (name == "." || name == "..")
             continue;
+        callback(dir, name, S_IFMT & st.st_mode);
         if ((S_IFMT & st.st_mode) == S_IFDIR)
         {
             recursive_traverse(StrCat(dir, "/", name), callback);
-        }
-        else
-        {
-            callback(dir, name);
         }
     }
 }

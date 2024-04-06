@@ -19,38 +19,40 @@ static void find_ids_helper(const std::string& current_dir,
 {
     id_type id;
     std::string hex(id_type::size() * 2, 0);
-    OSService::recursive_traverse_callback callback
-        = [&id, &result, &hex](std::string_view dir, std::string_view name) -> bool
+    auto callback = [&id, &result, &hex](std::string_view dir, std::string_view name, int type)
     {
-        if (name == "." || name == "..")
-            return true;
-        if (absl::EndsWithIgnoreCase(name, ".meta"))
+        if (type != S_IFREG)
         {
-            std::string total_name
-                = absl::StrCat(dir, "/", name.substr(0, name.size() - strlen(".meta")));
-            hex.assign(hex.size(), 0);
-            ptrdiff_t i = hex.size() - 1, j = total_name.size() - 1;
-            while (i >= 0 && j >= 0)
-            {
-                char namechar = total_name[j];
-                if ((namechar >= '0' && namechar <= '9') || (namechar >= 'a' && namechar <= 'f'))
-                {
-                    hex[i] = namechar;
-                    --i;
-                }
-                else if (namechar != '/' && namechar != '\\')
-                {
-                    throw_runtime_error(absl::StrFormat(
-                        "File \"%s\" has extension .meta, but not a valid securefs "
-                        "meta filename. Please cleanup the underlying storage first.",
-                        total_name));
-                }
-                --j;
-            }
-            parse_hex(hex, id.data(), id.size());
-            result.insert(id);
+            return;
         }
-        return true;
+        if (!absl::EndsWithIgnoreCase(name, ".meta"))
+        {
+            return;
+        }
+
+        std::string total_name
+            = absl::StrCat(dir, "/", name.substr(0, name.size() - strlen(".meta")));
+        hex.assign(hex.size(), 0);
+        ptrdiff_t i = hex.size() - 1, j = total_name.size() - 1;
+        while (i >= 0 && j >= 0)
+        {
+            char namechar = total_name[j];
+            if ((namechar >= '0' && namechar <= '9') || (namechar >= 'a' && namechar <= 'f'))
+            {
+                hex[i] = namechar;
+                --i;
+            }
+            else if (namechar != '/' && namechar != '\\')
+            {
+                throw_runtime_error(
+                    absl::StrFormat("File \"%s\" has extension .meta, but not a valid securefs "
+                                    "meta filename. Please cleanup the underlying storage first.",
+                                    total_name));
+            }
+            --j;
+        }
+        parse_hex(hex, id.data(), id.size());
+        result.insert(id);
     };
 
     OSService::get_default().recursive_traverse(current_dir, callback);
