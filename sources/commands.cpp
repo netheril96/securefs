@@ -10,6 +10,7 @@
 #include "lock_enabled.h"
 #include "logger.h"
 #include "myutils.h"
+#include "object.h"
 #include "params.pb.h"
 #include "params_io.h"
 #include "platform.h"
@@ -64,21 +65,30 @@ constexpr std::string_view EMPTY_PASSWORD_WHEN_KEY_FILE_IS_USED = " ";
 
 namespace securefs
 {
-/// A base class for all commands that require a data dir to be present.
-class DataDirCommandBase : public CommandBase
+struct ArgsHolder : public Object
 {
+public:
+    explicit ArgsHolder(TCLAP::CmdLine& cmdline) : cmdline(cmdline) {}
+
 protected:
+    TCLAP::CmdLine& cmdline;
+};
+
+struct DataDirHolder : public ArgsHolder
+{
+    using ArgsHolder::ArgsHolder;
+
     TCLAP::UnlabeledValueArg<std::string> data_dir{
-        "dir", "Directory where the data are stored", true, "", "data_dir"};
+        "dir", "Directory where the data are stored", true, "", "data_dir", cmdline};
     TCLAP::ValueArg<std::string> config_path{
         "",
         "config",
         "Full path name of the config file. ${data_dir}/.config.pb by default",
         false,
         "",
-        "config_path"};
+        "config_path",
+        cmdline};
 
-protected:
     std::string get_real_config_path_for_reading()
     {
         if (!config_path.getValue().empty())
@@ -110,30 +120,34 @@ static void secure_wipe(char* buffer, size_t size)
     CryptoPP::SecureWipeBuffer(reinterpret_cast<byte*>(buffer), size);
 }
 
-void CommandBase::parse_cmdline(int argc, const char* const* argv) { cmdline()->parse(argc, argv); }
+void CommandBase::parse_cmdline(int argc, const char* const* argv) { cmdline().parse(argc, argv); }
 
-class SinglePasswordCommandBase : public DataDirCommandBase
+struct SinglePasswordHolder : public DataDirHolder
 {
-protected:
+    using DataDirHolder::DataDirHolder;
+
     TCLAP::ValueArg<std::string> pass{
         "",
         "pass",
         "Password (prefer manually typing or piping since those methods are more secure)",
         false,
         "",
-        "password"};
+        "password",
+        cmdline};
     TCLAP::ValueArg<std::string> keyfile{
         "",
         "keyfile",
         "An optional path to a key file to use in addition to or in place of password",
         false,
         "",
-        "path"};
+        "path",
+        cmdline};
     TCLAP::SwitchArg askpass{
         "",
         "askpass",
         "When set to true, ask for password even if a key file is used. "
         "password+keyfile provides even stronger security than one of them alone.",
+        cmdline,
         false};
     CryptoPP::AlignedSecByteBlock password;
 
@@ -159,35 +173,23 @@ protected:
         }
         return OSService::read_password_no_confirmation("Enter password:", &password);
     }
-    void add_all_args_from_base(TCLAP::CmdLine& cmd_line)
-    {
-        cmd_line.add(&data_dir);
-        cmd_line.add(&config_path);
-        cmd_line.add(&pass);
-        cmd_line.add(&keyfile);
-        cmd_line.add(&askpass);
-    }
 };
 
-struct Argon2idArgsHolder
+struct Argon2idArgsHolder : public ArgsHolder
 {
+    using ArgsHolder::ArgsHolder;
+
     TCLAP::ValueArg<unsigned> t{
-        "", "argon2-t", "The time cost for argon2 algorithm", false, 30, "integer"};
+        "", "argon2-t", "The time cost for argon2 algorithm", false, 30, "integer", cmdline};
     TCLAP::ValueArg<unsigned> m{"",
                                 "argon2-m",
                                 "The memory cost for argon2 algorithm (in terms of KiB)",
                                 false,
                                 1 << 18,
-                                "integer"};
+                                "integer",
+                                cmdline};
     TCLAP::ValueArg<unsigned> p{
-        "", "argon2-p", "The parallelism for argon2 algorithm", false, 4, "integer"};
-
-    void add_to(TCLAP::CmdLine& cmdline)
-    {
-        cmdline.add(&t);
-        cmdline.add(&m);
-        cmdline.add(&p);
-    }
+        "", "argon2-p", "The parallelism for argon2 algorithm", false, 4, "integer", cmdline};
 
     EncryptedSecurefsParams::Argon2idParams to_params()
     {
@@ -199,10 +201,14 @@ struct Argon2idArgsHolder
     }
 };
 
-class CreateCommand : public SinglePasswordCommandBase
+class CreateCommand : public CommandBase
 {
 private:
     static inline constexpr std::string_view kSensitive = "sensitive", kInsensitive = "insensitive";
+
+    SinglePasswordHolder single_pass_holder_{cmdline()};
+    Argon2idArgsHolder argon2id_holder_{cmdline()};
+
     TCLAP::ValueArg<std::string> format{
         "f",
         "format",
@@ -211,11 +217,17 @@ private:
         "the cost of performance and ease of synchronization.",
         false,
         "lite",
-        "lite/full"};
+        "lite/full",
+        cmdline()};
     TCLAP::ValueArg<unsigned int> iv_size{
-        "", "iv-size", "The IV size (ignored for fs format 1)", false, 12, "integer"};
-    TCLAP::ValueArg<unsigned int> block_size{
-        "", "block-size", "Block size for files (ignored for fs format 1)", false, 4096, "integer"};
+        "", "iv-size", "The IV size (ignored for fs format 1)", false, 12, "integer", cmdline()};
+    TCLAP::ValueArg<unsigned int> block_size{"",
+                                             "block-size",
+                                             "Block size for files (ignored for fs format 1)",
+                                             false,
+                                             4096,
+                                             "integer",
+                                             cmdline()};
     TCLAP::ValueArg<unsigned> max_padding{
         "",
         "max-padding",
@@ -224,7 +236,8 @@ private:
         "file has a different padding. Enabling this has a large performance cost.",
         false,
         0,
-        "int"};
+        "int",
+        cmdline()};
     TCLAP::ValueArg<unsigned int> long_name_threshold{
         "",
         "long-name-threshold",
@@ -232,7 +245,8 @@ private:
         "encrypted in a SQLite database.",
         false,
         128,
-        "integer"};
+        "integer",
+        cmdline()};
     TCLAP::ValueArg<std::string> case_handling{
         "",
         "case",
@@ -240,7 +254,8 @@ private:
         "applicable to lite format.",
         false,
         std::string(kSensitive),
-        absl::StrCat(kSensitive, "/", kInsensitive)};
+        absl::StrCat(kSensitive, "/", kInsensitive),
+        cmdline()};
     TCLAP::ValueArg<std::string> uninorm{
         "",
         "uninorm",
@@ -248,8 +263,8 @@ private:
         "applicable to lite format.",
         false,
         std::string(kSensitive),
-        absl::StrCat(kSensitive, "/", kInsensitive)};
-    Argon2idArgsHolder argon2;
+        absl::StrCat(kSensitive, "/", kInsensitive),
+        cmdline()};
 
 private:
     static void randomize(std::string* str, size_t size)
@@ -259,29 +274,15 @@ private:
     }
 
 public:
-    std::unique_ptr<TCLAP::CmdLine> cmdline() override
-    {
-        auto result = make_unique<TCLAP::CmdLine>(help_message());
-        add_all_args_from_base(*result);
-        result->add(&iv_size);
-        result->add(&block_size);
-        result->add(&max_padding);
-        result->add(&format);
-        result->add(&case_handling);
-        result->add(&uninorm);
-        argon2.add_to(*result);
-        return result;
-    }
-
     void parse_cmdline(int argc, const char* const* argv) override
     {
-        SinglePasswordCommandBase::parse_cmdline(argc, argv);
-        get_password(true);
+        CommandBase::parse_cmdline(argc, argv);
+        single_pass_holder_.get_password(true);
     }
 
     int execute() override
     {
-        OSService::get_default().ensure_directory(data_dir.getValue(), 0755);
+        OSService::get_default().ensure_directory(single_pass_holder_.data_dir.getValue(), 0755);
 
         DecryptedSecurefsParams params;
         params.mutable_size_params()->set_iv_size(iv_size.getValue());
@@ -345,14 +346,16 @@ public:
             throw_runtime_error("--format lite/full must be specified");
         }
 
-        auto encrypted_data = encrypt(params,
-                                      argon2.to_params(),
-                                      {password.data(), password.size()},
-                                      maybe_open_key_stream(keyfile.getValue()).get())
-                                  .SerializeAsString();
+        auto encrypted_data
+            = encrypt(params,
+                      argon2id_holder_.to_params(),
+                      {single_pass_holder_.password.data(), single_pass_holder_.password.size()},
+                      maybe_open_key_stream(single_pass_holder_.keyfile.getValue()).get())
+                  .SerializeAsString();
         auto config_stream = OSService::get_default().open_file_stream(
-            config_path.getValue().empty() ? absl::StrCat(data_dir.getValue(), "/", kConfigFileName)
-                                           : config_path.getValue(),
+            single_pass_holder_.config_path.getValue().empty()
+                ? absl::StrCat(single_pass_holder_.data_dir.getValue(), "/", kConfigFileName)
+                : single_pass_holder_.config_path.getValue(),
             O_WRONLY | O_EXCL | O_CREAT,
             0644);
         config_stream->write(encrypted_data.data(), 0, encrypted_data.size());
@@ -366,25 +369,30 @@ public:
     const char* help_message() const noexcept override { return "Create a new filesystem"; }
 };
 
-class ChangePasswordCommand : public DataDirCommandBase
+class ChangePasswordCommand : public CommandBase
 {
 private:
     CryptoPP::AlignedSecByteBlock old_password, new_password;
+
+    DataDirHolder data_dir_holder_{cmdline()};
+
     TCLAP::ValueArg<std::string> old_key_file{
-        "", "oldkeyfile", "Path to original key file", false, "", "path"};
+        "", "oldkeyfile", "Path to original key file", false, "", "path", cmdline()};
     TCLAP::ValueArg<std::string> new_key_file{
-        "", "newkeyfile", "Path to new key file", false, "", "path"};
+        "", "newkeyfile", "Path to new key file", false, "", "path", cmdline()};
     TCLAP::SwitchArg askoldpass{
         "",
         "askoldpass",
         "When set to true, ask for password even if a key file is used. "
         "password+keyfile provides even stronger security than one of them alone.",
+        cmdline(),
         false};
     TCLAP::SwitchArg asknewpass{
         "",
         "asknewpass",
         "When set to true, ask for password even if a key file is used. "
         "password+keyfile provides even stronger security than one of them alone.",
+        cmdline(),
         false};
     TCLAP::ValueArg<std::string> oldpass{
         "",
@@ -392,15 +400,17 @@ private:
         "The old password (prefer manually typing or piping since those methods are more secure)",
         false,
         "",
-        "string"};
+        "string",
+        cmdline()};
     TCLAP::ValueArg<std::string> newpass{
         "",
         "newpass",
         "The new password (prefer manually typing or piping since those methods are more secure)",
         false,
         "",
-        "string"};
-    Argon2idArgsHolder argon2;
+        "string",
+        cmdline()};
+    Argon2idArgsHolder argon2{cmdline()};
 
     static void assign(std::string_view value, CryptoPP::AlignedSecByteBlock& output)
     {
@@ -408,24 +418,9 @@ private:
     }
 
 public:
-    std::unique_ptr<TCLAP::CmdLine> cmdline() override
-    {
-        auto result = make_unique<TCLAP::CmdLine>(help_message());
-        result->add(&data_dir);
-        result->add(&config_path);
-        result->add(&old_key_file);
-        result->add(&new_key_file);
-        result->add(&askoldpass);
-        result->add(&asknewpass);
-        result->add(&oldpass);
-        result->add(&newpass);
-        argon2.add_to(*result);
-        return result;
-    }
-
     void parse_cmdline(int argc, const char* const* argv) override
     {
-        DataDirCommandBase::parse_cmdline(argc, argv);
+        CommandBase::parse_cmdline(argc, argv);
 
         if (oldpass.isSet())
         {
@@ -456,7 +451,7 @@ public:
 
     int execute() override
     {
-        auto original_path = get_real_config_path_for_reading();
+        auto original_path = data_dir_holder_.get_real_config_path_for_reading();
         byte buffer[16];
         generate_random(buffer, array_length(buffer));
         auto tmp_path = original_path + hexify(buffer, array_length(buffer));
@@ -491,36 +486,52 @@ public:
     }
 };
 
-class MountCommand : public SinglePasswordCommandBase
+class MountCommand : public CommandBase
 {
 private:
-    TCLAP::SwitchArg single_threaded{"s", "single", "Single threaded mode"};
-    TCLAP::SwitchArg background{
-        "b", "background", "Run securefs in the background (currently no effect on Windows)"};
+    SinglePasswordHolder single_pass_holder_{cmdline()};
+
+    TCLAP::SwitchArg single_threaded{"s", "single", "Single threaded mode", cmdline()};
+    TCLAP::SwitchArg background{"b",
+                                "background",
+                                "Run securefs in the background (currently no effect on Windows)",
+                                cmdline()};
     TCLAP::SwitchArg insecure{
-        "i", "insecure", "Disable all integrity verification (insecure mode)"};
-    TCLAP::SwitchArg noxattr{"x", "noxattr", "Disable built-in xattr support"};
-    TCLAP::SwitchArg verbose{"v", "verbose", "Logs more verbose messages"};
-    TCLAP::SwitchArg trace{"", "trace", "Trace all calls into `securefs` (implies --verbose)"};
-    TCLAP::ValueArg<std::string> log{
-        "", "log", "Path of the log file (may contain sensitive information)", false, "", "path"};
+        "i", "insecure", "Disable all integrity verification (insecure mode)", cmdline()};
+    TCLAP::SwitchArg noxattr{"x", "noxattr", "Disable built-in xattr support", cmdline()};
+    TCLAP::SwitchArg verbose{"v", "verbose", "Logs more verbose messages", cmdline()};
+    TCLAP::SwitchArg trace{
+        "", "trace", "Trace all calls into `securefs` (implies --verbose)", cmdline()};
+    TCLAP::ValueArg<std::string> log{"",
+                                     "log",
+                                     "Path of the log file (may contain sensitive information)",
+                                     false,
+                                     "",
+                                     "path",
+                                     cmdline()};
     TCLAP::MultiArg<std::string> fuse_options{
         "o",
         "opt",
         "Additional FUSE options; this may crash the filesystem; use only for testing!",
         false,
-        "options"};
+        "options",
+        cmdline()};
     TCLAP::UnlabeledValueArg<std::string> mount_point{
-        "mount_point", "Mount point", true, "", "mount_point"};
+        "mount_point", "Mount point", true, "", "mount_point", cmdline()};
     TCLAP::ValueArg<std::string> fsname{
-        "", "fsname", "Filesystem name shown when mounted", false, "securefs", "fsname"};
-    TCLAP::ValueArg<std::string> fssubtype{
-        "", "fssubtype", "Filesystem subtype shown when mounted", false, "securefs", "fssubtype"};
+        "", "fsname", "Filesystem name shown when mounted", false, "securefs", "fsname", cmdline()};
+    TCLAP::ValueArg<std::string> fssubtype{"",
+                                           "fssubtype",
+                                           "Filesystem subtype shown when mounted",
+                                           false,
+                                           "securefs",
+                                           "fssubtype",
+                                           cmdline()};
     TCLAP::SwitchArg noflock{"",
                              "noflock",
                              "Disables the usage of file locking. Needed on some network "
                              "filesystems. May cause data loss, so use it at your own risk!",
-                             false};
+                             cmdline()};
     TCLAP::ValueArg<std::string> normalization{"",
                                                "normalization",
                                                "Mode of filename normalization. Valid values: "
@@ -532,23 +543,25 @@ private:
 #else
                                                "none",
 #endif
-                                               ""};
+                                               "",
+                                               cmdline()};
     TCLAP::ValueArg<int> attr_timeout{"",
                                       "attr-timeout",
                                       "Number of seconds to cache file attributes. Default is 30.",
                                       false,
                                       30,
-                                      "int"};
+                                      "int",
+                                      cmdline()};
     TCLAP::SwitchArg skip_dot_dot{"",
                                   "skip-dot-dot",
                                   "When enabled, securefs will not return . and .. in `readdir` "
                                   "calls. You should normally not need this.",
-                                  false};
+                                  cmdline()};
     TCLAP::SwitchArg plain_text_names{"",
                                       "plain-text-names",
                                       "When enabled, securefs does not encrypt or decrypt file "
                                       "names. Use it at your own risk. No effect on full format.",
-                                      false};
+                                      cmdline()};
 
     DecryptedSecurefsParams fsparams{};
 
@@ -696,8 +709,9 @@ private:
                         return from_byte_string(cmd.fsparams.lite_format_params().padding_key());
                     return key_type();
                 })
-            .registerProvider([](const MountCommand& cmd)
-                              { return new OSService(cmd.data_dir.getValue()); })
+            .registerProvider(
+                [](const MountCommand& cmd)
+                { return new OSService(cmd.single_pass_holder_.data_dir.getValue()); })
             .registerProvider(
                 [](const MountCommand& cmd)
                 {
@@ -722,36 +736,11 @@ private:
     }
 
 public:
-    std::unique_ptr<TCLAP::CmdLine> cmdline() override
-    {
-        auto result = make_unique<TCLAP::CmdLine>(help_message());
-        add_all_args_from_base(*result);
-        result->add(&background);
-        // result->add(&insecure);
-        result->add(&verbose);
-        result->add(&trace);
-        result->add(&log);
-        result->add(&mount_point);
-        result->add(&fuse_options);
-        result->add(&single_threaded);
-        result->add(&normalization);
-        result->add(&fsname);
-        result->add(&fssubtype);
-        result->add(&noflock);
-        result->add(&attr_timeout);
-        result->add(&skip_dot_dot);
-        result->add(&plain_text_names);
-#ifdef __APPLE__
-        result->add(&noxattr);
-#endif
-        return result;
-    }
-
     void parse_cmdline(int argc, const char* const* argv) override
     {
-        SinglePasswordCommandBase::parse_cmdline(argc, argv);
+        CommandBase::parse_cmdline(argc, argv);
 
-        get_password(false);
+        single_pass_holder_.get_password(false);
 
         if (global_logger && verbose.getValue())
             global_logger->set_level(LoggingLevel::kLogVerbose);
@@ -795,7 +784,7 @@ public:
             OSService::enter_background();
         }
 
-        if (data_dir.getValue() == mount_point.getValue())
+        if (single_pass_holder_.data_dir.getValue() == mount_point.getValue())
         {
             WARN_LOG("Mounting a directory on itself may cause securefs to hang");
         }
@@ -815,9 +804,11 @@ public:
         std::string config_content;
         try
         {
-            config_content = OSService::get_default()
-                                 .open_file_stream(get_real_config_path_for_reading(), O_RDONLY, 0)
-                                 ->as_string();
+            config_content
+                = OSService::get_default()
+                      .open_file_stream(
+                          single_pass_holder_.get_real_config_path_for_reading(), O_RDONLY, 0)
+                      ->as_string();
         }
         catch (const ExceptionBase& e)
         {
@@ -827,15 +818,17 @@ public:
                 ERROR_LOG(
                     "Config file %s does not exist. Perhaps you forget to run `create` command "
                     "first?",
-                    get_real_config_path_for_reading().c_str());
+                    single_pass_holder_.get_real_config_path_for_reading().c_str());
                 return 19;
             }
             throw;
         }
-        fsparams = decrypt(config_content,
-                           {password.data(), password.size()},
-                           maybe_open_key_stream(keyfile.getValue()).get());
-        CryptoPP::SecureWipeBuffer(password.data(), password.size());
+        fsparams
+            = decrypt(config_content,
+                      {single_pass_holder_.password.data(), single_pass_holder_.password.size()},
+                      maybe_open_key_stream(single_pass_holder_.keyfile.getValue()).get());
+        CryptoPP::SecureWipeBuffer(single_pass_holder_.password.data(),
+                                   single_pass_holder_.password.size());
 
         try
         {
@@ -935,13 +928,14 @@ public:
 #ifdef __APPLE__
         if (native_xattr)
         {
-            auto rc = OSService::get_default().listxattr(data_dir.getValue().c_str(), nullptr, 0);
+            auto rc = OSService::get_default().listxattr(
+                single_pass_holder_.data_dir.getValue().c_str(), nullptr, 0);
             if (rc < 0)
             {
                 absl::FPrintF(stderr,
                               "Warning: the filesystem under %s has no extended attribute "
                               "support.\nXattr is disabled\n",
-                              data_dir.getValue());
+                              single_pass_holder_.data_dir.getValue());
                 native_xattr = false;
             }
         }
@@ -965,12 +959,6 @@ public:
 class VersionCommand : public CommandBase
 {
 public:
-    std::unique_ptr<TCLAP::CmdLine> cmdline() override
-    {
-        auto result = make_unique<TCLAP::CmdLine>(help_message());
-        return result;
-    }
-
     int execute() override
     {
         using namespace CryptoPP;
@@ -1020,20 +1008,14 @@ public:
     const char* help_message() const noexcept override { return "Show version of the program"; }
 };
 
-class InfoCommand : public SinglePasswordCommandBase
+class InfoCommand : public CommandBase
 {
 private:
+    SinglePasswordHolder single_pass_holder_{cmdline()};
     TCLAP::SwitchArg unmask{
-        "", "unmask", "Disables the masking of master keys in the output", false};
+        "", "unmask", "Disables the masking of master keys in the output", cmdline()};
 
 public:
-    std::unique_ptr<TCLAP::CmdLine> cmdline() override
-    {
-        auto result = make_unique<TCLAP::CmdLine>(help_message());
-        add_all_args_from_base(*result);
-        return result;
-    }
-
     const char* long_name() const noexcept override { return "info"; }
 
     char short_name() const noexcept override { return 'i'; }
@@ -1045,18 +1027,20 @@ public:
 
     void parse_cmdline(int argc, const char* const* argv) override
     {
-        SinglePasswordCommandBase::parse_cmdline(argc, argv);
-        get_password(false);
+        CommandBase::parse_cmdline(argc, argv);
+        single_pass_holder_.get_password(false);
     }
 
     int execute() override
     {
-        auto real_config_path = get_real_config_path_for_reading();
-        auto params = decrypt(OSService::get_default()
-                                  .open_file_stream(get_real_config_path_for_reading(), O_RDONLY, 0)
-                                  ->as_string(),
-                              {password.data(), password.size()},
-                              maybe_open_key_stream(keyfile.getValue()).get());
+        auto real_config_path = single_pass_holder_.get_real_config_path_for_reading();
+        auto params
+            = decrypt(OSService::get_default()
+                          .open_file_stream(
+                              single_pass_holder_.get_real_config_path_for_reading(), O_RDONLY, 0)
+                          ->as_string(),
+                      {single_pass_holder_.password.data(), single_pass_holder_.password.size()},
+                      maybe_open_key_stream(single_pass_holder_.keyfile.getValue()).get());
         if (!unmask.getValue())
         {
             if (params.has_lite_format_params())
@@ -1100,10 +1084,6 @@ public:
     {
         return "Display the full help message of all commands in markdown format";
     }
-    std::unique_ptr<TCLAP::CmdLine> cmdline() override
-    {
-        return make_unique<TCLAP::CmdLine>(help_message());
-    }
     void add_command(CommandBase* c) { commands.push_back(c); }
     int execute() override
     {
@@ -1118,11 +1098,11 @@ public:
             else
                 absl::PrintF("## %s\n", c->long_name());
             absl::PrintF("%s\n\n", c->help_message());
-            auto cmdline = c->cmdline();
+            auto&& cmdline = c->cmdline();
 
             std::vector<std::pair<size_t, TCLAP::Arg*>> prioritizedArgs;
             size_t index = 0;
-            for (TCLAP::Arg* arg : cmdline->getArgList())
+            for (TCLAP::Arg* arg : cmdline.getArgList())
             {
                 ++index;
                 if (dynamic_cast<TCLAP::UnlabeledValueArg<std::string>*>(arg))
@@ -1131,7 +1111,7 @@ public:
                 }
                 else
                 {
-                    prioritizedArgs.emplace_back(2 * cmdline->getArgList().size() - index, arg);
+                    prioritizedArgs.emplace_back(2 * cmdline.getArgList().size() - index, arg);
                 }
             }
             std::sort(prioritizedArgs.begin(), prioritizedArgs.end());
@@ -1235,10 +1215,10 @@ int commands_main(int argc, const char* const* argv)
                                                make_unique<DocCommand>()};
 
         const char* const program_name = argv[0];
-        auto doc_command = dynamic_cast<DocCommand*>(cmds[array_length(cmds) - 1].get());
+        auto&& doc_command = dynamic_cast<DocCommand&>(*cmds[array_length(cmds) - 1]);
         for (auto&& c : cmds)
         {
-            doc_command->add_command(c.get());
+            doc_command.add_command(c.get());
         }
 
         auto print_usage = [&]()
