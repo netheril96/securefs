@@ -14,13 +14,15 @@ Security, however, is often at odds with convenience, and people easily grow tir
 
 ## Comparison
 
-There are already many encrypting filesystem in widespread use. Some notable ones are TrueCrypt, FileVault, BitLocker, eCryptFS, encfs and gocryptfs. `securefs` differs from them in that it is the only one with all of the following features:
+There are already many encrypting filesystem in widespread use. Some notable ones are TrueCrypt, FileVault, BitLocker, eCryptFS, encfs, cryfs, rclone and gocryptfs. `securefs` differs from them in that it is the only one with all of the following features:
 
 - [Authenticated encryption](https://en.wikipedia.org/wiki/Authenticated_encryption) (hence secure against chosen ciphertext attacks)
 - [Probabilistic encryption](https://en.wikipedia.org/wiki/Probabilistic_encryption) (hence provides semantical security)
 - Supported on all major platforms (Mac, Linux, BSDs and Windows)
 - Efficient cloud synchronization (not a single preallocated file as container)
 - (Optional) File size obfuscation by random padding.
+- (Optional) Case insensitive and case preserving filesystem (matching the default behavior of NTFS).
+- (Optional) Unicode normalization agnostic filesystem (matching the default behavior of APFS/HFS+)
 
 ## Install
 
@@ -42,7 +44,7 @@ Download from the Release page.
 
 ### Build from source
 
-First you need to install [vcpkg](vcpkg.io). Then run `python3 build.py --enable_test`.
+First you need to install [vcpkg](vcpkg.io). Then run `python3 build.py --enable_unit_test`.
 
 ### Package managers
 
@@ -58,11 +60,25 @@ _It is recommended to disable or encrypt the swap and hibernation file. Otherwis
 Examples:
 
 ```bash
+# Help commands
 securefs --help
-securefs create ~/Secret
-securefs chpass ~/Secret
+securefs m --help
+securefs c --help
+# Creation
+securefs create ~/Secret # Default parameters
+securefs create ~/Secret --keyfile ./mykey # Use keyfile instead of password
+securefs c ~/Secret --format full # Full mode. See below for the meaning.
+securefs c ~/Secret --format full --case insensitive # Like NTFS
+securefs c ~/Secret --format full --uninorm insensitive # Like APFS
+# Mounting
 securefs mount ~/Secret ~/Mount # press Ctrl-C to unmount
-securefs m -h # m is an alias for mount, -h tell you all the flags
+securefs mount ~/Secret ~/Mount --keyfile ./mykey # press Ctrl-C to unmount
+# Mount in the background (no-op on Windows). Use `umount` to unmount.
+securefs m -b ~/Secret ~/Mount --log ~/securefs.thismaycontainsensitiveinformation.log
+securefs m --plain-text-names ~/Secret ~/Mount # Do not encrypt the filenames
+securefs m ~/Secret Z: # Windows only
+# Chpass
+securefs chpass ~/Secret
 ```
 
 See the [full command line options](docs/usage.md).
