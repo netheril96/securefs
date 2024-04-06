@@ -104,3 +104,10 @@ See [here](docs/design.md).
 If you store `securefs` encrypted files on iCloud Drive, it might cause Spotlight Search on iOS to stop working. It is a bug in iOS, not in `securefs`.
 
 To work around that bug, you can disable the indexing of _Files_ app in Settings -> Siri & Suggestions.
+
+## Crash resistance
+If `securefs` exits abnormally, or if the computer suddenly powers down, we have only the following guarantees (assuming the underlying filesystem isn't corrupted)
+
+1. Files not being written will never be corrupted.
+2. In lite format, the directory structure and file names will not be corrupted, unless the file name is a [long name](docs/long_name.md).
+3. In full format, the directory structure and file names may be corrupted, but the files themselves can be recovered even in this case.
