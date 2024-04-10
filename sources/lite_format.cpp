@@ -79,6 +79,7 @@ void StreamOpener::validate()
 std::vector<byte> XattrCryptor::encrypt(const char* value, size_t size)
 {
     std::vector<byte> result(infer_encrypted_size(size));
+    generate_random(result.data(), iv_size_);
     crypt_.get().enc.EncryptAndAuthenticate(result.data() + iv_size_,
                                             result.data() + (result.size() - kMacSize),
                                             kMacSize,
