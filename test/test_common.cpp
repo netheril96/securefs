@@ -103,7 +103,10 @@ namespace
     std::vector<std::string> listxattr(FuseHighLevelOpsBase& ops, const char* path)
     {
         auto size = ops.vlistxattr(path, nullptr, 0, nullptr);
-        REQUIRE(size > 0);
+        if (size <= 0)
+        {
+            return {};
+        }
         std::vector<char> buffer(size);
         REQUIRE(ops.vlistxattr(path, buffer.data(), buffer.size(), nullptr) > 0);
         std::vector<std::string> result;
@@ -283,7 +286,7 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root, bool case_in
         CHECK(ops.vsetxattr("/cbd", "org.securefs.test", "blah", 4, 0, 0, nullptr) >= 0);
         CHECK(listxattr(ops, "/cbd")
               == std::vector<std::string>{"com.apple.FinderInfo", "org.securefs.test"});
-        CHECK(ops.vremovexattr("/cbd", "com.apple.FinderInfo", nullptr) > 0);
+        CHECK(ops.vremovexattr("/cbd", "com.apple.FinderInfo", nullptr) == 0);
         CHECK(listxattr(ops, "/cbd") == std::vector<std::string>{"org.securefs.test"});
         CHECK(getxattr(ops, "/cbd", "org.securefs.test") == "blah");
     }

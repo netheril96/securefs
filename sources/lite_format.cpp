@@ -1057,13 +1057,13 @@ int FuseHighLevelOps::vutimens(const char* path, const fuse_timespec* ts, const 
 }
 int FuseHighLevelOps::vlistxattr(const char* path, char* list, size_t size, const fuse_context* ctx)
 {
-    int rc = root_.listxattr(path, list, size);
+    int rc = root_.listxattr(name_trans_.encrypt_full_path(path, nullptr).c_str(), list, size);
     if (rc < 0)
     {
         return rc;
     }
     transform_listxattr_result(list, size);
-    return 0;
+    return rc;
 }
 int FuseHighLevelOps::vgetxattr(const char* path,
                                 const char* name,
