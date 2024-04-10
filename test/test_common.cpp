@@ -1,14 +1,19 @@
 #include "test_common.h"
 #include "crypto.h"
+#include "fuse_high_level_ops_base.h"
 #include "lite_format.h"
 #include "lite_long_name_lookup_table.h"
 #include "logger.h"
+#include "myutils.h"
 
 #include <cryptopp/osrng.h>
 
+#include <cstddef>
 #include <cstdlib>
 #include <fuse/fuse.h>
+#include <string>
 #include <thread>
+#include <vector>
 
 std::mt19937& get_random_number_engine()
 {
@@ -93,6 +98,29 @@ namespace
         std::string result(strlen(path) * 2, 0);
         REQUIRE(ops.vgetpath(path, result.data(), result.size() + 1, nullptr, nullptr) == 0);
         result.resize(strlen(result.c_str()));
+        return result;
+    }
+    std::vector<std::string> listxattr(FuseHighLevelOpsBase& ops, const char* path)
+    {
+        auto size = ops.vlistxattr(path, nullptr, 0, nullptr);
+        REQUIRE(size > 0);
+        std::vector<char> buffer(size);
+        REQUIRE(ops.vlistxattr(path, buffer.data(), buffer.size(), nullptr) > 0);
+        std::vector<std::string> result;
+        for (const char* ptr = buffer.data(); ptr < buffer.data() + buffer.size();
+             ptr += result.back().size() + 1)
+        {
+            result.emplace_back(ptr);
+        }
+        std::sort(result.begin(), result.end());
+        return result;
+    }
+    std::string getxattr(FuseHighLevelOpsBase& ops, const char* path, const char* name)
+    {
+        auto size = ops.vgetxattr(path, name, nullptr, 0, 0, nullptr);
+        REQUIRE(size > 0);
+        std::string result(size, '\0');
+        REQUIRE(ops.vgetxattr(path, name, result.data(), result.size(), 0, nullptr) > 0);
         return result;
     }
 }    // namespace
@@ -247,6 +275,17 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root, bool case_in
         CHECK(ops.vunlink(link_target.c_str(), &ctx) == 0);
         REQUIRE(ops.vgetattr("/check-mark", &st, &ctx) == 0);
         CHECK(st.st_nlink == 1);
+    }
+    if (is_apple())
+    {
+        CHECK(listxattr(ops, "/cbd") == std::vector<std::string>{});
+        CHECK(ops.vsetxattr("/cbd", "com.apple.FinderInfo", "65535", 5, 0, 0, nullptr) >= 0);
+        CHECK(ops.vsetxattr("/cbd", "org.securefs.test", "blah", 4, 0, 0, nullptr) >= 0);
+        CHECK(listxattr(ops, "/cbd")
+              == std::vector<std::string>{"com.apple.FinderInfo", "org.securefs.test"});
+        CHECK(ops.vremovexattr("/cbd", "com.apple.FinderInfo", nullptr) > 0);
+        CHECK(listxattr(ops, "/cbd") == std::vector<std::string>{"org.securefs.test"});
+        CHECK(getxattr(ops, "/cbd", "org.securefs.test") == "blah");
     }
 }
 }    // namespace securefs::testing
