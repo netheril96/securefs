@@ -7,6 +7,7 @@
 #include <absl/base/thread_annotations.h>
 #include <absl/functional/function_ref.h>
 #include <absl/synchronization/mutex.h>
+#include <cerrno>
 #include <uni_algo/conv.h>
 
 #include <functional>
@@ -221,6 +222,18 @@ public:
     int
     setxattr(const char* path, const char* name, void* buf, size_t size, int flags) const noexcept;
     int removexattr(const char* path, const char* name) const noexcept;
+#else
+    ssize_t listxattr(const char* path, char* buf, size_t size) const noexcept { return -ENOTSUP; }
+    ssize_t getxattr(const char* path, const char* name, void* buf, size_t size) const noexcept
+    {
+        return -ENOTSUP;
+    }
+    int
+    setxattr(const char* path, const char* name, void* buf, size_t size, int flags) const noexcept
+    {
+        return -ENOTSUP;
+    }
+    int removexattr(const char* path, const char* name) const noexcept { return -ENOTSUP; }
 #endif
 public:
     static uint32_t getuid() noexcept;

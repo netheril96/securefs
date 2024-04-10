@@ -1,4 +1,5 @@
 #include "lite_format.h"
+#include "apple_xattr_workaround.h"
 #include "crypto.h"
 #include "exceptions.h"
 #include "lite_long_name_lookup_table.h"
@@ -19,6 +20,7 @@
 #include <absl/utility/utility.h>
 #include <cryptopp/blake2.h>
 #include <cryptopp/sha.h>
+#include <cstdio>
 #include <fruit/component.h>
 #include <fruit/fruit.h>
 #include <fruit/fruit_forward_decls.h>
@@ -1008,7 +1010,13 @@ int FuseHighLevelOps::vutimens(const char* path, const fuse_timespec* ts, const 
 }
 int FuseHighLevelOps::vlistxattr(const char* path, char* list, size_t size, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    int rc = root_.listxattr(path, list, size);
+    if (rc < 0)
+    {
+        return rc;
+    }
+    transform_listxattr_result(list, size);
+    return 0;
 }
 int FuseHighLevelOps::vgetxattr(const char* path,
                                 const char* name,
@@ -1017,6 +1025,16 @@ int FuseHighLevelOps::vgetxattr(const char* path,
                                 uint32_t position,
                                 const fuse_context* ctx)
 {
+    if (position != 0)
+    {
+        return -EINVAL;
+    }
+    int rc = precheck_getxattr(&name);
+    if (rc <= 0)
+    {
+        return rc;
+    }
+
     return -ENOSYS;
 }
 int FuseHighLevelOps::vsetxattr(const char* path,
@@ -1027,10 +1045,28 @@ int FuseHighLevelOps::vsetxattr(const char* path,
                                 uint32_t position,
                                 const fuse_context* ctx)
 {
+    if (position != 0)
+    {
+        return -EINVAL;
+    }
+    int rc = precheck_setxattr(&name, &flags);
+    if (rc <= 0)
+    {
+        return rc;
+    }
+    if (!value || size == 0)
+    {
+        return 0;
+    }
     return -ENOSYS;
 }
 int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fuse_context* ctx)
 {
+    int rc = precheck_removexattr(&name);
+    if (rc <= 0)
+    {
+        return rc;
+    }
     return -ENOSYS;
 }
 std::unique_ptr<File> FuseHighLevelOps::open(std::string_view path, int flags, unsigned mode)
