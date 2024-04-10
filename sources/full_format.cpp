@@ -467,14 +467,14 @@ int FuseHighLevelOps::vgetpath(
     absl::InlinedVector<std::string_view, 7> splits = absl::StrSplit(path, '/', absl::SkipEmpty());
     uint64_t parent_ino = to_inode_number(kRootId);
     FilePtrHolder holder = ft_.open_as(kRootId, Directory::class_type());
-    for (size_t i = 0; i < splits.size(); ++i)
+    for (auto& split : splits)
     {
         id_type id;
         int type;
         std::string_view normed_name;
         {
             FileLockGuard lg(*holder);
-            auto get_result = holder->cast_as<Directory>()->get_entry(splits[i], id, type);
+            auto get_result = holder->cast_as<Directory>()->get_entry(split, id, type);
             if (!get_result.has_value())
             {
                 throwVFSException(ENOENT);
@@ -484,7 +484,7 @@ int FuseHighLevelOps::vgetpath(
         holder = ft_.open_as(id, type);
         holder->set_parent_ino(parent_ino);
         parent_ino = holder->get_parent_ino();
-        splits[i] = normed_name;
+        split = normed_name;
     }
     std::string result;
     result.reserve(strlen(path) + 31);
