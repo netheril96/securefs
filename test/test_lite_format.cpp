@@ -43,7 +43,8 @@ namespace
         CHECK(NameTranslator::remove_last_component("/cc/abcde") == "/cc/");
     }
 
-    fruit::Component<StreamOpener, fruit::Annotated<tNameMasterKey, key_type>> get_test_component()
+    fruit::Component<StreamOpener, XattrCryptor, fruit::Annotated<tNameMasterKey, key_type>>
+    get_test_component()
     {
         return fruit::createComponent()
             .registerProvider<fruit::Annotated<tContentMasterKey, key_type>()>(
@@ -52,6 +53,8 @@ namespace
                 []() { return key_type(111); })
             .registerProvider<fruit::Annotated<tNameMasterKey, key_type>()>(
                 []() { return key_type(122); })
+            .registerProvider<fruit::Annotated<tXattrMasterKey, key_type>()>(
+                []() { return key_type(108); })
             .registerProvider<fruit::Annotated<tSkipVerification, bool>()>([]() { return false; })
             .registerProvider<fruit::Annotated<tBlockSize, unsigned>()>([]() { return 64u; })
             .registerProvider<fruit::Annotated<tIvSize, unsigned>()>([]() { return 12u; })

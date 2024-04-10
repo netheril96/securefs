@@ -1,8 +1,10 @@
 #pragma once
 
+#include "exceptions.h"
 #include "fuse_high_level_ops_base.h"
 #include "lite_stream.h"
 #include "lock_guard.h"
+#include "mystring.h"
 #include "myutils.h"
 #include "platform.h"
 #include "tags.h"
@@ -10,13 +12,19 @@
 
 #include <absl/functional/function_ref.h>
 #include <absl/strings/string_view.h>
+#include <array>
 #include <cryptopp/aes.h>
+#include <cryptopp/gcm.h>
 #include <cryptopp/modes.h>
 #include <cstddef>
+#include <exception>
 #include <fruit/fruit.h>
+#include <fruit/macro.h>
+
 #include <memory>
 #include <string_view>
 #include <variant>
+#include <vector>
 
 namespace securefs::lite_format
 {
@@ -215,13 +223,54 @@ fruit::Component<
     NameTranslator>
 get_name_translator_component();
 
+class XattrVerificationException : public std::exception
+{
+public:
+    const char* what() const noexcept override { return "Xattr decryption failed verification"; }
+};
+
+class XattrCryptor
+{
+public:
+    INJECT(XattrCryptor(ANNOTATED(tXattrMasterKey, const key_type&) key,
+                        ANNOTATED(tIvSize, unsigned) iv_size))
+        : crypt_([key]() { return std::make_unique<Cryptor>(key); }), iv_size_(iv_size)
+    {
+    }
+
+    std::vector<byte> encrypt(const char* value, size_t size);
+    void decrypt(const byte* input, size_t size, byte* output, size_t out_size);
+    size_t infer_decrypted_size(size_t encrypted_size);
+    size_t infer_encrypted_size(size_t decrypted_size);
+
+    static constexpr unsigned kMacSize = 16;
+
+private:
+    struct Cryptor
+    {
+        CryptoPP::GCM<CryptoPP::AES>::Encryption enc;
+        CryptoPP::GCM<CryptoPP::AES>::Decryption dec;
+
+        explicit Cryptor(const key_type& key)
+        {
+            const std::array<byte, 12> null_iv{};
+            enc.SetKeyWithIV(key.data(), key.size(), null_iv.data(), null_iv.size());
+            dec.SetKeyWithIV(key.data(), key.size(), null_iv.data(), null_iv.size());
+        }
+    };
+
+    ThreadLocal<Cryptor> crypt_;
+    unsigned iv_size_;
+};
+
 class FuseHighLevelOps : public ::securefs::FuseHighLevelOpsBase
 {
 public:
     INJECT(FuseHighLevelOps(::securefs::OSService& root,
                             StreamOpener& opener,
-                            NameTranslator& name_trans))
-        : root_(root), opener_(opener), name_trans_(name_trans)
+                            NameTranslator& name_trans,
+                            XattrCryptor& xattr))
+        : root_(root), opener_(opener), name_trans_(name_trans), xattr_(xattr)
     {
     }
 
@@ -296,6 +345,7 @@ private:
     ::securefs::OSService& root_;
     StreamOpener& opener_;
     NameTranslator& name_trans_;
+    XattrCryptor& xattr_;
     bool read_dir_plus_ = false;
 
 private:

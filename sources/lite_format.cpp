@@ -76,6 +76,52 @@ void StreamOpener::validate()
     }
 }
 
+std::vector<byte> XattrCryptor::encrypt(const char* value, size_t size)
+{
+    std::vector<byte> result(infer_encrypted_size(size));
+    crypt_.get().enc.EncryptAndAuthenticate(result.data() + iv_size_,
+                                            result.data() + (result.size() - kMacSize),
+                                            kMacSize,
+                                            result.data(),
+                                            static_cast<int>(iv_size_),
+                                            nullptr,
+                                            0,
+                                            reinterpret_cast<const byte*>(value),
+                                            size);
+    return result;
+}
+void XattrCryptor::decrypt(const byte* input, size_t size, byte* output, size_t out_size)
+{
+    if (size < infer_encrypted_size(out_size))
+    {
+        throwInvalidArgumentException("Insufficent output buffer size");
+    }
+    if (!crypt_.get().dec.DecryptAndVerify(output,
+                                           input + (size - kMacSize),
+                                           kMacSize,
+                                           input,
+                                           static_cast<int>(iv_size_),
+                                           nullptr,
+                                           0,
+                                           input + iv_size_,
+                                           size - iv_size_ - kMacSize))
+    {
+        throw XattrVerificationException();
+    }
+}
+size_t XattrCryptor::infer_decrypted_size(size_t encrypted_size)
+{
+    if (encrypted_size >= iv_size_ + kMacSize)
+    {
+        return encrypted_size - (iv_size_ + kMacSize);
+    }
+    return 0;
+}
+size_t XattrCryptor::infer_encrypted_size(size_t decrypted_size)
+{
+    return decrypted_size + iv_size_ + kMacSize;
+}
+
 namespace
 {
     class InvalidFilenameException : public VerificationException
@@ -1029,13 +1075,32 @@ int FuseHighLevelOps::vgetxattr(const char* path,
     {
         return -EINVAL;
     }
-    int rc = precheck_getxattr(&name);
-    if (rc <= 0)
+    if (int rc = precheck_getxattr(&name); rc <= 0)
     {
         return rc;
     }
-
-    return -ENOSYS;
+    if (!value)
+    {
+        ssize_t rc = root_.getxattr(
+            name_trans_.encrypt_full_path(path, nullptr).c_str(), name, nullptr, 0);
+        if (rc < 0)
+        {
+            return rc;
+        }
+        return static_cast<int>(xattr_.infer_decrypted_size(rc));
+    }
+    std::vector<byte> underlying_data(xattr_.infer_encrypted_size(size));
+    auto rc = root_.getxattr(name_trans_.encrypt_full_path(path, nullptr).c_str(),
+                             name,
+                             underlying_data.data(),
+                             underlying_data.size());
+    if (rc < 0)
+    {
+        return static_cast<int>(rc);
+    }
+    xattr_.decrypt(
+        underlying_data.data(), underlying_data.size(), reinterpret_cast<byte*>(value), size);
+    return static_cast<int>(xattr_.infer_decrypted_size(rc));
 }
 int FuseHighLevelOps::vsetxattr(const char* path,
                                 const char* name,
@@ -1049,8 +1114,7 @@ int FuseHighLevelOps::vsetxattr(const char* path,
     {
         return -EINVAL;
     }
-    int rc = precheck_setxattr(&name, &flags);
-    if (rc <= 0)
+    if (int rc = precheck_setxattr(&name, &flags); rc <= 0)
     {
         return rc;
     }
@@ -1058,7 +1122,12 @@ int FuseHighLevelOps::vsetxattr(const char* path,
     {
         return 0;
     }
-    return -ENOSYS;
+    auto data = xattr_.encrypt(value, size);
+    return root_.setxattr(name_trans_.encrypt_full_path(path, nullptr).c_str(),
+                          name,
+                          data.data(),
+                          data.size(),
+                          flags);
 }
 int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fuse_context* ctx)
 {
@@ -1067,7 +1136,7 @@ int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fus
     {
         return rc;
     }
-    return -ENOSYS;
+    return root_.removexattr(name_trans_.encrypt_full_path(path, nullptr).c_str(), name);
 }
 std::unique_ptr<File> FuseHighLevelOps::open(std::string_view path, int flags, unsigned mode)
 {
