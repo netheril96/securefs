@@ -1,4 +1,5 @@
 #include "full_format.h"
+#include "apple_xattr_workaround.h"
 #include "exceptions.h"
 #include "files.h"
 #include "logger.h"
@@ -6,6 +7,7 @@
 #include "platform.h"
 
 #include <absl/container/inlined_vector.h>
+#include <absl/strings/numbers.h>
 #include <absl/strings/str_split.h>
 
 #include <cerrno>
@@ -372,7 +374,18 @@ int FuseHighLevelOps::vutimens(const char* path, const fuse_timespec* ts, const 
 };
 int FuseHighLevelOps::vlistxattr(const char* path, char* list, size_t size, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    auto opened = open_all(path);
+    if (!opened)
+    {
+        return -ENOENT;
+    }
+    int rc;
+    {
+        FileLockGuard fg(**opened);
+        rc = (**opened).listxattr(list, size);
+    }
+    transform_listxattr_result(list, size);
+    return rc;
 };
 int FuseHighLevelOps::vgetxattr(const char* path,
                                 const char* name,
@@ -381,7 +394,17 @@ int FuseHighLevelOps::vgetxattr(const char* path,
                                 uint32_t position,
                                 const fuse_context* ctx)
 {
-    return -ENOSYS;
+    if (position != 0)
+        return -EINVAL;
+    if (int rc = precheck_getxattr(&name); rc <= 0)
+        return rc;
+    auto opened = open_all(path);
+    if (!opened)
+    {
+        return -ENOENT;
+    }
+    FileLockGuard fg(**opened);
+    return (**opened).getxattr(name, value, size);
 };
 int FuseHighLevelOps::vsetxattr(const char* path,
                                 const char* name,
@@ -391,11 +414,35 @@ int FuseHighLevelOps::vsetxattr(const char* path,
                                 uint32_t position,
                                 const fuse_context* ctx)
 {
-    return -ENOSYS;
+    if (position != 0)
+        return -EINVAL;
+    if (int rc = precheck_setxattr(&name, &flags); rc <= 0)
+        return rc;
+
+    flags &= XATTR_CREATE | XATTR_REPLACE;
+    auto opened = open_all(path);
+    if (!opened)
+    {
+        return -ENOENT;
+    }
+    FileLockGuard fg(**opened);
+    (**opened).setxattr(name, value, size, flags);
+    return 0;
 };
 int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fuse_context* ctx)
 {
-    return -ENOSYS;
+    if (int rc = precheck_removexattr(&name); rc <= 0)
+    {
+        return rc;
+    }
+    auto opened = open_all(path);
+    if (!opened)
+    {
+        return -ENOENT;
+    }
+    FileLockGuard fg(**opened);
+    (**opened).removexattr(name);
+    return 0;
 }
 bool FuseHighLevelOps::has_getpath() const { return case_insensitive_; }
 

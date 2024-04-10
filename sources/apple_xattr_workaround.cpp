@@ -2,17 +2,6 @@
 
 #include <errno.h>
 #include <string.h>
-#if __has_include(<sys/xattr.h>)
-#include <sys/xattr.h>
-#endif
-
-#ifndef ENOATTR
-#define ENOATTR 93
-#endif
-
-#ifndef XATTR_NOSECURITY
-#define XATTR_NOSECURITY 0x0008
-#endif
 
 namespace securefs
 {

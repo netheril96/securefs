@@ -1,6 +1,26 @@
 #pragma once
 #include <stddef.h>
 
+#if __has_include(<sys/xattr.h>)
+#include <sys/xattr.h>
+#endif
+
+#ifndef ENOATTR
+#define ENOATTR 93
+#endif
+
+#ifndef XATTR_NOSECURITY
+#define XATTR_NOSECURITY 0x0008
+#endif
+
+#ifndef XATTR_CREATE
+#define XATTR_CREATE 0x0002
+#endif
+
+#ifndef XATTR_REPLACE
+#define XATTR_REPLACE 0x0004
+#endif
+
 namespace securefs
 {
 void transform_listxattr_result(char* buffer, size_t size);
