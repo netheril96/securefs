@@ -1,5 +1,4 @@
 #pragma once
-#ifdef __APPLE__
 #include <stddef.h>
 
 namespace securefs
@@ -12,4 +11,3 @@ int precheck_getxattr(const char** name);
 int precheck_setxattr(const char** name, int* flags);
 int precheck_removexattr(const char** name);
 }    // namespace securefs
-#endif
