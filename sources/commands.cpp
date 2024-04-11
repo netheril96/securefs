@@ -563,11 +563,8 @@ private:
                                       30,
                                       "int",
                                       cmdline()};
-    TCLAP::SwitchArg skip_dot_dot{"",
-                                  "skip-dot-dot",
-                                  "When enabled, securefs will not return . and .. in `readdir` "
-                                  "calls. You should normally not need this.",
-                                  cmdline()};
+    TCLAP::SwitchArg skip_dot_dot{
+        "", "skip-dot-dot", "A no-op option retained for backwards compatibility", cmdline()};
     TCLAP::SwitchArg plain_text_names{"",
                                       "plain-text-names",
                                       "When enabled, securefs does not encrypt or decrypt file "
