@@ -532,6 +532,17 @@ private:
                              "Disables the usage of file locking. Needed on some network "
                              "filesystems. May cause data loss, so use it at your own risk!",
                              cmdline()};
+    TCLAP::ValueArg<std::string> use_ino{
+        "",
+        "use-ino",
+        "Asking libfuse to use the inode number reported by securefs as is. This may be needed if "
+        "the application reads inode number. For full format, this should always be on. For lite "
+        "format, the user needs to manually turn this on when the underlying filesystem has stable "
+        "inode numbers (e.g. ext4, APFS, ZFS).",
+        false,
+        "auto",
+        "auto/true/false",
+        cmdline()};
     TCLAP::ValueArg<std::string> normalization{"",
                                                "normalization",
                                                "Mode of filename normalization. Valid values: "
@@ -873,6 +884,13 @@ public:
         }
         // Handling `daemon` ourselves, as FUSE's version interferes with our initialization.
         fuse_args.emplace_back("-f");
+
+        if (use_ino.getValue() == "true"
+            || (use_ino.getValue() == "auto" && fsparams.has_full_format_params()))
+        {
+            fuse_args.emplace_back("-o");
+            fuse_args.emplace_back("use_ino");
+        }
 
 #ifdef __APPLE__
         const char* copyfile_disable = ::getenv("COPYFILE_DISABLE");
