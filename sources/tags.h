@@ -26,9 +26,6 @@ struct tXattrMasterKey
 struct tPaddingMasterKey
 {
 };
-struct tSkipVerification
-{
-};
 struct tReadOnly
 {
 };

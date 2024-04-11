@@ -1,6 +1,5 @@
 #pragma once
 
-#include "exceptions.h"
 #include "fuse_high_level_ops_base.h"
 #include "lite_stream.h"
 #include "lock_guard.h"
@@ -37,13 +36,13 @@ public:
                         ANNOTATED(tBlockSize, unsigned) block_size,
                         ANNOTATED(tIvSize, unsigned) iv_size,
                         ANNOTATED(tMaxPaddingSize, unsigned) max_padding_size,
-                        ANNOTATED(tSkipVerification, bool) skip_verfication))
+                        ANNOTATED(tVerify, bool) verify))
         : content_master_key_(content_master_key)
         , padding_master_key_(padding_master_key)
         , block_size_(block_size)
         , iv_size_(iv_size)
         , max_padding_size_(max_padding_size)
-        , skip_verification_(skip_verfication)
+        , verify_(verify)
         , content_ecb(
               [this]() {
                   return std::make_unique<AES_ECB>(content_master_key_.data(),
@@ -78,7 +77,7 @@ private:
 private:
     key_type content_master_key_, padding_master_key_;
     unsigned block_size_, iv_size_, max_padding_size_;
-    bool skip_verification_;
+    bool verify_;
     ThreadLocal<AES_ECB> content_ecb, padding_ecb;
 };
 

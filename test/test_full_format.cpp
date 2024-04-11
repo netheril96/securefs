@@ -20,8 +20,6 @@ namespace
         return fruit::createComponent()
             .bind<FuseHighLevelOpsBase, full_format::FuseHighLevelOps>()
             .install(full_format::get_table_io_component, 2)
-            .template registerProvider<fruit::Annotated<tSkipVerification, bool>()>(
-                []() { return false; })
             .template registerProvider<fruit::Annotated<tVerify, bool>()>([]() { return true; })
             .template registerProvider<fruit::Annotated<tStoreTimeWithinFs, bool>()>(
                 []() { return false; })

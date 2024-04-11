@@ -666,8 +666,6 @@ private:
                         = cmd.fsparams.lite_format_params().long_name_threshold();
                     return flags;
                 })
-            .registerProvider<fruit::Annotated<tSkipVerification, bool>(const MountCommand&)>(
-                [](const MountCommand& cmd) { return cmd.insecure.getValue(); })
             .registerProvider<fruit::Annotated<tVerify, bool>(const MountCommand&)>(
                 [](const MountCommand& cmd) { return !cmd.insecure.getValue(); })
             .registerProvider<fruit::Annotated<tStoreTimeWithinFs, bool>(const MountCommand&)>(

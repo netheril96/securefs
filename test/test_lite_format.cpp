@@ -55,7 +55,7 @@ namespace
                 []() { return key_type(122); })
             .registerProvider<fruit::Annotated<tXattrMasterKey, key_type>()>(
                 []() { return key_type(108); })
-            .registerProvider<fruit::Annotated<tSkipVerification, bool>()>([]() { return false; })
+            .registerProvider<fruit::Annotated<tVerify, bool>()>([]() { return true; })
             .registerProvider<fruit::Annotated<tBlockSize, unsigned>()>([]() { return 64u; })
             .registerProvider<fruit::Annotated<tIvSize, unsigned>()>([]() { return 12u; })
             .registerProvider<fruit::Annotated<tMaxPaddingSize, unsigned>()>([]() { return 24u; });

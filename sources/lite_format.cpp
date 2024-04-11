@@ -48,7 +48,7 @@ std::unique_ptr<securefs::lite::AESGCMCryptStream>
 StreamOpener::open(std::shared_ptr<StreamBase> base)
 {
     return std::make_unique<securefs::lite::AESGCMCryptStream>(
-        std::move(base), *this, block_size_, iv_size_, !skip_verification_);
+        std::move(base), *this, block_size_, iv_size_, verify_);
 }
 
 void StreamOpener::compute_session_key(const std::array<unsigned char, 16>& id,
