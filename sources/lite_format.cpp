@@ -97,15 +97,16 @@ void XattrCryptor::decrypt(const byte* input, size_t size, byte* output, size_t 
     {
         throwInvalidArgumentException("Insufficent output buffer size");
     }
-    if (!crypt_.get().dec.DecryptAndVerify(output,
-                                           input + (size - kMacSize),
-                                           kMacSize,
-                                           input,
-                                           static_cast<int>(iv_size_),
-                                           nullptr,
-                                           0,
-                                           input + iv_size_,
-                                           size - iv_size_ - kMacSize))
+    bool success = crypt_.get().dec.DecryptAndVerify(output,
+                                                     input + (size - kMacSize),
+                                                     kMacSize,
+                                                     input,
+                                                     static_cast<int>(iv_size_),
+                                                     nullptr,
+                                                     0,
+                                                     input + iv_size_,
+                                                     size - iv_size_ - kMacSize);
+    if (!success && verify_)
     {
         throw XattrVerificationException();
     }

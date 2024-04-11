@@ -232,8 +232,11 @@ class XattrCryptor
 {
 public:
     INJECT(XattrCryptor(ANNOTATED(tXattrMasterKey, const key_type&) key,
-                        ANNOTATED(tIvSize, unsigned) iv_size))
-        : crypt_([key]() { return std::make_unique<Cryptor>(key); }), iv_size_(iv_size)
+                        ANNOTATED(tIvSize, unsigned) iv_size,
+                        ANNOTATED(tVerify, bool) verify))
+        : crypt_([key]() { return std::make_unique<Cryptor>(key); })
+        , iv_size_(iv_size)
+        , verify_(verify)
     {
     }
 
@@ -260,6 +263,7 @@ private:
 
     ThreadLocal<Cryptor> crypt_;
     unsigned iv_size_;
+    bool verify_;
 };
 
 class FuseHighLevelOps : public ::securefs::FuseHighLevelOpsBase
