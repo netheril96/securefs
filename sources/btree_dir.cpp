@@ -1,5 +1,6 @@
 #include "btree_dir.h"
 #include "exceptions.h"
+#include "files.h"
 
 #include <absl/strings/str_format.h>
 
@@ -277,8 +278,6 @@ void BtreeDirectory::flush_cache()
             n.clear_dirty();
         }
     }
-    if (m_node_cache.size() > 8)
-        m_node_cache.clear();
 }
 
 bool BtreeDirectory::validate_node(const BtreeNode* n, int depth)
@@ -754,8 +753,7 @@ void BtreeDirectory::rebuild()
 
     std::vector<DirEntry> entries;
     entries.reserve(this->m_stream->size() / BLOCK_SIZE * BTREE_MAX_NUM_ENTRIES);
-    mutable_recursive_iterate(
-        root, [&](DirEntry&& e) { entries.push_back(std::move(e)); }, 0);
+    mutable_recursive_iterate(root, [&](DirEntry&& e) { entries.push_back(std::move(e)); }, 0);
     clear_cache();    // root is invalid after this line
     m_stream->resize(0);
     set_num_free_page(0);
@@ -769,5 +767,21 @@ bool BtreeDirectory::empty()
 {
     auto root = get_root_node();
     return root == nullptr || root->entries().empty();
+}
+bool BtreeDirectory::is_dirty() const
+{
+    if (Directory::is_dirty())
+    {
+        return true;
+    }
+    for (auto&& pair : m_node_cache)
+    {
+        auto&& n = *pair.second;
+        if (n.is_dirty())
+        {
+            return true;
+        }
+    }
+    return false;
 }
 }    // namespace securefs

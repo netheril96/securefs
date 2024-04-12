@@ -103,6 +103,8 @@ public:
     static_assert(REGULAR_FILE != SYMLINK && SYMLINK != DIRECTORY,
                   "The value assigned are indistinguishable");
 
+    virtual bool is_dirty() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) { return m_dirty; }
+
     static int error_number_for_not(int type) noexcept
     {
         switch (type)

@@ -211,7 +211,8 @@ private:
     }
 
 public:
-    virtual bool empty() override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    bool empty() override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
+    bool is_dirty() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this) override;
     void rebuild() ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
 public:
