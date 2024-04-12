@@ -27,6 +27,10 @@ if(SECUREFS_ADDRESS_SANITIZE)
     add_link_options(-fsanitize=address)
 endif()
 
+if(${SECUREFS_LINK_PROFILER}})
+    add_compile_options(-g)
+endif()
+
 set(CMAKE_FIND_FRAMEWORK NEVER)
 
 if(APPLE)
