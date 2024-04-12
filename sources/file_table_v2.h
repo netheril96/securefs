@@ -102,13 +102,7 @@ class FileTableCloser
 public:
     explicit FileTableCloser(FileTable* table) : table_(table) {}
 
-    void operator()(FileBase* fb) const
-    {
-        if (fb && table_ && fb->decref() <= 0)
-        {
-            table_->close(fb->get_id());
-        }
-    }
+    void operator()(FileBase* fb) const;
 
 private:
     FileTable* table_;

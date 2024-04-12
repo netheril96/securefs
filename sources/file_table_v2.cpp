@@ -58,7 +58,7 @@ FilePtrHolder FileTable::open_as(const id_type& id, int type)
         {
             throw_runtime_error("Inconsistent type");
         }
-        return {root_.get(), FileTableCloser(this)};
+        return create_holder(root_);
     }
     auto& s = find_shard(id);
     LockGuard<Mutex> lg(s.mu);
@@ -86,6 +86,10 @@ FilePtrHolder FileTable::open_as(const id_type& id, int type)
 }
 FileTable::Shard& FileTable::find_shard(const id_type& id)
 {
+    if (id == kRootId)
+    {
+        throwInvalidArgumentException("Root file descriptor does not belong to any shard");
+    }
     return shards[to_inode_number(id) % shards.size()];
 }
 FilePtrHolder FileTable::create_as(int type)
@@ -119,6 +123,12 @@ std::unique_ptr<FileBase> FileTable::construct(int type,
 }
 void FileTable::close(const id_type& id)
 {
+    if (id == kRootId)
+    {
+        LockGuard<FileBase> lg(*root_);
+        root_->flush();
+        return;
+    }
     pool_.detach_task(
         [this, id]()
         {
@@ -340,5 +350,12 @@ get_table_io_component(bool legacy)
         return fruit::createComponent().bind<FileTableIO, FileTableIOVersion1>();
     }
     return fruit::createComponent().bind<FileTableIO, FileTableIOVersion2>();
+}
+void FileTableCloser::operator()(FileBase* fb) const
+{
+    if (fb && table_ && fb->decref() <= 0)
+    {
+        table_->close(fb->get_id());
+    }
 }
 }    // namespace securefs::full_format
