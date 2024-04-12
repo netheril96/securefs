@@ -11,14 +11,11 @@
 
 #include <absl/base/thread_annotations.h>
 #include <absl/strings/str_cat.h>
-#include <absl/synchronization/mutex.h>
-#include <absl/time/time.h>
 #include <algorithm>
 #include <exception>
 #include <fruit/component.h>
 #include <fruit/macro.h>
 #include <memory>
-#include <thread>
 
 namespace securefs::full_format
 {
@@ -132,17 +129,20 @@ void FileTable::close(const id_type& id)
         root_->flush();
         return;
     }
-
-    try
-    {
-        close_internal(id);
-    }
-    catch (const std::exception& e)
-    {
-        ERROR_LOG("Failed background maintanence work: %s", e.what());
-    }
+    pool_.detach_task(
+        [this, id]()
+        {
+            try
+            {
+                close_internal(id);
+            }
+            catch (const std::exception& e)
+            {
+                ERROR_LOG("Failed background maintanence work: %s", e.what());
+            }
+        });
 }
-void FileTable::close_internal(id_type id)
+void FileTable::close_internal(const id_type& id)
 {
     auto& s = find_shard(id);
 
@@ -158,8 +158,17 @@ void FileTable::close_internal(id_type id)
     }
 
     // The file descriptor is not referenced anywhere else, so we don't need to lock it.
-    auto query_link_status
-        = [](FileBase* fb) ABSL_NO_THREAD_SAFETY_ANALYSIS { return fb->is_unlinked(); };
+    // If we do lock it, then later when it is destroyed, we are still holding the mutex,
+    // which may cause undefined behavior.
+    auto query_link_status = [](FileBase* fb) ABSL_NO_THREAD_SAFETY_ANALYSIS
+    {
+        bool result = fb->is_unlinked();
+        if (!result)
+        {
+            fb->flush();
+        }
+        return result;
+    };
 
     bool should_unlink = query_link_status(it->second.get());
     auto holder = std::move(it->second);
@@ -173,29 +182,46 @@ void FileTable::close_internal(id_type id)
         holder.reset();
         io_.unlink(id);
     }
+    if (s.cache.size() > kMaxCached)
+    {
+        static_assert(kEjectNumber < kMaxCached);
+        auto begin = s.cache.begin();
+        auto end = s.cache.begin() + kEjectNumber;
+        for (auto it = begin; it != end; ++it)
+        {
+            if (it->get()->getref() > 0)
+            {
+                ERROR_LOG("A file descriptor in the closed pool has outstanding references");
+                return;
+            }
+        }
+        s.cache.erase(begin, end);
+    }
 };
 
 FileTable::~FileTable()
 {
     INFO_LOG("Flushing all opened and cached file descriptors, please wait...");
-    {
-        FileLockGuard root_lg(*root_);
-        root_->flush();
-    }
+    root_->flush();
     for (auto&& s : shards)
     {
-        LockGuard<Mutex> lg(s.mu);
-        for (auto&& pair : s.live_map)
-        {
-            FileLockGuard inner_lg(*pair.second);
-            pair.second->flush();
-        }
-        for (auto&& p : s.cache)
-        {
-            FileLockGuard inner_lg(*p);
-            p->flush();
-        }
+        pool_.detach_task(
+            [&s]()
+            {
+                LockGuard<Mutex> lg(s.mu);
+                for (auto&& pair : s.live_map)
+                {
+                    LockGuard<FileBase> inner_lg(*pair.second);
+                    pair.second->flush();
+                }
+                for (auto&& p : s.cache)
+                {
+                    LockGuard<FileBase> inner_lg(*p);
+                    p->flush();
+                }
+            });
     }
+    pool_.wait();
 }
 
 namespace
@@ -331,57 +357,5 @@ void FileTableCloser::operator()(FileBase* fb) const
     {
         table_->close(fb->get_id());
     }
-}
-FileTable::Shard::~Shard()
-{
-    {
-        LockGuard<absl::Mutex> lg(mu);
-        exiting = true;
-    }
-    if (maintanence_thread.joinable())
-    {
-        maintanence_thread.join();
-    }
-}
-FileTable::Shard::Shard()
-    : maintanence_thread(
-          [this]()
-          {
-              while (true)
-              {
-                  mu.LockWhenWithTimeout(absl::Condition(
-                                             +[](const Shard* s)
-                                             { return s->exiting || s->cache.size() > kMaxCached; },
-                                             this),
-                                         absl::Seconds(5));
-                  if (exiting)
-                  {
-                      return;
-                  }
-                  DEFER(mu.Unlock());
-                  for (auto&& fp : cache)
-                  {
-                      FileLockGuard inner_fg(*fp);
-                      fp->flush();
-                  }
-                  if (cache.size() > kMaxCached)
-                  {
-                      static_assert(kEjectNumber < kMaxCached);
-                      auto begin = cache.begin();
-                      auto end = cache.begin() + kEjectNumber;
-                      for (auto it = begin; it != end; ++it)
-                      {
-                          if (it->get()->getref() > 0)
-                          {
-                              ERROR_LOG("A file descriptor in the closed pool has outstanding "
-                                        "references");
-                              return;
-                          }
-                      }
-                      cache.erase(begin, end);
-                  }
-              }
-          })
-{
 }
 }    // namespace securefs::full_format

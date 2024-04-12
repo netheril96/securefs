@@ -10,7 +10,6 @@
 #include <absl/container/flat_hash_map.h>
 
 #include <array>
-#include <atomic>
 #include <cstddef>
 #include <fruit/component.h>
 #include <fruit/fruit_forward_decls.h>
@@ -75,12 +74,6 @@ private:
         absl::flat_hash_map<id_type, std::unique_ptr<FileBase>, id_hash>
             live_map ABSL_GUARDED_BY(mu);
         std::vector<std::unique_ptr<FileBase>> cache ABSL_GUARDED_BY(mu);
-
-        std::thread maintanence_thread;
-        bool exiting ABSL_GUARDED_BY(mu) = false;
-
-        Shard();
-        ~Shard();
     };
     static constexpr inline size_t kNumShards = 32, kMaxCached = 50, kEjectNumber = 10;
 
@@ -90,7 +83,7 @@ private:
                                         std::shared_ptr<FileStream> data_stream,
                                         std::shared_ptr<FileStream> meta_stream,
                                         const id_type& id);
-    void close_internal(id_type id);
+    void close_internal(const id_type& id);
     FilePtrHolder create_holder(FileBase* fb);
     FilePtrHolder create_holder(std::unique_ptr<FileBase>& fb);
 
