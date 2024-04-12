@@ -4,7 +4,7 @@ import os
 import tempfile
 import argparse
 import shutil
-import pathlib
+from typing import Optional
 
 
 def check_call(*args):
@@ -22,7 +22,7 @@ def get_build_root(build_root: str) -> str:
     return tempfile.mkdtemp(prefix="securefs", dir=base_tmp_dir)
 
 
-def _unchecked_get_vcpkg_cmake_file(vcpkg_root: str | None) -> str:
+def _unchecked_get_vcpkg_cmake_file(vcpkg_root: Optional[str]) -> str:
     subpath = "scripts/buildsystems/vcpkg.cmake"
     vcpkg_root = vcpkg_root or os.environ.get("VCPKG_ROOT")
     if vcpkg_root:
@@ -35,7 +35,7 @@ def _unchecked_get_vcpkg_cmake_file(vcpkg_root: str | None) -> str:
     return os.path.join(vcpkg_root, subpath)
 
 
-def get_vcpkg_cmake_file(vcpkg_root: str | None) -> str:
+def get_vcpkg_cmake_file(vcpkg_root: Optional[str]) -> str:
     result = _unchecked_get_vcpkg_cmake_file(vcpkg_root)
     if not os.path.isfile(result):
         raise ValueError(
@@ -115,14 +115,16 @@ def main():
     if args.lto:
         configure_args += [
             "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON",
-            f"-DVCPKG_OVERLAY_TRIPLETS={pathlib.Path(__file__).absolute().parent/'overlay_triplets'}",
+            f"-DVCPKG_OVERLAY_TRIPLETS={os.path.join(source_dir,'overlay_triplets')}",
         ]
     for pair in args.cmake_defines:
         configure_args.append("-D" + pair)
     configure_args.append(source_dir)
 
     check_call(*configure_args)
-    check_call("cmake", "--build", ".", "--config", args.build_type)
+    check_call(
+        "cmake", "--build", ".", "--config", args.build_type, "-j", str(os.cpu_count())
+    )
     if args.enable_unit_test or args.enable_integration_test:
         check_call("ctest", "-V", "-C", args.build_type)
     print(
