@@ -18,7 +18,7 @@ option(SECUREFS_USE_FUSET
 option(SECUREFS_ADDRESS_SANITIZE
        "Enable address sanitizer during building. Mainly for development use."
        OFF)
-
+option(SECUREFS_LINK_PROFILER "Enable linking with gperftools profiler" OFF)
 project(securefs)
 enable_testing()
 
@@ -193,4 +193,8 @@ install(TARGETS securefs DESTINATION bin)
 
 if(MINGW)
     target_link_libraries(securefs PRIVATE -municode)
+endif()
+
+if(SECUREFS_LINK_PROFILER)
+    target_link_libraries(securefs PRIVATE -Wl,--no-as-needed -lprofiler)
 endif()
