@@ -96,7 +96,6 @@ FilePtrHolder FileTable::create_as(int type)
     LockGuard<Mutex> lg(s.mu);
     auto [data, meta] = io_.create(id);
     auto fp = construct(type, std::move(data), std::move(meta), id);
-    fp->setref(0);
     auto holder = create_holder(fp);
     s.live_map.emplace(id, std::move(fp));
     return holder;

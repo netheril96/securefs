@@ -113,8 +113,7 @@ FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
                    unsigned iv_size,
                    unsigned max_padding_size,
                    bool store_time)
-    : m_refcount(1)
-    , m_header()
+    : m_header()
     , m_id(id_)
     , m_data_stream(data_stream)
     , m_meta_stream(meta_stream)
