@@ -26,7 +26,6 @@ namespace
             .template registerProvider<fruit::Annotated<tReadOnly, bool>()>([]() { return false; })
             .template registerProvider<fruit::Annotated<tCaseInsensitive, bool>()>(
                 []() { return CaseInsensitive; })
-            .registerProvider([]() { return new BS::thread_pool(2); })
             .template bind<Directory, BtreeDirectory>()
             .template registerProvider<fruit::Annotated<tMaxPaddingSize, unsigned>()>(
                 []() { return 0u; })

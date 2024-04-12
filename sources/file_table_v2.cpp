@@ -129,20 +129,18 @@ void FileTable::close(const id_type& id)
         root_->flush();
         return;
     }
-    pool_.detach_task(
-        [this, id]()
-        {
-            try
-            {
-                close_internal(id);
-            }
-            catch (const std::exception& e)
-            {
-                ERROR_LOG("Failed background maintanence work: %s", e.what());
-            }
-        });
+    try
+    {
+        close_internal(id);
+    }
+    catch (const std::exception& e)
+    {
+        ERROR_LOG("Failed background maintanence work: %s", e.what());
+    }
 }
-void FileTable::close_internal(const id_type& id)
+// Note: this function argument must be value not reference, or we will encounter the nasty bug of
+// use-after-move.
+void FileTable::close_internal(const id_type id)
 {
     auto& s = find_shard(id);
 
@@ -201,27 +199,22 @@ void FileTable::close_internal(const id_type& id)
 
 FileTable::~FileTable()
 {
-    INFO_LOG("Flushing all opened and cached file descriptors, please wait...");
+    VERBOSE_LOG("Flushing all opened and cached file descriptors, please wait...");
     root_->flush();
     for (auto&& s : shards)
     {
-        pool_.detach_task(
-            [&s]()
-            {
-                LockGuard<Mutex> lg(s.mu);
-                for (auto&& pair : s.live_map)
-                {
-                    LockGuard<FileBase> inner_lg(*pair.second);
-                    pair.second->flush();
-                }
-                for (auto&& p : s.cache)
-                {
-                    LockGuard<FileBase> inner_lg(*p);
-                    p->flush();
-                }
-            });
+        LockGuard<Mutex> lg(s.mu);
+        for (auto&& pair : s.live_map)
+        {
+            LockGuard<FileBase> inner_lg(*pair.second);
+            pair.second->flush();
+        }
+        for (auto&& p : s.cache)
+        {
+            LockGuard<FileBase> inner_lg(*p);
+            p->flush();
+        }
     }
-    pool_.wait();
 }
 
 namespace

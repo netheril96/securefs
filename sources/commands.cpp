@@ -17,7 +17,6 @@
 #include "tags.h"
 #include "win_get_proc.h"    // IWYU pragma: keep
 
-#include <BS_thread_pool.hpp>
 #include <absl/strings/escaping.h>
 #include <absl/strings/match.h>
 #include <absl/strings/str_cat.h>
@@ -685,8 +684,6 @@ private:
                     // TODO: Support readonly mounts.
                     return false;
                 })
-            .registerProvider(
-                []() { return new BS::thread_pool(std::thread::hardware_concurrency() * 2); })
             .bind<Directory, BtreeDirectory>()
             .registerProvider<fruit::Annotated<tMaxPaddingSize, unsigned>(const MountCommand&)>(
                 [](const MountCommand& cmd)

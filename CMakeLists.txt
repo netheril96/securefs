@@ -117,9 +117,6 @@ endif()
 
 find_library(FRUIT_LIBRARY NAMES fruit)
 target_link_libraries(securefs-static PUBLIC ${FRUIT_LIBRARY})
-find_path(BSHOSHANY_THREAD_POOL_INCLUDE_DIRS "BS_thread_pool.hpp")
-target_include_directories(securefs-static
-                           PUBLIC ${BSHOSHANY_THREAD_POOL_INCLUDE_DIRS})
 
 if(CMAKE_DL_LIBS)
     target_link_libraries(securefs-static PUBLIC ${CMAKE_DL_LIBS})

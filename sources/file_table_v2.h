@@ -5,7 +5,6 @@
 #include "platform.h"
 #include "tags.h"
 
-#include <BS_thread_pool.hpp>
 #include <absl/base/thread_annotations.h>
 #include <absl/container/flat_hash_map.h>
 
@@ -50,12 +49,10 @@ public:
 
 public:
     INJECT(FileTable(FileTableIO& io,
-                     BS::thread_pool& pool,
                      Factory<RegularFile> regular_file_factory,
                      Factory<Directory> directory_factory,
                      Factory<Symlink> symlink_factory))
         : io_(io)
-        , pool_(pool)
         , regular_file_factory_(std::move(regular_file_factory))
         , directory_factory_(std::move(directory_factory))
         , symlink_factory_(std::move(symlink_factory))
@@ -83,13 +80,12 @@ private:
                                         std::shared_ptr<FileStream> data_stream,
                                         std::shared_ptr<FileStream> meta_stream,
                                         const id_type& id);
-    void close_internal(const id_type& id);
+    void close_internal(const id_type id);
     FilePtrHolder create_holder(FileBase* fb);
     FilePtrHolder create_holder(std::unique_ptr<FileBase>& fb);
 
 private:
     FileTableIO& io_;
-    BS::thread_pool& pool_;
     std::unique_ptr<FileBase> root_;
     Factory<RegularFile> regular_file_factory_;
     Factory<Directory> directory_factory_;
