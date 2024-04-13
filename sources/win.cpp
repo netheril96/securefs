@@ -1,5 +1,5 @@
-#include "exceptions.h"
 #ifdef _WIN32
+#include "exceptions.h"
 #include "lock_enabled.h"
 #include "logger.h"
 #include "platform.h"
@@ -833,6 +833,30 @@ void OSService::mkdir(const std::string& path, unsigned mode) const
         DWORD err = GetLastError();
         THROW_WINDOWS_EXCEPTION_WITH_PATH(err, L"CreateDirectory", npath);
     }
+}
+
+void OSService::ensure_directory(const std::string& path, unsigned mode) const
+{
+    auto npath = norm_path(path);
+    if (CreateDirectoryW(npath.c_str(), nullptr) == 0)
+    {
+        DWORD err = GetLastError();
+        if (err == ERROR_ALREADY_EXISTS)
+        {
+            return;
+        }
+        THROW_WINDOWS_EXCEPTION_WITH_PATH(err, L"CreateDirectory", npath);
+    }
+}
+
+bool OSService::remove_file_nothrow(const std::string& path) const noexcept
+{
+    return DeleteFileW(norm_path(path).c_str());
+}
+
+bool OSService::remove_directory_nothrow(const std::string& path) const noexcept
+{
+    return RemoveDirectoryW(norm_path(path).c_str());
 }
 
 void OSService::statfs(fuse_statvfs* fs_info) const

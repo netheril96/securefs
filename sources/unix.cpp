@@ -324,6 +324,24 @@ void OSService::mkdir(const std::string& path, unsigned mode) const
                               absl::StrFormat("Fail to create directory %s", norm_path(path)));
 }
 
+void OSService::ensure_directory(const std::string& path, unsigned mode) const
+{
+    int rc = ::mkdirat(m_dir_fd, path.c_str(), mode);
+    if (rc < 0 && errno != EEXIST)
+        THROW_POSIX_EXCEPTION(errno,
+                              absl::StrFormat("Fail to create directory %s", norm_path(path)));
+}
+
+bool OSService::remove_file_nothrow(const std::string& path) const noexcept
+{
+    return ::unlinkat(m_dir_fd, path.c_str(), 0) == 0;
+}
+
+bool OSService::remove_directory_nothrow(const std::string& path) const noexcept
+{
+    return ::unlinkat(m_dir_fd, path.c_str(), AT_REMOVEDIR) == 0;
+}
+
 void OSService::symlink(const std::string& to, const std::string& from) const
 {
     int rc = ::symlinkat(to.c_str(), m_dir_fd, from.c_str());
