@@ -291,10 +291,20 @@ int case_insensitive_compare(std::string_view a, std::string_view b)
 }
 int uni_norm_insensitive_compare(std::string_view a, std::string_view b)
 {
+    if (is_ascii(a) && is_ascii(b))
+    {
+        // Fast path. No normalization needed.
+        return a.compare(b);
+    }
     return una::norm::to_nfc_utf8(a).compare(una::norm::to_nfc_utf8(b));
 }
 int case_uni_norm_insensitve_compare(std::string_view a, std::string_view b)
 {
+    if (is_ascii(a) && is_ascii(b))
+    {
+        // Fast path. No normalization needed.
+        return una::caseless::compare_utf8(a, b);
+    }
     return una::caseless::compare_utf8(una::norm::to_nfc_utf8(a), una::norm::to_nfc_utf8(b));
 }
 }    // namespace securefs
