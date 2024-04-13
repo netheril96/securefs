@@ -279,6 +279,15 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root, bool case_in
         REQUIRE(ops.vgetattr("/check-mark", &st, &ctx) == 0);
         CHECK(st.st_nlink == 1);
     }
+
+    if (!is_windows())
+    {
+        CHECK(ops.vchmod("/check-mark", 0600, &ctx) == 0);
+        fuse_stat st{};
+        CHECK(ops.vgetattr("/check-mark", &st, &ctx) == 0);
+        CHECK(st.st_mode == 0100600);
+    }
+
     if (is_apple())
     {
         CHECK(listxattr(ops, "/cbd") == std::vector<std::string>{});

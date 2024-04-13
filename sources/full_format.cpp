@@ -247,7 +247,7 @@ int FuseHighLevelOps::vchmod(const char* path, fuse_mode_t mode, const fuse_cont
         return -ENOENT;
     }
     FileLockGuard fg(**opened);
-    (**opened).set_mode((**opened).type() | (mode & 0777));
+    (**opened).set_mode(((**opened).get_mode() & ~0777u) | (mode & 0777u));
     return 0;
 };
 int FuseHighLevelOps::vchown(const char* path,
