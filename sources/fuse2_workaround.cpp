@@ -22,7 +22,8 @@
 namespace securefs
 {
 
-#ifndef _WIN32
+#if defined(_WIN32) || defined(__APPLE__)
+#else
 namespace
 {
     // Wrapper around POSIX semaphore. Needed because it is an async signal safe communication
@@ -107,7 +108,7 @@ namespace
 
 int my_fuse_main(int argc, char** argv, fuse_operations* op, void* user_data)
 {
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__APPLE__)
     return fuse_main(argc, argv, op, user_data);
 #else
     char* mountpoint;
