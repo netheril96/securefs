@@ -31,12 +31,37 @@ namespace
     class Semaphore
     {
     public:
-        Semaphore() { sem_init(&s_, 0, 0); }
+        Semaphore()
+        {
+            if (sem_init(&s_, 0, 0) < 0)
+                THROW_POSIX_EXCEPTION(errno, "Failed to initialize semaphore");
+        }
         ~Semaphore() { sem_destroy(&s_); }
         DISABLE_COPY_MOVE(Semaphore);
 
-        void wait() { sem_wait(&s_); }
-        void post() { sem_post(&s_); }
+        void wait()
+        {
+            while (true)
+            {
+                int rc = sem_wait(&s_);
+                if (rc < 0 && errno == EINTR)
+                {
+                    continue;
+                }
+                if (rc < 0)
+                {
+                    THROW_POSIX_EXCEPTION(errno, "sem_wait fails");
+                }
+                return;
+            }
+        }
+        void post()
+        {
+            if (sem_post(&s_) < 0)
+            {
+                THROW_POSIX_EXCEPTION(errno, "sem_post fails");
+            }
+        }
 
     private:
         sem_t s_;
