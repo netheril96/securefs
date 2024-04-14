@@ -1,14 +1,20 @@
 #include "fuse2_workaround.h"
+
+#include <fuse/fuse.h>
+
+#ifndef _WIN32
+#include <fuse/fuse_lowlevel.h>
+
+#include "exceptions.h"
 #include "logger.h"
 #include "myutils.h"
 
-#include <fuse/fuse.h>
-#ifndef _WIN32
+#include <cerrno>
 #include <csignal>
-#include <fuse/fuse_lowlevel.h>
 #include <pthread.h>
+#include <semaphore.h>
 
-#include <future>
+#include <atomic>
 #include <thread>
 #include <vector>
 #endif
@@ -19,6 +25,26 @@ namespace securefs
 #ifndef _WIN32
 namespace
 {
+    // Wrapper around POSIX semaphore. Needed because it is an async signal safe communication
+    // mechanism.
+    class Semaphore
+    {
+    public:
+        Semaphore() { sem_init(&s_, 0, 0); }
+        ~Semaphore() { sem_destroy(&s_); }
+        DISABLE_COPY_MOVE(Semaphore);
+
+        void wait() { sem_wait(&s_); }
+        void post() { sem_post(&s_); }
+
+    private:
+        sem_t s_;
+    };
+
+    Semaphore global_semaphore;
+
+    void signal_handler(int) { global_semaphore.post(); }
+
     void block_some_signals()
     {
         sigset_t newset;
@@ -30,10 +56,12 @@ namespace
         pthread_sigmask(SIG_BLOCK, &newset, nullptr);
     }
 
-    int worker_loop(fuse_session* session, fuse_chan* channel)
+    void worker_loop(fuse_session* session, fuse_chan* channel, std::atomic<int>* error_code)
     {
         block_some_signals();
         std::vector<char> buffer(fuse_chan_bufsize(channel));
+
+        DEFER(global_semaphore.post());
 
         while (!fuse_session_exited(session))
         {
@@ -52,16 +80,27 @@ namespace
                 ERROR_LOG(
                     "fuse_session_receive_buf failed with error code %d, exiting abnormally...",
                     res);
-                fuse_session_exit(session);
-                return res;
+                *error_code = res;
+                return;
             }
             if (res == 0)
             {
-                return 0;
+                return;
             }
             fuse_session_process_buf(session, &fbuf, channel);
         }
-        return 0;
+    }
+
+    void install_signal_handler(int sig)
+    {
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = &signal_handler;
+        sigemptyset(&sa.sa_mask);
+        if (sigaction(sig, &sa, nullptr))
+        {
+            THROW_POSIX_EXCEPTION(errno, "Failed to install signal handler");
+        }
     }
 }    // namespace
 #endif
@@ -92,26 +131,37 @@ int my_fuse_main(int argc, char** argv, fuse_operations* op, void* user_data)
         return 3;
     }
 
-    std::vector<std::future<int>> workers(multithreaded ? std::thread::hardware_concurrency() * 2
-                                                        : 1);
+    std::atomic<int> error_code;
+    std::vector<std::thread> workers(multithreaded ? std::thread::hardware_concurrency() * 2 : 1);
     for (auto&& w : workers)
     {
-        w = std::async(std::launch::async, [=]() { return worker_loop(session, channel); });
+        w = std::thread(worker_loop, session, channel, &error_code);
     }
-    std::vector<int> results;
-    results.reserve(workers.size());
-    for (auto&& w : workers)
-    {
-        results.push_back(w.get());
-    }
-    for (int rc : results)
-    {
-        if (rc)
+
+    install_signal_handler(SIGINT);
+    install_signal_handler(SIGTERM);
+    install_signal_handler(SIGHUP);
+
+    std::thread waiter(
+        [&]()
         {
-            return rc;
-        }
+            block_some_signals();
+            global_semaphore.wait();
+            fuse_session_exit(session);
+
+            for (auto&& w : workers)
+            {
+                pthread_cancel(w.native_handle());
+            }
+        });
+    waiter.join();
+
+    for (auto&& w : workers)
+    {
+        w.join();
     }
-    return 0;
+
+    return error_code;
 #endif
 }
 }    // namespace securefs
