@@ -3,11 +3,12 @@
 #include "lock_enabled.h"
 #include "logger.h"
 #include "platform.h"
-#include "win_get_proc.h"
 
 #include <absl/container/inlined_vector.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_split.h>
+#include <absl/time/clock.h>
+#include <absl/time/time.h>
 #include <winfsp/winfsp.h>
 
 #include <cerrno>
@@ -25,8 +26,6 @@
 #include <sddl.h>
 #include <strsafe.h>
 
-static void(WINAPI* best_get_time_func)(LPFILETIME) = nullptr;
-
 static inline uint64_t convert_dword_pair(uint64_t low_part, uint64_t high_part)
 {
     return low_part | (high_part << 32);
@@ -40,13 +39,20 @@ static void filetime_to_unix_time(const FILETIME* ft, fuse_timespec* out)
     out->tv_nsec = (ll % FACTOR) * 100;
 }
 
-static FILETIME unix_time_to_filetime(const fuse_timespec* t)
+template <class TimeSpec>
+static FILETIME unix_time_to_filetime(const TimeSpec* t)
 {
     long long ll = t->tv_sec * 10000000LL + t->tv_nsec / 100LL + 116444736000000000LL;
     FILETIME res;
     res.dwLowDateTime = (DWORD)ll;
     res.dwHighDateTime = (DWORD)(ll >> 32);
     return res;
+}
+
+template <class TimeSpec>
+static FILETIME unix_time_to_filetime(const TimeSpec& t)
+{
+    return unix_time_to_filetime(&t);
 }
 
 static const DWORD MAX_SINGLE_BLOCK = std::numeric_limits<DWORD>::max();
@@ -694,7 +700,7 @@ public:
         FILETIME access_time, mod_time;
         if (!ts)
         {
-            best_get_time_func(&access_time);
+            access_time = unix_time_to_filetime(absl::ToTimespec(absl::Now()));
             mod_time = access_time;
         }
         else
@@ -885,7 +891,7 @@ void OSService::utimens(const std::string& path, const fuse_timespec ts[2]) cons
     FILETIME atime, mtime;
     if (!ts)
     {
-        best_get_time_func(&atime);
+        atime = unix_time_to_filetime(absl::ToTimespec(absl::Now()));
         mtime = atime;
     }
     else
@@ -1055,9 +1061,9 @@ uint32_t OSService::getgid() noexcept { return 0; }
 
 void OSService::get_current_time(fuse_timespec& current_time)
 {
-    FILETIME ft;
-    best_get_time_func(&ft);
-    filetime_to_unix_time(&ft, &current_time);
+    auto ts = absl::ToTimespec(absl::Now());
+    current_time.tv_sec = ts.tv_sec;
+    current_time.tv_nsec = ts.tv_nsec;
 }
 
 void OSService::get_current_time_in_tm(struct tm* tm, int* ns)
@@ -1202,13 +1208,6 @@ void windows_init(void)
               stderr);
         abort();
     }
-
-    HMODULE hd = GetModuleHandleW(L"kernel32.dll");
-
-    best_get_time_func
-        = get_proc_address<decltype(best_get_time_func)>(hd, "GetSystemTimePreciseAsFileTime");
-    if (best_get_time_func == nullptr)
-        best_get_time_func = &GetSystemTimeAsFileTime;
 }
 }    // namespace securefs
 

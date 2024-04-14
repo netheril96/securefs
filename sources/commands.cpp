@@ -16,7 +16,6 @@
 #include "params_io.h"
 #include "platform.h"
 #include "tags.h"
-#include "win_get_proc.h"    // IWYU pragma: keep
 
 #include <absl/strings/escaping.h>
 #include <absl/strings/match.h>
@@ -32,26 +31,27 @@
 #include <fruit/fruit.h>
 #include <fruit/fruit_forward_decls.h>
 #include <google/protobuf/util/json_util.h>
-#include <string>
 #include <tclap/CmdLine.h>
 #include <tclap/SwitchArg.h>
 #include <tclap/ValueArg.h>
 
 #include <algorithm>
+#include <cstdint>
+#include <cstdio>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string>
 #include <string_view>
 #include <typeinfo>
 #include <vector>
 
 #ifdef _WIN32
 #include <Windows.h>
-#else
-#include <dlfcn.h>
+#include <winfsp/winfsp.h>
 #endif
 
 using namespace securefs;
@@ -976,22 +976,14 @@ public:
         absl::PrintF("securefs %s\n", GIT_VERSION);
         absl::PrintF("Crypto++ %g\n", CRYPTOPP_VERSION / 100.0);
 #ifdef _WIN32
-        HMODULE hd = GetModuleHandleW((sizeof(void*) == 8) ? L"winfsp-x64.dll" : L"winfsp-x86.dll");
-        NTSTATUS(*fsp_version_func)
-        (uint32_t*) = get_proc_address<decltype(fsp_version_func)>(hd, "FspVersion");
-        if (fsp_version_func)
-        {
-            uint32_t vn;
-            if (fsp_version_func(&vn) == 0)
-            {
-                absl::PrintF("WinFsp %u.%u\n", vn >> 16, vn & 0xFFFFu);
-            }
-        }
+        uint32_t vn;
+        auto status = ::FspVersion(&vn);
+        if (NT_SUCCESS(status))
+            absl::PrintF("WinFsp %u.%u\n", vn >> 16, vn & 0xFFFFu);
+        else
+            absl::FPrintF(stderr, "Failed to query WinFsp version (code 0x%x)", status);
 #else
-        typedef int version_function(void);
-        auto fuse_version_func
-            = reinterpret_cast<version_function*>(::dlsym(RTLD_DEFAULT, "fuse_version"));
-        absl::PrintF("libfuse %d\n", fuse_version_func());
+        absl::PrintF("libfuse %d\n", ::fuse_version());
 #endif
 
 #ifdef CRYPTOPP_DISABLE_ASM

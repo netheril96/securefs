@@ -122,10 +122,6 @@ endif()
 find_library(FRUIT_LIBRARY NAMES fruit)
 target_link_libraries(securefs-static PUBLIC ${FRUIT_LIBRARY})
 
-if(CMAKE_DL_LIBS)
-    target_link_libraries(securefs-static PUBLIC ${CMAKE_DL_LIBS})
-endif()
-
 if(UNIX)
     find_path(FUSE_INCLUDE_DIR fuse.h PATHS /usr/local/include/fuse
                                             /usr/local/include)
