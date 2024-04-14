@@ -76,6 +76,7 @@ typedef ptrdiff_t ssize_t;
 #else
 
 #include <fcntl.h>
+#include <fuse/fuse_lowlevel.h>
 #include <pthread.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -84,7 +85,6 @@ using fuse_uid_t = uid_t;
 using fuse_gid_t = gid_t;
 using fuse_pid_t = pid_t;
 using fuse_dev_t = dev_t;
-using fuse_ino_t = ino_t;
 using fuse_mode_t = mode_t;
 using fuse_nlink_t = nlink_t;
 using fuse_off_t = off_t;
