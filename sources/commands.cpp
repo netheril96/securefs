@@ -47,6 +47,7 @@
 #include <string>
 #include <string_view>
 #include <typeinfo>
+#include <utility>
 #include <vector>
 
 #ifdef _WIN32
@@ -1059,7 +1060,7 @@ public:
         google::protobuf::util::JsonPrintOptions options{};
         options.preserve_proto_field_names = true;
         options.add_whitespace = true;
-        options.always_print_primitive_fields = true;
+        set_has_always_print_fields_with_no_presence(options);
         auto status = google::protobuf::util::MessageToJsonString(params, &json, options);
         if (!status.ok())
         {
@@ -1067,6 +1068,32 @@ public:
         }
         absl::PrintF("%s\n", json);
         return 0;
+    }
+
+private:
+    template <class PrintOption>
+    static constexpr auto has_always_print_fields_with_no_presence(int)
+        -> decltype(std::declval<PrintOption>().always_print_fields_with_no_presence, true)
+    {
+        return true;
+    }
+    template <class PrintOption>
+    static constexpr auto has_always_print_fields_with_no_presence(...)
+    {
+        return false;
+    }
+    template <class PrintOption>
+    static void set_has_always_print_fields_with_no_presence(PrintOption& opt)
+    {
+        // Compatibility helper between old and new protobuf library.
+        if constexpr (has_always_print_fields_with_no_presence<PrintOption>(0))
+        {
+            opt.always_print_fields_with_no_presence = true;
+        }
+        else
+        {
+            opt.always_print_primitive_fields = true;
+        }
     }
 };
 
