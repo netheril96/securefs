@@ -874,7 +874,7 @@ public:
 #ifdef _WIN32
             fuse_args.emplace_back("-o");
             fuse_args.emplace_back(
-                absl::StrFormat("ThreadCount=%d", 2 * std::thread::hardware_concurrency()));
+                absl::StrFormat("ThreadCount=%d", std::thread::hardware_concurrency()));
 #endif
         }
         // Handling `daemon` ourselves, as FUSE's version interferes with our initialization.

@@ -158,7 +158,7 @@ int my_fuse_main(int argc, char** argv, fuse_operations* op, void* user_data)
     }
 
     std::atomic<int> error_code;
-    std::vector<std::thread> workers(multithreaded ? std::thread::hardware_concurrency() * 2 : 1);
+    std::vector<std::thread> workers(multithreaded ? std::thread::hardware_concurrency() : 1);
     for (auto&& w : workers)
     {
         w = std::thread(worker_loop, session, channel, &error_code);
