@@ -2,6 +2,7 @@
 #include "crypto.h"
 #include "exceptions.h"
 #include "myutils.h"
+#include "stat_workaround.h"
 
 #include <cryptopp/integer.h>
 #include <cryptopp/secblock.h>
@@ -224,19 +225,10 @@ void FileBase::stat(fuse_stat* st)
     }
     if (m_store_time)
     {
-#ifdef __APPLE__
-        get_atime(st->st_atimespec);
-        get_mtime(st->st_mtimespec);
-        get_ctime(st->st_ctimespec);
-        get_birthtime(st->st_birthtimespec);
-#else
-        get_atime(st->st_atim);
-        get_mtime(st->st_mtim);
-        get_ctime(st->st_ctim);
-#ifndef __linux__
-        get_birthtime(st->st_birthtim);
-#endif
-#endif
+        set_atim(*st, get_atime());
+        set_mtim(*st, get_mtime());
+        set_ctim(*st, get_ctime());
+        set_birthtim(*st, get_birthtime());
     }
 }
 

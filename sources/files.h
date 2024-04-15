@@ -206,24 +206,24 @@ public:
         m_dirty = true;
     }
 
-    void get_atime(fuse_timespec& out) const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
+    fuse_timespec get_atime() const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
-        out = m_atime;
+        return m_atime;
     }
 
-    void get_mtime(fuse_timespec& out) const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
+    fuse_timespec get_mtime() const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
-        out = m_mtime;
+        return m_mtime;
     }
 
-    void get_ctime(fuse_timespec& out) const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
+    fuse_timespec get_ctime() const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
-        out = m_ctime;
+        return m_ctime;
     }
 
-    void get_birthtime(fuse_timespec& out) const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
+    fuse_timespec get_birthtime() const noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)
     {
-        out = m_birthtime;
+        return m_birthtime;
     }
 
     void set_atime(const fuse_timespec& in) noexcept ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this)

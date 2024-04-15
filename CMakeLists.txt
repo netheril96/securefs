@@ -130,9 +130,8 @@ if(UNIX)
                                PUBLIC ${FUSE_INCLUDE_DIRS})
     target_link_libraries(securefs-static PUBLIC ${FUSE_LDFLAGS})
     target_compile_options(securefs-static PUBLIC ${FUSE_CFLAGS})
-    target_compile_definitions(
-        securefs-static PUBLIC -D_XOPEN_SOURCE=700 -D_FILE_OFFSET_BITS=64
-                               -DFUSE_USE_VERSION=29)
+    target_compile_definitions(securefs-static PUBLIC -D_FILE_OFFSET_BITS=64
+                                                      -DFUSE_USE_VERSION=29)
 else()
     target_compile_definitions(
         securefs-static PUBLIC -DNOMINMAX=1 -D_CRT_SECURE_NO_WARNINGS=1

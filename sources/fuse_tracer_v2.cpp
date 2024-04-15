@@ -1,5 +1,6 @@
 #include "fuse_tracer_v2.h"
 #include "exceptions.h"
+#include "stat_workaround.h"
 
 #include <absl/strings/escaping.h>
 #include <absl/strings/str_format.h>
@@ -13,78 +14,6 @@ namespace securefs::trace
 {
 namespace
 {
-    template <typename StatClass>
-    auto get_atim_helper(const StatClass* st, int) -> decltype(&st->st_atim)
-    {
-        return &st->st_atim;
-    }
-
-    template <typename StatClass>
-    auto get_atim_helper(const StatClass* st, double) -> decltype(&st->st_atimespec)
-    {
-        return &st->st_atimespec;
-    }
-
-    template <typename StatClass>
-    const fuse_timespec* get_atim_helper(const StatClass*, ...)
-    {
-        return nullptr;
-    }
-
-    template <typename StatClass>
-    auto get_mtim_helper(const StatClass* st, int) -> decltype(&st->st_mtim)
-    {
-        return &st->st_mtim;
-    }
-
-    template <typename StatClass>
-    auto get_mtim_helper(const StatClass* st, double) -> decltype(&st->st_mtimespec)
-    {
-        return &st->st_mtimespec;
-    }
-
-    template <typename StatClass>
-    const fuse_timespec* get_mtim_helper(const StatClass*, ...)
-    {
-        return nullptr;
-    }
-
-    template <typename StatClass>
-    auto get_ctim_helper(const StatClass* st, int) -> decltype(&st->st_ctim)
-    {
-        return &st->st_ctim;
-    }
-
-    template <typename StatClass>
-    auto get_ctim_helper(const StatClass* st, double) -> decltype(&st->st_ctimespec)
-    {
-        return &st->st_ctimespec;
-    }
-
-    template <typename StatClass>
-    const fuse_timespec* get_ctim_helper(const StatClass*, ...)
-    {
-        return nullptr;
-    }
-
-    template <typename StatClass>
-    auto get_birthtim_helper(const StatClass* st, int) -> decltype(&st->st_birthtim)
-    {
-        return &st->st_birthtim;
-    }
-
-    template <typename StatClass>
-    auto get_birthtim_helper(const StatClass* st, double) -> decltype(&st->st_birthtimespec)
-    {
-        return &st->st_birthtimespec;
-    }
-
-    template <typename StatClass>
-    const fuse_timespec* get_birthtim_helper(const StatClass*, ...)
-    {
-        return nullptr;
-    }
-
     template <typename T>
     struct Wrapped
     {
@@ -121,21 +50,20 @@ namespace
                      value.value->st_gid,
                      value.value->st_blksize,
                      value.value->st_blocks);
-        if (auto atim = get_atim_helper(value.value, 0); atim)
+
+        auto atim = get_atim(*value.value);
+        auto mtim = get_mtim(*value.value);
+        auto ctim = get_ctim(*value.value);
+        auto birthtime = get_birthtim(*value.value);
+        absl::Format(&sink,
+                     ", st_atim=%v, st_mtim=%v, st_ctim=%v",
+                     Wrapped<const fuse_timespec*>{&atim},
+                     Wrapped<const fuse_timespec*>{&mtim},
+                     Wrapped<const fuse_timespec*>{&ctim});
+        if (birthtime.has_value())
         {
-            absl::Format(&sink, ", st_atim=%v", Wrapped<const fuse_timespec*>{atim});
-        }
-        if (auto mtim = get_mtim_helper(value.value, 0); mtim)
-        {
-            absl::Format(&sink, ", st_mtim=%v", Wrapped<const fuse_timespec*>{mtim});
-        }
-        if (auto ctim = get_ctim_helper(value.value, 0); ctim)
-        {
-            absl::Format(&sink, ", st_ctim=%v", Wrapped<const fuse_timespec*>{ctim});
-        }
-        if (auto btim = get_birthtim_helper(value.value, 0); btim)
-        {
-            absl::Format(&sink, ", st_birthtim=%v", Wrapped<const fuse_timespec*>{btim});
+            absl::Format(
+                &sink, ", st_birthtim=%v", Wrapped<const fuse_timespec*>{&birthtime.value()});
         }
         absl::Format(&sink, "%c", '}');
     }
