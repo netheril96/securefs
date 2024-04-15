@@ -105,7 +105,7 @@ else()
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(ARGON2 libargon2 REQUIRED)
     pkg_check_modules(SQLITE sqlite3 REQUIRED)
-    pkg_check_modules(CRYPTOPP cryptopp REQUIRED)
+    pkg_check_modules(CRYPTOPP libcryptopp REQUIRED)
 
     target_include_directories(
         securefs-static SYSTEM
