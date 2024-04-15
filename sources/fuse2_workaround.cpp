@@ -1,9 +1,9 @@
 #include "fuse2_workaround.h"
 
-#include <fuse/fuse.h>
+#include <fuse.h>
 
 #ifndef _WIN32
-#include <fuse/fuse_lowlevel.h>
+#include <fuse_lowlevel.h>
 
 #include "exceptions.h"
 #include "logger.h"

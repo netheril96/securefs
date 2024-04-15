@@ -76,7 +76,7 @@ typedef ptrdiff_t ssize_t;
 #else
 
 #include <fcntl.h>
-#include <fuse/fuse_lowlevel.h>
+#include <fuse_lowlevel.h>
 #include <pthread.h>
 #include <sys/stat.h>
 #include <sys/types.h>

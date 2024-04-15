@@ -1,6 +1,6 @@
 #pragma once
 
-#include <fuse/fuse.h>
+#include <fuse.h>
 
 namespace securefs
 {

@@ -53,8 +53,6 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     endif()
 endif()
 
-add_definitions(-D_REENTRANT -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=28)
-
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
@@ -107,35 +105,38 @@ if(SECUREFS_USE_VCPKG)
     target_link_libraries(securefs-static PUBLIC unofficial::sqlite3::sqlite3)
 else()
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(ARGON2 REQUIRED libargon2)
+    pkg_check_modules(ARGON2 libargon2 REQUIRED)
     pkg_check_modules(SQLITE sqlite3 REQUIRED)
+    pkg_check_modules(CRYPTOPP cryptopp REQUIRED)
+
     target_include_directories(
-        securefs-static SYSTEM PUBLIC ${ARGON2_INCLUDE_DIRS}
-                                      ${SQLITE_INCLUDE_DIRS})
+        securefs-static SYSTEM
+        PUBLIC ${ARGON2_INCLUDE_DIRS} ${SQLITE_INCLUDE_DIRS}
+               ${CRYPTOPP_INCLUDE_DIRS})
     target_link_libraries(
         securefs-static PUBLIC ${CRYPTOPP_LDFLAGS} ${ARGON2_LDFLAGS}
                                ${SQLITE_LDFLAGS})
-    find_library(CRYPTOPP_FLAGS NAMES cryptopp crypto++)
-    target_link_libraries(securefs-static PUBLIC ${CRYPTOPP_FLAGS})
+    target_compile_options(
+        securefs-static PUBLIC ${CRYPTOPP_CFLAGS} ${ARGON2_CFLAGS}
+                               ${SQLITE_CFLAGS})
+
 endif()
 
 find_library(FRUIT_LIBRARY NAMES fruit)
 target_link_libraries(securefs-static PUBLIC ${FRUIT_LIBRARY})
 
 if(UNIX)
-    find_path(FUSE_INCLUDE_DIR fuse.h PATHS /usr/local/include/fuse
-                                            /usr/local/include)
-    if(SECUREFS_USE_FUSET)
-        find_library(FUSE_LIBRARIES fuse-t PATHS /usr/local/lib)
-    else()
-        find_library(FUSE_LIBRARIES fuse PATHS /usr/local/lib)
-    endif()
-
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(FUSE fuse REQUIRED)
     target_include_directories(securefs-static SYSTEM AFTER
-                               PUBLIC ${FUSE_INCLUDE_DIR})
-    target_link_libraries(securefs-static PUBLIC ${FUSE_LIBRARIES})
+                               PUBLIC ${FUSE_INCLUDE_DIRS})
+    target_link_libraries(securefs-static PUBLIC ${FUSE_LDFLAGS})
+    target_compile_options(securefs-static PUBLIC ${FUSE_CFLAGS})
+    target_compile_definitions(
+        securefs-static PUBLIC -D_XOPEN_SOURCE=700 -D_FILE_OFFSET_BITS=64
+                               -DFUSE_USE_VERSION=29)
 else()
-    target_compile_options(
+    target_compile_definitions(
         securefs-static PUBLIC -DNOMINMAX=1 -D_CRT_SECURE_NO_WARNINGS=1
                                -D__STDC__=1 -DSTRSAFE_NO_DEPRECATE=1)
     if(NOT WINFSP_PREFIX)

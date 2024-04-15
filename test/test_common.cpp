@@ -7,10 +7,10 @@
 #include "myutils.h"
 
 #include <cryptopp/osrng.h>
+#include <fuse.h>
 
 #include <cstddef>
 #include <cstdlib>
-#include <fuse/fuse.h>
 #include <string>
 #include <thread>
 #include <vector>
