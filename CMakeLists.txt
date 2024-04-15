@@ -22,12 +22,16 @@ option(SECUREFS_LINK_PROFILER "Enable linking with gperftools profiler" OFF)
 project(securefs)
 enable_testing()
 
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
 if(SECUREFS_ADDRESS_SANITIZE)
     add_compile_options(-fsanitize=address)
     add_link_options(-fsanitize=address)
 endif()
 
-if(${SECUREFS_LINK_PROFILER}})
+if(${SECUREFS_LINK_PROFILER})
     add_compile_options(-g)
 endif()
 
@@ -51,10 +55,6 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     if(MINGW)
         add_compile_options(-fansi-escape-codes -fcolor-diagnostics)
     endif()
-endif()
-
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
 endif()
 
 include_directories(BEFORE sources)
