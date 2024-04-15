@@ -42,8 +42,6 @@ if(APPLE)
     add_compile_options(-fvisibility=hidden -fvisibility-inlines-hidden)
 endif()
 
-execute_process(COMMAND bash -c "uname -m" OUTPUT_VARIABLE architecture)
-
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake-modules/")
 include(GetGitRevisionDescription)
 git_describe(GIT_VERSION --tags)
