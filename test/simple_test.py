@@ -608,6 +608,17 @@ def make_test_case(
                 self.assertEqual(st.st_ino, fst.st_ino)
                 self.assertEqual(st.st_size, fst.st_size)
 
+            if sys.platform != "win32":
+                os.chmod(rng_filename, 0o620)
+                self.assertEqual(os.lstat(rng_filename).st_mode, 0o100620)
+
+            os.utime(rng_filename, times=(1713274809, 1713274821))
+            self.assertEqual(os.lstat(rng_filename).st_mtime, 1713274821)
+
+            now = int(time.time())
+            os.utime(rng_filename)
+            self.assertGreaterEqual(os.lstat(rng_filename).st_mtime, now)
+
             data = b"\0" * len(random_data) + b"0"
             with open(rng_filename, "wb") as f:
                 f.write(data)
