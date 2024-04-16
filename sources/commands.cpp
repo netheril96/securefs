@@ -991,15 +991,25 @@ public:
         fputs("\nBuilt without hardware acceleration\n", stdout);
 #else
 #if CRYPTOPP_BOOL_X86 || CRYPTOPP_BOOL_X32 || CRYPTOPP_BOOL_X64
-        absl::PrintF("\nHardware features available:\nSSE2: %s\nSSE3: %s\nSSE4.1: %s\nSSE4.2: "
-                     "%s\nAES-NI: %s\nCLMUL: %s\nSHA: %s\n",
-                     HasSSE2() ? "true" : "false",
-                     HasSSSE3() ? "true" : "false",
-                     HasSSE41() ? "true" : "false",
-                     HasSSE42() ? "true" : "false",
-                     HasAESNI() ? "true" : "false",
-                     HasCLMUL() ? "true" : "false",
-                     HasSHA() ? "true" : "false");
+        absl::PrintF("\nHardware features available:\nSSE2: %v\nSSE3: %v\nSSE4.1: %v\nSSE4.2: "
+                     "%v\nAVX: %v\nAVX2: %v\nAES-NI: %v\nCLMUL: %v\nSHA: %v\n",
+                     CryptoPP::HasSSE2(),
+                     CryptoPP::HasSSSE3(),
+                     CryptoPP::HasSSE41(),
+                     CryptoPP::HasSSE42(),
+                     CryptoPP::HasAVX(),
+                     CryptoPP::HasAVX2(),
+                     CryptoPP::HasAESNI(),
+                     CryptoPP::HasCLMUL(),
+                     CryptoPP::HasSHA());
+#elif CRYPTOPP_BOOL_ARM32 || CRYPTOPP_BOOL_ARMV8
+        absl::PrintF(
+            "\nHardware features available:\nNEON: %v\nAES: %v\nPMULL: %v\nSHA2: %v\nSHA3: %v\n",
+            CryptoPP::HasNEON(),
+            CryptoPP::HasAES(),
+            CryptoPP::HasPMULL(),
+            CryptoPP::HasSHA2(),
+            CryptoPP::HasSHA3());
 #endif
 #endif
         return 0;
