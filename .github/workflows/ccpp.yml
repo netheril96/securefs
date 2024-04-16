@@ -4,11 +4,13 @@ on: [push, pull_request]
 
 env:
   PYTHONUTF8: 1
+  GITHUB_TOKEN: ${{ github.token }}
+  VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
 
 jobs:
   build-ubuntu:
     runs-on: ubuntu-20.04
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v3
         with:
@@ -25,7 +27,7 @@ jobs:
           manifest-dir: ${{ github.workspace }}
           triplet: x64-linux
           token: ${{ github.token }}
-          github-binarycache: true
+          github-binarycache: false
       - name: build-test
         run: python3 build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build
       - name: upload
@@ -36,7 +38,7 @@ jobs:
 
   build-mac:
     runs-on: macos-12
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v3
         with:
@@ -56,7 +58,7 @@ jobs:
           triplet: x64-osx
           token: ${{ github.token }}
           cache-key: macos-12-x64
-          github-binarycache: true
+          github-binarycache: false
       - name: build
         run: python3 build.py --enable_unit_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build
       - name: upload
@@ -67,7 +69,7 @@ jobs:
 
   build-mac-arm64:
     runs-on: macos-12
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v3
         with:
@@ -87,7 +89,7 @@ jobs:
           triplet: arm64-osx
           token: ${{ github.token }}
           cache-key: macos-12-arm64
-          github-binarycache: true
+          github-binarycache: false
       - name: build
         run: python3 build.py --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build --cmake_defines CMAKE_OSX_ARCHITECTURES=arm64
       - name: upload
@@ -98,7 +100,7 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v3
         with:
@@ -116,7 +118,7 @@ jobs:
           triplet: x64-windows-static-md
           token: ${{ github.token }}
           cache-key: windows-latest
-          github-binarycache: true
+          github-binarycache: false
       - name: build-test
         run: python3 build.py --clang_cl --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build
       - name: upload
@@ -124,3 +126,53 @@ jobs:
         with:
           path: build/Release/securefs.exe
           name: securefs-windows-amd64
+
+  build-freebsd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - name: Get latest Github release of vcpkg
+        uses: cardinalby/git-get-release-action@v1
+        id: get-latest-vcpkg-release
+        with:
+          latest: true
+          repo: microsoft/vcpkg
+          prerelease: false
+          draft: false
+      - name: Cache vcpkg
+        id: cache-vcpkg
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg
+          key: freebsd-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{hashFiles('vcpkg.json')}}
+          save-always: true
+      - name: checkout-vcpkg
+        if: steps.cache-vcpkg.outputs.cache-hit != 'true'
+        uses: actions/checkout@v3
+        with:
+          path: ${{ github.workspace }}/vcpkg
+          repository: microsoft/vcpkg
+          ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
+          fetch-depth: 1
+      - name: Test in FreeBSD
+        id: freebsd
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          envs: "GITHUB_TOKEN VCPKG_ROOT"
+          release: "13.3"
+          prepare: |
+            pkg install -y cmake git python39 zip curl pkgconf ninja fusefs-libs
+            kldload fusefs
+            [ -x "$VCPKG_ROOT/vcpkg" ] || sh "$VCPKG_ROOT/bootstrap-vcpkg.sh"
+          run: |
+            cd ${{ github.workspace }} && python3.9 build.py --enable_unit_test --enable_integration_test --vcpkg_root=$VCPKG_ROOT --build_root=./build --lto
+      - name: upload
+        uses: actions/upload-artifact@v1
+        with:
+          path: ${{ github.workspace }}/build/securefs
+          name: securefs-freebsd-amd64
