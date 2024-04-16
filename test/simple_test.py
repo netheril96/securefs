@@ -289,6 +289,10 @@ def parametrize(possible_args: Sequence[Sequence]):
     return real_parametrize
 
 
+def is_freebsd():
+    return sys.platform.startswith("freebsd")
+
+
 @parametrize(
     list(
         itertools.product(
@@ -389,7 +393,7 @@ def make_test_case(
             securefs_unmount(cls.securefs_process, cls.mount_point)
             cls.securefs_process = None
 
-        if fmt == RepoFormat.LITE and not plain_text_names:
+        if fmt == RepoFormat.LITE and not plain_text_names and not is_freebsd:
 
             def test_long_name(self):
                 os.mkdir(os.path.join(self.mount_point, "k" * 200))
@@ -472,7 +476,7 @@ def make_test_case(
                     except EnvironmentError:
                         pass
 
-        if sys.platform != "win32":
+        if sys.platform != "win32" and not is_freebsd:
 
             def test_hardlink(self):
                 data = os.urandom(16)
