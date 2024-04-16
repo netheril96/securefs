@@ -160,7 +160,7 @@ jobs:
           fetch-depth: 1
       - name: Test in FreeBSD
         id: freebsd
-        uses: vmactions/freebsd-vm@v1
+        uses: netheril96/freebsd-vm@main
         with:
           usesh: true
           envs: "GITHUB_TOKEN VCPKG_ROOT"
