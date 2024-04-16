@@ -15,7 +15,7 @@ jobs:
           submodules: true
       - uses: actions/setup-python@v4
         with:
-          python-version: "3.x"
+          python-version: "3.8"
       - name: install
         run: sudo apt-get install fuse libfuse-dev
       - name: vcpkg build
@@ -43,7 +43,7 @@ jobs:
           submodules: true
       - uses: actions/setup-python@v4
         with:
-          python-version: "3.x"
+          python-version: "3.8"
       - name: pip
         run: pip install xattr
       - name: install
@@ -74,7 +74,7 @@ jobs:
           submodules: true
       - uses: actions/setup-python@v4
         with:
-          python-version: "3.x"
+          python-version: "3.8"
       - name: pip
         run: pip install xattr
       - name: install
@@ -105,7 +105,7 @@ jobs:
           submodules: true
       - uses: actions/setup-python@v4
         with:
-          python-version: "3.x"
+          python-version: "3.8"
       - name: install
         run: choco install winfsp
       - name: vcpkg build

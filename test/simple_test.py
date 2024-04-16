@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 # coding: utf-8
 import ctypes
-import errno
 import faulthandler
 import itertools
 import logging
@@ -135,9 +134,9 @@ class RepoFormat(enum.Enum):
     FULL = 2
 
 
-class Sensitivity(enum.StrEnum):
-    SENSITIVE = enum.auto()
-    INSENSITIVE = enum.auto()
+class Sensitivity(enum.Enum):
+    SENSITIVE = "sensitive"
+    INSENSITIVE = "insensitive"
 
 
 def securefs_create(
@@ -170,9 +169,9 @@ def securefs_create(
         "-f",
         fmt.name,
         "--case",
-        str(case),
+        case.value,
         "--uninorm",
-        str(uninorm),
+        uninorm.value,
     ]
     if password:
         command.append("--pass")
