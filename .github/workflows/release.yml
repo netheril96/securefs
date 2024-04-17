@@ -1,0 +1,188 @@
+name: Build release binaries
+
+on:
+  push:
+    tags:
+      - '**'
+  workflow_dispatch:
+
+env:
+  PYTHONUTF8: 1
+  GITHUB_TOKEN: ${{ github.token }}
+  VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
+jobs:
+
+  build-ubuntu:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.8"
+      - name: install
+        run: sudo apt-get install fuse libfuse-dev clang-12
+      - name: Get latest Github release of vcpkg
+        uses: cardinalby/git-get-release-action@v1
+        id: get-latest-vcpkg-release
+        with:
+          latest: true
+          repo: microsoft/vcpkg
+          prerelease: false
+          draft: false
+      - name: checkout-vcpkg
+        uses: actions/checkout@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg
+          repository: microsoft/vcpkg
+          ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
+          fetch-depth: 1
+      - name: build-test
+        env:
+          CC: clang-12
+          CXX: clang++-12
+          VCPKG_KEEP_ENV_VARS: "CC;CXX"
+        run: python3 build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build
+      - name: upload
+        uses: actions/upload-artifact@v1
+        with:
+          path: build/securefs
+          name: securefs-linux-amd64-release
+
+  build-mac:
+    runs-on: macos-12
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.8"
+      - name: install
+        run: brew install macfuse && pip install xattr
+      - name: Get latest Github release of vcpkg
+        uses: cardinalby/git-get-release-action@v1
+        id: get-latest-vcpkg-release
+        with:
+          latest: true
+          repo: microsoft/vcpkg
+          prerelease: false
+          draft: false
+      - name: checkout-vcpkg
+        uses: actions/checkout@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg
+          repository: microsoft/vcpkg
+          ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
+          fetch-depth: 1
+      - name: build
+        run: python3 build.py --lto --enable_unit_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build
+      - name: upload
+        uses: actions/upload-artifact@v1
+        with:
+          path: build/securefs
+          name: securefs-macos-amd64-release
+
+  build-mac-arm64:
+    runs-on: macos-12
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.8"
+      - name: install
+        run: brew install macfuse && pip install xattr
+      - name: Get latest Github release of vcpkg
+        uses: cardinalby/git-get-release-action@v1
+        id: get-latest-vcpkg-release
+        with:
+          latest: true
+          repo: microsoft/vcpkg
+          prerelease: false
+          draft: false
+      - name: checkout-vcpkg
+        uses: actions/checkout@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg
+          repository: microsoft/vcpkg
+          ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
+          fetch-depth: 1
+      - name: build
+        run: python3 build.py --lto --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build --cmake_defines CMAKE_OSX_ARCHITECTURES=arm64
+      - name: upload
+        uses: actions/upload-artifact@v1
+        with:
+          path: build/securefs
+          name: securefs-macos-arm64-release
+
+  build-windows:
+    runs-on: windows-2019
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.8"
+      - name: install
+        run: choco install winfsp
+      - name: Get latest Github release of vcpkg
+        uses: cardinalby/git-get-release-action@v1
+        id: get-latest-vcpkg-release
+        with:
+          latest: true
+          repo: microsoft/vcpkg
+          prerelease: false
+          draft: false
+      - name: checkout-vcpkg
+        uses: actions/checkout@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg
+          repository: microsoft/vcpkg
+          ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
+          fetch-depth: 1
+      - name: build-test
+        run: python3 build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build
+      - name: upload
+        uses: actions/upload-artifact@v1
+        with:
+          path: build/Release/securefs.exe
+          name: securefs-windows-amd64-release
+        
+  build-freebsd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v3
+      - name: Get latest Github release of vcpkg
+        uses: cardinalby/git-get-release-action@v1
+        id: get-latest-vcpkg-release
+        with:
+          latest: true
+          repo: microsoft/vcpkg
+          prerelease: false
+          draft: false
+      - name: checkout-vcpkg
+        uses: actions/checkout@v3
+        with:
+          path: ${{ github.workspace }}/vcpkg
+          repository: microsoft/vcpkg
+          ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
+          fetch-depth: 1
+      - name: Test in FreeBSD
+        id: freebsd
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          envs: "GITHUB_TOKEN VCPKG_ROOT"
+          release: "13.3"
+          prepare: |
+            pkg install -y cmake git python39 zip curl pkgconf ninja fusefs-libs
+            kldload fusefs
+            sh $VCPKG_ROOT/bootstrap-vcpkg.sh
+          run: |
+            cd ${{ github.workspace }} && python3.9 build.py --enable_unit_test --enable_integration_test --vcpkg_root=$VCPKG_ROOT --build_root=./build --lto
+      - name: upload
+        uses: actions/upload-artifact@v1
+        with:
+          path: ${{ github.workspace }}/build/securefs
+          name: securefs-freebsd-amd64-release

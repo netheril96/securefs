@@ -1,6 +1,9 @@
 name: C/C++ CI
 
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    tags-ignore: '**'
 
 env:
   PYTHONUTF8: 1
