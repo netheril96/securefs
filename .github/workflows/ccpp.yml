@@ -3,7 +3,6 @@ name: C/C++ CI
 on:
   pull_request:
   push:
-    tags-ignore: '**'
 
 env:
   PYTHONUTF8: 1
@@ -30,7 +29,7 @@ jobs:
           token: ${{ github.token }}
           github-binarycache: true
       - name: build-test
-        run: python3 build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build --cmake_defines CMAKE_BUILD_TYPE=Debug
+        run: python3 build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build --build_type Debug
       - name: upload
         uses: actions/upload-artifact@v1
         with:
@@ -61,7 +60,7 @@ jobs:
           cache-key: macos-12-x64
           github-binarycache: true
       - name: build
-        run: python3 build.py --enable_unit_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build --cmake_defines CMAKE_BUILD_TYPE=Debug
+        run: python3 build.py --enable_unit_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build --build_type Debug
       - name: upload
         uses: actions/upload-artifact@v1
         with:
@@ -92,7 +91,7 @@ jobs:
           cache-key: macos-12-arm64
           github-binarycache: true
       - name: build
-        run: python3 build.py --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build --cmake_defines CMAKE_OSX_ARCHITECTURES=arm64 CMAKE_BUILD_TYPE=Debug
+        run: python3 build.py --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build --cmake_defines CMAKE_OSX_ARCHITECTURES=arm64 --build_type Debug
       - name: upload
         uses: actions/upload-artifact@v1
         with:
@@ -121,9 +120,9 @@ jobs:
           cache-key: windows-latest
           github-binarycache: true
       - name: build-test
-        run: python3 build.py --clang_cl --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build  --cmake_defines CMAKE_BUILD_TYPE=Debug
+        run: python3 build.py --clang_cl --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build --build_type Debug
       - name: upload
         uses: actions/upload-artifact@v1
         with:
-          path: build/Release/securefs.exe
+          path: build/Debug/securefs.exe
           name: securefs-windows-amd64
