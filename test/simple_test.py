@@ -248,11 +248,11 @@ def securefs_chpass(
 
 
 def get_data_dir(fmt: RepoFormat):
-    return tempfile.mkdtemp(prefix=f"securefs.{fmt}.data_dir", dir="tmp")
+    return tempfile.mkdtemp(prefix=f"securefs.{fmt}.data🔐", dir="tmp")
 
 
 def get_mount_point():
-    result = tempfile.mkdtemp(prefix=f"securefs.mount_point", dir="tmp")
+    result = tempfile.mkdtemp(prefix=f"securefs.mount🔓", dir="tmp")
     os.rmdir(result)
     return result
 
