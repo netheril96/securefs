@@ -20,6 +20,7 @@ There are already many encrypting filesystem in widespread use. Some notable one
 - [Probabilistic encryption](https://en.wikipedia.org/wiki/Probabilistic_encryption) (hence provides semantical security)
 - Supported on all major platforms (Mac, Linux, BSDs and Windows)
 - Efficient cloud synchronization (not a single preallocated file as container)
+- Full 255 bytes long file name components.
 - (Optional) File size obfuscation by random padding.
 - (Optional) Case insensitive and case preserving filesystem (matching the default behavior of NTFS).
 - (Optional) Unicode normalization agnostic filesystem (matching the default behavior of APFS/HFS+)
@@ -32,7 +33,7 @@ There are already many encrypting filesystem in widespread use. Some notable one
 
 On Windows, we need to separately install [WinFsp](https://winfsp.dev/) and [VC++ redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170#visual-studio-2015-2017-2019-and-2022).
 
-On Linux, we need to install `fuse-dev` package.
+On Linux, we need to install `libfuse-dev`/`fuse-devel` package.
 
 On FreeBSD, we need to run `pkg install fusefs-libs`.
 
@@ -44,14 +45,18 @@ Download from the Release page.
 
 ### Build from source
 
-First you need to install [vcpkg](vcpkg.io). Then run `python3 build.py --enable_unit_test`.
+First you need to install [vcpkg](https://vcpkg.io). Then run `python3 build.py --enable_unit_test`.
 
 ### Package managers
 
 #### macOS
-Use homebrew.
+Use [homebrew](https://brew.sh).
 
 `brew install netheril96/fuse/securefs-mac`
+#### Linux
+Use [homebrew](https://brew.sh).
+
+`brew install securefs`
 
 ## Basic usage
 
@@ -67,6 +72,7 @@ securefs c --help
 # Creation
 securefs create ~/Secret # Default parameters
 securefs create ~/Secret --keyfile ./mykey # Use keyfile instead of password
+securefs c ~/Secret --max-padding 65535 # Randomly pad each file with at most 65535 bytes to obfuscate its size
 securefs c ~/Secret --format full # Full mode. See below for the meaning.
 securefs c ~/Secret --format full --case insensitive # Like NTFS
 securefs c ~/Secret --format full --uninorm insensitive # Like APFS
@@ -77,11 +83,17 @@ securefs mount ~/Secret ~/Mount --keyfile ./mykey # press Ctrl-C to unmount
 securefs m -b ~/Secret ~/Mount --log ~/securefs.thismaycontainsensitiveinformation.log
 securefs m --plain-text-names ~/Secret ~/Mount # Do not encrypt the filenames
 securefs m ~/Secret Z: # Windows only
-# Chpass
+# Change password
 securefs chpass ~/Secret
 ```
 
 See the [full command line options](docs/usage.md).
+
+## GUI
+
+[SiriKali](https://mhogomchungu.github.io/sirikali/) is a GUI frontend for securefs (and several other filesystems).
+
+Note: this is informational only. The author of securefs has never tried SiriKali or vetted its code.
 
 ## Lite and full mode
 
