@@ -55,6 +55,13 @@
 #include <winfsp/winfsp.h>
 #endif
 
+#if __has_include(<sys/vfs.h>)
+#include <sys/vfs.h>
+#endif
+#if __has_include(<sys/statfs.h>)
+#include <sys/statfs.h>
+#endif
+
 using namespace securefs;
 
 namespace
@@ -490,6 +497,23 @@ public:
 class MountCommand : public CommandBase
 {
 private:
+#ifdef __linux__
+    static constexpr inline long kKnownFileSystemTypesWithStableInodes[] = {
+        0x9123683E,    // BTRFS
+        0x2011BAB0,    // EXFAT
+        0x137D,        // EXT
+        0xEF53,        // EXT 2/3/4
+        0xEF51,        // EXT 2 old
+        0x4244,        // HFS
+        0x482B,        // HFS+
+        0x4858,        // HFSX
+        0x5346544E,    // NTFS
+        0x01021994,    // TMPFS
+        0x58465342,    // XFS
+        0x2FC12FC1,    // ZFS
+    };
+#endif
+
     SinglePasswordHolder single_pass_holder_{cmdline()};
 
     TCLAP::SwitchArg single_threaded{"s", "single", "Single threaded mode", cmdline()};
@@ -740,6 +764,37 @@ private:
                 { return cmd.fsparams.full_format_params().case_insensitive(); });
     }
 
+    bool should_use_ino()
+    {
+        if (use_ino.getValue() == "true")
+        {
+            return true;
+        }
+        else if (use_ino.getValue() == "false")
+        {
+            return false;
+        }
+        else if (use_ino.getValue() == "auto")
+        {
+            if (fsparams.has_full_format_params())
+                return true;
+#ifdef __linux__
+            struct statfs st;
+            if (statfs(single_pass_holder_.data_dir.getValue().c_str(), &st) < 0)
+            {
+                THROW_POSIX_EXCEPTION(errno, "statfs call failed");
+            }
+            return std::find(std::begin(kKnownFileSystemTypesWithStableInodes),
+                             std::end(kKnownFileSystemTypesWithStableInodes),
+                             st.f_type)
+                != std::end(kKnownFileSystemTypesWithStableInodes);
+#else
+            return false;
+#endif
+        }
+        throw_runtime_error("Invalid --use_ino. Must be true/false/auto.");
+    }
+
 public:
     void parse_cmdline(int argc, const char* const* argv) override
     {
@@ -881,8 +936,7 @@ public:
         // Handling `daemon` ourselves, as FUSE's version interferes with our initialization.
         fuse_args.emplace_back("-f");
 
-        if (use_ino.getValue() == "true"
-            || (use_ino.getValue() == "auto" && fsparams.has_full_format_params()))
+        if (should_use_ino())
         {
             fuse_args.emplace_back("-o");
             fuse_args.emplace_back("use_ino");
