@@ -351,10 +351,11 @@ fuse_operations FuseHighLevelOpsBase::build_ops(const FuseHighLevelOpsBase* op, 
 #endif
         auto op = static_cast<FuseHighLevelOpsBase*>(fuse_get_context()->private_data);
         op->initialize(info);
+        INFO_LOG("Fuse operations initialized");
         TRACE_LOG("Initalize with fuse op class %s", typeid(*op).name());
         return op;
     };
-    opt.destroy = [](void* data) { TRACE_LOG("Destroy"); };
+    opt.destroy = [](void* data) { INFO_LOG("Fuse operations destroyed"); };
     opt.statfs = &FuseHighLevelOpsBase::static_statfs;
     opt.getattr = &FuseHighLevelOpsBase::static_getattr;
     opt.fgetattr = &FuseHighLevelOpsBase::static_fgetattr;
