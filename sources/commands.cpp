@@ -146,7 +146,7 @@ struct SinglePasswordHolder : public DataDirHolder
     TCLAP::SwitchArg askpass{
         "",
         "askpass",
-        "When set to true, ask for password even if a key file is used. "
+        "When provided, ask for password even if a key file is used. "
         "password+keyfile provides even stronger security than one of them alone.",
         cmdline,
         false};
