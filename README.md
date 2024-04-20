@@ -103,9 +103,9 @@ The **lite** format simply encrypts filenames and file contents separately, simi
 
 The **full** format maps files, directory and symlinks in the virtual filesystem all to regular files in the underlying filesystem. The directory structure is flattened and recorded as B-trees in files.
 
-The lite format has become the default on Unix-like operating systems as it is much faster and features easier conflict resolution, especially when used with DropBox, Google Drive, etc. The full format, however, leaks fewer information about the filesystem hierarchy, runs relatively independent of the features of the underlying filesystem, and is in general more secure.
+The lite format is the default as it is much faster and features easier conflict resolution, especially when used with DropBox, Google Drive, etc. The full format, however, leaks fewer information about the filesystem hierarchy, runs relatively independent of the features of the underlying filesystem, and is in general more secure.
 
-To request full format, which is no longer the default, run `securefs create --format 2`.
+To request full format, which is no longer the default, run `securefs create --format full`.
 
 ## Design and algorithms
 
