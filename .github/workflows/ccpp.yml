@@ -3,7 +3,8 @@ name: C/C++ CI
 on:
   pull_request:
   push:
-
+    branches:
+      - '**' 
 env:
   PYTHONUTF8: 1
 
