@@ -53,10 +53,6 @@ First you need to install [vcpkg](https://vcpkg.io). Then run `python3 build.py 
 Use [homebrew](https://brew.sh).
 
 `brew install netheril96/fuse/securefs-mac`
-#### Linux
-Use [homebrew](https://brew.sh).
-
-`brew install securefs`
 
 ## Basic usage
 
