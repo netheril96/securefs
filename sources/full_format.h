@@ -62,8 +62,13 @@ public:
     INJECT(FuseHighLevelOps(OSService& root,
                             FileTable& ft,
                             RepoLocker& locker,
+                            const OwnerOverride& owner_override,
                             ANNOTATED(tCaseInsensitive, bool) case_insensitive))
-        : root_(root), ft_(ft), locker_(locker), case_insensitive_(case_insensitive)
+        : root_(root)
+        , ft_(ft)
+        , locker_(locker)
+        , owner_override_(owner_override)
+        , case_insensitive_(case_insensitive)
     {
     }
 
@@ -144,6 +149,7 @@ private:
     OSService& root_;
     FileTable& ft_;
     [[maybe_unused]] RepoLocker& locker_;    // We only needs this to construct and destruct.
+    OwnerOverride owner_override_;
     bool case_insensitive_;
 
 private:
@@ -166,5 +172,7 @@ private:
     {
         info->fh = reinterpret_cast<uintptr_t>(fb);
     }
+
+    void postprocess_stat(fuse_stat* st);
 };
 }    // namespace securefs::full_format

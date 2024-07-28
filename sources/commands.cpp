@@ -595,7 +595,24 @@ private:
                                       "When enabled, securefs does not encrypt or decrypt file "
                                       "names. Use it at your own risk. No effect on full format.",
                                       cmdline()};
-
+    TCLAP::ValueArg<int> uid_override{
+        "",
+        "uid-override",
+        "Forces every file to be owned by this uid in the virtual filesystem. If the value is -1, "
+        "then no override is in place",
+        false,
+        -1,
+        "int",
+        cmdline()};
+    TCLAP::ValueArg<int> gid_override{
+        "",
+        "gid-override",
+        "Forces every file to be owned by this gid in the virtual filesystem. If the value is -1, "
+        "then no override is in place",
+        false,
+        -1,
+        "int",
+        cmdline()};
     DecryptedSecurefsParams fsparams{};
 
 private:
@@ -718,6 +735,20 @@ private:
                 [](const MountCommand& cmd) { return cmd.fsparams.size_params().iv_size(); })
             .registerProvider<fruit::Annotated<tBlockSize, unsigned>(const MountCommand&)>(
                 [](const MountCommand& cmd) { return cmd.fsparams.size_params().block_size(); })
+            .registerProvider<OwnerOverride(const MountCommand&)>(
+                [](const MountCommand& cmd)
+                {
+                    OwnerOverride result{};
+                    if (cmd.uid_override.getValue() != -1)
+                    {
+                        result.uid_override = cmd.uid_override.getValue();
+                    }
+                    if (cmd.gid_override.getValue() != -1)
+                    {
+                        result.gid_override = cmd.gid_override.getValue();
+                    }
+                    return result;
+                })
             .registerProvider<fruit::Annotated<tMasterKey, key_type>(const MountCommand&)>(
                 [](const MountCommand& cmd)
                 { return from_byte_string(cmd.fsparams.full_format_params().master_key()); })

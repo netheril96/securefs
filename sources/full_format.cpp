@@ -44,6 +44,7 @@ int FuseHighLevelOps::vgetattr(const char* path, fuse_stat* st, const fuse_conte
     }
     FileLockGuard lg(**opened);
     (**opened).stat(st);
+    postprocess_stat(st);
     return 0;
 };
 int FuseHighLevelOps::vfgetattr(const char* path,
@@ -54,6 +55,7 @@ int FuseHighLevelOps::vfgetattr(const char* path,
     auto fp = get_file(info);
     FileLockGuard lg(*fp);
     fp->stat(st);
+    postprocess_stat(st);
     return 0;
 };
 int FuseHighLevelOps::vopendir(const char* path, fuse_file_info* info, const fuse_context* ctx)
@@ -563,6 +565,18 @@ std::optional<FilePtrHolder> FuseHighLevelOps::open_all(absl::string_view path)
     auto holder = ft_.open_as(id, type);
     holder->set_parent_ino(to_inode_number(base_dir->get_id()));
     return holder;
+}
+
+void FuseHighLevelOps::postprocess_stat(fuse_stat* st)
+{
+    if (owner_override_.uid_override.has_value())
+    {
+        st->st_uid = *owner_override_.uid_override;
+    }
+    if (owner_override_.gid_override.has_value())
+    {
+        st->st_gid = *owner_override_.gid_override;
+    }
 }
 
 }    // namespace securefs::full_format

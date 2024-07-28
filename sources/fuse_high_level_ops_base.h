@@ -3,8 +3,15 @@
 #include "object.h"
 #include "platform.h"    // IWYU pragma: keep
 
+#include <optional>
+
 namespace securefs
 {
+struct OwnerOverride
+{
+    std::optional<int> uid_override, gid_override;
+};
+
 class FuseHighLevelOpsBase : public Object
 {
 public:

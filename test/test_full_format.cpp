@@ -40,6 +40,7 @@ namespace
                     return CaseInsensitive ? Directory::DirNameComparison{&case_insensitive_compare}
                                            : Directory::DirNameComparison{&binary_compare};
                 })
+            .registerProvider([]() { return OwnerOverride{}; })
             .bindInstance(*os);
     }
     TEST_CASE("Full format test (case sensitive)")
