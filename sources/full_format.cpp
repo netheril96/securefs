@@ -263,8 +263,10 @@ int FuseHighLevelOps::vchown(const char* path,
         return -ENOENT;
     }
     FileLockGuard fg(**opened);
-    (**opened).set_uid(uid);
-    (**opened).set_gid(gid);
+    if (uid != -1)
+        (**opened).set_uid(uid);
+    if (gid != -1)
+        (**opened).set_gid(gid);
     return 0;
 };
 int FuseHighLevelOps::vsymlink(const char* to, const char* from, const fuse_context* ctx)
