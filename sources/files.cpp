@@ -81,6 +81,14 @@ namespace securefs
 {
 void FileBase::initialize_empty(uint32_t mode, uint32_t uid, uint32_t gid)
 {
+    if (uid == -1)
+    {
+        uid == OSService::get_default().getuid();
+    }
+    if (gid == -1)
+    {
+        gid = OSService::get_default().getgid();
+    }
     m_flags[0] = mode;
     m_flags[1] = uid;
     m_flags[2] = gid;
