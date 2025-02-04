@@ -48,7 +48,44 @@ jobs:
         with:
           path: build/securefs
           name: securefs-linux-amd64-release
-
+          
+  build-ubuntu-arm64:
+    runs-on: ubuntu-22.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+      - name: install
+        run: sudo apt-get install fuse libfuse-dev clang-12
+      - name: Get latest Github release of vcpkg
+        uses: cardinalby/git-get-release-action@v1
+        id: get-latest-vcpkg-release
+        with:
+          latest: true
+          repo: microsoft/vcpkg
+          prerelease: false
+          draft: false
+      - name: checkout-vcpkg
+        uses: actions/checkout@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg
+          repository: microsoft/vcpkg
+          ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
+          fetch-depth: 1
+      - name: build-test
+        env:
+          CC: clang-12
+          CXX: clang++-12
+          VCPKG_KEEP_ENV_VARS: "CC;CXX"
+        run: python3 build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build
+      - name: upload
+        uses: actions/upload-artifact@v4
+        with:
+          path: build/securefs
+          name: securefs-linux-arm64-release
+          
   build-mac:
     runs-on: macos-12
     timeout-minutes: 45
