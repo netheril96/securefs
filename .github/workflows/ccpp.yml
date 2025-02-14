@@ -46,7 +46,7 @@ jobs:
           title: Auto PR for usage.md
           commit-message: Auto update usage.md
   build-mac:
-    runs-on: macos-12
+    runs-on: macos-13
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
@@ -66,7 +66,7 @@ jobs:
           manifest-dir: ${{ github.workspace }}
           triplet: x64-osx
           token: ${{ github.token }}
-          cache-key: macos-12-x64
+          cache-key: macos-13-x64
           github-binarycache: true
       - name: build
         run: python3 build.py --enable_unit_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build --build_type Debug
@@ -77,7 +77,7 @@ jobs:
           name: securefs-macos-amd64
 
   build-mac-arm64:
-    runs-on: macos-12
+    runs-on: macos-13
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
@@ -97,7 +97,7 @@ jobs:
           manifest-dir: ${{ github.workspace }}
           triplet: arm64-osx
           token: ${{ github.token }}
-          cache-key: macos-12-arm64
+          cache-key: macos-13-arm64
           github-binarycache: true
       - name: build
         run: python3 build.py --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build --cmake_defines CMAKE_OSX_ARCHITECTURES=arm64 --build_type Debug

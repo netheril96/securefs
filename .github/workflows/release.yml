@@ -48,7 +48,7 @@ jobs:
         with:
           path: build/securefs
           name: securefs-linux-amd64-release
-          
+
   build-ubuntu-arm64:
     runs-on: ubuntu-22.04-arm
     timeout-minutes: 45
@@ -85,9 +85,9 @@ jobs:
         with:
           path: build/securefs
           name: securefs-linux-arm64-release
-          
+
   build-mac:
-    runs-on: macos-12
+    runs-on: macos-13
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -120,7 +120,7 @@ jobs:
           name: securefs-macos-amd64-release
 
   build-mac-arm64:
-    runs-on: macos-12
+    runs-on: macos-13
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
