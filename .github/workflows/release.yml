@@ -211,7 +211,7 @@ jobs:
         with:
           usesh: true
           envs: "GITHUB_TOKEN VCPKG_ROOT"
-          release: "13.3"
+          release: "14.2"
           prepare: |
             pkg install -y cmake git python39 zip curl pkgconf ninja fusefs-libs
             kldload fusefs
