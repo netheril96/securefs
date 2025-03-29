@@ -26,6 +26,26 @@
 #include <sddl.h>
 #include <strsafe.h>
 
+static constexpr std::string_view kSecurefsSymlinkPrefix = R"(\\?\UNC\securefs\P)";
+
+static std::string prepend_symlink_prefix(std::string_view path)
+{
+    std::string modified_path(path);
+    std::replace(modified_path.begin(), modified_path.end(), '/', '\\');
+    return absl::StrCat(kSecurefsSymlinkPrefix, modified_path);
+}
+
+static std::string remove_symlink_prefix(std::string_view path)
+{
+    if (absl::StartsWith(path, kSecurefsSymlinkPrefix))
+    {
+        std::string stripped_path(path.substr(kSecurefsSymlinkPrefix.size()));
+        std::replace(stripped_path.begin(), stripped_path.end(), '\\', '/');
+        return stripped_path;
+    }
+    return std::string(path);
+}
+
 static inline uint64_t convert_dword_pair(uint64_t low_part, uint64_t high_part)
 {
     return low_part | (high_part << 32);
@@ -460,7 +480,40 @@ static void stat_file_handle(HANDLE hd, fuse_stat* st)
     st->st_nlink = static_cast<fuse_nlink_t>(info.nNumberOfLinks);
     st->st_uid = securefs::OSService::getuid();
     st->st_gid = securefs::OSService::getgid();
-    if (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+    if (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+    {
+        st->st_mode = S_IFLNK | 0755;
+
+        std::wstring buffer(65535 / 2, L'\0');
+        DWORD returned_length;
+        if (DeviceIoControl(hd,
+                            FSCTL_GET_REPARSE_POINT,
+                            nullptr,
+                            0,
+                            buffer.data(),
+                            static_cast<DWORD>(buffer.size() * sizeof(wchar_t)),
+                            &returned_length,
+                            nullptr))
+        {
+            auto reparse_data = reinterpret_cast<REPARSE_DATA_BUFFER*>(buffer.data());
+            if (reparse_data->ReparseTag != IO_REPARSE_TAG_SYMLINK)
+            {
+                THROW_WINDOWS_EXCEPTION(
+                    ERROR_INVALID_PARAMETER,
+                    L"DeviceIoControl(FSCTL_GET_REPARSE_POINT) returned invalid reparse tag");
+            }
+            std::wstring_view target(
+                reparse_data->SymbolicLinkReparseBuffer.PathBuffer
+                    + reparse_data->SymbolicLinkReparseBuffer.SubstituteNameOffset
+                        / sizeof(wchar_t),
+                reparse_data->SymbolicLinkReparseBuffer.SubstituteNameLength / sizeof(wchar_t));
+            size_t target_size = narrow_string(target).size();
+            st->st_size = target_size > kSecurefsSymlinkPrefix.size()
+                ? target_size - kSecurefsSymlinkPrefix.size()
+                : 0;
+        }
+    }
+    else if (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
         st->st_mode = S_IFDIR | 0755;
     else
         st->st_mode = S_IFREG | 0755;
@@ -574,7 +627,7 @@ public:
                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                                nullptr,
                                create_flags,
-                               FILE_ATTRIBUTE_NORMAL,
+                               FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
                                nullptr);
         if (m_handle == INVALID_HANDLE_VALUE)
         {
@@ -905,7 +958,7 @@ void OSService::utimens(const std::string& path, const fuse_timespec ts[2]) cons
                             FILE_SHARE_READ | FILE_SHARE_DELETE | FILE_SHARE_WRITE,
                             nullptr,
                             OPEN_EXISTING,
-                            FILE_FLAG_BACKUP_SEMANTICS,
+                            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
                             nullptr);
     if (hd == INVALID_HANDLE_VALUE)
         THROW_WINDOWS_EXCEPTION_WITH_PATH(GetLastError(), L"CreateFileW", npath);
@@ -927,7 +980,7 @@ bool OSService::stat(const std::string& path, fuse_stat* stat) const
                                 FILE_SHARE_READ | FILE_SHARE_DELETE | FILE_SHARE_WRITE,
                                 nullptr,
                                 OPEN_EXISTING,
-                                FILE_FLAG_BACKUP_SEMANTICS,
+                                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
                                 nullptr);
     if (handle == INVALID_HANDLE_VALUE)
     {
@@ -951,11 +1004,66 @@ void OSService::chown(const std::string&, fuse_uid_t, fuse_gid_t) const { (void)
 
 ssize_t OSService::readlink(const std::string& path, char* output, size_t size) const
 {
-    throwVFSException(ENOSYS);
+    auto npath = norm_path(path);
+    HANDLE handle = CreateFileW(npath.c_str(),
+                                GENERIC_READ,
+                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                nullptr,
+                                OPEN_EXISTING,
+                                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                                nullptr);
+    if (handle == INVALID_HANDLE_VALUE)
+    {
+        THROW_WINDOWS_EXCEPTION_WITH_PATH(GetLastError(), L"CreateFileW", npath);
+    }
+    DEFER(CloseHandle(handle));
+
+    std::wstring buffer(path.size() * 3 + 128, L'\0');
+    DWORD returned_length;
+    if (!DeviceIoControl(handle,
+                         FSCTL_GET_REPARSE_POINT,
+                         nullptr,
+                         0,
+                         buffer.data(),
+                         static_cast<DWORD>(buffer.size() * sizeof(wchar_t)),
+                         &returned_length,
+                         nullptr))
+    {
+        THROW_WINDOWS_EXCEPTION_WITH_PATH(GetLastError(), L"DeviceIoControl", npath);
+    }
+
+    auto reparse_data = reinterpret_cast<REPARSE_DATA_BUFFER*>(buffer.data());
+    if (reparse_data->ReparseTag != IO_REPARSE_TAG_SYMLINK)
+    {
+        throwVFSException(EINVAL);
+    }
+
+    std::wstring_view target(
+        reparse_data->SymbolicLinkReparseBuffer.PathBuffer
+            + reparse_data->SymbolicLinkReparseBuffer.SubstituteNameOffset / sizeof(wchar_t),
+        reparse_data->SymbolicLinkReparseBuffer.SubstituteNameLength / sizeof(wchar_t));
+    std::string stripped = remove_symlink_prefix(narrow_string(target));
+    size_t copy_length = std::min(size, stripped.size());
+    if (output && size > 0)
+    {
+        memcpy(output, stripped.data(), copy_length);
+    }
+    return copy_length;
 }
+
 void OSService::symlink(const std::string& source, const std::string& dest) const
 {
-    throwVFSException(ENOSYS);
+    auto transformed_target = widen_string(prepend_symlink_prefix(dest));
+    auto wide_source = widen_string(source);
+
+    if (!CreateSymbolicLinkW(wide_source.c_str(),
+                             transformed_target.c_str(),
+                             SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE))
+    {
+        DWORD err = GetLastError();
+        THROW_WINDOWS_EXCEPTION_WITH_TWO_PATHS(
+            err, L"CreateSymbolicLinkW", wide_source, transformed_target);
+    }
 }
 
 void OSService::rename(const std::string& a, const std::string& b) const
