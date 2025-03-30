@@ -35,7 +35,7 @@ namespace
         // Test readlink
         char buffer[1024];
         auto link_size = os_service.readlink(symlink_file, buffer, sizeof(buffer));
-        REQUIRE(link_size > 0);
+        REQUIRE(link_size == symlink_stat.st_size);
         CHECK(std::string(buffer, link_size) == target_file);
     }
 

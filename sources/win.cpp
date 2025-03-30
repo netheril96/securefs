@@ -480,6 +480,11 @@ static void stat_file_handle(HANDLE hd, fuse_stat* st)
     st->st_nlink = static_cast<fuse_nlink_t>(info.nNumberOfLinks);
     st->st_uid = securefs::OSService::getuid();
     st->st_gid = securefs::OSService::getgid();
+    st->st_dev = info.dwVolumeSerialNumber;
+    st->st_ino = convert_dword_pair(info.nFileIndexLow, info.nFileIndexHigh);
+    st->st_size = convert_dword_pair(info.nFileSizeLow, info.nFileSizeHigh);
+    st->st_blksize = 4096;
+    st->st_blocks = (st->st_size + 4095) / 4096 * (4096 / 512);
     if (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
     {
         st->st_mode = S_IFLNK | 0755;
@@ -517,11 +522,6 @@ static void stat_file_handle(HANDLE hd, fuse_stat* st)
         st->st_mode = S_IFDIR | 0755;
     else
         st->st_mode = S_IFREG | 0755;
-    st->st_dev = info.dwVolumeSerialNumber;
-    st->st_ino = convert_dword_pair(info.nFileIndexLow, info.nFileIndexHigh);
-    st->st_size = convert_dword_pair(info.nFileSizeLow, info.nFileSizeHigh);
-    st->st_blksize = 4096;
-    st->st_blocks = (st->st_size + 4095) / 4096 * (4096 / 512);
 }
 
 class WindowsFileStream final : public FileStream
