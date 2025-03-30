@@ -1018,7 +1018,8 @@ ssize_t OSService::readlink(const std::string& path, char* output, size_t size) 
     }
     DEFER(CloseHandle(handle));
 
-    std::wstring buffer(path.size() * 3 + 128, L'\0');
+    std::wstring buffer(std::min<size_t>(65535 / 2, size + kSecurefsSymlinkPrefix.size() + 9),
+                        L'\0');
     DWORD returned_length;
     if (!DeviceIoControl(handle,
                          FSCTL_GET_REPARSE_POINT,
