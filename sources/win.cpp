@@ -26,7 +26,7 @@
 #include <sddl.h>
 #include <strsafe.h>
 
-static constexpr std::string_view kSecurefsSymlinkPrefix = R"(\\?\UNC\securefs\P)";
+static constexpr std::string_view kSecurefsSymlinkPrefix = R"(\??\UNC\securefs\P)";
 
 static std::string prepend_symlink_prefix(std::string_view path)
 {
@@ -1051,10 +1051,10 @@ ssize_t OSService::readlink(const std::string& path, char* output, size_t size) 
     return copy_length;
 }
 
-void OSService::symlink(const std::string& source, const std::string& dest) const
+void OSService::symlink(const std::string& to, const std::string& from) const
 {
-    auto transformed_target = widen_string(prepend_symlink_prefix(dest));
-    auto wide_source = widen_string(source);
+    auto transformed_target = widen_string(prepend_symlink_prefix(to));
+    auto wide_source = widen_string(from);
 
     if (!CreateSymbolicLinkW(wide_source.c_str(),
                              transformed_target.c_str(),
