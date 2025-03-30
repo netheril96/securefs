@@ -117,6 +117,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.8"
+      - name: Enable Developer Mode
+        run:  reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1
       - name: install
         run: choco install winfsp
       - name: vcpkg build

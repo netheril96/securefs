@@ -162,6 +162,8 @@ jobs:
           python-version: "3.8"
       - name: install
         run: choco install winfsp
+      - name: Enable Developer Mode
+        run:  reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1
       - name: Get latest Github release of vcpkg
         uses: cardinalby/git-get-release-action@v1
         id: get-latest-vcpkg-release
