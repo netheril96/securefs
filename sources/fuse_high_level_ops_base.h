@@ -15,7 +15,8 @@ struct OwnerOverride
 class FuseHighLevelOpsBase : public Object
 {
 public:
-    static fuse_operations build_ops(const FuseHighLevelOpsBase* op, bool enable_xattr);
+    static fuse_operations
+    build_ops(const FuseHighLevelOpsBase* op, bool enable_xattr, bool enable_symlink = true);
 
     virtual void initialize(fuse_conn_info* info) = 0;
     virtual int vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx) = 0;

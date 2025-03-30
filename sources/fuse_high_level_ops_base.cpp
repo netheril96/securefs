@@ -325,7 +325,9 @@ namespace
     }
 }    // namespace
 
-fuse_operations FuseHighLevelOpsBase::build_ops(const FuseHighLevelOpsBase* op, bool enable_xattr)
+fuse_operations FuseHighLevelOpsBase::build_ops(const FuseHighLevelOpsBase* op,
+                                                bool enable_xattr,
+                                                bool enable_symlink)
 {
     fuse_operations opt{};
 
@@ -373,10 +375,13 @@ fuse_operations FuseHighLevelOpsBase::build_ops(const FuseHighLevelOpsBase* op, 
     opt.unlink = &FuseHighLevelOpsBase::static_unlink;
     opt.mkdir = &FuseHighLevelOpsBase::static_mkdir;
     opt.rmdir = &FuseHighLevelOpsBase::static_rmdir;
+    if (enable_symlink)
+    {
+        opt.symlink = &FuseHighLevelOpsBase::static_symlink;
+    }
 #ifndef _WIN32
     opt.chmod = &FuseHighLevelOpsBase::static_chmod;
     opt.chown = &FuseHighLevelOpsBase::static_chown;
-    opt.symlink = &FuseHighLevelOpsBase::static_symlink;
     opt.link = &FuseHighLevelOpsBase::static_link;
     opt.readlink = &FuseHighLevelOpsBase::static_readlink;
 #else
