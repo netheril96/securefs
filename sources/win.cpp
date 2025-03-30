@@ -489,14 +489,14 @@ static void stat_file_handle(HANDLE hd, fuse_stat* st)
     {
         st->st_mode = S_IFLNK | 0755;
 
-        std::wstring buffer(65535 / 2, L'\0');
+        std::vector<char> buffer(65535);
         DWORD returned_length;
         if (DeviceIoControl(hd,
                             FSCTL_GET_REPARSE_POINT,
                             nullptr,
                             0,
                             buffer.data(),
-                            static_cast<DWORD>(buffer.size() * sizeof(wchar_t)),
+                            static_cast<DWORD>(buffer.size()),
                             &returned_length,
                             nullptr))
         {
@@ -1018,15 +1018,14 @@ ssize_t OSService::readlink(const std::string& path, char* output, size_t size) 
     }
     DEFER(CloseHandle(handle));
 
-    std::wstring buffer(std::min<size_t>(65535 / 2, size + kSecurefsSymlinkPrefix.size() + 9),
-                        L'\0');
+    std::vector<char> buffer(65535);
     DWORD returned_length;
     if (!DeviceIoControl(handle,
                          FSCTL_GET_REPARSE_POINT,
                          nullptr,
                          0,
                          buffer.data(),
-                         static_cast<DWORD>(buffer.size() * sizeof(wchar_t)),
+                         static_cast<DWORD>(buffer.size()),
                          &returned_length,
                          nullptr))
     {
@@ -1055,7 +1054,7 @@ ssize_t OSService::readlink(const std::string& path, char* output, size_t size) 
 void OSService::symlink(const std::string& to, const std::string& from) const
 {
     auto transformed_target = widen_string(prepend_symlink_prefix(to));
-    auto wide_source = widen_string(from);
+    auto wide_source = norm_path(from);
 
     if (!CreateSymbolicLinkW(wide_source.c_str(),
                              transformed_target.c_str(),

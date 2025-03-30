@@ -534,6 +534,11 @@ private:
                                      "",
                                      "path",
                                      cmdline()};
+    TCLAP::SwitchArg win_symlink{
+        "",
+        "win-symlink",
+        "Enable symlink support on Windows at the cost of performance. No effect otherwise.",
+        cmdline()};
     TCLAP::MultiArg<std::string> fuse_options{
         "o",
         "opt",
@@ -1038,7 +1043,12 @@ public:
         }
 #endif
         auto high_level_ops = injector.get<FuseHighLevelOpsBase*>();
-        auto fuse_callbacks = FuseHighLevelOpsBase::build_ops(high_level_ops, native_xattr);
+        auto fuse_callbacks = FuseHighLevelOpsBase::build_ops(
+            high_level_ops,    // high_level_ops: Pointer to the high-level FUSE operations
+            native_xattr,      // native_xattr: Whether to enable native extended attributes
+            !is_windows() || win_symlink.getValue()    // enable_symlink: Enable symlink support if
+                                                       // not on Windows or explicitly requested
+        );
         VERBOSE_LOG("Calling fuse_main with arguments: %s", escape_args(fuse_args));
         return my_fuse_main(static_cast<int>(fuse_args.size()),
                             const_cast<char**>(to_c_style_args(fuse_args).data()),

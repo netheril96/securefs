@@ -76,6 +76,7 @@ def securefs_mount(
         mount_point,
         "--normalization",
         "none",
+        "--win-symlink",
     ]
     if password:
         command.append("--pass")
@@ -427,17 +428,15 @@ def make_test_case(
                     set(os.listdir(os.path.join(self.mount_point, "k" * 200))),
                     {"🎈" * 2},
                 )
+                os.symlink(
+                    "/b🔼🎈" * 30,
+                    os.path.join(self.mount_point, "k" * 200, "🔼" * 64),
+                )
+                self.assertEqual(
+                    "/b🔼🎈" * 30,
+                    os.readlink(os.path.join(self.mount_point, "k" * 200, "🔼" * 64)),
+                )
                 if sys.platform != "win32":
-                    os.symlink(
-                        "/bcd" * 20,
-                        os.path.join(self.mount_point, "k" * 200, "🔼" * 64),
-                    )
-                    self.assertEqual(
-                        "/bcd" * 20,
-                        os.readlink(
-                            os.path.join(self.mount_point, "k" * 200, "🔼" * 64)
-                        ),
-                    )
                     os.link(
                         os.path.join(self.mount_point, "k" * 200, "🎈" * 2),
                         os.path.join(self.mount_point, "k" * 200, "✅" * 60),
@@ -448,10 +447,11 @@ def make_test_case(
                         ).st_nlink,
                         2,
                     )
-                    all_names = os.listdir(os.path.join(self.mount_point, "k" * 200))
+                all_names = os.listdir(os.path.join(self.mount_point, "k" * 200))
+                if sys.platform != "win32":
                     self.assertIn("✅" * 60, all_names)
                     self.assertIn("🎈" * 2, all_names)
-                    self.assertIn("🔼" * 64, all_names)
+                self.assertIn("🔼" * 64, all_names)
                 shutil.rmtree(os.path.join(self.mount_point, "k" * 200))
 
         if xattr is not None:
@@ -507,33 +507,40 @@ def make_test_case(
                     except EnvironmentError:
                         pass
 
-        if sys.platform != "win32":
+        def test_symlink(self):
+            data = os.urandom(16)
+            source = os.path.join(self.mount_point, str(uuid.uuid4()))
+            dest = os.path.join(self.mount_point, str(uuid.uuid4()))
+            try:
+                with open(source, "wb") as f:
+                    f.write(data)
+                os.symlink(source, dest)
+                self.assertIn(os.path.basename(dest), os.listdir(self.mount_point))
+                self.assertEqual(os.readlink(dest), source)
+                with open(dest, "rb") as f:
+                    self.assertEqual(data, f.read())
 
-            def test_symlink(self):
-                data = os.urandom(16)
-                source = os.path.join(self.mount_point, str(uuid.uuid4()))
-                dest = os.path.join(self.mount_point, str(uuid.uuid4()))
+                dest2 = os.path.join(self.mount_point, str(uuid.uuid4()))
+                os.rename(dest, dest2)
+                self.assertIn(os.path.basename(dest2), os.listdir(self.mount_point))
+                self.assertEqual(os.readlink(dest2), source)
+                with open(dest2, "rb") as f:
+                    self.assertEqual(data, f.read())
+                os.remove(source)
+                with self.assertRaises(EnvironmentError):
+                    with open(dest2, "rb") as f:
+                        f.read()
+            finally:
                 try:
-                    with open(source, "wb") as f:
-                        f.write(data)
-                    os.symlink(source, dest)
-                    self.assertIn(os.path.basename(dest), os.listdir(self.mount_point))
-                    self.assertEqual(os.readlink(dest), source)
                     os.remove(source)
-                    with self.assertRaises(EnvironmentError):
-                        with open(dest, "rb") as f:
-                            f.read()
-                finally:
-                    try:
-                        os.remove(source)
-                    except EnvironmentError:
-                        pass
-                    try:
-                        os.remove(dest)
-                    except EnvironmentError:
-                        pass
+                except EnvironmentError:
+                    pass
+                try:
+                    os.remove(dest)
+                except EnvironmentError:
+                    pass
 
-        else:
+        if sys.platform == "win32":
 
             def test_win_long_path(self):
                 long_mount_point = rf"\\?\{os.path.abspath(self.mount_point)}"

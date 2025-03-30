@@ -995,7 +995,7 @@ int FuseHighLevelOps::vreadlink(const char* path, char* buf, size_t size, const 
         return 0;
     }
 
-    auto max_size = size / 5 * 8 + 32;
+    auto max_size = size * 2 + 127;
     std::vector<char> buffer(max_size);
     root_.readlink(name_trans_.encrypt_full_path(path, nullptr), buffer.data(), max_size - 1);
     std::string resolved = name_trans_.decrypt_path_from_symlink(std::string_view(buffer.data()));
