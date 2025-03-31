@@ -119,9 +119,7 @@ def securefs_unmount(p: subprocess.Popen, mount_point: str):
         if sys.platform == "win32":
             p.send_signal(signal.CTRL_BREAK_EVENT)
         elif sys.platform == "linux":
-            subprocess.check_call(["fusermount", "-u", mount_point])
-        else:
-            subprocess.check_call(["umount", mount_point])
+            p.send_signal(signal.SIGINT)
         p.wait(timeout=5)
         if p.returncode:
             logging.error("securefs exited with non-zero code: %d", p.returncode)
