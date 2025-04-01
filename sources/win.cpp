@@ -487,7 +487,7 @@ static void stat_file_handle(HANDLE hd, fuse_stat* st)
     st->st_blocks = (st->st_size + 4095) / 4096 * (4096 / 512);
     if (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
     {
-        st->st_mode = S_IFLNK | 0755;
+        st->st_mode = S_IFLNK | 0777;
 
         std::vector<char> buffer(65535);
         DWORD returned_length;
