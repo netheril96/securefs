@@ -83,7 +83,7 @@ void FileBase::initialize_empty(uint32_t mode, uint32_t uid, uint32_t gid)
 {
     if (uid == -1)
     {
-        uid == OSService::get_default().getuid();
+        uid = OSService::get_default().getuid();
     }
     if (gid == -1)
     {
