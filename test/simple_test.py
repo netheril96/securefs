@@ -515,22 +515,22 @@ def make_test_case(
                 with open(source, "wb") as f:
                     f.write(data)
                 os.symlink(source, dest)
-                self.assertIn(dest, os.listdir(self.mount_point))
+                self.assertIn(os.path.basename(dest), os.listdir("."))
                 self.assertEqual(os.readlink(dest), source)
                 with open(dest, "rb") as f:
                     self.assertEqual(data, f.read())
 
-                os.mkdir("ccc")
+                os.makedirs("ccc", exist_ok=True)
                 dest2 = "ccc/" + str(uuid.uuid4())
                 os.rename(dest, dest2)
-                self.assertIn(dest2, os.listdir("ccc"))
+                self.assertIn(os.path.basename(dest2), os.listdir("ccc"))
                 self.assertEqual(os.readlink(dest2), source)
-                with open(dest2, "rb") as f:
-                    self.assertEqual(data, f.read())
-                os.remove(source)
                 with self.assertRaises(EnvironmentError):
                     with open(dest2, "rb") as f:
                         f.read()
+                os.rename(source, "ccc/" + source)
+                with open(dest2, "rb") as f:
+                    self.assertEqual(data, f.read())
             finally:
                 try:
                     os.remove(source)
