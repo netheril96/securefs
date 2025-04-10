@@ -246,13 +246,10 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root, bool case_in
 
     {
         auto symlink_location = absl::StrCat("/cbd/", kLongFileNameExample2, "/", "sym");
-        auto symlink_location2 = absl::StrCat("/cbd/sym2");
-        std::string symlink_target = u8"/888888888888888888888888888888/🧬9999999999999999999🧬/"
-                                     "66666666666666666/🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬";
-
-        REQUIRE(ops.vsymlink(symlink_target.c_str(), symlink_location2.c_str(), &ctx) == 0);
-        REQUIRE(ops.vrename(symlink_location2.c_str(), symlink_location.c_str(), &ctx) == 0);
-
+        std::string symlink_target
+            = u8"../../888888888888888888888888888888/🧬9999999999999999999🧬/"
+              "66666666666666666/🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬";
+        REQUIRE(ops.vsymlink(symlink_target.c_str(), symlink_location.c_str(), &ctx) == 0);
         fuse_stat st{};
         REQUIRE(ops.vgetattr(symlink_location.c_str(), &st, &ctx) == 0);
         CHECK((st.st_mode & S_IFMT) == S_IFLNK);

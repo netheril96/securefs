@@ -427,11 +427,11 @@ def make_test_case(
                     {"🎈" * 2},
                 )
                 os.symlink(
-                    "/b🔼🎈" * 30,
+                    "b🔼🎈" * 30,
                     os.path.join(self.mount_point, "k" * 200, "🔼" * 64),
                 )
                 self.assertEqual(
-                    "/b🔼🎈" * 30,
+                    "b🔼🎈" * 30,
                     os.readlink(os.path.join(self.mount_point, "k" * 200, "🔼" * 64)),
                 )
                 if sys.platform != "win32":
@@ -507,20 +507,23 @@ def make_test_case(
 
         def test_symlink(self):
             data = os.urandom(16)
-            source = os.path.join(self.mount_point, str(uuid.uuid4()))
-            dest = os.path.join(self.mount_point, str(uuid.uuid4()))
+            source = str(uuid.uuid4())
+            dest = str(uuid.uuid4())
+            cwd: str = os.getcwd()
+            os.chdir(self.mount_point)
             try:
                 with open(source, "wb") as f:
                     f.write(data)
                 os.symlink(source, dest)
-                self.assertIn(os.path.basename(dest), os.listdir(self.mount_point))
+                self.assertIn(dest, os.listdir(self.mount_point))
                 self.assertEqual(os.readlink(dest), source)
                 with open(dest, "rb") as f:
                     self.assertEqual(data, f.read())
 
-                dest2 = os.path.join(self.mount_point, str(uuid.uuid4()))
+                os.mkdir("ccc")
+                dest2 = "ccc/" + str(uuid.uuid4())
                 os.rename(dest, dest2)
-                self.assertIn(os.path.basename(dest2), os.listdir(self.mount_point))
+                self.assertIn(dest2, os.listdir("ccc"))
                 self.assertEqual(os.readlink(dest2), source)
                 with open(dest2, "rb") as f:
                     self.assertEqual(data, f.read())
@@ -537,6 +540,7 @@ def make_test_case(
                     os.remove(dest)
                 except EnvironmentError:
                     pass
+                os.chdir(cwd)
 
         if sys.platform == "win32":
 

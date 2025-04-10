@@ -271,6 +271,11 @@ int FuseHighLevelOps::vchown(const char* path,
 };
 int FuseHighLevelOps::vsymlink(const char* to, const char* from, const fuse_context* ctx)
 {
+    if (is_windows() && to && to[0] == '/')
+    {
+        ERROR_LOG("Symlink target %s is absolute and therefore not supported", to);
+        return -EINVAL;
+    }
     auto holder = create(from, 0644, Symlink::class_type(), ctx->uid, ctx->gid);
     FileLockGuard fg(*holder);
     holder->cast_as<Symlink>()->set(to);

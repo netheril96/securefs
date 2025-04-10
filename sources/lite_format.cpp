@@ -1011,6 +1011,11 @@ int FuseHighLevelOps::vchown(const char* path,
 }
 int FuseHighLevelOps::vsymlink(const char* to, const char* from, const fuse_context* ctx)
 {
+    if (is_windows() && to && to[0] == '/')
+    {
+        ERROR_LOG("Symlink target %s is absolute and therefore not supported", to);
+        return -EINVAL;
+    }
     process_possible_long_name(from,
                                LongNameComponentAction::kCreate,
                                [&](std::string&& enc_path)
