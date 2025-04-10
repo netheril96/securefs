@@ -378,12 +378,12 @@ fuse_operations FuseHighLevelOpsBase::build_ops(const FuseHighLevelOpsBase* op,
     if (enable_symlink)
     {
         opt.symlink = &FuseHighLevelOpsBase::static_symlink;
+        opt.readlink = &FuseHighLevelOpsBase::static_readlink;
     }
 #ifndef _WIN32
     opt.chmod = &FuseHighLevelOpsBase::static_chmod;
     opt.chown = &FuseHighLevelOpsBase::static_chown;
     opt.link = &FuseHighLevelOpsBase::static_link;
-    opt.readlink = &FuseHighLevelOpsBase::static_readlink;
 #else
     if (op->has_getpath())
     {

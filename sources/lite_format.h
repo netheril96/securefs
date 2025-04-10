@@ -377,6 +377,7 @@ private:
                                     absl::FunctionRef<void(std::string&& enc_path)> callback);
 
     std::string long_name_table_file_name(absl::string_view enc_path);
+    int vrename_impl(const char* from, const char* to, const fuse_context* ctx);
 
 private:
     ::securefs::OSService& root_;
