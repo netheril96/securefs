@@ -108,7 +108,7 @@ jobs:
           name: securefs-macos-arm64
 
   build-windows:
-    runs-on: windows-2019
+    runs-on: windows-latest
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
