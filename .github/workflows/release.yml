@@ -180,7 +180,7 @@ jobs:
           ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
           fetch-depth: 1
       - name: build-test
-        run: python3 build.py --clang_cl --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build
+        run: python3 build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build
       - name: upload
         uses: actions/upload-artifact@v4
         with:
