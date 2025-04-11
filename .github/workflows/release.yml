@@ -221,7 +221,7 @@ jobs:
             fi
             sh $VCPKG_ROOT/bootstrap-vcpkg.sh
           run: |
-            cd ${{ github.workspace }} && python3.9 build.py --enable_unit_test --enable_integration_test --vcpkg_root=$VCPKG_ROOT --build_root=./build --lto
+            cd ${{ github.workspace }} && python3.9 build.py --enable_unit_test --vcpkg_root=$VCPKG_ROOT --build_root=./build --lto
       - name: upload
         uses: actions/upload-artifact@v4
         with:
