@@ -216,7 +216,9 @@ jobs:
           release: "14.2"
           prepare: |
             pkg install -y cmake git python39 zip curl pkgconf ninja fusefs-libs
-            kldload fusefs
+            if ! kldstat -m fusefs > /dev/null 2>&1; then
+               kldload fusefs
+            fi
             sh $VCPKG_ROOT/bootstrap-vcpkg.sh
           run: |
             cd ${{ github.workspace }} && python3.9 build.py --enable_unit_test --enable_integration_test --vcpkg_root=$VCPKG_ROOT --build_root=./build --lto
