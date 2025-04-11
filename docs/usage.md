@@ -18,6 +18,7 @@ Mount an existing filesystem
 - **-v** or **--verbose**: Logs more verbose messages. *This is a switch arg. Default: false.*
 - **--trace**: Trace all calls into `securefs` (implies --verbose). *This is a switch arg. Default: false.*
 - **--log**: Path of the log file (may contain sensitive information). *Unset by default.*
+- **--win-symlink**: Enable symlink support on Windows at the cost of performance. No effect otherwise.. *This is a switch arg. Default: false.*
 - **-o** or **--opt**: Additional FUSE options; this may crash the filesystem; use only for testing!. *This option can be specified multiple times.*
 - **--fsname**: Filesystem name shown when mounted. *Default: securefs.*
 - **--fssubtype**: Filesystem subtype shown when mounted. *Default: securefs.*
