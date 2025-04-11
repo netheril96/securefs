@@ -205,7 +205,7 @@ jobs:
         with:
           path: ${{ github.workspace }}/vcpkg
           repository: microsoft/vcpkg
-          ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
+          ref: '2025.01.13'
           fetch-depth: 1
       - name: Test in FreeBSD
         id: freebsd
