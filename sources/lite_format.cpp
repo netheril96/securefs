@@ -840,12 +840,16 @@ int FuseHighLevelOps::vopendir(const char* path, fuse_file_info* info, const fus
         opener_,
         read_dir_plus_);
     info->fh = reinterpret_cast<uintptr_t>(dir.release());
+    if (win_symlink_workaround)
+    {
+        LockGuard lg(win_symlink_workaround->mutex);
+        win_symlink_workaround->created_file_handle_to_path.emplace(info->fh, path);
+    }
     return 0;
 }
 int FuseHighLevelOps::vreleasedir(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
-    delete get_base(info);
-    return 0;
+    return vrelease(path, info, ctx);
 }
 int FuseHighLevelOps::vreaddir(const char* path,
                                void* buf,
@@ -993,6 +997,11 @@ int FuseHighLevelOps::vrmdir(const char* path, const fuse_context* ctx)
                                    root_.remove_file_nothrow(
                                        absl::StrCat(enc_path, "/", kLongNameTableFileName));
                                    root_.remove_directory(enc_path);
+                                   if (win_symlink_workaround)
+                                   {
+                                       LockGuard<Mutex> lg(win_symlink_workaround->mutex);
+                                       win_symlink_workaround->temporary_symlinks.erase(path);
+                                   }
                                });
     return 0;
 }
