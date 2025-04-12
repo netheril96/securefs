@@ -515,7 +515,13 @@ def make_test_case(
                 with open(source, "wb") as f:
                     f.write(data)
                 os.symlink(source, dest)
-                self.assertIn(os.path.basename(dest), os.listdir("."))
+                dir_entries = list(os.scandir("."))
+                self.assertIn(os.path.basename(dest), [d.name for d in dir_entries])
+                self.assertTrue(
+                    next(
+                        d for d in dir_entries if d.name == os.path.basename(dest)
+                    ).is_symlink()
+                )
                 self.assertEqual(os.readlink(dest), source)
                 with open(dest, "rb") as f:
                     self.assertEqual(data, f.read())
@@ -523,7 +529,13 @@ def make_test_case(
                 os.makedirs("ccc", exist_ok=True)
                 dest2 = "ccc/" + str(uuid.uuid4())
                 os.rename(dest, dest2)
-                self.assertIn(os.path.basename(dest2), os.listdir("ccc"))
+                dir_entries = list(os.scandir("ccc"))
+                self.assertIn(os.path.basename(dest2), [d.name for d in dir_entries])
+                self.assertTrue(
+                    next(
+                        d for d in dir_entries if d.name == os.path.basename(dest2)
+                    ).is_symlink()
+                )
                 self.assertEqual(os.readlink(dest2), source)
                 with self.assertRaises(EnvironmentError):
                     with open(dest2, "rb") as f:
@@ -531,15 +543,22 @@ def make_test_case(
                 os.rename(source, "ccc/" + source)
                 with open(dest2, "rb") as f:
                     self.assertEqual(data, f.read())
+
+                dest3 = "📚🔐🔓📗😂🤣❤️😍😶‍🌫️"
+                os.symlink("ccc", dest3, target_is_directory=True)
+                dir_entries = list(os.scandir("."))
+                self.assertIn(dest3, [d.name for d in dir_entries])
+                self.assertTrue(
+                    next(d for d in dir_entries if d.name == dest3).is_symlink()
+                )
+                self.assertTrue(
+                    next(d for d in dir_entries if d.name == dest3).is_dir()
+                )
+                with open(os.path.join(dest3, os.path.basename(dest2)), "rb") as f:
+                    self.assertEqual(data, f.read())
             finally:
-                try:
-                    os.remove(source)
-                except EnvironmentError:
-                    pass
-                try:
-                    os.remove(dest)
-                except EnvironmentError:
-                    pass
+                for d in os.scandir("."):
+                    shutil.rmtree(d.name, ignore_errors=True)
                 os.chdir(cwd)
 
         if sys.platform == "win32":
