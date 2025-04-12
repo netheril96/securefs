@@ -1141,10 +1141,18 @@ public:
             *name = narrow_string(m_data.cFileName);
         if (st)
         {
-            if (m_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            if (m_data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+            {
+                st->st_mode = 0777 | S_IFLNK;
+            }
+            else if (m_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            {
                 st->st_mode = 0755 | S_IFDIR;
+            }
             else
+            {
                 st->st_mode = 0755 | S_IFREG;
+            }
             st->st_size = convert_dword_pair(m_data.nFileSizeLow, m_data.nFileSizeHigh);
             filetime_to_unix_time(&m_data.ftCreationTime, &st->st_birthtim);
             filetime_to_unix_time(&m_data.ftLastAccessTime, &st->st_atim);
