@@ -129,7 +129,8 @@ namespace
 }    // namespace
 void test_fuse_ops(FuseHighLevelOpsBase& ops,
                    OSService& repo_root,
-                   CaseSensitivity case_sensitivity)
+                   CaseSensitivity case_sensitivity,
+                   ResolveSymlinks resolve_symlinks)
 {
     CHECK(names(listdir(ops, "/")) == std::vector<std::string>{".", ".."});
 
@@ -267,6 +268,7 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops,
         CHECK(read_symlink_target == symlink_target);
     }
 
+    if (resolve_symlinks == ResolveSymlinks::YES)
     {
         // Test nested directories and relative symlinks
         const char* real_dir0_path = "/realdir0";
@@ -359,6 +361,7 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops,
         REQUIRE(ops.vrmdir(real_dir0_path, &ctx) == 0);
     }
 
+    if (resolve_symlinks == ResolveSymlinks::YES)
     {
         // Test case: Symlink loops with relative paths
         const char* symlink1_path = "/symlink1";

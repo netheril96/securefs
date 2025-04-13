@@ -49,8 +49,10 @@ namespace
         OSService::get_default().ensure_directory(temp_dir_name, 0755);
         auto root = std::make_shared<OSService>(temp_dir_name);
         fruit::Injector<FuseHighLevelOpsBase> injector(get_test_component<false>, root);
-        testing::test_fuse_ops(
-            injector.get<FuseHighLevelOpsBase&>(), *root, testing::CaseSensitivity::CaseSensitive);
+        testing::test_fuse_ops(injector.get<FuseHighLevelOpsBase&>(),
+                               *root,
+                               testing::CaseSensitivity::CaseSensitive,
+                               testing::ResolveSymlinks::YES);
     }
     TEST_CASE("Full format test (case insensitive)")
     {
@@ -60,7 +62,8 @@ namespace
         fruit::Injector<FuseHighLevelOpsBase> injector(get_test_component<true>, root);
         testing::test_fuse_ops(injector.get<FuseHighLevelOpsBase&>(),
                                *root,
-                               testing::CaseSensitivity::CaseInsensitive);
+                               testing::CaseSensitivity::CaseInsensitive,
+                               testing::ResolveSymlinks::YES);
     }
 }    // namespace
 }    // namespace securefs::full_format

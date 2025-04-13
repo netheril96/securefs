@@ -47,7 +47,14 @@ enum class CaseSensitivity
     CaseInsensitive
 };
 
+enum class ResolveSymlinks
+{
+    NO,
+    YES
+};
+
 void test_fuse_ops(FuseHighLevelOpsBase& ops,
                    OSService& repo_root,
-                   CaseSensitivity case_sensitivity = CaseSensitivity::CaseSensitive);
+                   CaseSensitivity case_sensitivity = CaseSensitivity::CaseSensitive,
+                   ResolveSymlinks resolve_symlinks = ResolveSymlinks::NO);
 }    // namespace securefs::testing
