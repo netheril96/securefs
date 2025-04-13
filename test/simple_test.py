@@ -650,9 +650,10 @@ def make_test_case(
             os.utime(rng_filename, times=(1713274809, 1713274821))
             self.assertEqual(os.lstat(rng_filename).st_mtime, 1713274821)
 
-            now = int(time.time())
+            now = time.time()
             os.utime(rng_filename)
-            self.assertGreaterEqual(os.lstat(rng_filename).st_mtime, now)
+            tolerance = 0.2  # The timing functions may differ a little bit
+            self.assertGreaterEqual(os.lstat(rng_filename).st_mtime + tolerance, now)
 
             data = b"\0" * len(random_data) + b"0"
             with open(rng_filename, "wb") as f:
