@@ -127,7 +127,9 @@ namespace
         return result;
     }
 }    // namespace
-void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root, bool case_insensitive)
+void test_fuse_ops(FuseHighLevelOpsBase& ops,
+                   OSService& repo_root,
+                   CaseSensitivity case_sensitivity)
 {
     CHECK(names(listdir(ops, "/")) == std::vector<std::string>{".", ".."});
 
@@ -145,7 +147,7 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root, bool case_in
         CHECK((st.st_mode & S_IFMT) == S_IFREG);
         CHECK(st.st_size == 0);
 
-        if (case_insensitive)
+        if (case_sensitivity == CaseSensitivity::CaseInsensitive)
         {
             CHECK(getpath(ops, "/HeLLo") == "/hello");
         }
@@ -214,7 +216,7 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root, bool case_in
     REQUIRE(ops.vmkdir("/cbd", 0755, &ctx) == 0);
     REQUIRE(ops.vmkdir("/aBc", 0755, &ctx) == 0);
     REQUIRE(ops.vmkdir("/aBc/yyyyY", 0755, &ctx) == 0);
-    if (case_insensitive)
+    if (case_sensitivity == CaseSensitivity::CaseInsensitive)
     {
         CHECK(getpath(ops, "/ABC/YYYYY") == "/aBc/yyyyY");
     }

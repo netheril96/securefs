@@ -40,5 +40,14 @@ struct doctest::StringMaker<std::vector<std::string>>
 
 namespace securefs::testing
 {
-void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root, bool case_insensitive = false);
-}
+
+enum class CaseSensitivity
+{
+    CaseSensitive,
+    CaseInsensitive
+};
+
+void test_fuse_ops(FuseHighLevelOpsBase& ops,
+                   OSService& repo_root,
+                   CaseSensitivity case_sensitivity = CaseSensitivity::CaseSensitive);
+}    // namespace securefs::testing
