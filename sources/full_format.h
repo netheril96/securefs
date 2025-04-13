@@ -159,9 +159,15 @@ private:
         std::string_view last_component;
     };
 
+    std::optional<FilePtrHolder> generic_open(id_type parent_id,
+                                              FilePtrHolder holder,
+                                              absl::Span<const std::string_view> path,
+                                              int recursion_depth = 0);
+
     OpenBaseResult open_base(absl::string_view path);
     FilePtrHolder create(absl::string_view path, unsigned mode, int type, int uid, int gid);
-    std::optional<FilePtrHolder> open_all(absl::string_view path);
+    std::optional<FilePtrHolder>
+    open_all(absl::string_view path, bool resolve_last_symlink = false);
 
     FileBase* get_file(fuse_file_info* info)
     {

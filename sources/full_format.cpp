@@ -60,7 +60,7 @@ int FuseHighLevelOps::vfgetattr(const char* path,
 };
 int FuseHighLevelOps::vopendir(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
-    auto opened = open_all(path);
+    auto opened = open_all(path, true);
     if (!opened)
     {
         return -ENOENT;
@@ -102,7 +102,7 @@ int FuseHighLevelOps::vreaddir(const char* path,
     st.st_mode = S_IFDIR;
     filler(buf, ".", &st, 0);
 
-    st.st_ino = fp->get_parent_ino();
+    st.st_ino = to_inode_number(fp->get_parent_id());
     filler(buf, "..", &st, 0);
 
     fp->cast_as<Directory>()->iterate_over_entries(
@@ -131,7 +131,7 @@ int FuseHighLevelOps::vcreate(const char* path,
 };
 int FuseHighLevelOps::vopen(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
-    auto opened = open_all(path);
+    auto opened = open_all(path, true);
     if (!opened)
     {
         return -ENOENT;
@@ -283,7 +283,7 @@ int FuseHighLevelOps::vsymlink(const char* to, const char* from, const fuse_cont
 };
 int FuseHighLevelOps::vlink(const char* src, const char* dest, const fuse_context* ctx)
 {
-    auto opened = open_all(src);
+    auto opened = open_all(src, true);
     if (!opened)
     {
         return -ENOENT;
@@ -361,7 +361,7 @@ int FuseHighLevelOps::vfsync(const char* path,
 };
 int FuseHighLevelOps::vtruncate(const char* path, fuse_off_t len, const fuse_context* ctx)
 {
-    auto opened = open_all(path);
+    auto opened = open_all(path, true);
     if (!opened)
     {
         return -ENOENT;
@@ -474,7 +474,7 @@ int FuseHighLevelOps::vgetpath(
         return copy_and_return(path);
     }
     absl::InlinedVector<std::string_view, 7> splits = absl::StrSplit(path, '/', absl::SkipEmpty());
-    uint64_t parent_ino = to_inode_number(kRootId);
+    auto parent_id = kRootId;
     FilePtrHolder holder = ft_.open_as(kRootId, Directory::class_type());
     for (auto& split : splits)
     {
@@ -491,8 +491,8 @@ int FuseHighLevelOps::vgetpath(
             normed_name = *get_result;
         }
         holder = ft_.open_as(id, type);
-        holder->set_parent_ino(parent_ino);
-        parent_ino = holder->get_parent_ino();
+        holder->set_parent_id(parent_id);
+        parent_id = holder->get_id();
         split = normed_name;
     }
     std::string result;
@@ -505,27 +505,82 @@ int FuseHighLevelOps::vgetpath(
     return copy_and_return(result);
 };
 
-FuseHighLevelOps::OpenBaseResult FuseHighLevelOps::open_base(absl::string_view path)
+std::optional<FilePtrHolder>
+FuseHighLevelOps::generic_open(id_type parent_id,
+                               FilePtrHolder parent,
+                               absl::Span<const std::string_view> splits,
+                               int recursion_depth)
 {
-    absl::InlinedVector<std::string_view, 7> splits = absl::StrSplit(path, '/', absl::SkipEmpty());
-    uint64_t parent_ino = to_inode_number(kRootId);
-    FilePtrHolder holder = ft_.open_as(kRootId, Directory::class_type());
-    for (size_t i = 0; i + 1 < splits.size(); ++i)
+    if (recursion_depth >= 16)
     {
+        throwVFSException(ELOOP);
+    }
+    for (size_t i = 0; i < splits.size(); ++i)
+    {
+        if (splits[i] == ".")
+        {
+            continue;
+        }
+        if (splits[i] == "..")
+        {
+            parent_id = parent->get_parent_id();
+            parent = ft_.open_as(parent_id, Directory::class_type());
+            continue;
+        }
         id_type id;
         int type;
         {
-            FileLockGuard lg(*holder);
-            if (!holder->cast_as<Directory>()->get_entry(splits[i], id, type))
+            FileLockGuard lg(*parent);
+            if (!parent->cast_as<Directory>()->get_entry(splits[i], id, type))
             {
-                throwVFSException(ENOENT);
+                return {};
             }
         }
-        holder = ft_.open_as(id, type);
-        holder->set_parent_ino(parent_ino);
-        parent_ino = holder->get_parent_ino();
+        auto child = ft_.open_as(id, type);
+        child->set_parent_id(parent_id);
+
+        if (type == Symlink::class_type())
+        {
+            std::string target;
+            {
+                FileLockGuard lg(*child);
+                target = child->cast_as<Symlink>()->get();
+            }
+            absl::InlinedVector<std::string_view, 7> new_splits
+                = absl::StrSplit(target, '/', absl::SkipEmpty());
+            auto resolved
+                = generic_open(parent_id, std::move(parent), new_splits, recursion_depth + 1);
+            if (!resolved)
+            {
+                return {};
+            }
+            child = std::move(*resolved);
+        }
+        parent_id = child->get_id();
+        parent = std::move(child);
     }
-    return {std::move(holder), splits.empty() ? std::string_view() : splits.back()};
+    return parent;
+}
+
+FuseHighLevelOps::OpenBaseResult FuseHighLevelOps::open_base(absl::string_view path)
+{
+    absl::InlinedVector<std::string_view, 7> splits = absl::StrSplit(path, '/', absl::SkipEmpty());
+    auto root = ft_.open_as(kRootId, Directory::class_type());
+    if (splits.empty())
+    {
+        return {std::move(root), std::string_view()};
+    }
+    if (splits.size() == 1)
+    {
+        return {std::move(root), splits[0]};
+    }
+    auto generic_open_result = generic_open(
+        kRootId, std::move(root), absl::MakeConstSpan(splits.data(), splits.size() - 1));
+    if (!generic_open_result)
+    {
+        throwVFSException(ENOENT);
+    }
+    return {std::move(*generic_open_result), splits.back()};
 }
 FilePtrHolder
 FuseHighLevelOps::create(absl::string_view path, unsigned mode, int type, int uid, int gid)
@@ -547,10 +602,11 @@ FuseHighLevelOps::create(absl::string_view path, unsigned mode, int type, int ui
         holder->unlink();
         throwVFSException(EEXIST);
     }
-    holder->set_parent_ino(to_inode_number(base_dir->get_id()));
+    holder->set_parent_id(base_dir->get_id());
     return holder;
 }
-std::optional<FilePtrHolder> FuseHighLevelOps::open_all(absl::string_view path)
+std::optional<FilePtrHolder> FuseHighLevelOps::open_all(absl::string_view path,
+                                                        bool resolve_last_symlink)
 {
     if (path.empty() || path == "/")
     {
@@ -570,7 +626,25 @@ std::optional<FilePtrHolder> FuseHighLevelOps::open_all(absl::string_view path)
         return {};
     }
     auto holder = ft_.open_as(id, type);
-    holder->set_parent_ino(to_inode_number(base_dir->get_id()));
+    holder->set_parent_id(base_dir->get_id());
+    if (resolve_last_symlink && holder->type() == Symlink::class_type())
+    {
+        std::string target;
+        {
+            FileLockGuard lock_guard(*holder);
+            target = holder->cast_as<Symlink>()->get();
+        }
+        absl::InlinedVector<std::string_view, 7> new_splits
+            = absl::StrSplit(target, '/', absl::SkipEmpty());
+        auto current_parent_id = base_dir->get_id();    // Evaluate get_id() first and store the ID
+        auto resolved = generic_open(
+            current_parent_id, std::move(base_dir), new_splits);    // Now the move is safe
+        if (!resolved)
+        {
+            return {};
+        }
+        holder = std::move(*resolved);
+    }
     return holder;
 }
 

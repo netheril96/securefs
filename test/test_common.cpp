@@ -246,6 +246,7 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root, bool case_in
 
     {
         auto symlink_location = absl::StrCat("/cbd/", kLongFileNameExample2, "/", "sym");
+        // Target is relative to the location of the symlink itself
         std::string symlink_target
             = u8"../../888888888888888888888888888888/🧬9999999999999999999🧬/"
               "66666666666666666/🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬";
@@ -262,6 +263,163 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops, OSService& repo_root, bool case_in
                               &ctx)
                 == 0);
         CHECK(read_symlink_target == symlink_target);
+    }
+
+    {
+        // Test nested directories and relative symlinks
+        const char* real_dir0_path = "/realdir0";
+        const char* fake_dir0_path = "/fakedir0";
+        const char* fake_dir0_target = "realdir0";            // Relative target for the symlink
+        const char* real_dir1_path = "/fakedir0/realdir1";    // Will resolve to /realdir0/realdir1
+        const char* fake_file0_path = "/fakedir0/realdir1/fakefile0";
+        const char* fake_file0_target
+            = "../../../../../realfile0";    // Relative path from fake_file0_path
+        const char* real_file0_path = "/realfile0";
+        const std::string real_file0_content = "Content of the real file!";
+
+        // 1. Create realdir0
+        REQUIRE(ops.vmkdir(real_dir0_path, 0755, &ctx) == 0);
+
+        // 2. Create fakedir0 symlink (using relative target)
+        REQUIRE(ops.vsymlink(fake_dir0_target, fake_dir0_path, &ctx) == 0);
+        // Verify the symlink exists and points correctly
+        fuse_stat symlink_st{};
+        REQUIRE(ops.vgetattr(fake_dir0_path, &symlink_st, &ctx) == 0);
+        CHECK((symlink_st.st_mode & S_IFMT) == S_IFLNK);
+        CHECK(symlink_st.st_size == strlen(fake_dir0_target));
+        std::string read_link_target(symlink_st.st_size, '\0');
+        REQUIRE(ops.vreadlink(
+                    fake_dir0_path, read_link_target.data(), read_link_target.size() + 1, &ctx)
+                == 0);
+        CHECK(read_link_target == fake_dir0_target);
+
+        // 3. Create directory via the symlink path
+        REQUIRE(ops.vmkdir(real_dir1_path, 0755, &ctx) == 0);
+        // Verify the actual directory was created
+        fuse_stat real_dir1_st{};
+        REQUIRE(ops.vgetattr("/realdir0/realdir1", &real_dir1_st, &ctx) == 0);
+        CHECK((real_dir1_st.st_mode & S_IFMT) == S_IFDIR);
+
+        // 4. Create the relative symlink
+        REQUIRE(ops.vsymlink(fake_file0_target, fake_file0_path, &ctx) == 0);
+        // Verify symlink properties
+        fuse_stat fake_file0_st{};
+        REQUIRE(ops.vgetattr(fake_file0_path, &fake_file0_st, &ctx) == 0);
+        CHECK((fake_file0_st.st_mode & S_IFMT) == S_IFLNK);
+        CHECK(fake_file0_st.st_size == strlen(fake_file0_target));
+        std::string read_target(fake_file0_st.st_size, '\0');
+        REQUIRE(ops.vreadlink(fake_file0_path, read_target.data(), read_target.size() + 1, &ctx)
+                == 0);
+        CHECK(read_target == fake_file0_target);
+
+        // 5. Assert opening the symlink fails (target doesn't exist)
+        fuse_file_info open_info_fail{};
+        open_info_fail.flags = O_RDONLY;
+        CHECK(ops.vopen(fake_file0_path, &open_info_fail, &ctx) == -ENOENT);
+
+        // 6. Create the target file /realfile0
+        fuse_file_info create_info{};
+        REQUIRE(ops.vcreate(real_file0_path, 0644, &create_info, &ctx) == 0);
+        REQUIRE(ops.vwrite(real_file0_path,
+                           real_file0_content.data(),
+                           real_file0_content.size(),
+                           0,
+                           &create_info,
+                           &ctx)
+                == real_file0_content.size());
+        REQUIRE(ops.vrelease(real_file0_path, &create_info, &ctx) == 0);
+        // Verify real file exists and has correct size
+        fuse_stat real_file0_st{};
+        REQUIRE(ops.vgetattr(real_file0_path, &real_file0_st, &ctx) == 0);
+        CHECK((real_file0_st.st_mode & S_IFMT) == S_IFREG);
+        CHECK(real_file0_st.st_size == real_file0_content.size());
+
+        // 7. Assert opening the symlink now succeeds
+        fuse_file_info open_info_ok{};
+        open_info_ok.flags = O_RDONLY;
+        REQUIRE(ops.vopen(fake_file0_path, &open_info_ok, &ctx) == 0);
+
+        // 8. Read content via symlink and assert it matches
+        std::string read_content(real_file0_content.size() + 10, '\0');    // Extra space
+        auto bytes_read = ops.vread(
+            fake_file0_path, read_content.data(), read_content.size(), 0, &open_info_ok, &ctx);
+        REQUIRE(bytes_read == real_file0_content.size());
+        read_content.resize(bytes_read);
+        CHECK(read_content == real_file0_content);
+
+        REQUIRE(ops.vrelease(fake_file0_path, &open_info_ok, &ctx) == 0);
+
+        // Clean up (order matters: files, links, then dirs)
+        REQUIRE(ops.vunlink(real_file0_path, &ctx) == 0);
+        REQUIRE(ops.vunlink(fake_file0_path, &ctx) == 0);
+        REQUIRE(ops.vrmdir(real_dir1_path, &ctx) == 0);    // Remove via symlink path
+        REQUIRE(ops.vunlink(fake_dir0_path, &ctx) == 0);
+        REQUIRE(ops.vrmdir(real_dir0_path, &ctx) == 0);
+    }
+
+    {
+        // Test case: Symlink loops with relative paths
+        const char* symlink1_path = "/symlink1";
+        const char* symlink2_path = "/symlink2";
+        const char* symlink1_target = "../symlink2";    // Relative path to symlink2
+        const char* symlink2_target = "../symlink1";    // Relative path to symlink1
+
+        // Create the first symlink
+        REQUIRE(ops.vsymlink(symlink1_target, symlink1_path, &ctx) == 0);
+
+        // Create the second symlink
+        REQUIRE(ops.vsymlink(symlink2_target, symlink2_path, &ctx) == 0);
+
+        // Verify the first symlink exists and points correctly
+        fuse_stat symlink1_st{};
+        REQUIRE(ops.vgetattr(symlink1_path, &symlink1_st, &ctx) == 0);
+        CHECK((symlink1_st.st_mode & S_IFMT) == S_IFLNK);
+        CHECK(symlink1_st.st_size == strlen(symlink1_target));
+        std::string read_symlink1_target(symlink1_st.st_size, '\0');
+        REQUIRE(
+            ops.vreadlink(
+                symlink1_path, read_symlink1_target.data(), read_symlink1_target.size() + 1, &ctx)
+            == 0);
+        CHECK(read_symlink1_target == symlink1_target);
+
+        // Verify the second symlink exists and points correctly
+        fuse_stat symlink2_st{};
+        REQUIRE(ops.vgetattr(symlink2_path, &symlink2_st, &ctx) == 0);
+        CHECK((symlink2_st.st_mode & S_IFMT) == S_IFLNK);
+        CHECK(symlink2_st.st_size == strlen(symlink2_target));
+        std::string read_symlink2_target(symlink2_st.st_size, '\0');
+        REQUIRE(
+            ops.vreadlink(
+                symlink2_path, read_symlink2_target.data(), read_symlink2_target.size() + 1, &ctx)
+            == 0);
+        CHECK(read_symlink2_target == symlink2_target);
+
+        // Attempt to open the first symlink and assert it results in -ELOOP or throws
+        // VFSException(ELOOP)
+        fuse_file_info info{};
+        try
+        {
+            CHECK(ops.vopendir(symlink1_path, &info, &ctx) == -ELOOP);
+        }
+        catch (const VFSException& ex)
+        {
+            CHECK(ex.error_number() == ELOOP);
+        }
+
+        // Attempt to open the second symlink and assert it results in -ELOOP or throws
+        // VFSException(ELOOP)
+        try
+        {
+            CHECK(ops.vopendir(symlink2_path, &info, &ctx) == -ELOOP);
+        }
+        catch (const VFSException& ex)
+        {
+            CHECK(ex.error_number() == ELOOP);
+        }
+
+        // Cleanup: Remove the symlinks
+        REQUIRE(ops.vunlink(symlink1_path, &ctx) == 0);
+        REQUIRE(ops.vunlink(symlink2_path, &ctx) == 0);
     }
 
     if (!is_windows())
