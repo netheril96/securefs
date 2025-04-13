@@ -840,16 +840,12 @@ int FuseHighLevelOps::vopendir(const char* path, fuse_file_info* info, const fus
         opener_,
         read_dir_plus_);
     info->fh = reinterpret_cast<uintptr_t>(dir.release());
-    if (win_symlink_workaround)
-    {
-        LockGuard lg(win_symlink_workaround->mutex);
-        win_symlink_workaround->created_file_handle_to_path.emplace(info->fh, path);
-    }
     return 0;
 }
 int FuseHighLevelOps::vreleasedir(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
-    return vrelease(path, info, ctx);
+    delete get_base(info);
+    return 0;
 }
 int FuseHighLevelOps::vreaddir(const char* path,
                                void* buf,
@@ -882,11 +878,6 @@ int FuseHighLevelOps::vcreate(const char* path,
                               const fuse_context* ctx)
 {
     info->fh = reinterpret_cast<uintptr_t>(open(path, O_CREAT | O_EXCL | O_RDWR, mode).release());
-    if (win_symlink_workaround)
-    {
-        LockGuard lg(win_symlink_workaround->mutex);
-        win_symlink_workaround->created_file_handle_to_path.emplace(info->fh, path);
-    }
     return 0;
 }
 int FuseHighLevelOps::vopen(const char* path, fuse_file_info* info, const fuse_context* ctx)
@@ -897,33 +888,6 @@ int FuseHighLevelOps::vopen(const char* path, fuse_file_info* info, const fuse_c
 int FuseHighLevelOps::vrelease(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
     delete get_base(info);
-
-    if (win_symlink_workaround)
-    {
-        LockGuard lg(win_symlink_workaround->mutex);
-        auto it = win_symlink_workaround->created_file_handle_to_path.find(info->fh);
-        if (it != win_symlink_workaround->created_file_handle_to_path.end())
-        {
-            auto&& permanent_symlink = it->second;
-            auto itt = win_symlink_workaround->permanent_symlinks_to_temporary_symlinks.find(
-                permanent_symlink);
-            if (itt != win_symlink_workaround->permanent_symlinks_to_temporary_symlinks.end())
-            {
-                auto&& temporary_symlink = itt->second;
-                int rc
-                    = this->vrename_impl(temporary_symlink.c_str(), permanent_symlink.c_str(), ctx);
-                if (rc != 0)
-                {
-                    ERROR_LOG("Failed to finish delayed renaming %s to %s: %d",
-                              temporary_symlink,
-                              permanent_symlink,
-                              rc);
-                }
-                win_symlink_workaround->permanent_symlinks_to_temporary_symlinks.erase(itt);
-            }
-            win_symlink_workaround->created_file_handle_to_path.erase(it);
-        }
-    }
     return 0;
 }
 int FuseHighLevelOps::vread(const char* path,
@@ -970,15 +934,7 @@ int FuseHighLevelOps::vunlink(const char* path, const fuse_context* ctx)
 {
     process_possible_long_name(path,
                                LongNameComponentAction::kDelete,
-                               [&](std::string&& enc_path)
-                               {
-                                   root_.remove_file(enc_path);
-                                   if (win_symlink_workaround)
-                                   {
-                                       LockGuard<Mutex> lg(win_symlink_workaround->mutex);
-                                       win_symlink_workaround->temporary_symlinks.erase(path);
-                                   }
-                               });
+                               [&](std::string&& enc_path) { root_.remove_file(enc_path); });
     return 0;
 };
 int FuseHighLevelOps::vmkdir(const char* path, fuse_mode_t mode, const fuse_context* ctx)
@@ -997,11 +953,6 @@ int FuseHighLevelOps::vrmdir(const char* path, const fuse_context* ctx)
                                    root_.remove_file_nothrow(
                                        absl::StrCat(enc_path, "/", kLongNameTableFileName));
                                    root_.remove_directory(enc_path);
-                                   if (win_symlink_workaround)
-                                   {
-                                       LockGuard<Mutex> lg(win_symlink_workaround->mutex);
-                                       win_symlink_workaround->temporary_symlinks.erase(path);
-                                   }
                                });
     return 0;
 }
@@ -1020,23 +971,11 @@ int FuseHighLevelOps::vchown(const char* path,
 }
 int FuseHighLevelOps::vsymlink(const char* to, const char* from, const fuse_context* ctx)
 {
-    if (is_windows() && to && to[0] == '/')
-    {
-        ERROR_LOG("Symlink target %s is absolute and therefore not supported", to);
-        return -EINVAL;
-    }
-    process_possible_long_name(from,
-                               LongNameComponentAction::kCreate,
-                               [&](std::string&& enc_path)
-                               {
-                                   if (win_symlink_workaround)
-                                   {
-                                       LockGuard<Mutex> lg(win_symlink_workaround->mutex);
-                                       win_symlink_workaround->temporary_symlinks.insert(from);
-                                   }
-                                   root_.symlink(name_trans_.encrypt_path_for_symlink(to),
-                                                 enc_path);
-                               });
+    process_possible_long_name(
+        from,
+        LongNameComponentAction::kCreate,
+        [&](std::string&& enc_path)
+        { root_.symlink(name_trans_.encrypt_path_for_symlink(to), enc_path); });
     return 0;
 }
 int FuseHighLevelOps::vlink(const char* src, const char* dest, const fuse_context* ctx)
@@ -1056,7 +995,7 @@ int FuseHighLevelOps::vreadlink(const char* path, char* buf, size_t size, const 
         return 0;
     }
 
-    auto max_size = size * 2 + 127;
+    auto max_size = size / 5 * 8 + 32;
     std::vector<char> buffer(max_size);
     root_.readlink(name_trans_.encrypt_full_path(path, nullptr), buffer.data(), max_size - 1);
     std::string resolved = name_trans_.decrypt_path_from_symlink(std::string_view(buffer.data()));
@@ -1066,26 +1005,6 @@ int FuseHighLevelOps::vreadlink(const char* path, char* buf, size_t size, const 
     return 0;
 }
 int FuseHighLevelOps::vrename(const char* from, const char* to, const fuse_context* ctx)
-{
-    if (!win_symlink_workaround)
-    {
-        return vrename_impl(from, to, ctx);
-    }
-
-    UniqueLock<Mutex> lg(win_symlink_workaround->mutex);
-    auto it = win_symlink_workaround->temporary_symlinks.find(from);
-    if (it == win_symlink_workaround->temporary_symlinks.end())
-    {
-        // This is a normal rename
-        lg.unlock();
-        return vrename_impl(from, to, ctx);
-    }
-    // This is a delayed rename
-    win_symlink_workaround->permanent_symlinks_to_temporary_symlinks.try_emplace(to, from);
-    win_symlink_workaround->temporary_symlinks.erase(it);
-    return 0;
-}
-int FuseHighLevelOps::vrename_impl(const char* from, const char* to, const fuse_context* ctx)
 {
     std::string encrypted_last_component_from, encrypted_last_component_to;
     auto enc_from = name_trans_.encrypt_full_path(from, &encrypted_last_component_from);

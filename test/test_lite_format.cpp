@@ -43,10 +43,7 @@ namespace
         CHECK(NameTranslator::remove_last_component("/cc/abcde") == "/cc/");
     }
 
-    fruit::Component<StreamOpener,
-                     XattrCryptor,
-                     fruit::Annotated<tNameMasterKey, key_type>,
-                     fruit::Annotated<tEnableSymlink, bool>>
+    fruit::Component<StreamOpener, XattrCryptor, fruit::Annotated<tNameMasterKey, key_type>>
     get_test_component()
     {
         return fruit::createComponent()
@@ -61,8 +58,7 @@ namespace
             .registerProvider<fruit::Annotated<tVerify, bool>()>([]() { return true; })
             .registerProvider<fruit::Annotated<tBlockSize, unsigned>()>([]() { return 64u; })
             .registerProvider<fruit::Annotated<tIvSize, unsigned>()>([]() { return 12u; })
-            .registerProvider<fruit::Annotated<tMaxPaddingSize, unsigned>()>([]() { return 24u; })
-            .registerProvider<fruit::Annotated<tEnableSymlink, bool>()>([]() { return true; });
+            .registerProvider<fruit::Annotated<tMaxPaddingSize, unsigned>()>([]() { return 24u; });
     }
 
     TEST_CASE("case folding name translator")

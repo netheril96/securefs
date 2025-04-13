@@ -9,11 +9,8 @@
 #include "tags.h"
 #include "thread_local.h"
 
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/flat_hash_set.h>
 #include <absl/functional/function_ref.h>
 #include <absl/strings/string_view.h>
-#include <absl/synchronization/mutex.h>
 #include <array>
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
@@ -275,14 +272,9 @@ public:
     INJECT(FuseHighLevelOps(::securefs::OSService& root,
                             StreamOpener& opener,
                             NameTranslator& name_trans,
-                            XattrCryptor& xattr,
-                            ANNOTATED(tEnableSymlink, bool) enable_symlink))
+                            XattrCryptor& xattr))
         : root_(root), opener_(opener), name_trans_(name_trans), xattr_(xattr)
     {
-        if (is_windows() && enable_symlink)
-        {
-            win_symlink_workaround = std::make_unique<WinSymlinkWorkAround>();
-        }
     }
 
     void initialize(fuse_conn_info* info) override;
@@ -353,6 +345,13 @@ public:
     int vremovexattr(const char* path, const char* name, const fuse_context* ctx) override;
 
 private:
+    ::securefs::OSService& root_;
+    StreamOpener& opener_;
+    NameTranslator& name_trans_;
+    XattrCryptor& xattr_;
+    bool read_dir_plus_ = false;
+
+private:
     std::unique_ptr<File> open(std::string_view path, int flags, unsigned mode);
 
     enum class LongNameComponentAction : unsigned char
@@ -362,29 +361,10 @@ private:
         kIgnore = 2,
     };
 
-    struct WinSymlinkWorkAround
-    {
-        Mutex mutex;
-        absl::flat_hash_map<uintptr_t, std::string>
-            created_file_handle_to_path ABSL_GUARDED_BY(mutex);
-        absl::flat_hash_set<std::string> temporary_symlinks ABSL_GUARDED_BY(mutex);
-        absl::flat_hash_map<std::string, std::string>
-            permanent_symlinks_to_temporary_symlinks ABSL_GUARDED_BY(mutex);
-    };
-
     void process_possible_long_name(absl::string_view path,
                                     LongNameComponentAction action,
                                     absl::FunctionRef<void(std::string&& enc_path)> callback);
 
     std::string long_name_table_file_name(absl::string_view enc_path);
-    int vrename_impl(const char* from, const char* to, const fuse_context* ctx);
-
-private:
-    ::securefs::OSService& root_;
-    StreamOpener& opener_;
-    NameTranslator& name_trans_;
-    XattrCryptor& xattr_;
-    std::unique_ptr<WinSymlinkWorkAround> win_symlink_workaround;
-    bool read_dir_plus_ = false;
 };
 }    // namespace securefs::lite_format

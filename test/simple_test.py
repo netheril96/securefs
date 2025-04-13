@@ -76,7 +76,6 @@ def securefs_mount(
         mount_point,
         "--normalization",
         "none",
-        "--win-symlink",
     ]
     if password:
         command.append("--pass")
@@ -426,15 +425,18 @@ def make_test_case(
                     set(os.listdir(os.path.join(self.mount_point, "k" * 200))),
                     {"🎈" * 2},
                 )
-                os.symlink(
-                    "b🔼🎈" * 30,
-                    os.path.join(self.mount_point, "k" * 200, "🔼" * 64),
-                )
-                self.assertEqual(
-                    "b🔼🎈" * 30,
-                    os.readlink(os.path.join(self.mount_point, "k" * 200, "🔼" * 64)),
-                )
+
                 if sys.platform != "win32":
+                    os.symlink(
+                        "b🔼🎈" * 30,
+                        os.path.join(self.mount_point, "k" * 200, "🔼" * 64),
+                    )
+                    self.assertEqual(
+                        "b🔼🎈" * 30,
+                        os.readlink(
+                            os.path.join(self.mount_point, "k" * 200, "🔼" * 64)
+                        ),
+                    )
                     os.link(
                         os.path.join(self.mount_point, "k" * 200, "🎈" * 2),
                         os.path.join(self.mount_point, "k" * 200, "✅" * 60),
@@ -447,6 +449,7 @@ def make_test_case(
                     )
                 all_names = os.listdir(os.path.join(self.mount_point, "k" * 200))
                 if sys.platform != "win32":
+                    self.assertIn("b🔼🎈" * 30, all_names)
                     self.assertIn("✅" * 60, all_names)
                     self.assertIn("🎈" * 2, all_names)
                 self.assertIn("🔼" * 64, all_names)
@@ -505,61 +508,65 @@ def make_test_case(
                     except EnvironmentError:
                         pass
 
-        def test_symlink(self):
-            data = os.urandom(16)
-            source = str(uuid.uuid4())
-            dest = str(uuid.uuid4())
-            cwd: str = os.getcwd()
-            os.chdir(self.mount_point)
-            try:
-                with open(source, "wb") as f:
-                    f.write(data)
-                os.symlink(source, dest)
-                dir_entries = list(os.scandir("."))
-                self.assertIn(os.path.basename(dest), [d.name for d in dir_entries])
-                self.assertTrue(
-                    next(
-                        d for d in dir_entries if d.name == os.path.basename(dest)
-                    ).is_symlink()
-                )
-                self.assertEqual(os.readlink(dest), source)
-                with open(dest, "rb") as f:
-                    self.assertEqual(data, f.read())
+        if sys.platform != "win32" or fmt == RepoFormat.FULL:
 
-                os.makedirs("ccc", exist_ok=True)
-                dest2 = "ccc/" + str(uuid.uuid4())
-                os.rename(dest, dest2)
-                dir_entries = list(os.scandir("ccc"))
-                self.assertIn(os.path.basename(dest2), [d.name for d in dir_entries])
-                self.assertTrue(
-                    next(
-                        d for d in dir_entries if d.name == os.path.basename(dest2)
-                    ).is_symlink()
-                )
-                self.assertEqual(os.readlink(dest2), source)
-                with self.assertRaises(EnvironmentError):
+            def test_symlink(self):
+                data = os.urandom(16)
+                source = str(uuid.uuid4())
+                dest = str(uuid.uuid4())
+                cwd: str = os.getcwd()
+                os.chdir(self.mount_point)
+                try:
+                    with open(source, "wb") as f:
+                        f.write(data)
+                    os.symlink(source, dest)
+                    dir_entries = list(os.scandir("."))
+                    self.assertIn(os.path.basename(dest), [d.name for d in dir_entries])
+                    self.assertTrue(
+                        next(
+                            d for d in dir_entries if d.name == os.path.basename(dest)
+                        ).is_symlink()
+                    )
+                    self.assertEqual(os.readlink(dest), source)
+                    with open(dest, "rb") as f:
+                        self.assertEqual(data, f.read())
+
+                    os.makedirs("ccc", exist_ok=True)
+                    dest2 = "ccc/" + str(uuid.uuid4())
+                    os.rename(dest, dest2)
+                    dir_entries = list(os.scandir("ccc"))
+                    self.assertIn(
+                        os.path.basename(dest2), [d.name for d in dir_entries]
+                    )
+                    self.assertTrue(
+                        next(
+                            d for d in dir_entries if d.name == os.path.basename(dest2)
+                        ).is_symlink()
+                    )
+                    self.assertEqual(os.readlink(dest2), source)
+                    with self.assertRaises(EnvironmentError):
+                        with open(dest2, "rb") as f:
+                            f.read()
+                    os.rename(source, "ccc/" + source)
                     with open(dest2, "rb") as f:
-                        f.read()
-                os.rename(source, "ccc/" + source)
-                with open(dest2, "rb") as f:
-                    self.assertEqual(data, f.read())
+                        self.assertEqual(data, f.read())
 
-                dest3 = "📚🔐🔓📗😂🤣❤️😍😶‍🌫️"
-                os.symlink("ccc", dest3, target_is_directory=True)
-                dir_entries = list(os.scandir("."))
-                self.assertIn(dest3, [d.name for d in dir_entries])
-                self.assertTrue(
-                    next(d for d in dir_entries if d.name == dest3).is_symlink()
-                )
-                self.assertTrue(
-                    next(d for d in dir_entries if d.name == dest3).is_dir()
-                )
-                with open(os.path.join(dest3, os.path.basename(dest2)), "rb") as f:
-                    self.assertEqual(data, f.read())
-            finally:
-                for d in os.scandir("."):
-                    shutil.rmtree(d.name, ignore_errors=True)
-                os.chdir(cwd)
+                    dest3 = "📚🔐🔓📗😂🤣❤️😍😶‍🌫️"
+                    os.symlink("ccc", dest3, target_is_directory=True)
+                    dir_entries = list(os.scandir("."))
+                    self.assertIn(dest3, [d.name for d in dir_entries])
+                    self.assertTrue(
+                        next(d for d in dir_entries if d.name == dest3).is_symlink()
+                    )
+                    self.assertTrue(
+                        next(d for d in dir_entries if d.name == dest3).is_dir()
+                    )
+                    with open(os.path.join(dest3, os.path.basename(dest2)), "rb") as f:
+                        self.assertEqual(data, f.read())
+                finally:
+                    for d in os.scandir("."):
+                        shutil.rmtree(d.name, ignore_errors=True)
+                    os.chdir(cwd)
 
         if sys.platform == "win32":
 

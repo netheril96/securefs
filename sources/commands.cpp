@@ -534,11 +534,6 @@ private:
                                      "",
                                      "path",
                                      cmdline()};
-    TCLAP::SwitchArg win_symlink{
-        "",
-        "win-symlink",
-        "Enable symlink support on Windows at the cost of performance. No effect otherwise.",
-        cmdline()};
     TCLAP::MultiArg<std::string> fuse_options{
         "o",
         "opt",
@@ -797,10 +792,7 @@ private:
                 })
             .registerProvider<fruit::Annotated<tCaseInsensitive, bool>(const MountCommand&)>(
                 [](const MountCommand& cmd)
-                { return cmd.fsparams.full_format_params().case_insensitive(); })
-            .registerProvider<fruit::Annotated<tEnableSymlink, bool>(const MountCommand&)>(
-                [](const MountCommand& cmd)
-                { return !is_windows() || cmd.win_symlink.getValue(); });
+                { return cmd.fsparams.full_format_params().case_insensitive(); });
     }
 
     bool should_use_ino()
@@ -1047,7 +1039,7 @@ public:
 #endif
         auto high_level_ops = injector.get<FuseHighLevelOpsBase*>();
         auto fuse_callbacks = FuseHighLevelOpsBase::build_ops(
-            high_level_ops, native_xattr, !is_windows() || win_symlink.getValue());
+            high_level_ops, native_xattr, !is_windows() || fsparams.has_full_format_params());
         VERBOSE_LOG("Calling fuse_main with arguments: %s", escape_args(fuse_args));
         return my_fuse_main(static_cast<int>(fuse_args.size()),
                             const_cast<char**>(to_c_style_args(fuse_args).data()),
