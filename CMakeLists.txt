@@ -125,7 +125,13 @@ target_link_libraries(securefs-static PUBLIC ${FRUIT_LIBRARY})
 
 if(UNIX)
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(FUSE fuse REQUIRED)
+
+    if(SECUREFS_USE_FUSET)
+        pkg_check_modules(FUSE fuse-t REQUIRED)
+    else()
+        pkg_check_modules(FUSE fuse REQUIRED)
+    endif()
+
     target_include_directories(securefs-static SYSTEM AFTER
                                PUBLIC ${FUSE_INCLUDE_DIRS})
     target_link_libraries(securefs-static PUBLIC ${FUSE_LDFLAGS})
