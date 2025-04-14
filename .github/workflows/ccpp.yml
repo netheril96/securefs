@@ -45,6 +45,7 @@ jobs:
           add-paths: docs/
           title: Auto PR for usage.md
           commit-message: Auto update usage.md
+
   build-mac:
     runs-on: macos-13
     timeout-minutes: 35
@@ -131,9 +132,35 @@ jobs:
           cache-key: windows-latest
           github-binarycache: true
       - name: build-test
-        run: python3 build.py --clang_cl --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build --build_type Debug
+        run: python3 build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build --build_type Debug
       - name: upload
         uses: actions/upload-artifact@v4
         with:
           path: build/Debug/securefs.exe
           name: securefs-windows-amd64
+
+  build-windows-clang-cl:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+      - name: Enable Developer Mode
+        run:  reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1
+      - name: install
+        run: choco install winfsp
+      - name: vcpkg build
+        uses: johnwason/vcpkg-action@v6
+        id: vcpkg
+        with:
+          manifest-dir: ${{ github.workspace }}
+          triplet: x64-windows-static-md
+          token: ${{ github.token }}
+          cache-key: windows-latest
+          github-binarycache: true
+      - name: build-test
+        run: python3 build.py --clang_cl --enable_unit_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build --build_type Debug
