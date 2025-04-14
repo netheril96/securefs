@@ -77,6 +77,37 @@ jobs:
           path: build/securefs
           name: securefs-macos-amd64
 
+  build-mac-fuse-t:
+    runs-on: macos-13
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+      - name: pip
+        run: pip install xattr
+      - name: install
+        run: brew tap macos-fuse-t/homebrew-cask && brew install fuse-t
+      - name: vcpkg build
+        uses: johnwason/vcpkg-action@v6
+        id: vcpkg
+        with:
+          manifest-dir: ${{ github.workspace }}
+          triplet: x64-osx
+          token: ${{ github.token }}
+          cache-key: macos-13-x64
+          github-binarycache: true
+      - name: build
+        run: python3 build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build --build_type Debug --cmake_defines SECUREFS_USE_FUSET=ON
+      - name: upload
+        uses: actions/upload-artifact@v4
+        with:
+          path: build/securefs
+          name: securefs-macos-fuse-t-amd64
+
   build-mac-arm64:
     runs-on: macos-13
     timeout-minutes: 35
