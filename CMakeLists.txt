@@ -170,8 +170,9 @@ endif()
 if(SECUREFS_ENABLE_UNIT_TEST)
     add_executable(securefs_test ${TEST_SOURCES})
     find_package(doctest CONFIG REQUIRED)
-    target_link_libraries(securefs_test PRIVATE doctest::doctest
-                                                securefs-static)
+    target_link_libraries(
+        securefs_test PRIVATE doctest::doctest absl::failure_signal_handler
+                              securefs-static)
     add_test(
         NAME sec_test
         COMMAND
