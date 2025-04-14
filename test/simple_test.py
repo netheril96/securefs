@@ -25,6 +25,7 @@ import multiprocessing
 import random
 import secrets
 import io
+from concurrent.futures import ProcessPoolExecutor, TimeoutError as FuturesTimeoutError
 
 faulthandler.enable()
 
@@ -59,6 +60,28 @@ if sys.platform == "win32":
 else:
     ismount = os.path.ismount
     statvfs = os.statvfs
+
+
+def is_mount_then_statvfs(mount_point: str) -> bool:
+    try:
+        ismounted: bool = ismount(mount_point)
+        if not ismounted:
+            return False
+        # This forces initialization of FUSE
+        statvfs(mount_point)
+        return True
+    except EnvironmentError:
+        traceback.print_exc()
+        return False
+
+
+def is_mount_then_statvfs_with_timeout(mount_point: str, timeout: float = 1.0) -> bool:
+    with ProcessPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(is_mount_then_statvfs, mount_point)
+        try:
+            return future.result(timeout=timeout)
+        except FuturesTimeoutError:
+            return False
 
 
 def securefs_mount(
@@ -97,14 +120,10 @@ def securefs_mount(
     )
     try:
         for _ in range(300):
-            try:
-                if ismount(mount_point):
-                    statvfs(mount_point)
-                    if sys.platform == "darwin":
-                        time.sleep(0.01)
-                    return p
-            except EnvironmentError:
-                traceback.print_exc()
+            if is_mount_then_statvfs_with_timeout(mount_point, timeout=10.0):
+                if sys.platform == "darwin":
+                    time.sleep(0.01)
+                return p
             time.sleep(0.005)
         raise TimeoutError(f"Failed to mount {repr(mount_point)} after many attempts")
     except:
