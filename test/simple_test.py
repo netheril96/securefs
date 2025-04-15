@@ -25,7 +25,6 @@ import multiprocessing
 import random
 import secrets
 import io
-from concurrent.futures import ProcessPoolExecutor, TimeoutError as FuturesTimeoutError
 
 faulthandler.enable()
 
@@ -75,14 +74,6 @@ def is_mount_then_statvfs(mount_point: str) -> bool:
         return False
 
 
-def is_mount_then_statvfs_with_timeout(mount_point: str, timeout: float = 1.0) -> bool:
-    with ProcessPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(is_mount_then_statvfs, mount_point)
-        try:
-            return future.result(timeout=timeout)
-        except FuturesTimeoutError:
-            return False
-
 
 def securefs_mount(
     data_dir: str,
@@ -119,16 +110,14 @@ def securefs_mount(
         ),
     )
     try:
-        for _ in range(300):
-            if is_mount_then_statvfs_with_timeout(mount_point, timeout=10.0):
-                if sys.platform == "darwin":
-                    time.sleep(0.01)
+        for _ in range(600):
+            time.sleep(0.05)
+            if is_mount_then_statvfs(mount_point):
                 return p
-            time.sleep(0.005)
         raise TimeoutError(f"Failed to mount {repr(mount_point)} after many attempts")
     except:
         p.communicate(timeout=0.1)
-        p.kill()
+        securefs_unmount(p=p, mount_point=mount_point)
         raise
 
 
@@ -137,7 +126,7 @@ def securefs_unmount(p: subprocess.Popen, mount_point: str):
     with p:
         if sys.platform == "win32":
             p.send_signal(signal.CTRL_BREAK_EVENT)
-        elif sys.platform == "linux":
+        else:
             p.send_signal(signal.SIGINT)
         p.wait(timeout=5)
         if p.returncode:
@@ -328,7 +317,7 @@ def is_freebsd():
     + [
         (
             RepoFormat.LITE,
-            SecretInputMode.KEYFILE2,
+            SecretInputMode.PASSWORD_WITH_KEYFILE2,
             3,
             True,
             Sensitivity.SENSITIVE,
@@ -336,7 +325,7 @@ def is_freebsd():
         ),
         (
             RepoFormat.FULL,
-            SecretInputMode.KEYFILE2,
+            SecretInputMode.PASSWORD_WITH_KEYFILE2,
             3,
             False,
             Sensitivity.INSENSITIVE,
@@ -344,7 +333,7 @@ def is_freebsd():
         ),
         (
             RepoFormat.FULL,
-            SecretInputMode.KEYFILE2,
+            SecretInputMode.PASSWORD_WITH_KEYFILE2,
             15,
             False,
             Sensitivity.SENSITIVE,
@@ -734,8 +723,8 @@ def make_test_case(
                 finally:
                     shutil.rmtree(os.path.join(self.mount_point, "AbcDefG"))
 
-        if not plain_text_names and uninorm == Sensitivity.INSENSITIVE:
-
+        if not plain_text_names and uninorm == Sensitivity.INSENSITIVE and sys.platform != 'darwin':
+            # FUSE-T has its own normalization handling so we don't test this
             def test_uninorm_insensitive(self):
                 names = ["\u212bABV\u212b", "\u2126666", "333\u1e69", "\u1e0b\u0323..."]
 
