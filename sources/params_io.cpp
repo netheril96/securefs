@@ -307,7 +307,6 @@ DecryptedSecurefsParams decrypt(const EncryptedSecurefsParams& encparams,
     }
     return result;
 }
-
 EncryptedSecurefsParams encrypt(const DecryptedSecurefsParams& decparams,
                                 const EncryptedSecurefsParams::Argon2idParams& argon2id_params,
                                 absl::Span<const byte> password,

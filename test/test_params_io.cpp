@@ -28,10 +28,11 @@ namespace
         return dir;
     }
 
-    TEST_CASE("Decrypte legacy config")
+    TEST_CASE("Decrypt legacy config")
     {
         OSService root(refdir());
-        google::protobuf::util::MessageDifferencer differ;
+        auto differ
+            = std::make_unique<google::protobuf::util::MessageDifferencer>();
         EncryptedSecurefsParams::Argon2idParams argon2id_params;
         argon2id_params.set_memory_cost(64);
         argon2id_params.set_parallelism(2);
@@ -96,7 +97,7 @@ namespace
                         params.back(), argon2id_params, as_byte_span(password), key_stream.get());
                     auto decrypted_again
                         = decrypt(encparams, as_byte_span(password), key_stream.get());
-                    CHECK(differ.Compare(decrypted_again, params.back()));
+                    CHECK(differ->Compare(decrypted_again, params.back()));
 
                     CHECK_THROWS(decrypt(content, as_byte_span("ABC"), key_stream.get()));
                 }
@@ -104,7 +105,7 @@ namespace
                 REQUIRE(params.size() > 1);
                 for (size_t i = 1; i < params.size(); ++i)
                 {
-                    REQUIRE(differ.Compare(params[i - 1], params[i]));
+                    REQUIRE(differ->Compare(params[i - 1], params[i]));
                 }
             }
         }
