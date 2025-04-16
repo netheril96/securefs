@@ -56,8 +56,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.8"
-      - name: pip
-        run: pip install xattr
       - name: install
         run: brew install macfuse
       - name: vcpkg build
@@ -87,8 +85,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.8"
-      - name: pip
-        run: pip install xattr
+      - name: venv
+        run: 
+          python3 -m venv .venv
+          .venv/bin/pip install -U xattr
       - name: install
         run: brew tap macos-fuse-t/homebrew-cask && brew install fuse-t
       - name: vcpkg build
@@ -101,7 +101,7 @@ jobs:
           cache-key: macos-13-x64
           github-binarycache: true
       - name: build
-        run: python3 build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build --build_type Debug --cmake_defines SECUREFS_USE_FUSET=ON
+        run: .venv/bin/python build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build --build_type Debug --cmake_defines SECUREFS_USE_FUSET=ON
       - name: upload
         uses: actions/upload-artifact@v4
         with:
@@ -118,8 +118,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.8"
-      - name: pip
-        run: pip install xattr
       - name: install
         run: brew install macfuse
       - name: vcpkg build
