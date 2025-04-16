@@ -10,8 +10,8 @@ env:
   PYTHONUTF8: 1
   GITHUB_TOKEN: ${{ github.token }}
   VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
-jobs:
 
+jobs:
   build-ubuntu:
     runs-on: ubuntu-22.04
     timeout-minutes: 75
@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: "3.8"
       - name: install
-        run: sudo apt-get install fuse libfuse-dev clang-12
+        run: sudo apt-get install fuse libfuse-dev clang-15
       - name: Get latest Github release of vcpkg
         uses: cardinalby/git-get-release-action@v1
         id: get-latest-vcpkg-release
@@ -37,10 +37,18 @@ jobs:
           repository: microsoft/vcpkg
           ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
           fetch-depth: 1
+      - name: cache-vcpkg
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/build/vcpkg_installed
+          key: release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
+            release-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
         env:
-          CC: clang-12
-          CXX: clang++-12
+          CC: clang-15
+          CXX: clang++-15
           VCPKG_KEEP_ENV_VARS: "CC;CXX"
         run: python3 build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build
       - name: upload
@@ -58,7 +66,7 @@ jobs:
         with:
           python-version: "3.8"
       - name: install
-        run: sudo apt-get install fuse libfuse-dev clang-12
+        run: sudo apt-get install fuse libfuse-dev clang-15
       - name: Get latest Github release of vcpkg
         uses: cardinalby/git-get-release-action@v1
         id: get-latest-vcpkg-release
@@ -74,10 +82,18 @@ jobs:
           repository: microsoft/vcpkg
           ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
           fetch-depth: 1
+      - name: cache-vcpkg
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/build/vcpkg_installed
+          key: release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
+            release-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
         env:
-          CC: clang-12
-          CXX: clang++-12
+          CC: clang-15
+          CXX: clang++-15
           VCPKG_KEEP_ENV_VARS: "CC;CXX"
         run: python3 build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build
       - name: upload
@@ -111,6 +127,14 @@ jobs:
           repository: microsoft/vcpkg
           ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
           fetch-depth: 1
+      - name: cache-vcpkg
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/build/vcpkg_installed
+          key: release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
+            release-${{ runner.os }}-${{ runner.arch }}-
       - name: build
         run: python3 build.py --lto --enable_unit_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build
       - name: upload
@@ -144,6 +168,14 @@ jobs:
           repository: microsoft/vcpkg
           ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
           fetch-depth: 1
+      - name: cache-vcpkg
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/build/vcpkg_installed
+          key: release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
+            release-${{ runner.os }}-${{ runner.arch }}-
       - name: build
         run: python3 build.py --lto --enable_unit_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build
       - name: upload
@@ -183,6 +215,14 @@ jobs:
           repository: microsoft/vcpkg
           ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
           fetch-depth: 1
+      - name: cache-vcpkg
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/build/vcpkg_installed
+          key: release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
+            release-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
         run: .venv/bin/python build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build --build_type Release --cmake_defines SECUREFS_USE_FUSET=ON
       - name: upload
@@ -222,6 +262,14 @@ jobs:
           repository: microsoft/vcpkg
           ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
           fetch-depth: 1
+      - name: cache-vcpkg
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/build/vcpkg_installed
+          key: release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
+            release-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
         run: .venv/bin/python build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build --build_type Release --cmake_defines SECUREFS_USE_FUSET=ON
       - name: upload
@@ -257,6 +305,14 @@ jobs:
           repository: microsoft/vcpkg
           ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
           fetch-depth: 1
+      - name: cache-vcpkg
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/build/vcpkg_installed
+          key: release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
+            release-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
         run: python3 build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build
       - name: upload
@@ -285,6 +341,14 @@ jobs:
           repository: microsoft/vcpkg
           ref: '2025.01.13'
           fetch-depth: 1
+      - name: cache-vcpkg
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/build/vcpkg_installed
+          key: release-freebsd-'2025.01.13'-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            release-freebsd-'2025.01.13'-
+            release-freebsd-
       - name: Test in FreeBSD
         id: freebsd
         uses: vmactions/freebsd-vm@v1
