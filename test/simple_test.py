@@ -128,7 +128,10 @@ def securefs_unmount(p: subprocess.Popen, mount_point: str):
         else:
             p.send_signal(signal.SIGINT)
         time.sleep(0.017)
-        os.lstat(mount_point) # Trigger the next action of FUSE to unmount
+        try:
+            os.lstat(mount_point) # Trigger the next action of FUSE to unmount
+        except EnvironmentError:
+            pass
         p.wait(timeout=5)
         if p.returncode:
             logging.error("securefs exited with non-zero code: %d", p.returncode)
