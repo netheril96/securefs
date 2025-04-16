@@ -163,9 +163,9 @@ jobs:
         with:
           python-version: "3.8"
       - name: venv
-        run: 
-          python3 -m venv .venv
-          .venv/bin/pip install -U xattr
+        run:
+          python3 -m venv .venv;
+          .venv/bin/pip install -U xattr;
       - name: install
         run: brew tap macos-fuse-t/homebrew-cask && brew install fuse-t
       - name: Get latest Github release of vcpkg
@@ -202,9 +202,9 @@ jobs:
         with:
           python-version: "3.8"
       - name: venv
-        run: |
-          python3 -m venv .venv
-          .venv/bin/pip install -U xattr
+        run:
+          python3 -m venv .venv;
+          .venv/bin/pip install -U xattr;
       - name: install
         run: brew tap macos-fuse-t/homebrew-cask && brew install fuse-t
       - name: Get latest Github release of vcpkg
