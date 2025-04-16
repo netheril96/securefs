@@ -13,7 +13,7 @@ env:
 jobs:
 
   build-ubuntu:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
@@ -120,7 +120,7 @@ jobs:
           name: securefs-macos-amd64-release
 
   build-mac-arm64:
-    runs-on: macos-13
+    runs-on: macos-13-xlarge
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
@@ -128,7 +128,7 @@ jobs:
         with:
           python-version: "3.8"
       - name: install
-        run: brew install macfuse
+        run: brew install macfuse && pip install xattr
       - name: Get latest Github release of vcpkg
         uses: cardinalby/git-get-release-action@v1
         id: get-latest-vcpkg-release
@@ -145,7 +145,7 @@ jobs:
           ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
           fetch-depth: 1
       - name: build
-        run: python3 build.py --lto --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build --cmake_defines CMAKE_OSX_ARCHITECTURES=arm64
+        run: python3 build.py --lto --enable_unit_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build
       - name: upload
         uses: actions/upload-artifact@v4
         with:
@@ -189,7 +189,46 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: build/securefs
-          name: securefs-macos-fuse-t-amd64
+          name: securefs-macos-fuse-t-amd64-release
+
+  build-mac-fuse-t-arm64:
+    runs-on: macos-13-xlarge
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+      - name: venv
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -U xattr
+      - name: install
+        run: brew tap macos-fuse-t/homebrew-cask && brew install fuse-t
+      - name: Get latest Github release of vcpkg
+        uses: cardinalby/git-get-release-action@v1
+        id: get-latest-vcpkg-release
+        with:
+          latest: true
+          repo: microsoft/vcpkg
+          prerelease: false
+          draft: false
+      - name: checkout-vcpkg
+        uses: actions/checkout@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg
+          repository: microsoft/vcpkg
+          ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
+          fetch-depth: 1
+      - name: build-test
+        run: .venv/bin/python build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build --build_type Release --cmake_defines SECUREFS_USE_FUSET=ON
+      - name: upload
+        uses: actions/upload-artifact@v4
+        with:
+          path: build/securefs
+          name: securefs-macos-fuse-t-arm64-release
 
   build-windows:
     runs-on: windows-latest
