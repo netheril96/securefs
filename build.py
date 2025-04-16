@@ -77,6 +77,11 @@ def main():
         help="Override the default vcpkg triplet",
     )
     parser.add_argument(
+        "--host_triplet",
+        default="" if os.name != "nt" else "x64-windows-static-md",
+        help="Override the default vcpkg host triplet",
+    )
+    parser.add_argument(
         "--cmake_defines",
         default=[],
         nargs="*",
@@ -108,6 +113,8 @@ def main():
         configure_args += ["-T", "ClangCL"]
     if args.triplet:
         configure_args.append("-DVCPKG_TARGET_TRIPLET=" + args.triplet)
+    if args.host_triplet:
+        configure_args.append("-DVCPKG_HOST_TRIPLET=" + args.host_triplet)
     if not args.enable_unit_test:
         configure_args.append("-DSECUREFS_ENABLE_UNIT_TEST=OFF")
     if not args.enable_integration_test:
