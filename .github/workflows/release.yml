@@ -144,7 +144,7 @@ jobs:
           name: securefs-macos-amd64-release
 
   build-mac-arm64:
-    runs-on: macos-13-xlarge
+    runs-on: macos-13
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
@@ -172,12 +172,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
-          key: release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
+          key: release-${{ runner.os }}-arm64-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
-            release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
-            release-${{ runner.os }}-${{ runner.arch }}-
+            release-${{ runner.os }}-arm64-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
+            release-${{ runner.os }}-arm64-
       - name: build
-        run: python3 build.py --lto --enable_unit_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build
+        run: python3 build.py --lto --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build --cmake_defines CMAKE_OSX_ARCHITECTURES=arm64
       - name: upload
         uses: actions/upload-artifact@v4
         with:
@@ -232,7 +232,7 @@ jobs:
           name: securefs-macos-fuse-t-amd64-release
 
   build-mac-fuse-t-arm64:
-    runs-on: macos-13-xlarge
+    runs-on: macos-13
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
@@ -266,12 +266,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
-          key: release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
+          key: release-${{ runner.os }}-arm64-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
-            release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
-            release-${{ runner.os }}-${{ runner.arch }}-
+            release-${{ runner.os }}-arm64-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
+            release-${{ runner.os }}-arm64-
       - name: build-test
-        run: .venv/bin/python build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build --build_type Release --cmake_defines SECUREFS_USE_FUSET=ON
+        run: .venv/bin/python build.py --lto --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build --build_type Release --cmake_defines SECUREFS_USE_FUSET=ON CMAKE_OSX_ARCHITECTURES=arm64
       - name: upload
         uses: actions/upload-artifact@v4
         with:
