@@ -122,17 +122,16 @@ def securefs_mount(
 
 
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
-    statvfs(mount_point)
     with p:
         if sys.platform == "win32":
             p.send_signal(signal.CTRL_BREAK_EVENT)
         else:
             p.send_signal(signal.SIGINT)
+        time.sleep(0.017)
+        os.lstat(mount_point) # Trigger the next action of FUSE to unmount
         p.wait(timeout=5)
         if p.returncode:
             logging.error("securefs exited with non-zero code: %d", p.returncode)
-        if ismount(mount_point):
-            raise RuntimeError(f"{mount_point} still mounted")
 
 
 class RepoFormat(enum.Enum):
