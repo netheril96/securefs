@@ -113,7 +113,7 @@ jobs:
           name: securefs-macos-fuse-t-amd64
 
   build-windows:
-    needs: get-latest-vcpkg-release
+    needs: [get-latest-vcpkg-release, build-windows-clang-cl]
     runs-on: windows-latest
     timeout-minutes: 75
     steps:
@@ -152,7 +152,7 @@ jobs:
 
   # Compile time validation only.
   build-windows-clang-cl:
-    needs: [get-latest-vcpkg-release, build-windows]
+    needs: get-latest-vcpkg-release
     runs-on: windows-latest
     timeout-minutes: 75
     steps:
