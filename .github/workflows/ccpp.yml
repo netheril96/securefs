@@ -173,6 +173,7 @@ jobs:
   # Only validate the build with clang-cl.
   # clang has many compile time validations that other compilers don't have, such as thread safety validation.
   build-windows-clang-cl:
+    needs: build-windows
     runs-on: windows-latest
     timeout-minutes: 75
     steps:
