@@ -77,8 +77,8 @@ namespace
                                                          .install(get_test_component);
                                                  });
         auto t = injector.get<NameTranslator*>();
-        CHECK(t->encrypt_full_path(u8"/abCDe/ß", nullptr)
-              == t->encrypt_full_path(u8"/ABCde/ss", nullptr));
+        CHECK(t->encrypt_full_path("/abCDe/ß", nullptr)
+              == t->encrypt_full_path("/ABCde/ss", nullptr));
     }
 
     TEST_CASE("Unicode normalizing name translator")

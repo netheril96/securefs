@@ -51,12 +51,12 @@ namespace securefs::testing
 namespace
 {
     constexpr std::string_view kLongFileNameExample1
-        = u8"✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅"
-          u8"✅"
+        ="✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅"
+          "✅"
           "✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅";
     static_assert(kLongFileNameExample1.size() > 240 && kLongFileNameExample1.size() < 255);
 
-    constexpr std::string_view kLongFileNameExample2 = u8"🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️";
+    constexpr std::string_view kLongFileNameExample2 = "🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️🛡️";
     static_assert(kLongFileNameExample2.size() > 240 && kLongFileNameExample2.size() < 255);
 
     using ListDirResult = std::vector<std::pair<std::string, fuse_stat>>;
@@ -251,7 +251,7 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops,
         auto symlink_location = absl::StrCat("/cbd/", kLongFileNameExample2, "/", "sym");
         // Target is relative to the location of the symlink itself
         std::string symlink_target
-            = u8"../../888888888888888888888888888888/🧬9999999999999999999🧬/"
+            = "../../888888888888888888888888888888/🧬9999999999999999999🧬/"
               "66666666666666666/🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬🧬";
         REQUIRE(ops.vsymlink(symlink_target.c_str(), symlink_location.c_str(), &ctx) == 0);
         fuse_stat st{};

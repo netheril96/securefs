@@ -185,7 +185,7 @@ class PODArray
 private:
     T m_data[Size];
 
-    static_assert(std::is_pod<T>::value, "Only POD types are supported");
+    static_assert(std::is_standard_layout<T>::value, "Only POD types are supported");
 
 public:
     explicit PODArray() noexcept { memset(m_data, 0, sizeof(m_data)); }
