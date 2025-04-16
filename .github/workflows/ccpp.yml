@@ -27,7 +27,7 @@ jobs:
           prerelease: false
           draft: false
 
-  build-ubuntu:
+  build-ubuntu-clang:
     needs: get-latest-vcpkg-release
     runs-on: ubuntu-22.04
     timeout-minutes: 75
@@ -39,7 +39,42 @@ jobs:
         with:
           python-version: "3.8"
       - name: install
-        run: sudo apt-get install fuse libfuse-dev
+        run: sudo apt update && sudo apt install fuse libfuse-dev clang-15
+      - name: checkout-vcpkg
+        uses: actions/checkout@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg
+          repository: microsoft/vcpkg
+          ref: '${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}'
+          fetch-depth: 1
+      - name: cache-vcpkg
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/build/vcpkg_installed
+          key: ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-
+            ccpp-${{ runner.os }}-${{ runner.arch }}-
+      - name: build-test
+        env:
+          CC: clang-15
+          CXX: clang++15
+        run: |
+          python3 build.py --enable_unit_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build --build_type Debug
+
+  build-ubuntu:
+    needs: [get-latest-vcpkg-release, build-ubuntu-clang]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+      - name: install
+        run: sudo apt update && sudo apt install fuse libfuse-dev
       - name: checkout-vcpkg
         uses: actions/checkout@v4
         with:
@@ -113,7 +148,7 @@ jobs:
           name: securefs-macos-fuse-t-amd64
 
   build-windows:
-    needs: get-latest-vcpkg-release
+    needs: [get-latest-vcpkg-release, build-windows-clang-cl]
     runs-on: windows-latest
     timeout-minutes: 75
     steps:
@@ -152,7 +187,7 @@ jobs:
 
   # Compile time validation only.
   build-windows-clang-cl:
-    needs: [get-latest-vcpkg-release, build-windows]
+    needs: get-latest-vcpkg-release
     runs-on: windows-latest
     timeout-minutes: 75
     steps:

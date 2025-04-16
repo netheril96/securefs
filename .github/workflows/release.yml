@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: "3.8"
       - name: install
-        run: sudo apt-get install fuse libfuse-dev clang-15
+        run: sudo apt update && sudo apt install fuse libfuse-dev clang-15
       - name: Get latest Github release of vcpkg
         uses: cardinalby/git-get-release-action@v1
         id: get-latest-vcpkg-release
@@ -66,7 +66,7 @@ jobs:
         with:
           python-version: "3.8"
       - name: install
-        run: sudo apt-get install fuse libfuse-dev clang-15
+        run: sudo apt update && sudo apt install fuse libfuse-dev clang-15
       - name: Get latest Github release of vcpkg
         uses: cardinalby/git-get-release-action@v1
         id: get-latest-vcpkg-release
