@@ -100,7 +100,7 @@ jobs:
           token: ${{ github.token }}
           cache-key: macos-13-x64
           github-binarycache: true
-      - name: build
+      - name: build-test
         run: .venv/bin/python build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build --build_type Debug --cmake_defines SECUREFS_USE_FUSET=ON
       - name: upload
         uses: actions/upload-artifact@v4
