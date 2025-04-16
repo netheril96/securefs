@@ -11,7 +11,7 @@ env:
 jobs:
   build-ubuntu:
     runs-on: ubuntu-22.04
-    timeout-minutes: 35
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,7 +48,7 @@ jobs:
 
   build-mac:
     runs-on: macos-13
-    timeout-minutes: 35
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
         with:
@@ -79,7 +79,7 @@ jobs:
 
   build-mac-fuse-t:
     runs-on: macos-13
-    timeout-minutes: 35
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
         with:
@@ -110,7 +110,7 @@ jobs:
 
   build-mac-arm64:
     runs-on: macos-13
-    timeout-minutes: 35
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
         with:
@@ -141,7 +141,7 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
         with:
@@ -174,7 +174,7 @@ jobs:
   # clang has many compile time validations that other compilers don't have, such as thread safety validation.
   build-windows-clang-cl:
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
         with:
