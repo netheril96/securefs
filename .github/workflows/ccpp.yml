@@ -170,6 +170,8 @@ jobs:
           path: build/Debug/securefs.exe
           name: securefs-windows-amd64
 
+  # Only validate the build with clang-cl.
+  # clang has many compile time validations that other compilers don't have, such as thread safety validation.
   build-windows-clang-cl:
     runs-on: windows-latest
     timeout-minutes: 35
@@ -194,4 +196,4 @@ jobs:
           cache-key: windows-latest
           github-binarycache: true
       - name: build-test
-        run: python3 build.py --clang_cl --enable_unit_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build --build_type Debug
+        run: python3 build.py --clang_cl --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build --build_type Debug
