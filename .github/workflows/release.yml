@@ -185,6 +185,7 @@ jobs:
           name: securefs-macos-arm64-release
 
   build-mac-fuse-t:
+    needs: build-mac
     runs-on: macos-13
     timeout-minutes: 75
     steps:
@@ -232,6 +233,7 @@ jobs:
           name: securefs-macos-fuse-t-amd64-release
 
   build-mac-fuse-t-arm64:
+    needs: build-mac-arm64
     runs-on: macos-13
     timeout-minutes: 75
     steps:
