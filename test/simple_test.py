@@ -111,12 +111,11 @@ def securefs_mount(
     )
     try:
         for _ in range(600):
-            time.sleep(0.05)
+            time.sleep(0.1)
             if is_mount_then_statvfs(mount_point):
                 return p
         raise TimeoutError(f"Failed to mount {repr(mount_point)} after many attempts")
     except:
-        p.communicate(timeout=0.1)
         securefs_unmount(p=p, mount_point=mount_point)
         raise
 
