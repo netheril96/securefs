@@ -10,7 +10,7 @@ namespace securefs
 #define GENERATE_TIME_HELPER(PREFIX)                                                               \
     template <typename Stat>                                                                       \
     constexpr inline auto has_##PREFIX##tim(std::nullptr_t)                                        \
-        -> decltype(std::declval<Stat>().st_##PREFIX##tim, true)                                   \
+        ->decltype(std::declval<Stat>().st_##PREFIX##tim, true)                                    \
     {                                                                                              \
         return true;                                                                               \
     }                                                                                              \
@@ -54,8 +54,8 @@ GENERATE_TIME_HELPER(c)
 #undef GENERATE_TIME_HELPER
 
 template <typename Stat>
-constexpr inline auto has_birthtim(std::nullptr_t)
-    -> decltype(std::declval<Stat>().st_birthtim, true)
+constexpr inline auto has_birthtim(std::nullptr_t) -> decltype(std::declval<Stat>().st_birthtim,
+                                                               true)
 {
     return true;
 }
@@ -67,8 +67,8 @@ constexpr inline auto has_birthtim(...)
 }
 
 template <typename Stat>
-constexpr inline auto has_birthtimespec(std::nullptr_t)
-    -> decltype(std::declval<Stat>().st_birthtimespec, true)
+constexpr inline auto
+has_birthtimespec(std::nullptr_t) -> decltype(std::declval<Stat>().st_birthtimespec, true)
 {
     return true;
 }

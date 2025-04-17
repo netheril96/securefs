@@ -31,8 +31,7 @@ namespace
     TEST_CASE("Decrypt legacy config")
     {
         OSService root(refdir());
-        auto differ
-            = std::make_unique<google::protobuf::util::MessageDifferencer>();
+        auto differ = std::make_unique<google::protobuf::util::MessageDifferencer>();
         EncryptedSecurefsParams::Argon2idParams argon2id_params;
         argon2id_params.set_memory_cost(64);
         argon2id_params.set_parallelism(2);

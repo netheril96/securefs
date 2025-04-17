@@ -68,11 +68,11 @@ AESGCMCryptStream::AESGCMCryptStream(std::shared_ptr<StreamBase> stream,
                                      unsigned max_padding_size,
                                      CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption* padding_aes)
     : AESGCMCryptStream(
-        std::move(stream),
-        as_lvalue(DefaultParamsCalculator(master_key, max_padding_size, padding_aes)),
-        block_size,
-        iv_size,
-        check)
+          std::move(stream),
+          as_lvalue(DefaultParamsCalculator(master_key, max_padding_size, padding_aes)),
+          block_size,
+          iv_size,
+          check)
 {
 }
 
