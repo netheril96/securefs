@@ -27,6 +27,25 @@ jobs:
           prerelease: false
           draft: false
 
+  format-all-sources:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: install
+        run: sudo apt update && sudo apt upgrade && sudo apt install -y clang-format cmake-format
+      - name: Format all sources
+        run: clang-format -i sources/*.h sources/*.cpp test/*.h test/*.cpp protos/*.proto && cmake-format -i CMakeLists.txt
+      - name: Create PR to update sources
+        if: ${{ github.event_name == 'push' }}
+        uses: peter-evans/create-pull-request@v7
+        with:
+          title: Auto PR for source code formatting
+          commit-message: Format source code (auto generated)
+          sign-commits: true
+
   build-ubuntu:
     needs: get-latest-vcpkg-release
     runs-on: ubuntu-22.04
@@ -66,11 +85,12 @@ jobs:
           name: securefs-linux-amd64
       - name: Create PR to update usage.md
         if: ${{ github.event_name == 'push' }}
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v7
         with:
           add-paths: docs/
           title: Auto PR for usage.md
           commit-message: Auto update usage.md
+          sign-commits: true
 
   build-mac-fuse-t:
     needs: get-latest-vcpkg-release
