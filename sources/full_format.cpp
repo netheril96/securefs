@@ -393,7 +393,8 @@ int FuseHighLevelOps::vlistxattr(const char* path, char* list, size_t size, cons
         FileLockGuard fg(**opened);
         rc = (**opened).listxattr(list, size);
     }
-    securefs::apple_xattr::transform_listxattr_result(list, size);
+    if (is_apple())
+        securefs::apple_xattr::transform_listxattr_result(list, size);
     return rc;
 };
 int FuseHighLevelOps::vgetxattr(const char* path,
@@ -405,8 +406,11 @@ int FuseHighLevelOps::vgetxattr(const char* path,
 {
     if (position != 0)
         return -EINVAL;
-    if (int rc = securefs::apple_xattr::precheck_getxattr(&name); rc <= 0)
-        return rc;
+    if (is_apple())
+    {
+        if (int rc = securefs::apple_xattr::precheck_getxattr(&name); rc <= 0)
+            return rc;
+    }
     auto opened = open_all(path);
     if (!opened)
     {
@@ -425,8 +429,11 @@ int FuseHighLevelOps::vsetxattr(const char* path,
 {
     if (position != 0)
         return -EINVAL;
-    if (int rc = securefs::apple_xattr::precheck_setxattr(&name, &flags); rc <= 0)
-        return rc;
+    if (is_apple())
+    {
+        if (int rc = securefs::apple_xattr::precheck_setxattr(&name, &flags); rc <= 0)
+            return rc;
+    }
 
     flags &= XATTR_CREATE | XATTR_REPLACE;
     auto opened = open_all(path);
@@ -440,9 +447,12 @@ int FuseHighLevelOps::vsetxattr(const char* path,
 };
 int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fuse_context* ctx)
 {
-    if (int rc = securefs::apple_xattr::precheck_removexattr(&name); rc <= 0)
+    if (is_apple())
     {
-        return rc;
+        if (int rc = securefs::apple_xattr::precheck_removexattr(&name); rc <= 0)
+        {
+            return rc;
+        }
     }
     auto opened = open_all(path);
     if (!opened)

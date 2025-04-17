@@ -450,7 +450,7 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops,
         CHECK(st.st_mode == 0100600);
     }
 
-    if (is_apple())
+    if (!is_windows())
     {
         CHECK(listxattr(ops, "/cbd") == std::vector<std::string>{});
         CHECK(ops.vsetxattr("/cbd", "com.apple.FinderInfo", "65535", 5, 0, 0, nullptr) >= 0);

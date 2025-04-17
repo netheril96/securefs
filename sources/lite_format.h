@@ -8,6 +8,7 @@
 #include "platform.h"
 #include "tags.h"
 #include "thread_local.h"
+#include "crypto.h"
 
 #include <absl/functional/function_ref.h>
 #include <absl/strings/string_view.h>
@@ -275,6 +276,7 @@ public:
                             StreamOpener& opener,
                             NameTranslator& name_trans,
                             XattrCryptor& xattr,
+                            ANNOTATED(tXattrMasterKey, const key_type&) xattr_key,
                             ANNOTATED(tEnableXattr, bool) enable_xattr))
         : root_(root)
         , opener_(opener)
@@ -282,6 +284,9 @@ public:
         , xattr_(xattr)
         , enable_xattr_(enable_xattr)
     {
+        if (!is_apple()) {
+            xattr_name_cryptor_.emplace(xattr_key.data(), xattr_key.size());
+        }
     }
 
     bool has_symlink() const override { return !is_windows(); }
@@ -367,6 +372,7 @@ private:
     StreamOpener& opener_;
     NameTranslator& name_trans_;
     XattrCryptor& xattr_;
+    std::optional<AES_SIV> xattr_name_cryptor_;
     bool enable_xattr_;
     bool read_dir_plus_ = false;
 

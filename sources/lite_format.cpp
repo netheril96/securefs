@@ -9,6 +9,7 @@
 #include "myutils.h"
 #include "platform.h"
 #include "tags.h"
+#include "xattr_name.h"
 
 #include <absl/base/thread_annotations.h>
 #include <absl/container/inlined_vector.h>
@@ -149,7 +150,8 @@ namespace
         explicit AESSIVBasedNameTranslator(const key_type& name_master_key)
             : name_master_key_(name_master_key)
             , name_aes_siv_(
-                  [this]() {
+                  [this]()
+                  {
                       return std::make_unique<AES_SIV>(name_master_key_.data(),
                                                        name_master_key_.size());
                   })
@@ -547,9 +549,8 @@ namespace
     class PathNormalizingNameTranslator : public NameTranslator
     {
     public:
-        (PathNormalizingNameTranslator(std::unique_ptr<NameTranslator> delegate,
-                                       bool case_fold,
-                                       bool nfc))
+        (PathNormalizingNameTranslator(
+            std::unique_ptr<NameTranslator> delegate, bool case_fold, bool nfc))
             : delegate_(std::move(delegate)), case_fold_(case_fold), nfc_(nfc)
         {
         }
@@ -1058,6 +1059,17 @@ int FuseHighLevelOps::vutimens(const char* path, const fuse_timespec* ts, const 
 }
 int FuseHighLevelOps::vlistxattr(const char* path, char* list, size_t size, const fuse_context* ctx)
 {
+    auto encrypted_path = name_trans_.encrypt_full_path(path, nullptr);
+    if (xattr_name_cryptor_)
+    {
+        return generic_xattr::wrapped_listxattr(
+            [&](char* buffer, size_t size)
+            { return root_.listxattr(encrypted_path.c_str(), buffer, size); },
+            *xattr_name_cryptor_,
+            list,
+            size);
+    }
+
     int rc = root_.listxattr(name_trans_.encrypt_full_path(path, nullptr).c_str(), list, size);
     if (rc < 0)
     {
@@ -1077,14 +1089,21 @@ int FuseHighLevelOps::vgetxattr(const char* path,
     {
         return -EINVAL;
     }
-    if (int rc = securefs::apple_xattr::precheck_getxattr(&name); rc <= 0)
+    if (is_apple())
     {
-        return rc;
+        if (int rc = securefs::apple_xattr::precheck_getxattr(&name); rc <= 0)
+        {
+            return rc;
+        }
     }
+    std::string wrapped_name = xattr_name_cryptor_
+        ? generic_xattr::encrypt_xattr_name(*xattr_name_cryptor_, name)
+        : name;
+
     if (!value)
     {
         ssize_t rc = root_.getxattr(
-            name_trans_.encrypt_full_path(path, nullptr).c_str(), name, nullptr, 0);
+            name_trans_.encrypt_full_path(path, nullptr).c_str(), wrapped_name.c_str(), nullptr, 0);
         if (rc < 0)
         {
             return rc;
@@ -1093,7 +1112,7 @@ int FuseHighLevelOps::vgetxattr(const char* path,
     }
     std::vector<byte> underlying_data(xattr_.infer_encrypted_size(size));
     auto rc = root_.getxattr(name_trans_.encrypt_full_path(path, nullptr).c_str(),
-                             name,
+                             wrapped_name.c_str(),
                              underlying_data.data(),
                              underlying_data.size());
     if (rc < 0)
@@ -1116,29 +1135,46 @@ int FuseHighLevelOps::vsetxattr(const char* path,
     {
         return -EINVAL;
     }
-    if (int rc = securefs::apple_xattr::precheck_setxattr(&name, &flags); rc <= 0)
+    if (is_apple())
     {
-        return rc;
+        if (int rc = securefs::apple_xattr::precheck_setxattr(&name, &flags); rc <= 0)
+        {
+            return rc;
+        }
     }
     if (!value || size == 0)
     {
         return 0;
     }
+
+    std::string wrapped_name = xattr_name_cryptor_
+        ? generic_xattr::encrypt_xattr_name(*xattr_name_cryptor_, name)
+        : name;
+
     auto data = xattr_.encrypt(value, size);
     return root_.setxattr(name_trans_.encrypt_full_path(path, nullptr).c_str(),
-                          name,
+                          wrapped_name.c_str(),
                           data.data(),
                           data.size(),
                           flags);
 }
 int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fuse_context* ctx)
 {
-    int rc = securefs::apple_xattr::precheck_removexattr(&name);
-    if (rc <= 0)
+    if (is_apple())
     {
-        return rc;
+        int rc = securefs::apple_xattr::precheck_removexattr(&name);
+        if (rc <= 0)
+        {
+            return rc;
+        }
     }
-    return root_.removexattr(name_trans_.encrypt_full_path(path, nullptr).c_str(), name);
+
+    std::string wrapped_name = xattr_name_cryptor_
+        ? generic_xattr::encrypt_xattr_name(*xattr_name_cryptor_, name)
+        : name;
+
+    return root_.removexattr(name_trans_.encrypt_full_path(path, nullptr).c_str(),
+                             wrapped_name.c_str());
 }
 std::unique_ptr<File> FuseHighLevelOps::open(std::string_view path, int flags, unsigned mode)
 {

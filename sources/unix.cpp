@@ -179,6 +179,38 @@ public:
         if (rc < 0)
             THROW_POSIX_EXCEPTION(errno, "fsetxattr");
     }
+    #else
+
+    void removexattr(const char* name) override
+    {
+        auto rc = ::fremovexattr(m_fd, name);
+        if (rc < 0)
+            THROW_POSIX_EXCEPTION(errno, "fremovexattr");
+    }
+
+    ssize_t getxattr(const char* name, void* value, size_t size) override
+    {
+        ssize_t rc = ::fgetxattr(m_fd, name, value, size);
+        if (rc < 0)
+            THROW_POSIX_EXCEPTION(errno, "fgetxattr");
+        return rc;
+    }
+
+    ssize_t listxattr(char* buffer, size_t size) override
+    {
+        auto rc = ::flistxattr(m_fd, buffer, size);
+        if (rc < 0)
+            THROW_POSIX_EXCEPTION(errno, "flistxattr");
+        return rc;
+    }
+
+    void setxattr(const char* name, void* value, size_t size, int flags) override
+    {
+        auto rc = ::fsetxattr(m_fd, name, value, size, flags);
+        if (rc < 0)
+            THROW_POSIX_EXCEPTION(errno, "fsetxattr");
+    }
+
 #endif
 };
 

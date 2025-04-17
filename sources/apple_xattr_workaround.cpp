@@ -1,4 +1,5 @@
 #include "apple_xattr_workaround.h"
+#include "myutils.h"
 
 #include <errno.h>
 #include <string.h>
@@ -14,6 +15,10 @@ static_assert(sizeof(APPLE_FINDER_INFO) == sizeof(REPLACEMENT_FOR_FINDER_INFO),
 
 void transform_listxattr_result(char* buffer, size_t size)
 {
+    if (!is_apple())
+    {
+        return;
+    }
     if (size < sizeof(APPLE_FINDER_INFO))
         return;
 
@@ -34,6 +39,10 @@ void transform_listxattr_result(char* buffer, size_t size)
 
 static int precheck_common(const char** name)
 {
+    if (!is_apple())
+    {
+        return 1;
+    }
     if (strcmp(*name, APPLE_FINDER_INFO) == 0)
     {
         *name = REPLACEMENT_FOR_FINDER_INFO;
@@ -48,6 +57,10 @@ static int precheck_common(const char** name)
 
 int precheck_getxattr(const char** name)
 {
+    if (!is_apple())
+    {
+        return 1;
+    }
     if (strcmp(*name, APPLE_QUARANTINE) == 0)
     {
         return -ENOATTR;
@@ -57,6 +70,10 @@ int precheck_getxattr(const char** name)
 
 int precheck_setxattr(const char** name, int* flags)
 {
+    if (!is_apple())
+    {
+        return 1;
+    }
     if (strcmp(*name, APPLE_QUARANTINE) == 0)
     {
         return 0;    // Fakes success of quarantine to work around "XXX is damaged" bug on macOS.

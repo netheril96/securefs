@@ -46,6 +46,7 @@ namespace
     fruit::Component<StreamOpener,
                      XattrCryptor,
                      fruit::Annotated<tNameMasterKey, key_type>,
+                     fruit::Annotated<tXattrMasterKey, key_type>,
                      fruit::Annotated<tEnableXattr, bool>>
     get_test_component()
     {
