@@ -360,12 +360,12 @@ jobs:
           version: '14.2'
           shell: bash
           run: |
-            sudo pkg install -y cmake git python39 zip curl pkgconf ninja fusefs-libs
+            sudo pkg install -y cmake git python311 zip curl pkgconf ninja fusefs-libs
             if ! sudo kldstat -m fusefs > /dev/null 2>&1; then
                sudo kldload fusefs
             fi
             sh $VCPKG_ROOT/bootstrap-vcpkg.sh
-            cd ${{ github.workspace }} && python3.9 build.py --enable_unit_test --vcpkg_root=$VCPKG_ROOT --build_root=./build --lto
+            cd ${{ github.workspace }} && python3.11 build.py --enable_unit_test --vcpkg_root=$VCPKG_ROOT --build_root=./build --lto
       - name: upload
         uses: actions/upload-artifact@v4
         with:
