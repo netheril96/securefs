@@ -105,7 +105,7 @@ jobs:
             ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-
             ccpp-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
-        run: .venv/bin/python build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build --build_type Debug --cmake_defines SECUREFS_USE_FUSET=ON
+        run: .venv/bin/python build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build --build_type Release --cmake_defines SECUREFS_USE_FUSET=ON
       - name: upload
         uses: actions/upload-artifact@v4
         with:
