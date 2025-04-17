@@ -26,10 +26,7 @@
 #include <time.h>
 #include <typeinfo>
 #include <unistd.h>
-
-#ifdef __APPLE__
 #include <sys/xattr.h>
-#endif
 
 namespace securefs
 {
@@ -485,6 +482,32 @@ int OSService::setxattr(
 int OSService::removexattr(const char* path, const char* name) const noexcept
 {
     auto rc = ::removexattr(norm_path(path).c_str(), name, XATTR_NOFOLLOW);
+    return rc < 0 ? -errno : rc;
+}
+#else
+ssize_t OSService::listxattr(const char* path, char* buf, size_t size) const noexcept
+{
+    auto rc = ::llistxattr(norm_path(path).c_str(), buf, size);
+    return rc < 0 ? -errno : rc;
+}
+
+ssize_t
+OSService::getxattr(const char* path, const char* name, void* buf, size_t size) const noexcept
+{
+    auto rc = ::lgetxattr(norm_path(path).c_str(), name, buf, size);
+    return rc < 0 ? -errno : rc;
+}
+
+int OSService::setxattr(
+    const char* path, const char* name, void* buf, size_t size, int flags) const noexcept
+{
+    auto rc = ::lsetxattr(norm_path(path).c_str(), name, buf, size, flags);
+    return rc < 0 ? -errno : rc;
+}
+
+int OSService::removexattr(const char* path, const char* name) const noexcept
+{
+    auto rc = ::lremovexattr(norm_path(path).c_str(), name);
     return rc < 0 ? -errno : rc;
 }
 #endif    // __APPLE__

@@ -214,7 +214,7 @@ public:
 
     std::unique_ptr<DirectoryTraverser> create_traverser(const std::string& dir) const;
 
-#ifdef __APPLE__
+#ifndef _WIN32
     // These APIs, unlike all others, report errors through negative error numbers as defined in
     // <errno.h>
     ssize_t listxattr(const char* path, char* buf, size_t size) const noexcept;
