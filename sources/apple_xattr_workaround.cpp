@@ -3,7 +3,7 @@
 #include <errno.h>
 #include <string.h>
 
-namespace securefs
+namespace securefs::apple_xattr
 {
 static const char APPLE_FINDER_INFO[] = "com.apple.FinderInfo";
 static const char REPLACEMENT_FOR_FINDER_INFO[] = "_securefs.FinderInfo";
@@ -75,4 +75,4 @@ int precheck_setxattr(const char** name, int* flags)
 }
 
 int precheck_removexattr(const char** name) { return precheck_common(name); }
-}    // namespace securefs
+}    // namespace securefs::apple_xattr

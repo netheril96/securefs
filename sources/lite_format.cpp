@@ -1063,7 +1063,7 @@ int FuseHighLevelOps::vlistxattr(const char* path, char* list, size_t size, cons
     {
         return rc;
     }
-    transform_listxattr_result(list, size);
+    securefs::apple_xattr::transform_listxattr_result(list, size);
     return rc;
 }
 int FuseHighLevelOps::vgetxattr(const char* path,
@@ -1077,7 +1077,7 @@ int FuseHighLevelOps::vgetxattr(const char* path,
     {
         return -EINVAL;
     }
-    if (int rc = precheck_getxattr(&name); rc <= 0)
+    if (int rc = securefs::apple_xattr::precheck_getxattr(&name); rc <= 0)
     {
         return rc;
     }
@@ -1116,7 +1116,7 @@ int FuseHighLevelOps::vsetxattr(const char* path,
     {
         return -EINVAL;
     }
-    if (int rc = precheck_setxattr(&name, &flags); rc <= 0)
+    if (int rc = securefs::apple_xattr::precheck_setxattr(&name, &flags); rc <= 0)
     {
         return rc;
     }
@@ -1133,7 +1133,7 @@ int FuseHighLevelOps::vsetxattr(const char* path,
 }
 int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fuse_context* ctx)
 {
-    int rc = precheck_removexattr(&name);
+    int rc = securefs::apple_xattr::precheck_removexattr(&name);
     if (rc <= 0)
     {
         return rc;
