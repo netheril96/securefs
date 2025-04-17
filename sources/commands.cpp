@@ -790,6 +790,25 @@ private:
                     }
                     return Directory::DirNameComparison{&binary_compare};
                 })
+            .registerProvider<fruit::Annotated<tEnableXattr, bool>(const MountCommand&)>(
+                [](const MountCommand& cmd)
+                {
+                    if (cmd.noxattr.getValue())
+                    {
+                        return false;
+                    }
+                    auto rc = OSService::get_default().listxattr(
+                        cmd.single_pass_holder_.data_dir.getValue().c_str(), nullptr, 0);
+                    if (rc < 0)
+                    {
+                        absl::FPrintF(stderr,
+                                      "Warning: the filesystem under %s has no extended attribute "
+                                      "support.\nXattr is disabled\n",
+                                      cmd.single_pass_holder_.data_dir.getValue());
+                        return false;
+                    }
+                    return true;
+                })
             .registerProvider<fruit::Annotated<tCaseInsensitive, bool>(const MountCommand&)>(
                 [](const MountCommand& cmd)
                 { return cmd.fsparams.full_format_params().case_insensitive(); });
@@ -1020,26 +1039,8 @@ public:
             fuse_args.emplace_back(mount_point.getValue());
 
         fruit::Injector<FuseHighLevelOpsBase> injector(get_fuse_high_ops_component, this);
-
-        bool native_xattr = !noxattr.getValue();
-#ifdef __APPLE__
-        if (native_xattr)
-        {
-            auto rc = OSService::get_default().listxattr(
-                single_pass_holder_.data_dir.getValue().c_str(), nullptr, 0);
-            if (rc < 0)
-            {
-                absl::FPrintF(stderr,
-                              "Warning: the filesystem under %s has no extended attribute "
-                              "support.\nXattr is disabled\n",
-                              single_pass_holder_.data_dir.getValue());
-                native_xattr = false;
-            }
-        }
-#endif
         auto high_level_ops = injector.get<FuseHighLevelOpsBase*>();
-        auto fuse_callbacks = FuseHighLevelOpsBase::build_ops(
-            high_level_ops, native_xattr, !is_windows() || fsparams.has_full_format_params());
+        auto fuse_callbacks = FuseHighLevelOpsBase::build_ops(high_level_ops);
         VERBOSE_LOG("Calling fuse_main with arguments: %s", escape_args(fuse_args));
         return my_fuse_main(static_cast<int>(fuse_args.size()),
                             const_cast<char**>(to_c_style_args(fuse_args).data()),

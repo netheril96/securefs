@@ -63,12 +63,14 @@ public:
                             FileTable& ft,
                             RepoLocker& locker,
                             const OwnerOverride& owner_override,
-                            ANNOTATED(tCaseInsensitive, bool) case_insensitive))
+                            ANNOTATED(tCaseInsensitive, bool) case_insensitive,
+                            ANNOTATED(tEnableXattr, bool) enable_xattr))
         : root_(root)
         , ft_(ft)
         , locker_(locker)
         , owner_override_(owner_override)
         , case_insensitive_(case_insensitive)
+        , enable_xattr_(enable_xattr)
     {
     }
 
@@ -145,12 +147,18 @@ public:
                  fuse_file_info* info,
                  const fuse_context* ctx) override;
 
+    bool has_listxattr() const override { return enable_xattr_; }
+    bool has_getxattr() const override { return enable_xattr_; }
+    bool has_setxattr() const override { return enable_xattr_; }
+    bool has_removexattr() const override { return enable_xattr_; }
+
 private:
     OSService& root_;
     FileTable& ft_;
     [[maybe_unused]] RepoLocker& locker_;    // We only needs this to construct and destruct.
     OwnerOverride owner_override_;
     bool case_insensitive_;
+    bool enable_xattr_;
 
 private:
     struct OpenBaseResult

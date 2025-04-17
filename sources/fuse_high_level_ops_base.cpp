@@ -325,9 +325,7 @@ namespace
     }
 }    // namespace
 
-fuse_operations FuseHighLevelOpsBase::build_ops(const FuseHighLevelOpsBase* op,
-                                                bool enable_xattr,
-                                                bool enable_symlink)
+fuse_operations FuseHighLevelOpsBase::build_ops(const FuseHighLevelOpsBase* op)
 {
     fuse_operations opt{};
 
@@ -358,51 +356,42 @@ fuse_operations FuseHighLevelOpsBase::build_ops(const FuseHighLevelOpsBase* op,
         return op;
     };
     opt.destroy = [](void* data) { INFO_LOG("Fuse operations destroyed"); };
-    opt.statfs = &FuseHighLevelOpsBase::static_statfs;
-    opt.getattr = &FuseHighLevelOpsBase::static_getattr;
-    opt.fgetattr = &FuseHighLevelOpsBase::static_fgetattr;
-    opt.opendir = &FuseHighLevelOpsBase::static_opendir;
-    opt.releasedir = &FuseHighLevelOpsBase::static_releasedir;
-    opt.readdir = &FuseHighLevelOpsBase::static_readdir;
-    opt.create = &FuseHighLevelOpsBase::static_create;
-    opt.open = &FuseHighLevelOpsBase::static_open;
-    opt.release = &FuseHighLevelOpsBase::static_release;
-    opt.read = &FuseHighLevelOpsBase::static_read;
-    opt.write = &FuseHighLevelOpsBase::static_write;
-    opt.flush = &FuseHighLevelOpsBase::static_flush;
-    opt.truncate = &FuseHighLevelOpsBase::static_truncate;
-    opt.ftruncate = &FuseHighLevelOpsBase::static_ftruncate;
-    opt.unlink = &FuseHighLevelOpsBase::static_unlink;
-    opt.mkdir = &FuseHighLevelOpsBase::static_mkdir;
-    opt.rmdir = &FuseHighLevelOpsBase::static_rmdir;
-    if (enable_symlink)
-    {
-        opt.symlink = &FuseHighLevelOpsBase::static_symlink;
-        opt.readlink = &FuseHighLevelOpsBase::static_readlink;
-    }
-#ifndef _WIN32
-    opt.chmod = &FuseHighLevelOpsBase::static_chmod;
-    opt.chown = &FuseHighLevelOpsBase::static_chown;
-    opt.link = &FuseHighLevelOpsBase::static_link;
-#else
-    if (op->has_getpath())
-    {
-        opt.getpath = &FuseHighLevelOpsBase::static_getpath;
-    }
+    opt.statfs = op->has_statfs() ? &FuseHighLevelOpsBase::static_statfs : nullptr;
+    opt.getattr = op->has_getattr() ? &FuseHighLevelOpsBase::static_getattr : nullptr;
+    opt.fgetattr = op->has_fgetattr() ? &FuseHighLevelOpsBase::static_fgetattr : nullptr;
+    opt.opendir = op->has_opendir() ? &FuseHighLevelOpsBase::static_opendir : nullptr;
+    opt.releasedir = op->has_releasedir() ? &FuseHighLevelOpsBase::static_releasedir : nullptr;
+    opt.readdir = op->has_readdir() ? &FuseHighLevelOpsBase::static_readdir : nullptr;
+    opt.create = op->has_create() ? &FuseHighLevelOpsBase::static_create : nullptr;
+    opt.open = op->has_open() ? &FuseHighLevelOpsBase::static_open : nullptr;
+    opt.release = op->has_release() ? &FuseHighLevelOpsBase::static_release : nullptr;
+    opt.read = op->has_read() ? &FuseHighLevelOpsBase::static_read : nullptr;
+    opt.write = op->has_write() ? &FuseHighLevelOpsBase::static_write : nullptr;
+    opt.flush = op->has_flush() ? &FuseHighLevelOpsBase::static_flush : nullptr;
+    opt.truncate = op->has_truncate() ? &FuseHighLevelOpsBase::static_truncate : nullptr;
+    opt.ftruncate = op->has_ftruncate() ? &FuseHighLevelOpsBase::static_ftruncate : nullptr;
+    opt.unlink = op->has_unlink() ? &FuseHighLevelOpsBase::static_unlink : nullptr;
+    opt.mkdir = op->has_mkdir() ? &FuseHighLevelOpsBase::static_mkdir : nullptr;
+    opt.rmdir = op->has_rmdir() ? &FuseHighLevelOpsBase::static_rmdir : nullptr;
+    opt.symlink = op->has_symlink() ? &FuseHighLevelOpsBase::static_symlink : nullptr;
+    opt.readlink = op->has_readlink() ? &FuseHighLevelOpsBase::static_readlink : nullptr;
+    opt.chmod = op->has_chmod() ? &FuseHighLevelOpsBase::static_chmod : nullptr;
+    opt.chown = op->has_chown() ? &FuseHighLevelOpsBase::static_chown : nullptr;
+    opt.link = op->has_link() ? &FuseHighLevelOpsBase::static_link : nullptr;
+#ifdef _WIN32
+    opt.getpath = op->has_getpath() ? &FuseHighLevelOpsBase::static_getpath : nullptr;
 #endif
-    opt.rename = &FuseHighLevelOpsBase::static_rename;
-    opt.fsync = &FuseHighLevelOpsBase::static_fsync;
-    opt.utimens = &FuseHighLevelOpsBase::static_utimens;
-
-    if (!enable_xattr)
-        return opt;
-
-#ifdef __APPLE__
-    opt.listxattr = &FuseHighLevelOpsBase::static_listxattr;
-    opt.getxattr = &FuseHighLevelOpsBase::static_getxattr;
-    opt.setxattr = &FuseHighLevelOpsBase::static_setxattr;
-    opt.removexattr = &FuseHighLevelOpsBase::static_removexattr;
-#endif
+    opt.rename = op->has_rename() ? &FuseHighLevelOpsBase::static_rename : nullptr;
+    opt.fsync = op->has_fsync() ? &FuseHighLevelOpsBase::static_fsync : nullptr;
+    opt.utimens = op->has_utimens() ? &FuseHighLevelOpsBase::static_utimens : nullptr;
+    opt.listxattr = op->has_listxattr() ? &FuseHighLevelOpsBase::static_listxattr : nullptr;
+    opt.getxattr = op->has_getxattr()
+        ? static_cast<decltype(opt.getxattr)>(&FuseHighLevelOpsBase::static_getxattr)
+        : nullptr;
+    opt.setxattr = op->has_setxattr()
+        ? static_cast<decltype(opt.setxattr)>(&FuseHighLevelOpsBase::static_setxattr)
+        : nullptr;
+    opt.removexattr = op->has_removexattr() ? &FuseHighLevelOpsBase::static_removexattr : nullptr;
     return opt;
 }
 

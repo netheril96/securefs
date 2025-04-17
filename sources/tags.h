@@ -41,4 +41,7 @@ struct tLongNameThreshold
 struct tCaseInsensitive
 {
 };
+struct tEnableXattr
+{
+};
 }    // namespace securefs

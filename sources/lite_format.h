@@ -44,12 +44,14 @@ public:
         , max_padding_size_(max_padding_size)
         , verify_(verify)
         , content_ecb(
-              [this]() {
+              [this]()
+              {
                   return std::make_unique<AES_ECB>(content_master_key_.data(),
                                                    content_master_key_.size());
               })
         , padding_ecb(
-              [this]() {
+              [this]()
+              {
                   return std::make_unique<AES_ECB>(padding_master_key_.data(),
                                                    padding_master_key_.size());
               })
@@ -272,10 +274,26 @@ public:
     INJECT(FuseHighLevelOps(::securefs::OSService& root,
                             StreamOpener& opener,
                             NameTranslator& name_trans,
-                            XattrCryptor& xattr))
-        : root_(root), opener_(opener), name_trans_(name_trans), xattr_(xattr)
+                            XattrCryptor& xattr,
+                            ANNOTATED(tEnableXattr, bool) enable_xattr))
+        : root_(root)
+        , opener_(opener)
+        , name_trans_(name_trans)
+        , xattr_(xattr)
+        , enable_xattr_(enable_xattr)
     {
     }
+
+    bool has_symlink() const override { return !is_windows(); }
+    bool has_readlink() const override { return !is_windows(); }
+    bool has_link() const override { return !is_windows(); }
+    bool has_chmod() const override { return !is_windows(); }
+    bool has_chown() const override { return !is_windows(); }
+
+    bool has_listxattr() const override { return enable_xattr_; }
+    bool has_getxattr() const override { return enable_xattr_; }
+    bool has_setxattr() const override { return enable_xattr_; }
+    bool has_removexattr() const override { return enable_xattr_; }
 
     void initialize(fuse_conn_info* info) override;
     int vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx) override;
@@ -349,6 +367,7 @@ private:
     StreamOpener& opener_;
     NameTranslator& name_trans_;
     XattrCryptor& xattr_;
+    bool enable_xattr_;
     bool read_dir_plus_ = false;
 
 private:
