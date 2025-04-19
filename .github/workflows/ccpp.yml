@@ -58,7 +58,11 @@ jobs:
         with:
           python-version: "3.8"
       - name: install
-        run: sudo apt-get install fuse libfuse-dev
+        run: sudo apt-get install fuse libfuse-dev python3-venv
+      - name: venv
+        run: |
+          python3 -m venv .venv;
+          .venv/bin/pip install -U xattr;
       - name: checkout-vcpkg
         uses: actions/checkout@v4
         with:
@@ -76,7 +80,7 @@ jobs:
             ccpp-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
         run: |
-          python3 build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build --build_type Debug
+          .venv/bin/python build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build --build_type Debug
           ./build/securefs doc > docs/usage.md
       - name: upload
         uses: actions/upload-artifact@v4

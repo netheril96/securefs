@@ -33,7 +33,7 @@ SECUREFS_BINARY = os.environ["SECUREFS_BINARY"]
 if not os.path.isfile(SECUREFS_BINARY):
     raise ValueError(f"{repr(SECUREFS_BINARY)} is not a file!")
 
-if sys.platform == "darwin":
+if sys.platform != 'win32':
     try:
         import xattr
     except ImportError:

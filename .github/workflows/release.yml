@@ -21,7 +21,11 @@ jobs:
         with:
           python-version: "3.8"
       - name: install
-        run: sudo apt update && sudo apt upgrade && sudo apt install fuse libfuse-dev clang-15
+        run: sudo apt update && sudo apt upgrade && sudo apt install fuse libfuse-dev clang-15 python3-venv
+      - name: venv
+        run: |
+          python3 -m venv .venv;
+          .venv/bin/pip install -U xattr;
       - name: Get latest Github release of vcpkg
         uses: cardinalby/git-get-release-action@v1
         id: get-latest-vcpkg-release
@@ -50,7 +54,7 @@ jobs:
           CC: clang-15
           CXX: clang++-15
           VCPKG_KEEP_ENV_VARS: "CC;CXX"
-        run: python3 build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build
+        run: .venv/bin/python build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build
       - name: upload
         uses: actions/upload-artifact@v4
         with:
@@ -66,7 +70,11 @@ jobs:
         with:
           python-version: "3.8"
       - name: install
-        run: sudo apt update && sudo apt upgrade && sudo apt install fuse libfuse-dev clang-15
+        run: sudo apt update && sudo apt upgrade && sudo apt install fuse libfuse-dev clang-15 python3-venv
+      - name: venv
+        run: |
+          python3 -m venv .venv;
+          .venv/bin/pip install -U xattr;
       - name: Get latest Github release of vcpkg
         uses: cardinalby/git-get-release-action@v1
         id: get-latest-vcpkg-release
@@ -95,7 +103,7 @@ jobs:
           CC: clang-15
           CXX: clang++-15
           VCPKG_KEEP_ENV_VARS: "CC;CXX"
-        run: python3 build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build
+        run: .venv/bin/python build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build
       - name: upload
         uses: actions/upload-artifact@v4
         with:
