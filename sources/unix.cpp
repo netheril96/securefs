@@ -22,11 +22,11 @@
 #include <sys/statvfs.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/xattr.h>
 #include <termios.h>
 #include <time.h>
 #include <typeinfo>
 #include <unistd.h>
-#include <sys/xattr.h>
 
 namespace securefs
 {
@@ -179,7 +179,7 @@ public:
         if (rc < 0)
             THROW_POSIX_EXCEPTION(errno, "fsetxattr");
     }
-    #else
+#else
 
     void removexattr(const char* name) override
     {

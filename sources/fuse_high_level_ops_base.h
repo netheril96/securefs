@@ -15,8 +15,7 @@ struct OwnerOverride
 class FuseHighLevelOpsBase : public Object
 {
 public:
-    static fuse_operations
-    build_ops(const FuseHighLevelOpsBase* op);
+    static fuse_operations build_ops(const FuseHighLevelOpsBase* op);
 
     virtual void initialize(fuse_conn_info* info) = 0;
 
@@ -196,10 +195,8 @@ private:
                                size_t size,
                                int flags,
                                uint32_t position);
-    static int static_setxattr(const char* path,
-                               const char* name,
-                               const char* value,
-                               size_t size, int flags)
+    static int
+    static_setxattr(const char* path, const char* name, const char* value, size_t size, int flags)
     {
         return static_setxattr(path, name, value, size, flags, 0);
     }

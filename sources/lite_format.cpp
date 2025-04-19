@@ -150,8 +150,7 @@ namespace
         explicit AESSIVBasedNameTranslator(const key_type& name_master_key)
             : name_master_key_(name_master_key)
             , name_aes_siv_(
-                  [this]()
-                  {
+                  [this]() {
                       return std::make_unique<AES_SIV>(name_master_key_.data(),
                                                        name_master_key_.size());
                   })
@@ -549,8 +548,9 @@ namespace
     class PathNormalizingNameTranslator : public NameTranslator
     {
     public:
-        (PathNormalizingNameTranslator(
-            std::unique_ptr<NameTranslator> delegate, bool case_fold, bool nfc))
+        (PathNormalizingNameTranslator(std::unique_ptr<NameTranslator> delegate,
+                                       bool case_fold,
+                                       bool nfc))
             : delegate_(std::move(delegate)), case_fold_(case_fold), nfc_(nfc)
         {
         }

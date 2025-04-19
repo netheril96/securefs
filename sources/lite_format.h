@@ -1,5 +1,6 @@
 #pragma once
 
+#include "crypto.h"
 #include "fuse_high_level_ops_base.h"
 #include "lite_stream.h"
 #include "lock_guard.h"
@@ -8,7 +9,6 @@
 #include "platform.h"
 #include "tags.h"
 #include "thread_local.h"
-#include "crypto.h"
 
 #include <absl/functional/function_ref.h>
 #include <absl/strings/string_view.h>
@@ -45,14 +45,12 @@ public:
         , max_padding_size_(max_padding_size)
         , verify_(verify)
         , content_ecb(
-              [this]()
-              {
+              [this]() {
                   return std::make_unique<AES_ECB>(content_master_key_.data(),
                                                    content_master_key_.size());
               })
         , padding_ecb(
-              [this]()
-              {
+              [this]() {
                   return std::make_unique<AES_ECB>(padding_master_key_.data(),
                                                    padding_master_key_.size());
               })
@@ -284,7 +282,8 @@ public:
         , xattr_(xattr)
         , enable_xattr_(enable_xattr)
     {
-        if (!is_apple()) {
+        if (!is_apple())
+        {
             xattr_name_cryptor_.emplace(xattr_key.data(), xattr_key.size());
         }
     }
