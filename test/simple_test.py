@@ -33,7 +33,7 @@ SECUREFS_BINARY = os.environ["SECUREFS_BINARY"]
 if not os.path.isfile(SECUREFS_BINARY):
     raise ValueError(f"{repr(SECUREFS_BINARY)} is not a file!")
 
-if sys.platform != 'win32':
+if sys.platform != "win32":
     try:
         import xattr
     except ImportError:
@@ -72,7 +72,6 @@ def is_mount_then_statvfs(mount_point: str) -> bool:
     except EnvironmentError:
         traceback.print_exc()
         return False
-
 
 
 def securefs_mount(
@@ -128,7 +127,7 @@ def securefs_unmount(p: subprocess.Popen, mount_point: str):
             p.send_signal(signal.SIGINT)
         time.sleep(0.017)
         try:
-            os.lstat(mount_point) # Trigger the next action of FUSE to unmount
+            os.lstat(mount_point)  # Trigger the next action of FUSE to unmount
         except EnvironmentError:
             pass
         p.wait(timeout=5)
@@ -467,19 +466,35 @@ def make_test_case(
         if xattr is not None:
 
             def test_xattr(self):
+                golden_mapping = {
+                    "user.abc": b"def",
+                    "user.123": b"456",
+                    "user.AbCdeEf_kkGh": os.urandom(65),
+                }
+                if sys.platform == "darwin":
+                    golden_mapping["com.apple.FinderInfo"] = os.urandom(32)
                 fn = os.path.join(self.mount_point, str(uuid.uuid4()))
                 try:
                     with open(fn, "wt") as f:
                         f.write("hello\n")
                     x = xattr.xattr(fn)
-                    x.set("abc", b"def")
-                    x.set("123", b"456")
+                    for k, v in golden_mapping.items():
+                        x.set(k, v)
                     self.unmount()
                     self.mount()
-                    self.assertEqual(x.get("abc"), b"def")
-                    self.assertEqual(set(x.list()), {"abc", "123"})
-                    xattr.removexattr(fn, "abc")
-                    self.assertEqual(set(x.list()), {"123"})
+
+                    x = xattr.xattr(fn)
+                    self.assertSetEqual(
+                        frozenset(x.list()), frozenset(golden_mapping.keys())
+                    )
+                    for k, v in golden_mapping.items():
+                        self.assertEqual(x.get(k), v)
+
+                    for k in golden_mapping.keys():
+                        x.remove(k)
+                        self.assertNotIn(k, x.list())
+                    self.assertSetEqual(frozenset(x.list()), frozenset())
+
                 finally:
                     try:
                         os.remove(fn)
@@ -724,7 +739,11 @@ def make_test_case(
                 finally:
                     shutil.rmtree(os.path.join(self.mount_point, "AbcDefG"))
 
-        if not plain_text_names and uninorm == Sensitivity.INSENSITIVE and sys.platform != 'darwin':
+        if (
+            not plain_text_names
+            and uninorm == Sensitivity.INSENSITIVE
+            and sys.platform != "darwin"
+        ):
             # FUSE-T has its own normalization handling so we don't test this
             def test_uninorm_insensitive(self):
                 names = ["\u212bABV\u212b", "\u2126666", "333\u1e69", "\u1e0b\u0323..."]
