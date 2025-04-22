@@ -5,6 +5,8 @@ on:
     tags:
       - '**'
   workflow_dispatch:
+  schedule:
+    - cron: '41 7 * * 2,6'
 
 env:
   PYTHONUTF8: 1
