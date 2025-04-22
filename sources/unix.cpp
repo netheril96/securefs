@@ -22,11 +22,14 @@
 #include <sys/statvfs.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <sys/xattr.h>
 #include <termios.h>
 #include <time.h>
 #include <typeinfo>
 #include <unistd.h>
+
+#if __has_include(<sys/xattr.h>)
+#include <sys/xattr.h>
+#endif
 
 namespace securefs
 {
@@ -179,7 +182,7 @@ public:
         if (rc < 0)
             THROW_POSIX_EXCEPTION(errno, "fsetxattr");
     }
-#else
+#elif __has_include(<sys/xattr.h>)
 
     void removexattr(const char* name) override
     {
@@ -516,7 +519,7 @@ int OSService::removexattr(const char* path, const char* name) const noexcept
     auto rc = ::removexattr(norm_path(path).c_str(), name, XATTR_NOFOLLOW);
     return rc < 0 ? -errno : rc;
 }
-#else
+#elif __has_include(<sys/xattr.h>)
 ssize_t OSService::listxattr(const char* path, char* buf, size_t size) const noexcept
 {
     auto rc = ::llistxattr(norm_path(path).c_str(), buf, size);
@@ -542,7 +545,26 @@ int OSService::removexattr(const char* path, const char* name) const noexcept
     auto rc = ::lremovexattr(norm_path(path).c_str(), name);
     return rc < 0 ? -errno : rc;
 }
-#endif    // __APPLE__
+#else
+ssize_t OSService::listxattr(const char* path, char* buf, size_t size) const noexcept
+{
+    return -ENOSYS;
+}
+
+ssize_t
+OSService::getxattr(const char* path, const char* name, void* buf, size_t size) const noexcept
+{
+    return -ENOSYS;
+}
+
+int OSService::setxattr(
+    const char* path, const char* name, void* buf, size_t size, int flags) const noexcept
+{
+    return -ENOSYS;
+}
+
+int OSService::removexattr(const char* path, const char* name) const noexcept { return -ENOSYS; }
+#endif
 
 void OSService::read_password_no_confirmation(const char* prompt,
                                               CryptoPP::AlignedSecByteBlock* output)
