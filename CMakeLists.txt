@@ -20,6 +20,7 @@ option(SECUREFS_ADDRESS_SANITIZE
        OFF)
 option(SECUREFS_LINK_PROFILER "Enable linking with gperftools profiler" OFF)
 option(SECUREFS_ENABLE_MIMALLOC "Enable linking with mimalloc." OFF)
+option(SECUREFS_ENABLE_JEMALLOC "Enable linking with jemalloc." OFF)
 project(securefs)
 enable_testing()
 
@@ -126,6 +127,14 @@ if(SECUREFS_ENABLE_MIMALLOC)
     target_link_libraries(
         securefs-static
         PUBLIC $<IF:$<TARGET_EXISTS:mimalloc-static>,mimalloc-static,mimalloc>)
+endif()
+
+if(SECUREFS_ENABLE_JEMALLOC)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(JEMALLOC jemalloc REQUIRED)
+    target_include_directories(securefs-static SYSTEM
+                               PUBLIC ${JEMALLOC_INCLUDE_DIRS})
+    target_link_libraries(securefs-static PUBLIC ${JEMALLOC_LDFLAGS})
 endif()
 
 find_library(FRUIT_LIBRARY NAMES fruit)

@@ -27,6 +27,14 @@
                     ]
                 }
             ]
+        },
+        "jemalloc": {
+            "description": "Enable linking to jemalloc",
+            "dependencies": [
+                {
+                    "name": "jemalloc"
+                }
+            ]
         }
     }
 }
