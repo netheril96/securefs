@@ -450,7 +450,7 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops,
         CHECK(st.st_mode == 0100600);
     }
 
-    if (!is_windows())
+#if __has_include(<sys/xattr.h>)
     {
         CHECK(listxattr(ops, "/cbd") == std::vector<std::string>{});
         CHECK(ops.vsetxattr("/cbd", "com.apple.FinderInfo", "65535", 5, 0, 0, nullptr) >= 0);
@@ -461,5 +461,6 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops,
         CHECK(listxattr(ops, "/cbd") == std::vector<std::string>{"org.securefs.test"});
         CHECK(getxattr(ops, "/cbd", "org.securefs.test") == "blah");
     }
+#endif
 }
 }    // namespace securefs::testing
