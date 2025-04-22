@@ -15,5 +15,18 @@
         },
         "uni-algo",
         "protobuf"
-    ]
+    ],
+    "features": {
+        "mimalloc": {
+            "description": "Enable linking to mimalloc",
+            "dependencies": [
+                {
+                    "name": "mimalloc",
+                    "features": [
+                        "override"
+                    ]
+                }
+            ]
+        }
+    }
 }

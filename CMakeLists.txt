@@ -19,6 +19,7 @@ option(SECUREFS_ADDRESS_SANITIZE
        "Enable address sanitizer during building. Mainly for development use."
        OFF)
 option(SECUREFS_LINK_PROFILER "Enable linking with gperftools profiler" OFF)
+option(SECUREFS_ENABLE_MIMALLOC "Enable linking with mimalloc." OFF)
 project(securefs)
 enable_testing()
 
@@ -118,6 +119,13 @@ else()
         securefs-static PUBLIC ${CRYPTOPP_CFLAGS} ${ARGON2_CFLAGS}
                                ${SQLITE_CFLAGS})
 
+endif()
+
+if(SECUREFS_ENABLE_MIMALLOC)
+    find_package(mimalloc CONFIG REQUIRED)
+    target_link_libraries(
+        securefs-static
+        PUBLIC $<IF:$<TARGET_EXISTS:mimalloc-static>,mimalloc-static,mimalloc>)
 endif()
 
 find_library(FRUIT_LIBRARY NAMES fruit)
