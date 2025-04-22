@@ -304,6 +304,10 @@ int FuseHighLevelOps::vreadlink(const char* path, char* buf, size_t size, const 
     {
         return -EFAULT;
     }
+    if (path && strcmp(path, "/") == 0)
+    {
+        return -EISDIR;
+    }
     auto opened = open_all(path);
     if (!opened)
     {

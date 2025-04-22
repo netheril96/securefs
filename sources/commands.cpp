@@ -793,6 +793,10 @@ private:
             .registerProvider<fruit::Annotated<tEnableXattr, bool>(const MountCommand&)>(
                 [](const MountCommand& cmd)
                 {
+                    if (is_windows())
+                    {
+                        return false;
+                    }
                     if (cmd.noxattr.getValue())
                     {
                         return false;
