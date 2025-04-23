@@ -87,6 +87,15 @@ jobs:
         with:
           path: build/securefs
           name: securefs-linux-amd64
+      - name: Upload Logs Always
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-logs
+          path: |
+            build/**/*.log
+            build/**/*.out
+            build/**/*.err
       - name: Create PR to update usage.md
         if: ${{ github.event_name == 'push' }}
         uses: peter-evans/create-pull-request@v7
@@ -135,6 +144,15 @@ jobs:
         with:
           path: build/securefs
           name: securefs-macos-fuse-t-amd64
+      - name: Upload Logs Always
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-logs
+          path: |
+            build/**/*.log
+            build/**/*.out
+            build/**/*.err
 
   build-windows:
     needs: [get-latest-vcpkg-release, build-windows-clang-cl]
@@ -173,6 +191,15 @@ jobs:
         with:
           path: build/Debug/securefs.exe
           name: securefs-windows-amd64
+      - name: Upload Logs Always
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-logs
+          path: |
+            build/**/*.log
+            build/**/*.out
+            build/**/*.err
 
   # Compile time validation only.
   build-windows-clang-cl:
@@ -207,6 +234,15 @@ jobs:
             ccpp-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
         run: python3 build.py --clang_cl --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build --build_type Debug
+      - name: Upload Logs Always
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-logs
+          path: |
+            build/**/*.log
+            build/**/*.out
+            build/**/*.err
 
   build-freebsd:
     runs-on: ubuntu-latest
@@ -249,3 +285,12 @@ jobs:
         with:
           path: ${{ github.workspace }}/build/securefs
           name: securefs-freebsd-amd64
+      - name: Upload Logs Always
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-logs
+          path: |
+            build/**/*.log
+            build/**/*.out
+            build/**/*.err

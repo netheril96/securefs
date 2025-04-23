@@ -1,13 +1,14 @@
 name: Build release binaries
 
 on:
-  push:
-    tags:
-      - '**'
   workflow_dispatch:
   schedule:
     - cron: '41 7 * * 2,6'
-
+  push:
+    branches:
+      - '**'
+    tags:
+      - '**'
 env:
   PYTHONUTF8: 1
   GITHUB_TOKEN: ${{ github.token }}
@@ -62,6 +63,15 @@ jobs:
         with:
           path: build/securefs
           name: securefs-linux-amd64-release
+      - name: Upload Logs Always
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-logs
+          path: |
+            build/**/*.log
+            build/**/*.out
+            build/**/*.err
 
   build-ubuntu-arm64:
     runs-on: ubuntu-22.04-arm
@@ -111,6 +121,15 @@ jobs:
         with:
           path: build/securefs
           name: securefs-linux-arm64-release
+      - name: Upload Logs Always
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-logs
+          path: |
+            build/**/*.log
+            build/**/*.out
+            build/**/*.err
 
   build-alpine:
     runs-on: ubuntu-latest
@@ -176,6 +195,15 @@ jobs:
         with:
           path: build/securefs
           name: securefs-linux-amd64-musl-static-release
+      - name: Upload Logs Always
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-logs
+          path: |
+            build/**/*.log
+            build/**/*.out
+            build/**/*.err
 
   build-mac:
     runs-on: macos-13
@@ -217,6 +245,15 @@ jobs:
         with:
           path: build/securefs
           name: securefs-macos-amd64-release
+      - name: Upload Logs Always
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-logs
+          path: |
+            build/**/*.log
+            build/**/*.out
+            build/**/*.err
 
   build-mac-arm64:
     runs-on: macos-13
@@ -258,6 +295,15 @@ jobs:
         with:
           path: build/securefs
           name: securefs-macos-arm64-release
+      - name: Upload Logs Always
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-logs
+          path: |
+            build/**/*.log
+            build/**/*.out
+            build/**/*.err
 
   build-mac-fuse-t:
     needs: build-mac
@@ -306,6 +352,15 @@ jobs:
         with:
           path: build/securefs
           name: securefs-macos-fuse-t-amd64-release
+      - name: Upload Logs Always
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-logs
+          path: |
+            build/**/*.log
+            build/**/*.out
+            build/**/*.err
 
   build-mac-fuse-t-arm64:
     needs: build-mac-arm64
@@ -354,6 +409,15 @@ jobs:
         with:
           path: build/securefs
           name: securefs-macos-fuse-t-arm64-release
+      - name: Upload Logs Always
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-logs
+          path: |
+            build/**/*.log
+            build/**/*.out
+            build/**/*.err
 
   build-windows:
     runs-on: windows-latest
@@ -397,6 +461,15 @@ jobs:
         with:
           path: build/Release/securefs.exe
           name: securefs-windows-amd64-release
+      - name: Upload Logs Always
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-logs
+          path: |
+            build/**/*.log
+            build/**/*.out
+            build/**/*.err
 
   build-freebsd:
     runs-on: ubuntu-latest
@@ -438,3 +511,12 @@ jobs:
         with:
           path: ${{ github.workspace }}/build/securefs
           name: securefs-freebsd-amd64-release
+      - name: Upload Logs Always
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-logs
+          path: |
+            build/**/*.log
+            build/**/*.out
+            build/**/*.err
