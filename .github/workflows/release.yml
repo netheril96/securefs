@@ -112,6 +112,71 @@ jobs:
           path: build/securefs
           name: securefs-linux-arm64-release
 
+  build-alpine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - name: install
+        run: sudo apt update && sudo apt upgrade && sudo apt install fuse libfuse-dev clang-15 python3-venv
+      - name: venv
+        run: |
+          python3 -m venv .venv;
+          .venv/bin/pip install -U xattr;
+      - name: Get latest Github release of vcpkg
+        uses: cardinalby/git-get-release-action@v1
+        id: get-latest-vcpkg-release
+        with:
+          latest: true
+          repo: microsoft/vcpkg
+          prerelease: false
+          draft: false
+      - name: checkout-vcpkg
+        uses: actions/checkout@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg
+          repository: microsoft/vcpkg
+          ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
+          fetch-depth: 1
+      - name: cache-vcpkg
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/build/vcpkg_installed
+          key: release-alpine-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            release-alpine-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
+            release-alpine-${{ runner.arch }}-
+      - uses: jirutka/setup-alpine@master
+        with:
+          packages: >
+            git
+            cmake
+            ninja-build
+            fuse-dev
+            fuse-static
+            python3
+            build-base
+            zip
+            linux-headers
+            autoconf
+            automake
+            autoconf-archive
+      - name: cross-compile
+        env:
+          CFLAGS: -static
+          CXXFLAGS: -static
+          VCPKG_KEEP_ENV_VARS: "CFLAGS;CXXFLAGS"
+        shell: alpine.sh {0}
+        run: |
+          export PATH="/usr/lib/ninja-build/bin:$PATH"
+          echo | sudo tee /usr/include/linux/prctl.h # A hack to avoid a conflict with the musl headers when building mimalloc
+          python3 build.py --lto --enable_unit_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build --cmake_defines VCPKG_MANIFEST_FEATURES=mimalloc SECUREFS_ENABLE_MIMALLOC=ON
+      - name: upload
+        uses: actions/upload-artifact@v4
+        with:
+          path: build/securefs
+          name: securefs-linux-amd64-musl-static-release
+
   build-mac:
     runs-on: macos-13
     timeout-minutes: 75
