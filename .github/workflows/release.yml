@@ -25,11 +25,10 @@ jobs:
             arch: amd64
           - os: ubuntu-22.04-arm
             arch: arm64
+    env:
+      SECUREFS_TEST_FORCE_XATTR: 1
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.8"
       - name: install
         run: sudo apt update && sudo apt upgrade && sudo apt install fuse libfuse-dev clang-15 python3-venv
       - name: venv
@@ -64,7 +63,9 @@ jobs:
           CC: clang-15
           CXX: clang++-15
           VCPKG_KEEP_ENV_VARS: "CC;CXX"
-        run: .venv/bin/python build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build
+        run: |
+          source .venv/bin/activate
+          python build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build
       - name: upload
         uses: actions/upload-artifact@v4
         with:
@@ -83,6 +84,8 @@ jobs:
   build-alpine:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 75
+    env:
+      SECUREFS_TEST_FORCE_XATTR: 1
     strategy:
       matrix:
         include:
@@ -162,8 +165,9 @@ jobs:
       - name: Integration test
         env:
           SECUREFS_BINARY: build/securefs
-        run:
-          .venv/bin/python test/simple_test.py > build/simple_test.out.log 2> build/simple_test.err.log
+        run: |
+          source .venv/bin/activate
+          python test/simple_test.py > build/simple_test.out.log 2> build/simple_test.err.log
       - name: Upload Logs Always
         if: always()
         uses: actions/upload-artifact@v4
@@ -177,6 +181,8 @@ jobs:
   build-mac:
     runs-on: macos-13
     timeout-minutes: 75
+    env:
+      SECUREFS_TEST_FORCE_XATTR: 1
     strategy:
       matrix:
         include:
@@ -200,9 +206,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.8"
       - name: venv
         run: |
           python3 -m venv .venv;
@@ -239,7 +242,8 @@ jobs:
             release-macOS-${{ matrix.arch }}-
       - name: build
         run: |
-          .venv/bin/python build.py --lto --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=${{ matrix.triplet }} --build_root=./build \
+          source .venv/bin/activate
+          python build.py --lto --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=${{ matrix.triplet }} --build_root=./build \
             --build_type Release \
             --cmake_defines CMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_osx_arch }} \
                 ${{ matrix.is_fuse_t && 'SECUREFS_USE_FUSET=ON' || '' }} \

@@ -50,13 +50,12 @@ jobs:
     needs: get-latest-vcpkg-release
     runs-on: ubuntu-22.04
     timeout-minutes: 75
+    env:
+      SECUREFS_TEST_FORCE_XATTR: 1
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.8"
       - name: install
         run: sudo apt-get install fuse libfuse-dev python3-venv
       - name: venv
@@ -80,7 +79,8 @@ jobs:
             ccpp-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
         run: |
-          .venv/bin/python build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build --build_type Debug
+          source .venv/bin/activate
+          python build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build --build_type Debug
           ./build/securefs doc > docs/usage.md
       - name: upload
         uses: actions/upload-artifact@v4

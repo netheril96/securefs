@@ -37,6 +37,8 @@ if sys.platform != "win32":
     try:
         import xattr
     except ImportError:
+        if os.getenv("SECUREFS_TEST_FORCE_XATTR") in ("1", "true", "yes", "on"):
+            raise ValueError("SECUREFS_TEST_FORCE_XATTR is on but xattr import fails")
         sys.stderr.write(
             'Importing module "xattr" failed. Testing for extended attribute support is skipped\n'
         )
