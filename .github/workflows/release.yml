@@ -16,8 +16,15 @@ env:
 
 jobs:
   build-ubuntu:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 75
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            arch: amd64
+          - os: ubuntu-22.04-arm
+            arch: arm64
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -48,10 +55,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
-          key: release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
+          key: release-${{ matrix.os }}-${{ matrix.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
-            release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
-            release-${{ runner.os }}-${{ runner.arch }}-
+            release-${{ matrix.os }}-${{ matrix.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
+            release-${{ matrix.os }}-${{ matrix.arch }}-
       - name: build-test
         env:
           CC: clang-15
@@ -62,111 +69,37 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: build/securefs
-          name: securefs-linux-amd64-release
+          name: securefs-linux-${{ matrix.arch }}-release
       - name: Upload Logs Always
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.job }}-logs
-          path: |
-            build/**/*.log
-            build/**/*.out
-            build/**/*.err
-
-  build-ubuntu-arm64:
-    runs-on: ubuntu-22.04-arm
-    timeout-minutes: 75
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.8"
-      - name: install
-        run: sudo apt update && sudo apt upgrade && sudo apt install fuse libfuse-dev clang-15 python3-venv
-      - name: venv
-        run: |
-          python3 -m venv .venv;
-          .venv/bin/pip install -U xattr;
-      - name: Get latest Github release of vcpkg
-        uses: cardinalby/git-get-release-action@v1
-        id: get-latest-vcpkg-release
-        with:
-          latest: true
-          repo: microsoft/vcpkg
-          prerelease: false
-          draft: false
-      - name: checkout-vcpkg
-        uses: actions/checkout@v4
-        with:
-          path: ${{ github.workspace }}/vcpkg
-          repository: microsoft/vcpkg
-          ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
-          fetch-depth: 1
-      - name: cache-vcpkg
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/build/vcpkg_installed
-          key: release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: |
-            release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
-            release-${{ runner.os }}-${{ runner.arch }}-
-      - name: build-test
-        env:
-          CC: clang-15
-          CXX: clang++-15
-          VCPKG_KEEP_ENV_VARS: "CC;CXX"
-        run: .venv/bin/python build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build
-      - name: upload
-        uses: actions/upload-artifact@v4
-        with:
-          path: build/securefs
-          name: securefs-linux-arm64-release
-      - name: Upload Logs Always
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-logs
+          name: ${{ github.job }}-${{ matrix.arch }}-logs
           path: |
             build/**/*.log
             build/**/*.out
             build/**/*.err
 
   build-alpine:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 75
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+            qemu_arch: x86_64
+            apk_tools_url: "https://gitlab.alpinelinux.org/api/v4/projects/5/packages/generic/v2.14.7/x86_64/apk.static#!sha256!bdd044e0fd6cc388c5e571e1093efa5f35f7767cc5aa338b0a2576a429009a62"
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+            qemu_arch: aarch64
+            apk_tools_url: "https://gitlab.alpinelinux.org/api/v4/projects/5/packages/generic/v2.14.7/aarch64/apk.static#!sha256!27a975638ddc95a411c9f17c63383e335da9edf6bb7de2281d950c291a11f878"
     steps:
       - uses: actions/checkout@v4
-      - name: install
-        run: sudo apt update && sudo apt upgrade && sudo apt install fuse libfuse-dev clang-15 python3-venv
-      - name: venv
-        run: |
-          python3 -m venv .venv;
-          .venv/bin/pip install -U xattr;
-      - name: Get latest Github release of vcpkg
-        uses: cardinalby/git-get-release-action@v1
-        id: get-latest-vcpkg-release
-        with:
-          latest: true
-          repo: microsoft/vcpkg
-          prerelease: false
-          draft: false
-      - name: checkout-vcpkg
-        uses: actions/checkout@v4
-        with:
-          path: ${{ github.workspace }}/vcpkg
-          repository: microsoft/vcpkg
-          ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
-          fetch-depth: 1
-      - name: cache-vcpkg
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/build/vcpkg_installed
-          key: release-alpine-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: |
-            release-alpine-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
-            release-alpine-${{ runner.arch }}-
       - uses: jirutka/setup-alpine@master
         with:
+          arch: ${{ matrix.qemu_arch }}
+          apk-tools-url: ${{ matrix.apk_tools_url }}
           packages: >
             curl
             git
@@ -182,6 +115,35 @@ jobs:
             automake
             autoconf-archive
             sudo
+      - name: install
+        run: sudo apt install fuse libfuse-dev python3-venv
+      - name: venv
+        run: |
+          python3 -m venv .venv;
+          .venv/bin/pip install -U xattr;
+      - name: Get latest Github release of vcpkg
+        uses: cardinalby/git-get-release-action@v1
+        id: get-latest-vcpkg-release
+        with:
+          latest: true
+          repo: microsoft/vcpkg
+          prerelease: false
+          draft: false
+      - name: checkout-vcpkg
+        uses: actions/checkout@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg
+          repository: microsoft/vcpkg
+          ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
+          fetch-depth: 1
+      - name: cache-vcpkg
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/build/vcpkg_installed
+          key: release-alpine-${{ matrix.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            release-alpine-${{ matrix.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
+            release-alpine-${{ matrix.arch }}-
       - name: cross-compile
         env:
           CFLAGS: -static
@@ -196,7 +158,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: build/securefs
-          name: securefs-linux-amd64-musl-static-release
+          name: securefs-linux-${{ matrix.arch }}-musl-static-release
       - name: Integration test
         env:
           SECUREFS_BINARY: build/securefs
@@ -206,7 +168,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.job }}-logs
+          name: ${{ github.job }}-${{ matrix.arch }}-logs
           path: |
             build/**/*.log
             build/**/*.out
@@ -215,107 +177,25 @@ jobs:
   build-mac:
     runs-on: macos-13
     timeout-minutes: 75
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.8"
-      - name: install
-        run: brew install macfuse && pip install xattr
-      - name: Get latest Github release of vcpkg
-        uses: cardinalby/git-get-release-action@v1
-        id: get-latest-vcpkg-release
-        with:
-          latest: true
-          repo: microsoft/vcpkg
-          prerelease: false
-          draft: false
-      - name: checkout-vcpkg
-        uses: actions/checkout@v4
-        with:
-          path: ${{ github.workspace }}/vcpkg
-          repository: microsoft/vcpkg
-          ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
-          fetch-depth: 1
-      - name: cache-vcpkg
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/build/vcpkg_installed
-          key: release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: |
-            release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
-            release-${{ runner.os }}-${{ runner.arch }}-
-      - name: build
-        run: python3 build.py --lto --enable_unit_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build
-      - name: upload
-        uses: actions/upload-artifact@v4
-        with:
-          path: build/securefs
-          name: securefs-macos-amd64-release
-      - name: Upload Logs Always
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-logs
-          path: |
-            build/**/*.log
-            build/**/*.out
-            build/**/*.err
-
-  build-mac-arm64:
-    runs-on: macos-13
-    timeout-minutes: 75
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.8"
-      - name: install
-        run: brew install macfuse && pip install xattr
-      - name: Get latest Github release of vcpkg
-        uses: cardinalby/git-get-release-action@v1
-        id: get-latest-vcpkg-release
-        with:
-          latest: true
-          repo: microsoft/vcpkg
-          prerelease: false
-          draft: false
-      - name: checkout-vcpkg
-        uses: actions/checkout@v4
-        with:
-          path: ${{ github.workspace }}/vcpkg
-          repository: microsoft/vcpkg
-          ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
-          fetch-depth: 1
-      - name: cache-vcpkg
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/build/vcpkg_installed
-          key: release-${{ runner.os }}-arm64-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: |
-            release-${{ runner.os }}-arm64-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
-            release-${{ runner.os }}-arm64-
-      - name: build
-        run: python3 build.py --lto --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build --cmake_defines CMAKE_OSX_ARCHITECTURES=arm64
-      - name: upload
-        uses: actions/upload-artifact@v4
-        with:
-          path: build/securefs
-          name: securefs-macos-arm64-release
-      - name: Upload Logs Always
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-logs
-          path: |
-            build/**/*.log
-            build/**/*.out
-            build/**/*.err
-
-  build-mac-fuse-t:
-    needs: build-mac
-    runs-on: macos-13
-    timeout-minutes: 75
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            is_fuse_t: false
+            triplet: x64-osx
+            cmake_osx_arch: x86_64
+          - arch: arm64
+            is_fuse_t: false
+            triplet: arm64-osx
+            cmake_osx_arch: arm64
+          - arch: amd64
+            is_fuse_t: true
+            triplet: x64-osx
+            cmake_osx_arch: x86_64
+          - arch: arm64
+            is_fuse_t: true
+            triplet: arm64-osx
+            cmake_osx_arch: arm64
     steps:
       - uses: actions/checkout@v4
         with:
@@ -324,11 +204,16 @@ jobs:
         with:
           python-version: "3.8"
       - name: venv
-        run:
+        run: |
           python3 -m venv .venv;
           .venv/bin/pip install -U xattr;
       - name: install
-        run: brew tap macos-fuse-t/homebrew-cask && brew install fuse-t
+        run: |
+          if [ "${{ matrix.is_fuse_t }}" = "true" ]; then
+            brew tap macos-fuse-t/homebrew-cask && brew install fuse-t;
+          else
+            brew install macfuse;
+          fi
       - name: Get latest Github release of vcpkg
         uses: cardinalby/git-get-release-action@v1
         id: get-latest-vcpkg-release
@@ -348,79 +233,28 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
-          key: release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
+          key: release-macOS-${{ matrix.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
-            release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
-            release-${{ runner.os }}-${{ runner.arch }}-
-      - name: build-test
-        run: .venv/bin/python build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-osx --build_root=./build --build_type Release --cmake_defines SECUREFS_USE_FUSET=ON
+            release-macOS-${{ matrix.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
+            release-macOS-${{ matrix.arch }}-
+      - name: build
+        run: |
+          .venv/bin/python build.py --lto --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=${{ matrix.triplet }} --build_root=./build \
+            --build_type Release \
+            --cmake_defines CMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_osx_arch }} \
+                ${{ matrix.is_fuse_t && 'SECUREFS_USE_FUSET=ON' || '' }} \
+            ${{ matrix.arch == 'amd64' && matrix.is_fuse_t == false && '--enable_unit_test' || '' }} \
+            ${{ matrix.arch == 'amd64' && matrix.is_fuse_t == true && '--enable_unit_test --enable_integration_test' || '' }}
       - name: upload
         uses: actions/upload-artifact@v4
         with:
           path: build/securefs
-          name: securefs-macos-fuse-t-amd64-release
+          name: securefs-macos-${{ matrix.arch }}${{ matrix.is_fuse_t && '-fuse-t' || '' }}-release
       - name: Upload Logs Always
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.job }}-logs
-          path: |
-            build/**/*.log
-            build/**/*.out
-            build/**/*.err
-
-  build-mac-fuse-t-arm64:
-    needs: build-mac-arm64
-    runs-on: macos-13
-    timeout-minutes: 75
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.8"
-      - name: venv
-        run:
-          python3 -m venv .venv;
-          .venv/bin/pip install -U xattr;
-      - name: install
-        run: brew tap macos-fuse-t/homebrew-cask && brew install fuse-t
-      - name: Get latest Github release of vcpkg
-        uses: cardinalby/git-get-release-action@v1
-        id: get-latest-vcpkg-release
-        with:
-          latest: true
-          repo: microsoft/vcpkg
-          prerelease: false
-          draft: false
-      - name: checkout-vcpkg
-        uses: actions/checkout@v4
-        with:
-          path: ${{ github.workspace }}/vcpkg
-          repository: microsoft/vcpkg
-          ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
-          fetch-depth: 1
-      - name: cache-vcpkg
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/build/vcpkg_installed
-          key: release-${{ runner.os }}-arm64-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: |
-            release-${{ runner.os }}-arm64-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
-            release-${{ runner.os }}-arm64-
-      - name: build-test
-        run: .venv/bin/python build.py --lto --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=arm64-osx --build_root=./build --build_type Release --cmake_defines SECUREFS_USE_FUSET=ON CMAKE_OSX_ARCHITECTURES=arm64
-      - name: upload
-        uses: actions/upload-artifact@v4
-        with:
-          path: build/securefs
-          name: securefs-macos-fuse-t-arm64-release
-      - name: Upload Logs Always
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-logs
+          name: build-mac-${{ matrix.arch }}${{ matrix.is_fuse_t && '-fuse-t' || '' }}-logs
           path: |
             build/**/*.log
             build/**/*.out
