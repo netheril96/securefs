@@ -168,6 +168,7 @@ jobs:
       - uses: jirutka/setup-alpine@master
         with:
           packages: >
+            curl
             git
             cmake
             ninja-build
@@ -180,6 +181,7 @@ jobs:
             autoconf
             automake
             autoconf-archive
+            sudo
       - name: cross-compile
         env:
           CFLAGS: -static
@@ -195,6 +197,11 @@ jobs:
         with:
           path: build/securefs
           name: securefs-linux-amd64-musl-static-release
+      - name: Integration test
+        env:
+          SECUREFS_BINARY: build/securefs
+        run:
+          .venv/bin/python test/simple_test.py > build/simple_test.out.log 2> build/simple_test.err.log
       - name: Upload Logs Always
         if: always()
         uses: actions/upload-artifact@v4
