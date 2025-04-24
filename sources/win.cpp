@@ -1082,8 +1082,38 @@ int64_t OSService::raise_fd_limit() noexcept
 
 void OSService::enter_background()
 {
-    WARN_LOG("Entering background mode is not allowed on Windows, because you can't unmount then");
+    (void)FreeConsole();
+    CHECK_CALL(AllocConsole());
+    auto console_window = GetConsoleWindow();
+    if (!console_window)
+    {
+        THROW_WINDOWS_EXCEPTION(GetLastError(), L"GetConsoleWindow");
+    }
+    CHECK_CALL(ShowWindow(console_window, SW_HIDE));
 }
+
+void OSService::unmount(const std::string& mount_point)
+{
+    bool success = true;
+    try
+    {
+        // NUL is a reserved filename in Win32, so most programs cannot handle it.
+        // We use it as a marking on Win32 for unmounting.
+        OSService oss{mount_point};
+        oss.mkdir("NUL", 0700);
+        // If it somehow succeeds, then we are doing it wrong.
+        success = false;
+        oss.remove_directory("NUL");
+    }
+    catch (const std::exception&)
+    {
+        // Ignore
+    }
+    if (!success)
+        throw_runtime_error("Unmounting failed because the target is not a securefs volume");
+}
+
+void OSService::self_sigint() { CHECK_CALL(GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, 0)); }
 
 class WindowsDirectoryTraverser final : public DirectoryTraverser
 {

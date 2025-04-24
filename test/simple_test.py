@@ -122,19 +122,10 @@ def securefs_mount(
 
 
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
-    with p:
-        if sys.platform == "win32":
-            p.send_signal(signal.CTRL_BREAK_EVENT)
-        else:
-            p.send_signal(signal.SIGINT)
-        time.sleep(0.017)
-        try:
-            os.lstat(mount_point)  # Trigger the next action of FUSE to unmount
-        except EnvironmentError:
-            pass
-        p.wait(timeout=5)
-        if p.returncode:
-            logging.error("securefs exited with non-zero code: %d", p.returncode)
+    subprocess.check_call([SECUREFS_BINARY, "unmount", mount_point])
+    p.wait(timeout=10.0)
+    if p.returncode:
+        raise subprocess.CalledProcessError(p.returncode, p.args)
 
 
 class RepoFormat(enum.Enum):

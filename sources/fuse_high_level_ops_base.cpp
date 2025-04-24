@@ -3,6 +3,7 @@
 #include "logger.h"
 
 #include <absl/functional/function_ref.h>
+#include <absl/strings/match.h>
 
 namespace securefs
 {
@@ -148,10 +149,26 @@ int FuseHighLevelOpsBase::static_mkdir(const char* path, fuse_mode_t mode)
 {
     auto ctx = fuse_get_context();
     auto op = static_cast<FuseHighLevelOpsBase*>(ctx->private_data);
-    return trace::FuseTracer::traced_call([=]() { return op->vmkdir(path, mode, ctx); },
-                                          "mkdir",
-                                          __LINE__,
-                                          {{"path", {path}}, {"mode", {mode}}});
+    return trace::FuseTracer::traced_call(
+        [=]()
+        {
+            if (is_windows())
+            {
+                // NUL is a reserved filename in Win32, so most programs cannot handle it.
+                // We use it as a marking on Win32 for unmounting.
+                if (absl::EqualsIgnoreCase(path, "/NUL"))
+                {
+                    INFO_LOG("Unmounting the volume due to special dir /NUL being created");
+                    OSService::self_sigint();
+                    return -EINVAL;
+                }
+            }
+
+            return op->vmkdir(path, mode, ctx);
+        },
+        "mkdir",
+        __LINE__,
+        {{"path", {path}}, {"mode", {mode}}});
 }
 int FuseHighLevelOpsBase::static_rmdir(const char* path)
 {

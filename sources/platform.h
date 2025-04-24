@@ -251,6 +251,8 @@ public:
                                                 CryptoPP::AlignedSecByteBlock* output);
     static std::string stringify_system_error(int errcode);
     static void enter_background();
+    static void unmount(const std::string& mount_point);
+    static void self_sigint();
 };
 
 struct Colour

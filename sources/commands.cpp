@@ -1407,6 +1407,27 @@ public:
     }
 };
 
+class UnmountCommand : public CommandBase
+{
+private:
+    TCLAP::UnlabeledValueArg<std::string> mount_point{
+        "mount_point", "Mount point to unmount", true, "", "mount_point", cmdline()};
+
+public:
+    const char* long_name() const noexcept override { return "unmount"; }
+    char short_name() const noexcept override { return 'u'; }
+    const char* help_message() const noexcept override
+    {
+        return "Unmount a mounted securefs volumn";
+    }
+
+    int execute() override
+    {
+        OSService::unmount(mount_point.getValue());
+        return 0;
+    }
+};
+
 int commands_main(int argc, const char* const* argv)
 {
     try
@@ -1418,10 +1439,14 @@ int commands_main(int argc, const char* const* argv)
                                                make_unique<VersionCommand>(),
                                                make_unique<InfoCommand>(),
                                                make_unique<MigrateLongNameCommand>(),
-                                               make_unique<DocCommand>()};
+                                               make_unique<DocCommand>(),
+                                               make_unique<UnmountCommand>()};
 
         const char* const program_name = argv[0];
-        auto&& doc_command = dynamic_cast<DocCommand&>(*cmds[array_length(cmds) - 1]);
+        auto&& doc_command = dynamic_cast<DocCommand&>(
+            **std::find_if(std::begin(cmds),
+                           std::end(cmds),
+                           [](const auto& cmd) { return cmd->long_name() == "doc"; }));
         for (auto&& c : cmds)
         {
             doc_command.add_command(c.get());

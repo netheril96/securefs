@@ -13,6 +13,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -637,6 +638,22 @@ void OSService::read_password_with_confirmation(const char* prompt,
 }
 
 void OSService::enter_background() { daemon(true, false); }
+void OSService::unmount(const std::string& mount_point)
+{
+    int rc = ::execlp("umount", "umount", mount_point.c_str(), nullptr);
+    if (rc < 0)
+    {
+        THROW_POSIX_EXCEPTION(errno, "Unmounting " + mount_point);
+    }
+}
+void OSService::self_sigint()
+{
+    int rc = ::kill(::getpid(), SIGINT);
+    if (rc < 0)
+    {
+        THROW_POSIX_EXCEPTION(errno, "kill");
+    }
+}
 
 // These two overloads are used to distinguish the GNU and XSI version of strerror_r
 
