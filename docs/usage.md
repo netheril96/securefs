@@ -87,3 +87,7 @@ Migrate a lite format repository without long name support.
 ## doc
 Display the full help message of all commands in markdown format
 
+## unmount (short name: u)
+Unmount a mounted securefs volumn
+
+- **mount_point**: (*positional*) (required)  Mount point to unmount
