@@ -133,7 +133,7 @@ def main():
         "cmake", "--build", ".", "--config", args.build_type, "-j", str(os.cpu_count())
     )
     if args.enable_unit_test or args.enable_integration_test:
-        check_call("ctest", "-C", args.build_type)
+        check_call("ctest", "-V", "-C", args.build_type)
     print(
         "Build succeeds. Please copy the binary somewhere in your PATH:",
         os.path.realpath("./securefs"),

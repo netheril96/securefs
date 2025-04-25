@@ -123,15 +123,7 @@ def securefs_mount(
 
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
     with p:
-        if sys.platform == "win32":
-            p.send_signal(signal.CTRL_BREAK_EVENT)
-        else:
-            p.send_signal(signal.SIGINT)
-        time.sleep(0.017)
-        try:
-            os.lstat(mount_point)  # Trigger the next action of FUSE to unmount
-        except EnvironmentError:
-            pass
+        subprocess.check_call(["diskutil", "unmount", mount_point])
         p.wait(timeout=5)
         if p.returncode:
             logging.error("securefs exited with non-zero code: %d", p.returncode)
