@@ -9,67 +9,41 @@
 #include "logger.h"
 #include "myutils.h"
 
-#include <cerrno>
-#include <csignal>
-#include <pthread.h>
-#include <semaphore.h>
-
 #include <atomic>
 #include <thread>
 #include <vector>
+
+#include <cerrno>
+#include <csignal>
+
+#include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <pthread.h>
+#include <signal.h>
+#include <stdio.h>
+#include <unistd.h>
+
 #endif
 
 namespace securefs
 {
 
-#if defined(_WIN32) || defined(__APPLE__)
+#if defined(_WIN32)
 #else
 namespace
 {
-    // Wrapper around POSIX semaphore. Needed because it is an async signal safe communication
-    // mechanism.
-    class Semaphore
+    int signal_pipefd[2]
+        = {-1, -1};    // signal_pipefd[0] is read end, signal_pipefd[1] is write end
+
+    void signal_handler(int sig) noexcept
     {
-    public:
-        Semaphore()
-        {
-            if (sem_init(&s_, 0, 0) < 0)
-                THROW_POSIX_EXCEPTION(errno, "Failed to initialize semaphore");
-        }
-        ~Semaphore() { sem_destroy(&s_); }
-        DISABLE_COPY_MOVE(Semaphore);
-
-        void wait()
-        {
-            while (true)
-            {
-                int rc = sem_wait(&s_);
-                if (rc < 0 && errno == EINTR)
-                {
-                    continue;
-                }
-                if (rc < 0)
-                {
-                    THROW_POSIX_EXCEPTION(errno, "sem_wait fails");
-                }
-                return;
-            }
-        }
-        void post()
-        {
-            if (sem_post(&s_) < 0)
-            {
-                THROW_POSIX_EXCEPTION(errno, "sem_post fails");
-            }
-        }
-
-    private:
-        sem_t s_;
-    };
-
-    Semaphore global_semaphore;
-
-    void signal_handler(int) { global_semaphore.post(); }
+        // Save and restore errno around the write call, as write can change errno
+        int saved_errno = errno;
+        char byte = (char)sig;
+        (void)write(signal_pipefd[1], &byte, 1);
+        errno = saved_errno;    // Restore errno
+    }
 
     void block_some_signals()
     {
@@ -87,7 +61,7 @@ namespace
         block_some_signals();
         std::vector<char> buffer(fuse_chan_bufsize(channel));
 
-        DEFER(global_semaphore.post());
+        DEFER(signal_handler(SIGINT));
 
         while (!fuse_session_exited(session))
         {
@@ -133,11 +107,19 @@ namespace
 
 int my_fuse_main(int argc, char** argv, fuse_operations* op, void* user_data)
 {
-#if defined(_WIN32) || defined(__APPLE__)
+#ifdef _WIN32
     return fuse_main(argc, argv, op, user_data);
 #else
     char* mountpoint;
     int multithreaded;
+    if (pipe(signal_pipefd) < 0)
+    {
+        THROW_POSIX_EXCEPTION(errno, "pipe");
+    }
+    if (fcntl(signal_pipefd[1], F_SETFL, O_NONBLOCK) < 0)
+    {
+        THROW_POSIX_EXCEPTION(errno, "fcntl");
+    }
 
     auto fuse = fuse_setup(argc, argv, op, sizeof(*op), &mountpoint, &multithreaded, user_data);
     if (fuse == nullptr)
@@ -172,7 +154,37 @@ int my_fuse_main(int argc, char** argv, fuse_operations* op, void* user_data)
         [&]()
         {
             block_some_signals();
-            global_semaphore.wait();
+            struct pollfd pfd = {};
+            pfd.fd = signal_pipefd[0];
+            pfd.events = POLL_IN;
+            pfd.revents = 0;
+
+            while (true)
+            {
+                int ready = poll(&pfd, 1, -1);
+                if (ready == -1)
+                {
+                    if (errno == EINTR)
+                    {
+                        continue;
+                    }
+                    else
+                    {
+                        THROW_POSIX_EXCEPTION(errno, "poll");
+                    }
+                }
+                else if ((pfd.revents & POLL_IN) == 0)
+                {
+                    continue;
+                }
+                char b;
+                if (read(pfd.fd, &b, 1) < 0)
+                {
+                    WARN_LOG("Failed to read from self pipe: %s",
+                             OSService::stringify_system_error((errno)));
+                }
+                break;
+            }
             fuse_session_exit(session);
 
             for (auto&& w : workers)
