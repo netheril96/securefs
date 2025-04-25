@@ -27,17 +27,7 @@ public:
         {
             return;
         }
-        try
-        {
-            lock_stream_ = root_.open_file_stream(kLockFileName, O_RDONLY | O_CREAT | O_EXCL, 0644);
-        }
-        catch (const std::exception& e)
-        {
-            ERROR_LOG("Failed to acquire lock file %s. Perhaps another securefs process is holding "
-                      "the lock.",
-                      root_.norm_path_narrowed(kLockFileName));
-            throw;
-        }
+        check_lock_file();
     }
 
     ~RepoLocker()
@@ -52,6 +42,9 @@ public:
 
 private:
     DISABLE_COPY_MOVE(RepoLocker)
+
+    void check_lock_file();
+    std::shared_ptr<FileStream> open_lock_stream_checked();
 
     OSService& root_;
     std::shared_ptr<FileStream> lock_stream_;

@@ -253,6 +253,7 @@ public:
     static std::string stringify_system_error(int errcode);
     static void enter_background();
     static bool is_process_running(pid_t pid);
+    static pid_t get_current_process_id();
 };
 
 struct Colour

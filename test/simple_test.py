@@ -112,9 +112,15 @@ def securefs_mount(
     )
     try:
         for _ in range(600):
-            time.sleep(0.1)
+            try:
+                p.wait(timeout=0.1)
+            except subprocess.TimeoutExpired:
+                pass
+            if p.returncode:
+                raise subprocess.CalledProcessError(p.returncode, p.args)
             if is_mount_then_statvfs(mount_point):
                 return p
+
         raise TimeoutError(f"Failed to mount {repr(mount_point)} after many attempts")
     except:
         securefs_unmount(p=p, mount_point=mount_point)
@@ -880,6 +886,28 @@ class PlainTextNamesRegressionTestCase(unittest.TestCase):
             )
         finally:
             securefs_unmount(p, mount_point)
+
+
+class RepoLockerTestCase(unittest.TestCase):
+    def test_locked(self):
+        data_dir = get_data_dir(fmt=RepoFormat.FULL)
+        securefs_create(data_dir=data_dir, fmt=RepoFormat.FULL, password="123")
+        mount_point = get_mount_point()
+        with open(os.path.join(data_dir, ".securefs.lock"), "w") as f:
+            f.write(str(os.getpid()))
+        with self.assertRaises(subprocess.CalledProcessError):
+            p = securefs_mount(
+                data_dir=data_dir, mount_point=mount_point, password="123"
+            )
+
+    def test_locker_died(self):
+        data_dir: str = get_data_dir(fmt=RepoFormat.FULL)
+        securefs_create(data_dir=data_dir, fmt=RepoFormat.FULL, password="123")
+        mount_point = get_mount_point()
+        with open(os.path.join(data_dir, ".securefs.lock"), "w") as f:
+            f.write(str(2**31 - 1))
+        p = securefs_mount(data_dir=data_dir, mount_point=mount_point, password="123")
+        securefs_unmount(p, mount_point)
 
 
 def list_dir_recursive(dirname: str, relpath=False) -> Set[str]:

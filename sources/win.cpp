@@ -1347,6 +1347,8 @@ bool OSService::is_process_running(pid_t pid)
     // we'll assume if it's not ERROR_INVALID_PARAMETER, the PID likely exists.
     return true;
 }
+pid_t OSService::get_current_process_id() { return GetCurrentProcessId(); }
+
 }    // namespace securefs
 
 #endif

@@ -8,6 +8,7 @@
 
 #include <absl/container/inlined_vector.h>
 #include <absl/strings/numbers.h>
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_split.h>
 
 #include <cerrno>
@@ -671,6 +672,44 @@ void FuseHighLevelOps::postprocess_stat(fuse_stat* st)
     if (owner_override_.gid_override.has_value())
     {
         st->st_gid = *owner_override_.gid_override;
+    }
+}
+
+void RepoLocker::check_lock_file()
+{
+    lock_stream_ = open_lock_stream_checked();
+    auto pid = absl::StrCat(OSService::get_current_process_id());
+    lock_stream_->resize(0);
+    lock_stream_->write(pid.data(), 0, pid.size());
+}
+
+std::shared_ptr<FileStream> RepoLocker::open_lock_stream_checked()
+{
+    try
+    {
+        return root_.open_file_stream(kLockFileName, O_RDWR | O_CREAT | O_EXCL, 0644);
+    }
+    catch (const ExceptionBase& e)
+    {
+        if (e.error_number() != EEXIST)
+        {
+            throw;
+        }
+
+        auto result = root_.open_file_stream(kLockFileName, O_RDWR, 0644);
+        pid_t pid{};
+        if (absl::SimpleAtoi(result->as_string(), &pid) && OSService::is_process_running(pid))
+        {
+            ERROR_LOG("Failed to acquire lock file %s. Process %d is holding "
+                      "the lock.",
+                      root_.norm_path_narrowed(kLockFileName),
+                      pid);
+            throw;
+        }
+        else
+        {
+            return result;
+        }
     }
 }
 

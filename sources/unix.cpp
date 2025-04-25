@@ -666,6 +666,7 @@ void OSService::read_password_with_confirmation(const char* prompt,
 }
 
 void OSService::enter_background() { daemon(true, false); }
+pid_t OSService::get_current_process_id() { return getpid(); }
 
 // These two overloads are used to distinguish the GNU and XSI version of strerror_r
 
