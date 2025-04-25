@@ -96,6 +96,9 @@ def main():
         help="Build with link time optimization. Only works on some platforms",
         action="store_true",
     )
+    parser.add_argument(
+        "--test_timeout", help="Test time out in seconds", type=int, default=600
+    )
     args = parser.parse_args()
 
     if args.enable_test:  # For backwards compat
@@ -133,7 +136,7 @@ def main():
         "cmake", "--build", ".", "--config", args.build_type, "-j", str(os.cpu_count())
     )
     if args.enable_unit_test or args.enable_integration_test:
-        check_call("ctest", "-C", args.build_type)
+        check_call("ctest", "-C", args.build_type, "--timeout", str(args.test_timeout))
     print(
         "Build succeeds. Please copy the binary somewhere in your PATH:",
         os.path.realpath("./securefs"),
