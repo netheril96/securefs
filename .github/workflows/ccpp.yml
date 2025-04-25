@@ -93,9 +93,9 @@ jobs:
         with:
           name: ${{ github.job }}-logs
           path: |
-            build/**/*.log
-            build/**/*.out
-            build/**/*.err
+            **/*.log
+            **/*.out
+            **/*.err
       - name: Create PR to update usage.md
         if: ${{ github.event_name == 'push' }}
         uses: peter-evans/create-pull-request@v7
@@ -144,6 +144,6 @@ jobs:
         with:
           name: ${{ github.job }}-logs
           path: |
-            build/**/*.log
-            build/**/*.out
-            build/**/*.err
+            **/*.log
+            **/*.out
+            **/*.err
