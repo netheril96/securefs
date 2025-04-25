@@ -6,13 +6,15 @@
 #include <fuse_lowlevel.h>
 
 #include "exceptions.h"
+#include "lock_guard.h"
 #include "logger.h"
 #include "myutils.h"
+
+#include <absl/synchronization/mutex.h>
 
 #include <cerrno>
 #include <csignal>
 #include <pthread.h>
-#include <semaphore.h>
 
 #include <atomic>
 #include <thread>
@@ -22,54 +24,18 @@
 namespace securefs
 {
 
-#if defined(_WIN32) || defined(__APPLE__)
+#if defined(_WIN32)
 #else
 namespace
 {
-    // Wrapper around POSIX semaphore. Needed because it is an async signal safe communication
-    // mechanism.
-    class Semaphore
+    absl::Mutex kSignalEndMutex{absl::kConstInit};
+    bool isExiting ABSL_GUARDED_BY(kSignalEndMutex);
+
+    void markExiting()
     {
-    public:
-        Semaphore()
-        {
-            if (sem_init(&s_, 0, 0) < 0)
-                THROW_POSIX_EXCEPTION(errno, "Failed to initialize semaphore");
-        }
-        ~Semaphore() { sem_destroy(&s_); }
-        DISABLE_COPY_MOVE(Semaphore);
-
-        void wait()
-        {
-            while (true)
-            {
-                int rc = sem_wait(&s_);
-                if (rc < 0 && errno == EINTR)
-                {
-                    continue;
-                }
-                if (rc < 0)
-                {
-                    THROW_POSIX_EXCEPTION(errno, "sem_wait fails");
-                }
-                return;
-            }
-        }
-        void post()
-        {
-            if (sem_post(&s_) < 0)
-            {
-                THROW_POSIX_EXCEPTION(errno, "sem_post fails");
-            }
-        }
-
-    private:
-        sem_t s_;
-    };
-
-    Semaphore global_semaphore;
-
-    void signal_handler(int) { global_semaphore.post(); }
+        LockGuard<absl::Mutex> lg(kSignalEndMutex);
+        isExiting = true;
+    }
 
     void block_some_signals()
     {
@@ -84,13 +50,19 @@ namespace
 
     void worker_loop(fuse_session* session, fuse_chan* channel, std::atomic<int>* error_code)
     {
-        block_some_signals();
         std::vector<char> buffer(fuse_chan_bufsize(channel));
 
-        DEFER(global_semaphore.post());
+        DEFER(markExiting());
 
         while (!fuse_session_exited(session))
         {
+            {
+                LockGuard<absl::Mutex> lg(kSignalEndMutex);
+                if (isExiting)
+                {
+                    return;
+                }
+            }
             fuse_buf fbuf{};
             fbuf.mem = buffer.data();
             fbuf.size = buffer.size();
@@ -116,28 +88,17 @@ namespace
             fuse_session_process_buf(session, &fbuf, channel);
         }
     }
-
-    void install_signal_handler(int sig)
-    {
-        struct sigaction sa;
-        memset(&sa, 0, sizeof(sa));
-        sa.sa_handler = &signal_handler;
-        sigemptyset(&sa.sa_mask);
-        if (sigaction(sig, &sa, nullptr))
-        {
-            THROW_POSIX_EXCEPTION(errno, "Failed to install signal handler");
-        }
-    }
 }    // namespace
 #endif
 
 int my_fuse_main(int argc, char** argv, fuse_operations* op, void* user_data)
 {
-#if defined(_WIN32) || defined(__APPLE__)
+#if defined(_WIN32)
     return fuse_main(argc, argv, op, user_data);
 #else
     char* mountpoint;
     int multithreaded;
+    block_some_signals();
 
     auto fuse = fuse_setup(argc, argv, op, sizeof(*op), &mountpoint, &multithreaded, user_data);
     if (fuse == nullptr)
@@ -164,15 +125,44 @@ int my_fuse_main(int argc, char** argv, fuse_operations* op, void* user_data)
         w = std::thread(worker_loop, session, channel, &error_code);
     }
 
-    install_signal_handler(SIGINT);
-    install_signal_handler(SIGTERM);
-    install_signal_handler(SIGHUP);
+    std::thread signal_handler(
+        []()
+        {
+            sigset_t newset;
+            sigemptyset(&newset);
+            sigaddset(&newset, SIGTERM);
+            sigaddset(&newset, SIGINT);
+            sigaddset(&newset, SIGHUP);
+            sigaddset(&newset, SIGQUIT);
+
+            int sig;
+            while (true)
+            {
+                int rc = sigwait(&newset, &sig);
+                if (rc < 0)
+                {
+                    if (errno == EINTR)
+                    {
+                        continue;
+                    }
+                    else
+                    {
+                        THROW_POSIX_EXCEPTION(errno, "sigwait");
+                    }
+                }
+                markExiting();
+                return;
+            }
+        });
 
     std::thread waiter(
         [&]()
         {
-            block_some_signals();
-            global_semaphore.wait();
+            {
+                LockGuard<absl::Mutex> lg(kSignalEndMutex);
+                kSignalEndMutex.Await(absl::Condition(&isExiting));
+            }
+
             fuse_session_exit(session);
 
             for (auto&& w : workers)
@@ -180,6 +170,7 @@ int my_fuse_main(int argc, char** argv, fuse_operations* op, void* user_data)
                 pthread_cancel(w.native_handle());
             }
         });
+    signal_handler.detach();
     waiter.join();
 
     for (auto&& w : workers)
