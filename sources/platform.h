@@ -133,6 +133,7 @@ public:
 
 #ifdef _WIN32
 using native_string_type = std::wstring;
+using pid_t = DWORD;
 #else
 using native_string_type = std::string;
 #endif
@@ -251,6 +252,7 @@ public:
                                                 CryptoPP::AlignedSecByteBlock* output);
     static std::string stringify_system_error(int errcode);
     static void enter_background();
+    static bool is_process_running(pid_t pid);
 };
 
 struct Colour

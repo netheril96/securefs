@@ -31,6 +31,8 @@
 #include <sys/xattr.h>
 #endif
 
+#include <signal.h>
+
 namespace securefs
 {
 class UnixFileStream final : public FileStream
@@ -491,6 +493,33 @@ int64_t OSService::raise_fd_limit() noexcept
 void OSService::get_current_time(fuse_timespec& current_time)
 {
     clock_gettime(CLOCK_REALTIME, &current_time);
+}
+
+bool OSService::is_process_running(pid_t pid)
+{
+    // POSIX implementation (Linux, macOS, FreeBSD)
+
+    // kill(pid, 0) sends no signal but checks for existence and permissions.
+    // Returns 0 on success (process exists and visible).
+    // Returns -1 on error.
+    // If returns -1 and errno is ESRCH, the process does not exist.
+    // If returns -1 and errno is EPERM, the process exists but we don't have permission
+    // to signal it. For the purpose of "is it running", we consider it running.
+
+    if (pid <= 0)
+    {    // PIDs are positive; 0 means current process group, -1 means all processes
+        if (pid == 0)
+            return true;    // PID 0 typically means current process group
+        return false;       // Invalid PID
+    }
+
+    int result = kill(pid, 0);
+    if (result == 0)
+    {
+        // Process exists and we have permission to signal it.
+        return true;
+    }
+    return errno != ESRCH;
 }
 
 #ifdef __APPLE__

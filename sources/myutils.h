@@ -132,7 +132,30 @@ inline constexpr bool is_apple()
     return false;
 #endif
 }
+inline constexpr bool is_linux()
+{
+#ifdef __linux__
+    return true;
+#else
+    return false;
+#endif
+}
+inline constexpr bool is_freebsd()
+{
+#ifdef __FreeBSD__
+    return true;
+#else
+    return false;
+#endif
+}
 using std::optional;
+
+enum class MaybeBool
+{
+    Unknown = -1,
+    False = 0,
+    True = 1,
+};
 
 using length_type = uint64_t;
 using offset_type = uint64_t;

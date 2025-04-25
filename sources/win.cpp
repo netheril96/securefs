@@ -1325,6 +1325,28 @@ void windows_init(void)
         abort();
     }
 }
+
+bool OSService::is_process_running(pid_t pid)
+{
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (process != nullptr)
+    {
+        DEFER(CloseHandle(process));
+        return true;
+    }
+    DWORD error = GetLastError();
+    if (error == ERROR_INVALID_PARAMETER)
+    {
+        // The PID does not exist.
+        return false;
+    }
+    // If GetLastError is ERROR_ACCESS_DENIED, the process exists but
+    // we don't have permission to query it. For the purpose of
+    // "is it running", we should consider it running.
+    // Other errors might indicate temporary issues, but for simplicity,
+    // we'll assume if it's not ERROR_INVALID_PARAMETER, the PID likely exists.
+    return true;
+}
 }    // namespace securefs
 
 #endif
