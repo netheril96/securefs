@@ -153,37 +153,20 @@ int my_fuse_main(int argc, char** argv, fuse_operations* op, void* user_data)
     std::thread waiter(
         [&]()
         {
-            block_some_signals();
-            struct pollfd pfd = {};
-            pfd.fd = signal_pipefd[0];
-            pfd.events = POLL_IN;
-            pfd.revents = 0;
-
             while (true)
             {
-                int ready = poll(&pfd, 1, -1);
-                if (ready == -1)
+                char b;
+                if (read(signal_pipefd[0], &b, 1) > 0)
                 {
-                    if (errno == EINTR)
-                    {
-                        continue;
-                    }
-                    else
-                    {
-                        THROW_POSIX_EXCEPTION(errno, "poll");
-                    }
+                    break;
                 }
-                else if ((pfd.revents & POLL_IN) == 0)
+                if (errno == EINTR)
                 {
                     continue;
                 }
-                char b;
-                if (read(pfd.fd, &b, 1) < 0)
-                {
-                    WARN_LOG("Failed to read from self pipe: %s",
-                             OSService::stringify_system_error((errno)));
-                }
-                break;
+                WARN_LOG("Failed to read from self pipe: %s",
+                         OSService::stringify_system_error((errno)));
+                continue;
             }
             fuse_session_exit(session);
 
