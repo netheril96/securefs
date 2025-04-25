@@ -907,7 +907,11 @@ class RepoLockerTestCase(unittest.TestCase):
         with open(os.path.join(data_dir, ".securefs.lock"), "w") as f:
             f.write(str(2**31 - 1))
         p = securefs_mount(data_dir=data_dir, mount_point=mount_point, password="123")
-        securefs_unmount(p, mount_point)
+        try:
+            with open(os.path.join(data_dir, ".securefs.lock"), "r") as f:
+                self.assertEqual(f.read(), str(p.pid))
+        finally:
+            securefs_unmount(p, mount_point)
 
 
 def list_dir_recursive(dirname: str, relpath=False) -> Set[str]:
