@@ -708,6 +708,9 @@ std::shared_ptr<FileStream> RepoLocker::open_lock_stream_checked()
         }
         else
         {
+            WARN_LOG("Lock file %s exists but the process holding it has exited. The previous "
+                     "securefs probably exited abnormally.",
+                     root_.norm_path_narrowed(kLockFileName));
             return result;
         }
     }
