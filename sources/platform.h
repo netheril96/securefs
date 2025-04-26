@@ -215,6 +215,13 @@ public:
 
     std::unique_ptr<DirectoryTraverser> create_traverser(const std::string& dir) const;
 
+    // The following functions are for a hacky way to query mount status and trigger unmount.
+    static unsigned get_cmd_for_query_ioctl() noexcept;
+    static unsigned get_cmd_for_trigger_unmount_ioctl() noexcept;
+    static unsigned get_magic_for_mounted_status() noexcept { return 0xA0FF933; }
+    bool query_if_mounted() const;
+    void trigger_unmount() const;
+
 #ifndef _WIN32
     // These APIs, unlike all others, report errors through negative error numbers as defined in
     // <errno.h>

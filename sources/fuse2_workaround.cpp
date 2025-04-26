@@ -2,6 +2,8 @@
 
 #include <fuse.h>
 
+#include <csignal>
+
 #ifndef _WIN32
 #include <fuse_lowlevel.h>
 
@@ -14,7 +16,6 @@
 #include <vector>
 
 #include <cerrno>
-#include <csignal>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -24,19 +25,22 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#else
+#include <fuse/winfsp_fuse.h>
 #endif
 
 namespace securefs
 {
 
 #if defined(_WIN32)
+void clean_exit_fuse() { fsp_fuse_signal_handler(SIGINT); }
 #else
 namespace
 {
     int signal_pipefd[2]
         = {-1, -1};    // signal_pipefd[0] is read end, signal_pipefd[1] is write end
 
-    void signal_handler(int sig) noexcept
+    void self_pipe_signal_handler(int sig) noexcept
     {
         // Save and restore errno around the write call, as write can change errno
         int saved_errno = errno;
@@ -61,7 +65,7 @@ namespace
         block_some_signals();
         std::vector<char> buffer(fuse_chan_bufsize(channel));
 
-        DEFER(signal_handler(SIGINT));
+        DEFER(self_pipe_signal_handler(SIGINT));
 
         while (!fuse_session_exited(session))
         {
@@ -95,7 +99,7 @@ namespace
     {
         struct sigaction sa;
         memset(&sa, 0, sizeof(sa));
-        sa.sa_handler = &signal_handler;
+        sa.sa_handler = &self_pipe_signal_handler;
         sigemptyset(&sa.sa_mask);
         if (sigaction(sig, &sa, nullptr))
         {
@@ -103,6 +107,7 @@ namespace
         }
     }
 }    // namespace
+void clean_exit_fuse() { self_pipe_signal_handler(SIGINT); }
 #endif
 
 int my_fuse_main(int argc, char** argv, fuse_operations* op, void* user_data)
