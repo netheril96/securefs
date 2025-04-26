@@ -85,6 +85,14 @@ Migrate a lite format repository without long name support.
 - **--argon2-t**: The time cost for argon2 algorithm. *Default: 30.*
 - **--argon2-m**: The memory cost for argon2 algorithm (in terms of KiB). *Default: 262144.*
 - **--argon2-p**: The parallelism for argon2 algorithm. *Default: 4.*
+## unmount (short name: u)
+Unmount an existing filesystem
+
+- **mount-point**: (*positional*) (required)  The mount point to unmount
+## ismount
+Exit code 0 if the target is a securefs mount point.
+
+- **mount-point**: (*positional*) (required)  The mount point to unmount
 ## doc
 Display the full help message of all commands in markdown format
 
