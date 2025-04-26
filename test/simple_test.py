@@ -47,35 +47,6 @@ else:
     xattr = None
 
 
-if sys.platform == "win32":
-
-    def ismount(path):
-        # Not all reparse points are mounts, but in our test, that is close enough
-        attribute = ctypes.windll.kernel32.GetFileAttributesW(path.rstrip("/\\"))
-        return attribute != -1 and (attribute & 0x400) == 0x400
-
-    def statvfs(path):
-        if not ctypes.windll.kernel32.GetDiskFreeSpaceExW(path, None, None, None):
-            raise ctypes.WinError()
-
-else:
-    ismount = os.path.ismount
-    statvfs = os.statvfs
-
-
-def is_mount_then_statvfs(mount_point: str) -> bool:
-    try:
-        ismounted: bool = ismount(mount_point)
-        if not ismounted:
-            return False
-        # This forces initialization of FUSE
-        statvfs(mount_point)
-        return True
-    except EnvironmentError:
-        traceback.print_exc()
-        return False
-
-
 def securefs_mount(
     data_dir: str,
     mount_point: str,
@@ -113,34 +84,24 @@ def securefs_mount(
     try:
         for _ in range(600):
             try:
-                p.wait(timeout=0.1)
+                p.wait(timeout=0.02)
             except subprocess.TimeoutExpired:
                 pass
             if p.returncode:
                 raise subprocess.CalledProcessError(p.returncode, p.args)
-            if is_mount_then_statvfs(mount_point):
+            if subprocess.call([SECUREFS_BINARY, "ismount", mount_point]) == 0:
                 return p
-
         raise TimeoutError(f"Failed to mount {repr(mount_point)} after many attempts")
     except:
-        securefs_unmount(p=p, mount_point=mount_point)
+        p.terminate()
         raise
 
 
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
-    with p:
-        if sys.platform == "win32":
-            p.send_signal(signal.CTRL_BREAK_EVENT)
-        else:
-            p.send_signal(signal.SIGINT)
-        time.sleep(0.017)
-        try:
-            os.lstat(mount_point)  # Trigger the next action of FUSE to unmount
-        except EnvironmentError:
-            pass
-        p.wait(timeout=5)
-        if p.returncode:
-            logging.error("securefs exited with non-zero code: %d", p.returncode)
+    subprocess.check_call([SECUREFS_BINARY, "unmount", mount_point])
+    p.wait(timeout=5)
+    if p.returncode:
+        raise subprocess.CalledProcessError(p.returncode, p.args)
 
 
 class RepoFormat(enum.Enum):

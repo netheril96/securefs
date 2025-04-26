@@ -1349,6 +1349,38 @@ bool OSService::is_process_running(pid_t pid)
 }
 pid_t OSService::get_current_process_id() { return GetCurrentProcessId(); }
 
+unsigned OSService::get_cmd_for_query_ioctl() noexcept
+{
+    return FSP_FUSE_IOCTL('s', 0, (unsigned)sizeof(unsigned));
+}
+unsigned OSService::get_cmd_for_trigger_unmount_ioctl() noexcept
+{
+    return FSP_FUSE_IOCTL('s', 0, 0);
+}
+bool OSService::query_if_mounted() const
+{
+    unsigned magic = 0;
+    return DeviceIoControl(m_root_handle,
+                           FSP_FUSE_CTLCODE_FROM_IOCTL(get_cmd_for_query_ioctl()),
+                           nullptr,
+                           0,
+                           &magic,
+                           sizeof(magic),
+                           nullptr,
+                           nullptr)
+        && magic == get_magic_for_mounted_status();
+}
+void OSService::trigger_unmount() const
+{
+    CHECK_CALL(DeviceIoControl(m_root_handle,
+                               FSP_FUSE_CTLCODE_FROM_IOCTL(get_cmd_for_trigger_unmount_ioctl()),
+                               nullptr,
+                               0,
+                               nullptr,
+                               0,
+                               nullptr,
+                               nullptr));
+}
 }    // namespace securefs
 
 #endif

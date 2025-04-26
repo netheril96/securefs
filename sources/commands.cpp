@@ -1275,6 +1275,40 @@ public:
     }
 };
 
+class UnmountCommand : public CommandBase
+{
+private:
+    TCLAP::UnlabeledValueArg<std::string> mount_point{
+        "mount-point", "The mount point to unmount", true, "", "string", cmdline()};
+
+public:
+    const char* long_name() const noexcept override { return "unmount"; }
+    char short_name() const noexcept override { return 'u'; }
+    const char* help_message() const noexcept override { return "Unmount an existing filesystem"; }
+
+    int execute() override
+    {
+        OSService(mount_point.getValue()).trigger_unmount();
+        return 0;
+    }
+};
+
+class IsMountCommand : public CommandBase
+{
+private:
+    TCLAP::UnlabeledValueArg<std::string> mount_point{
+        "mount-point", "The mount point to unmount", true, "", "string", cmdline()};
+
+public:
+    const char* long_name() const noexcept override { return "ismount"; }
+    char short_name() const noexcept override { return 0; }
+    const char* help_message() const noexcept override
+    {
+        return "Exit code 0 if the target is a securefs mount point.";
+    }
+
+    int execute() override { return OSService(mount_point.getValue()).query_if_mounted() ? 0 : 1; }
+};
 class DocCommand : public CommandBase
 {
 private:
@@ -1418,6 +1452,8 @@ int commands_main(int argc, const char* const* argv)
                                                make_unique<VersionCommand>(),
                                                make_unique<InfoCommand>(),
                                                make_unique<MigrateLongNameCommand>(),
+                                               make_unique<UnmountCommand>(),
+                                               make_unique<IsMountCommand>(),
                                                make_unique<DocCommand>()};
 
         const char* const program_name = argv[0];

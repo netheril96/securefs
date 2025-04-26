@@ -202,5 +202,11 @@ private:
     }
     static int static_removexattr(const char* path, const char* name);
     static int static_getpath(const char* path, char* buf, size_t size, fuse_file_info* info);
+    static int static_ioctl(const char* path,
+                            int cmd,
+                            void* arg,
+                            struct fuse_file_info* fi,
+                            unsigned int flags,
+                            void* data);
 };
 }    // namespace securefs

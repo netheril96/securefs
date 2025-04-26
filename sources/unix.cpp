@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/file.h>
+#include <sys/ioctl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
@@ -594,6 +595,23 @@ int OSService::setxattr(
 
 int OSService::removexattr(const char* path, const char* name) const noexcept { return -ENOSYS; }
 #endif
+
+unsigned OSService::get_cmd_for_query_ioctl() noexcept { return _IOR('s', 1, unsigned); }
+unsigned OSService::get_cmd_for_trigger_unmount_ioctl() noexcept { return _IO('s', 2); }
+bool OSService::query_if_mounted() const
+{
+    unsigned magic = 0;
+    return ioctl(m_dir_fd, get_cmd_for_query_ioctl(), &magic) == 0
+        && magic == get_magic_for_mounted_status();
+}
+void OSService::trigger_unmount() const
+{
+    if (ioctl(m_dir_fd, get_cmd_for_trigger_unmount_ioctl()) < 0)
+    {
+        THROW_POSIX_EXCEPTION(
+            errno, absl::StrFormat("ioctl(%d, %d)", m_dir_fd, get_cmd_for_trigger_unmount_ioctl()));
+    }
+}
 
 void OSService::read_password_no_confirmation(const char* prompt,
                                               CryptoPP::AlignedSecByteBlock* output)

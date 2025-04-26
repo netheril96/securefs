@@ -1,8 +1,15 @@
 #include "fuse_high_level_ops_base.h"
+#include "fuse2_workaround.h"
 #include "fuse_tracer_v2.h"
 #include "logger.h"
 
 #include <absl/functional/function_ref.h>
+
+#include <thread>
+
+#if __has_include(<sys/ioctl.h>)
+#include <sys/ioctl.h>
+#endif
 
 namespace securefs
 {
@@ -314,6 +321,44 @@ int FuseHighLevelOpsBase::static_getpath(const char* path,
                                            {"info", {info}}});
 }
 
+int FuseHighLevelOpsBase::static_ioctl(
+    const char* path, int cmd, void* arg, struct fuse_file_info* fi, unsigned int flags, void* data)
+{
+    auto ctx = fuse_get_context();
+    auto op = static_cast<FuseHighLevelOpsBase*>(ctx->private_data);
+    return trace::FuseTracer::traced_call(
+        [=]()
+        {
+            if (cmd == OSService::get_cmd_for_query_ioctl())
+            {
+#ifdef _IOC_SIZE
+                if (_IOC_SIZE(cmd) != sizeof(unsigned))
+                {
+                    throw_runtime_error("Invalid coding for ioctl!!! A programming error!!!");
+                }
+#endif
+                *(unsigned*)data = OSService::get_magic_for_mounted_status();
+                TRACE_LOG("Received request for magic status");
+                return 0;
+            }
+            else if (cmd == OSService::get_cmd_for_trigger_unmount_ioctl())
+            {
+                TRACE_LOG("Received request for clean exit");
+                securefs::clean_exit_fuse();
+                return 0;
+            }
+            return -1;
+        },
+        "ioctl",
+        __LINE__,
+        {{"path", {path}},
+         {"cmd", {cmd}},
+         {"arg", {arg}},
+         {"fi", {fi}},
+         {"flags", {flags}},
+         {"data", {data}}});
+}
+
 namespace
 {
     void enable_if_capable(fuse_conn_info* info, int cap)
@@ -349,6 +394,9 @@ fuse_operations FuseHighLevelOpsBase::build_ops(const FuseHighLevelOpsBase* op)
 #ifdef FUSE_CAP_WRITEBACK_CACHE
         enable_if_capable(info, FUSE_CAP_WRITEBACK_CACHE);
 #endif
+#ifdef FUSE_CAP_IOCTL_DIR
+        enable_if_capable(info, FUSE_CAP_IOCTL_DIR);
+#endif
         auto op = static_cast<FuseHighLevelOpsBase*>(fuse_get_context()->private_data);
         op->initialize(info);
         INFO_LOG("Fuse operations initialized");
@@ -356,6 +404,8 @@ fuse_operations FuseHighLevelOpsBase::build_ops(const FuseHighLevelOpsBase* op)
         return op;
     };
     opt.destroy = [](void* data) { INFO_LOG("Fuse operations destroyed"); };
+    opt.ioctl = &FuseHighLevelOpsBase::static_ioctl;
+
     opt.statfs = op->has_statfs() ? &FuseHighLevelOpsBase::static_statfs : nullptr;
     opt.getattr = op->has_getattr() ? &FuseHighLevelOpsBase::static_getattr : nullptr;
     opt.fgetattr = op->has_fgetattr() ? &FuseHighLevelOpsBase::static_fgetattr : nullptr;
