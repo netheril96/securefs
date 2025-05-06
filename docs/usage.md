@@ -29,6 +29,7 @@ Mount an existing filesystem
 - **--plain-text-names**: When enabled, securefs does not encrypt or decrypt file names. Use it at your own risk. No effect on full format.. *This is a switch arg. Default: false.*
 - **--uid-override**: Forces every file to be owned by this uid in the virtual filesystem. If the value is -1, then no override is in place. *Default: -1.*
 - **--gid-override**: Forces every file to be owned by this gid in the virtual filesystem. If the value is -1, then no override is in place. *Default: -1.*
+- **--allow-sensitive-logging**: Allow sensitive information in logs. *This is a switch arg. Default: false.*
 ## create (short name: c)
 Create a new filesystem
 
