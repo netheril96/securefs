@@ -36,6 +36,8 @@ namespace
                 []() { return key_type(0x99); })
             .template registerProvider<fruit::Annotated<tEnableXattr, bool>()>([]()
                                                                                { return true; })
+            .template registerProvider<fruit::Annotated<tAllowSensitiveLogging, bool>()>(
+                []() { return true; })
             .registerProvider(
                 []()
                 {
