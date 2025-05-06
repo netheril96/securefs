@@ -110,6 +110,12 @@ void AbslStringify(Sink& sink, const RawBuffer& value)
         absl::Utf8SafeCEscape(std::string_view(static_cast<const char*>(value.data), value.size)));
 }
 
+template <typename Sink>
+void AbslStringify(Sink& sink, const RedactedRawBuffer& value)
+{
+    absl::Format(&sink, "<buffer at %p with size %d>", value.data, value.size);
+}
+
 void FuseTracer::print(FILE* fp, const WrappedFuseArg& arg)
 {
     absl::FPrintF(fp, "%s=", arg.name);

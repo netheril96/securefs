@@ -99,7 +99,7 @@ int FuseHighLevelOpsBase::static_read(
         "read",
         __LINE__,
         {{"path", {path}},
-         trace::WrappedFuseArg{"buf", trace::RawBuffer{buf, size}},
+         trace::WrappedFuseArg{"buf", trace::RedactedRawBuffer{buf, size}},
          {"size", {size}},
          {"offset", {offset}},
          {"info", {info}}});
@@ -114,7 +114,7 @@ int FuseHighLevelOpsBase::static_write(
         "write",
         __LINE__,
         {{"path", {path}},
-         trace::WrappedFuseArg{"buf", trace::RawBuffer{buf, size}},
+         trace::WrappedFuseArg{"buf", trace::RedactedRawBuffer{buf, size}},
          {"size", {size}},
          {"offset", {offset}},
          {"info", {info}}});
@@ -205,7 +205,7 @@ int FuseHighLevelOpsBase::static_readlink(const char* path, char* buf, size_t si
         "readlink",
         __LINE__,
         {{"path", {path}},
-         trace::WrappedFuseArg{"buf", trace::RawBuffer{buf, size}},
+         trace::WrappedFuseArg{"buf", trace::RedactedRawBuffer{buf, size}},
          {"size", {size}}});
 }
 int FuseHighLevelOpsBase::static_rename(const char* from, const char* to)
@@ -254,7 +254,7 @@ int FuseHighLevelOpsBase::static_listxattr(const char* path, char* list, size_t 
         "listxattr",
         __LINE__,
         {{"path", {path}},
-         trace::WrappedFuseArg{"list", trace::RawBuffer{list, size}},
+         trace::WrappedFuseArg{"list", trace::RedactedRawBuffer{list, size}},
          {"size", {size}}});
 }
 int FuseHighLevelOpsBase::static_getxattr(
@@ -268,7 +268,7 @@ int FuseHighLevelOpsBase::static_getxattr(
         __LINE__,
         {{"path", {path}},
          {"name", {name}},
-         trace::WrappedFuseArg{"value", trace::RawBuffer{value, size}},
+         trace::WrappedFuseArg{"value", trace::RedactedRawBuffer{value, size}},
          {"size", {size}},
          {"position", {position}}});
 }
@@ -287,7 +287,7 @@ int FuseHighLevelOpsBase::static_setxattr(const char* path,
         __LINE__,
         {{"path", {path}},
          {"name", {name}},
-         trace::WrappedFuseArg{"value", trace::RawBuffer{value, size}},
+         trace::WrappedFuseArg{"value", trace::RedactedRawBuffer{value, size}},
          {"size", {size}},
          {"flags", {flags}},
          {"position", {position}}});
