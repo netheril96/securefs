@@ -14,6 +14,11 @@ struct RawBuffer
     const void* data;
     size_t size;
 };
+struct RedactedRawBuffer
+{
+    const void* data;
+    size_t size;
+};
 struct WrappedFuseArg
 {
     absl::string_view name;
@@ -28,7 +33,8 @@ struct WrappedFuseArg
                  const fuse_file_info*,
                  const fuse_statvfs*,
                  fuse_fill_dir_t,
-                 RawBuffer>
+                 RawBuffer,
+                 RedactedRawBuffer>
         value;
 };
 

@@ -17,6 +17,8 @@ class FuseHighLevelOpsBase : public Object
 public:
     static fuse_operations build_ops(const FuseHighLevelOpsBase* op);
 
+    virtual bool allow_sensitive_logging() const { return false; }
+
     virtual void initialize(fuse_conn_info* info) = 0;
 
     virtual bool has_statfs() const { return true; }
