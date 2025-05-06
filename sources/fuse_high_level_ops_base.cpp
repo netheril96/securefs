@@ -99,7 +99,9 @@ int FuseHighLevelOpsBase::static_read(
         "read",
         __LINE__,
         {{"path", {path}},
-         trace::WrappedFuseArg{"buf", trace::RedactedRawBuffer{buf, size}},
+         op->allow_sensitive_logging()
+             ? trace::WrappedFuseArg{"buf", trace::PlainRawBuffer{buf, size}}
+             : trace::WrappedFuseArg{"buf", trace::RedactedRawBuffer{buf, size}},
          {"size", {size}},
          {"offset", {offset}},
          {"info", {info}}});
@@ -114,7 +116,9 @@ int FuseHighLevelOpsBase::static_write(
         "write",
         __LINE__,
         {{"path", {path}},
-         trace::WrappedFuseArg{"buf", trace::RedactedRawBuffer{buf, size}},
+         op->allow_sensitive_logging()
+             ? trace::WrappedFuseArg{"buf", trace::PlainRawBuffer{buf, size}}
+             : trace::WrappedFuseArg{"buf", trace::RedactedRawBuffer{buf, size}},
          {"size", {size}},
          {"offset", {offset}},
          {"info", {info}}});
@@ -254,7 +258,9 @@ int FuseHighLevelOpsBase::static_listxattr(const char* path, char* list, size_t 
         "listxattr",
         __LINE__,
         {{"path", {path}},
-         trace::WrappedFuseArg{"list", trace::RedactedRawBuffer{list, size}},
+         op->allow_sensitive_logging()
+             ? trace::WrappedFuseArg{"list", trace::PlainRawBuffer{list, size}}
+             : trace::WrappedFuseArg{"list", trace::RedactedRawBuffer{list, size}},
          {"size", {size}}});
 }
 int FuseHighLevelOpsBase::static_getxattr(
@@ -268,7 +274,9 @@ int FuseHighLevelOpsBase::static_getxattr(
         __LINE__,
         {{"path", {path}},
          {"name", {name}},
-         trace::WrappedFuseArg{"value", trace::RedactedRawBuffer{value, size}},
+         op->allow_sensitive_logging()
+             ? trace::WrappedFuseArg{"value", trace::PlainRawBuffer{value, size}}
+             : trace::WrappedFuseArg{"value", trace::RedactedRawBuffer{value, size}},
          {"size", {size}},
          {"position", {position}}});
 }
@@ -287,7 +295,9 @@ int FuseHighLevelOpsBase::static_setxattr(const char* path,
         __LINE__,
         {{"path", {path}},
          {"name", {name}},
-         trace::WrappedFuseArg{"value", trace::RedactedRawBuffer{value, size}},
+         op->allow_sensitive_logging()
+             ? trace::WrappedFuseArg{"value", trace::PlainRawBuffer{value, size}}
+             : trace::WrappedFuseArg{"value", trace::RedactedRawBuffer{value, size}},
          {"size", {size}},
          {"flags", {flags}},
          {"position", {position}}});

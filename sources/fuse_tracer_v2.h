@@ -9,7 +9,7 @@
 
 namespace securefs::trace
 {
-struct RawBuffer
+struct PlainRawBuffer
 {
     const void* data;
     size_t size;
@@ -33,7 +33,7 @@ struct WrappedFuseArg
                  const fuse_file_info*,
                  const fuse_statvfs*,
                  fuse_fill_dir_t,
-                 RawBuffer,
+                 PlainRawBuffer,
                  RedactedRawBuffer>
         value;
 };

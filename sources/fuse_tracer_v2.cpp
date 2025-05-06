@@ -102,7 +102,7 @@ namespace
 }    // namespace
 
 template <typename Sink>
-void AbslStringify(Sink& sink, const RawBuffer& value)
+void AbslStringify(Sink& sink, const PlainRawBuffer& value)
 {
     absl::Format(
         &sink,
