@@ -44,4 +44,7 @@ struct tCaseInsensitive
 struct tEnableXattr
 {
 };
+struct tAllowSensitiveLogging
+{
+};
 }    // namespace securefs

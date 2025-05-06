@@ -275,18 +275,22 @@ public:
                             NameTranslator& name_trans,
                             XattrCryptor& xattr,
                             ANNOTATED(tXattrMasterKey, const key_type&) xattr_key,
-                            ANNOTATED(tEnableXattr, bool) enable_xattr))
+                            ANNOTATED(tEnableXattr, bool) enable_xattr,
+                            ANNOTATED(tAllowSensitiveLogging, bool) allow_sensitive_logging))
         : root_(root)
         , opener_(opener)
         , name_trans_(name_trans)
         , xattr_(xattr)
         , enable_xattr_(enable_xattr)
+        , allow_sensitive_logging_(allow_sensitive_logging)
     {
         if (!is_apple())
         {
             xattr_name_cryptor_.emplace(xattr_key.data(), xattr_key.size());
         }
     }
+
+    bool allow_sensitive_logging() const override { return allow_sensitive_logging_; }
 
     bool has_symlink() const override { return !is_windows(); }
     bool has_readlink() const override { return !is_windows(); }
@@ -374,6 +378,7 @@ private:
     std::optional<AES_SIV> xattr_name_cryptor_;
     bool enable_xattr_;
     bool read_dir_plus_ = false;
+    bool allow_sensitive_logging_;
 
 private:
     std::unique_ptr<File> open(std::string_view path, int flags, unsigned mode);

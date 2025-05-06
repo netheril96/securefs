@@ -57,15 +57,19 @@ public:
                             RepoLocker& locker,
                             const OwnerOverride& owner_override,
                             ANNOTATED(tCaseInsensitive, bool) case_insensitive,
-                            ANNOTATED(tEnableXattr, bool) enable_xattr))
+                            ANNOTATED(tEnableXattr, bool) enable_xattr,
+                            ANNOTATED(tAllowSensitiveLogging, bool) allow_sensitive_logging))
         : root_(root)
         , ft_(ft)
         , locker_(locker)
         , owner_override_(owner_override)
         , case_insensitive_(case_insensitive)
         , enable_xattr_(enable_xattr)
+        , allow_sensitive_logging_(allow_sensitive_logging)
     {
     }
+
+    bool allow_sensitive_logging() const override { return allow_sensitive_logging_; }
 
     void initialize(fuse_conn_info* info) override;
     int vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx) override;
@@ -152,6 +156,7 @@ private:
     OwnerOverride owner_override_;
     bool case_insensitive_;
     bool enable_xattr_;
+    bool allow_sensitive_logging_;
 
 private:
     struct OpenBaseResult

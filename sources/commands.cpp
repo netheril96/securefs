@@ -613,6 +613,8 @@ private:
         -1,
         "int",
         cmdline()};
+    TCLAP::SwitchArg allow_sensitive_logging{
+        "", "allow-sensitive-logging", "Allow sensitive information in logs", cmdline()};
     DecryptedSecurefsParams fsparams{};
 
 private:
@@ -815,7 +817,9 @@ private:
                 })
             .registerProvider<fruit::Annotated<tCaseInsensitive, bool>(const MountCommand&)>(
                 [](const MountCommand& cmd)
-                { return cmd.fsparams.full_format_params().case_insensitive(); });
+                { return cmd.fsparams.full_format_params().case_insensitive(); })
+            .registerProvider<fruit::Annotated<tAllowSensitiveLogging, bool>(const MountCommand&)>(
+                [](const MountCommand& cmd) { return cmd.allow_sensitive_logging.getValue(); });
     }
 
     bool should_use_ino()
