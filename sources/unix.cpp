@@ -738,9 +738,9 @@ bool OSService::is_fuse_t()
         return false;
     }
     Dl_info info{};
-    if (dladdr(reinterpret_cast<const void*>(&fuse_get_context), &info) != 0)
+    if (dladdr(reinterpret_cast<const void*>(&fuse_get_context), &info) == 0)
     {
-        ERROR_LOG("Failed to query dladdr: %d", errno);
+        ERROR_LOG("Failed to query dladdr");
         return false;
     }
     return absl::StrContainsIgnoreCase(info.dli_fname, "fuse-t");
