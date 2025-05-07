@@ -261,6 +261,7 @@ public:
     static void enter_background();
     static bool is_process_running(pid_t pid);
     static pid_t get_current_process_id();
+    static bool is_fuse_t();
 };
 
 struct Colour

@@ -1,3 +1,6 @@
+#include "myutils.h"
+#include <cerrno>
+#include <fuse.h>
 #ifndef _WIN32
 #define _DARWIN_BETTER_REALPATH 1
 #include "exceptions.h"
@@ -11,6 +14,7 @@
 
 #include <cxxabi.h>
 #include <dirent.h>
+#include <dlfcn.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
@@ -725,6 +729,21 @@ std::unique_ptr<const char, void (*)(const char*)> get_type_name(const std::exce
     if (demangled)
         return {demangled, [](const char* ptr) { free((void*)ptr); }};
     return {name, [](const char*) { /* no op */ }};
+}
+
+bool OSService::is_fuse_t()
+{
+    if (!is_apple())
+    {
+        return false;
+    }
+    Dl_info info{};
+    if (dladdr(reinterpret_cast<const void*>(&fuse_get_context), &info) != 0)
+    {
+        ERROR_LOG("Failed to query dladdr: %d", errno);
+        return false;
+    }
+    return absl::StrContainsIgnoreCase(info.dli_fname, "fuse-t");
 }
 
 const char* PATH_SEPARATOR_STRING = "/";

@@ -1381,6 +1381,7 @@ void OSService::trigger_unmount() const
                                nullptr,
                                nullptr));
 }
+bool OSService::is_fuse_t() { return false; }
 }    // namespace securefs
 
 #endif

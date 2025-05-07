@@ -1080,6 +1080,7 @@ public:
             absl::FPrintF(stderr, "Failed to query WinFsp version (code 0x%x)", status);
 #else
         absl::PrintF("libfuse %d\n", ::fuse_version());
+        absl::PrintF("fuse-t: %v\n", OSService::is_fuse_t());
 #endif
 
 #ifdef CRYPTOPP_DISABLE_ASM
@@ -1311,7 +1312,10 @@ public:
         return "Exit code 0 if the target is a securefs mount point.";
     }
 
-    int execute() override { return OSService(mount_point.getValue()).query_if_mounted() ? 0 : 1; }
+    int execute() override
+    {
+        return OSService(mount_point.getValue()).query_if_mounted() ? 0 : 255;
+    }
 };
 class DocCommand : public CommandBase
 {
@@ -1450,18 +1454,21 @@ int commands_main(int argc, const char* const* argv)
     try
     {
         std::ios_base::sync_with_stdio(false);
-        std::unique_ptr<CommandBase> cmds[] = {make_unique<MountCommand>(),
-                                               make_unique<CreateCommand>(),
-                                               make_unique<ChangePasswordCommand>(),
-                                               make_unique<VersionCommand>(),
-                                               make_unique<InfoCommand>(),
-                                               make_unique<MigrateLongNameCommand>(),
-                                               make_unique<UnmountCommand>(),
-                                               make_unique<IsMountCommand>(),
-                                               make_unique<DocCommand>()};
+        std::vector<std::shared_ptr<CommandBase>> cmds{std::make_shared<MountCommand>(),
+                                                       std::make_shared<CreateCommand>(),
+                                                       std::make_shared<ChangePasswordCommand>(),
+                                                       std::make_shared<VersionCommand>(),
+                                                       std::make_shared<InfoCommand>(),
+                                                       std::make_shared<MigrateLongNameCommand>()};
+        if (!OSService::is_fuse_t())
+        {
+            cmds.push_back(std::make_shared<UnmountCommand>());
+            cmds.push_back(std::make_shared<IsMountCommand>());
+        }
+        cmds.push_back(std::make_shared<DocCommand>());
 
         const char* const program_name = argv[0];
-        auto&& doc_command = dynamic_cast<DocCommand&>(*cmds[array_length(cmds) - 1]);
+        auto&& doc_command = dynamic_cast<DocCommand&>(*cmds.back());
         for (auto&& c : cmds)
         {
             doc_command.add_command(c.get());
