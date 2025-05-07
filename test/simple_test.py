@@ -47,6 +47,11 @@ else:
     xattr = None
 
 
+SECUREFS_LINKED_TO_FUSE_T = (
+    "fuse-t: true" in subprocess.check_output([SECUREFS_BINARY, "v"]).decode()
+)
+
+
 def securefs_mount(
     data_dir: str,
     mount_point: str,
@@ -89,7 +94,9 @@ def securefs_mount(
                 pass
             if p.returncode:
                 raise subprocess.CalledProcessError(p.returncode, p.args)
-            if subprocess.call([SECUREFS_BINARY, "ismount", mount_point]) == 0:
+            if SECUREFS_LINKED_TO_FUSE_T and os.path.ismount(mount_point):
+                return p
+            elif subprocess.call([SECUREFS_BINARY, "ismount", mount_point]) == 0:
                 return p
         raise TimeoutError(f"Failed to mount {repr(mount_point)} after many attempts")
     except:
@@ -98,7 +105,10 @@ def securefs_mount(
 
 
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
-    subprocess.check_call([SECUREFS_BINARY, "unmount", mount_point])
+    if SECUREFS_LINKED_TO_FUSE_T:
+        p.send_signal(signal.SIGINT)
+    else:
+        subprocess.check_call([SECUREFS_BINARY, "unmount", mount_point])
     p.wait(timeout=5)
     if p.returncode:
         raise subprocess.CalledProcessError(p.returncode, p.args)
