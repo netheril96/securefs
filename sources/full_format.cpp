@@ -33,11 +33,13 @@ void FuseHighLevelOps::initialize(struct fuse_conn_info* conn)
 }
 int FuseHighLevelOps::vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     root_.statfs(buf);
     return 0;
 };
 int FuseHighLevelOps::vgetattr(const char* path, fuse_stat* st, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto opened = open_all(path);
     if (!opened)
     {
@@ -53,6 +55,7 @@ int FuseHighLevelOps::vfgetattr(const char* path,
                                 fuse_file_info* info,
                                 const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto fp = get_file(info);
     FileLockGuard lg(*fp);
     fp->stat(st);
@@ -61,6 +64,7 @@ int FuseHighLevelOps::vfgetattr(const char* path,
 };
 int FuseHighLevelOps::vopendir(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto opened = open_all(path, true);
     if (!opened)
     {
@@ -75,6 +79,7 @@ int FuseHighLevelOps::vopendir(const char* path, fuse_file_info* info, const fus
 };
 int FuseHighLevelOps::vreleasedir(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto fp = get_file(info);
     if (fp->type() != Directory::class_type())
     {
@@ -91,6 +96,7 @@ int FuseHighLevelOps::vreaddir(const char* path,
                                fuse_file_info* info,
                                const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto fp = get_file(info);
     if (fp->type() != Directory::class_type())
     {
@@ -126,12 +132,14 @@ int FuseHighLevelOps::vcreate(const char* path,
                               fuse_file_info* info,
                               const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto holder = create(path, mode, RegularFile::class_type(), ctx->uid, ctx->gid);
     set_file(info, holder.release());
     return 0;
 };
 int FuseHighLevelOps::vopen(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto opened = open_all(path, true);
     if (!opened)
     {
@@ -147,6 +155,7 @@ int FuseHighLevelOps::vopen(const char* path, fuse_file_info* info, const fuse_c
 };
 int FuseHighLevelOps::vrelease(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto fp = get_file(info);
     if (fp->type() != RegularFile::class_type())
     {
@@ -163,6 +172,7 @@ int FuseHighLevelOps::vread(const char* path,
                             fuse_file_info* info,
                             const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto fp = get_file(info);
     FileLockGuard lg(*fp);
     return static_cast<int>(fp->cast_as<RegularFile>()->read(buf, offset, size));
@@ -174,6 +184,7 @@ int FuseHighLevelOps::vwrite(const char* path,
                              fuse_file_info* info,
                              const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto fp = get_file(info);
     FileLockGuard lg(*fp);
     fp->cast_as<RegularFile>()->write(buf, offset, size);
@@ -181,6 +192,7 @@ int FuseHighLevelOps::vwrite(const char* path,
 };
 int FuseHighLevelOps::vflush(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto fp = get_file(info);
     FileLockGuard lg(*fp);
     fp->flush();
@@ -191,6 +203,7 @@ int FuseHighLevelOps::vftruncate(const char* path,
                                  fuse_file_info* info,
                                  const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto fp = get_file(info);
     FileLockGuard lg(*fp);
     fp->cast_as<RegularFile>()->truncate(len);
@@ -198,6 +211,7 @@ int FuseHighLevelOps::vftruncate(const char* path,
 };
 int FuseHighLevelOps::vunlink(const char* path, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto [dirholder, last_component] = open_base(path);
     id_type id;
     int type;
@@ -217,11 +231,13 @@ int FuseHighLevelOps::vunlink(const char* path, const fuse_context* ctx)
 };
 int FuseHighLevelOps::vmkdir(const char* path, fuse_mode_t mode, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     create(path, mode, Directory::class_type(), ctx->uid, ctx->gid);
     return 0;
 };
 int FuseHighLevelOps::vrmdir(const char* path, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto [dirholder, last_component] = open_base(path);
     id_type id;
     int type;
@@ -244,6 +260,7 @@ int FuseHighLevelOps::vrmdir(const char* path, const fuse_context* ctx)
 };
 int FuseHighLevelOps::vchmod(const char* path, fuse_mode_t mode, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto opened = open_all(path);
     if (!opened)
     {
@@ -258,6 +275,7 @@ int FuseHighLevelOps::vchown(const char* path,
                              fuse_gid_t gid,
                              const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto opened = open_all(path);
     if (!opened)
     {
@@ -272,6 +290,7 @@ int FuseHighLevelOps::vchown(const char* path,
 };
 int FuseHighLevelOps::vsymlink(const char* to, const char* from, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     if (is_windows() && to && to[0] == '/')
     {
         ERROR_LOG("Symlink target %s is absolute and therefore not supported", to);
@@ -284,6 +303,7 @@ int FuseHighLevelOps::vsymlink(const char* to, const char* from, const fuse_cont
 };
 int FuseHighLevelOps::vlink(const char* src, const char* dest, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto opened = open_all(src, true);
     if (!opened)
     {
@@ -301,6 +321,7 @@ int FuseHighLevelOps::vlink(const char* src, const char* dest, const fuse_contex
 };
 int FuseHighLevelOps::vreadlink(const char* path, char* buf, size_t size, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     if (!size)
     {
         return -EFAULT;
@@ -322,6 +343,7 @@ int FuseHighLevelOps::vreadlink(const char* path, char* buf, size_t size, const 
 };
 int FuseHighLevelOps::vrename(const char* from, const char* to, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto [base_from, last_from] = open_base(from);
     auto [base_to, last_to] = open_base(to);
 
@@ -359,6 +381,7 @@ int FuseHighLevelOps::vfsync(const char* path,
                              fuse_file_info* info,
                              const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto fp = get_file(info);
     FileLockGuard lg(*fp);
     fp->fsync();
@@ -366,6 +389,7 @@ int FuseHighLevelOps::vfsync(const char* path,
 };
 int FuseHighLevelOps::vtruncate(const char* path, fuse_off_t len, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto opened = open_all(path, true);
     if (!opened)
     {
@@ -377,6 +401,7 @@ int FuseHighLevelOps::vtruncate(const char* path, fuse_off_t len, const fuse_con
 };
 int FuseHighLevelOps::vutimens(const char* path, const fuse_timespec* ts, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto opened = open_all(path);
     if (!opened)
     {
@@ -388,6 +413,7 @@ int FuseHighLevelOps::vutimens(const char* path, const fuse_timespec* ts, const 
 };
 int FuseHighLevelOps::vlistxattr(const char* path, char* list, size_t size, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto opened = open_all(path);
     if (!opened)
     {
@@ -409,6 +435,7 @@ int FuseHighLevelOps::vgetxattr(const char* path,
                                 uint32_t position,
                                 const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     if (position != 0)
         return -EINVAL;
     if (is_apple())
@@ -432,6 +459,7 @@ int FuseHighLevelOps::vsetxattr(const char* path,
                                 uint32_t position,
                                 const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     if (position != 0)
         return -EINVAL;
     if (is_apple())
@@ -452,6 +480,7 @@ int FuseHighLevelOps::vsetxattr(const char* path,
 };
 int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     if (is_apple())
     {
         if (int rc = securefs::apple_xattr::precheck_removexattr(&name); rc <= 0)
@@ -473,6 +502,7 @@ bool FuseHighLevelOps::has_getpath() const { return case_insensitive_; }
 int FuseHighLevelOps::vgetpath(
     const char* path, char* buf, size_t size, fuse_file_info* info, const fuse_context* ctx)
 {
+    fuse_hook_.notify_activity();
     auto copy_and_return = [=](std::string_view result)
     {
         if (result.size() >= size)
