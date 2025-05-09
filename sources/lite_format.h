@@ -382,7 +382,7 @@ private:
     bool enable_xattr_;
     bool read_dir_plus_ = false;
     bool allow_sensitive_logging_;
-    FuseHook& fuse_hook_;   
+    FuseHook& fuse_hook_;
 
 private:
     std::unique_ptr<File> open(std::string_view path, int flags, unsigned mode);
