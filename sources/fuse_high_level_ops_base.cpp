@@ -1,4 +1,6 @@
 #include "fuse_high_level_ops_base.h"
+#include "apple_xattr_workaround.h"
+#include "exceptions.h"
 #include "fuse_tracer_v2.h"
 #include "logger.h"
 
@@ -269,7 +271,24 @@ int FuseHighLevelOpsBase::static_getxattr(
     auto ctx = fuse_get_context();
     auto op = static_cast<FuseHighLevelOpsBase*>(ctx->private_data);
     return trace::FuseTracer::traced_call(
-        [=]() { return op->vgetxattr(path, name, value, size, position, ctx); },
+        [=]()
+        {
+            try
+            {
+                return op->vgetxattr(path, name, value, size, position, ctx);
+            }
+            catch (const ExceptionBase& e)
+            {
+#ifdef ENOATTR
+                // This happens so frequently that we don't want to log it.
+                if (e.error_number() == ENOATTR)
+                {
+                    return -ENOATTR;
+                }
+#endif
+                throw;
+            }
+        },
         "getxattr",
         __LINE__,
         {{"path", {path}},
