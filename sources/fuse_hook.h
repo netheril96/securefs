@@ -13,24 +13,24 @@ public:
     virtual void notify_activity() = 0;
 };
 
-class NoOpFuseHook : public FuseHook
+class NoOpFuseHook final : public FuseHook
 {
 public:
     void notify_activity() override {}
 };
 
-class IdleShutdownHook : public FuseHook
+class IdleShutdownHook final : public FuseHook
 {
 public:
     explicit IdleShutdownHook(absl::Duration timeout);
     void notify_activity() override;
 
 private:
-    ResettableTimer timer_;
     absl::Duration timeout_;
+    ResettableTimer timer_;
 };
 
-class MultiFuseHook : public FuseHook
+class MultiFuseHook final : public FuseHook
 {
 public:
     void add_hook(std::shared_ptr<FuseHook> hook) { hooks_.push_back(std::move(hook)); }
