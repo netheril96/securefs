@@ -45,6 +45,7 @@ jobs:
           title: Auto PR for source code formatting
           commit-message: Format source code (auto generated)
           sign-commits: true
+          branch: create-pull-request/auto-format
 
   build-ubuntu:
     needs: get-latest-vcpkg-release
@@ -104,6 +105,7 @@ jobs:
           title: Auto PR for usage.md
           commit-message: Auto update usage.md
           sign-commits: true
+          branch: create-pull-request/auto-update-usage
 
   # Compile time validation only.
   build-windows-clang-cl:
