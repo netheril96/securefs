@@ -615,6 +615,15 @@ private:
         cmdline()};
     TCLAP::SwitchArg allow_sensitive_logging{
         "", "allow-sensitive-logging", "Allow sensitive information in logs", cmdline()};
+    TCLAP::ValueArg<int> max_idle_seconds{
+        "",
+        "max-idle-seconds",
+        "Maximum idle time before the filesystem is "
+        "unmounted automatically. Default is 0 (no auto unmount).",
+        false,
+        0,
+        "int",
+        cmdline()};
     DecryptedSecurefsParams fsparams{};
 
 private:
@@ -819,7 +828,16 @@ private:
                 [](const MountCommand& cmd)
                 { return cmd.fsparams.full_format_params().case_insensitive(); })
             .registerProvider<fruit::Annotated<tAllowSensitiveLogging, bool>(const MountCommand&)>(
-                [](const MountCommand& cmd) { return cmd.allow_sensitive_logging.getValue(); });
+                [](const MountCommand& cmd) { return cmd.allow_sensitive_logging.getValue(); })
+            .registerProvider(
+                [](const MountCommand& cmd) -> FuseHook*
+                {
+                    if (cmd.max_idle_seconds.getValue() > 0)
+                    {
+                        return new IdleShutdownHook(absl::Seconds(cmd.max_idle_seconds.getValue()));
+                    }
+                    return new NoOpFuseHook();
+                });
     }
 
     bool should_use_ino()

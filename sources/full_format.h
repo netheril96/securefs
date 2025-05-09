@@ -1,7 +1,7 @@
 #include "file_table_v2.h"
 #include "files.h"
 #include "fuse_high_level_ops_base.h"
-#include "logger.h"
+#include "fuse_hook.h"
 #include "myutils.h"
 #include "platform.h"
 #include "tags.h"
@@ -13,6 +13,7 @@
 #include <fruit/macro.h>
 #include <memory>
 #include <optional>
+#include <vector>
 
 namespace securefs::full_format
 {
@@ -55,6 +56,7 @@ public:
     INJECT(FuseHighLevelOps(OSService& root,
                             FileTable& ft,
                             RepoLocker& locker,
+                            FuseHook& fuse_hook,
                             const OwnerOverride& owner_override,
                             ANNOTATED(tCaseInsensitive, bool) case_insensitive,
                             ANNOTATED(tEnableXattr, bool) enable_xattr,
@@ -66,6 +68,7 @@ public:
         , case_insensitive_(case_insensitive)
         , enable_xattr_(enable_xattr)
         , allow_sensitive_logging_(allow_sensitive_logging)
+        , fuse_hook_(fuse_hook)
     {
     }
 
@@ -157,6 +160,7 @@ private:
     bool case_insensitive_;
     bool enable_xattr_;
     bool allow_sensitive_logging_;
+    FuseHook& fuse_hook_;
 
 private:
     struct OpenBaseResult

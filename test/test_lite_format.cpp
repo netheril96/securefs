@@ -1,3 +1,4 @@
+#include "fuse_hook.h"
 #include "lite_format.h"
 #include "mystring.h"
 #include "myutils.h"
@@ -48,7 +49,8 @@ namespace
                      fruit::Annotated<tNameMasterKey, key_type>,
                      fruit::Annotated<tXattrMasterKey, key_type>,
                      fruit::Annotated<tEnableXattr, bool>,
-                     fruit::Annotated<tAllowSensitiveLogging, bool>>
+                     fruit::Annotated<tAllowSensitiveLogging, bool>,
+                     FuseHook>
     get_test_component()
     {
         return fruit::createComponent()
@@ -66,7 +68,8 @@ namespace
             .registerProvider<fruit::Annotated<tMaxPaddingSize, unsigned>()>([]() { return 24u; })
             .registerProvider<fruit::Annotated<tEnableXattr, bool>()>([]() { return true; })
             .registerProvider<fruit::Annotated<tAllowSensitiveLogging, bool>()>([]()
-                                                                                { return true; });
+                                                                                { return true; })
+            .registerProvider([]() -> FuseHook* { return new NoOpFuseHook(); });
     }
 
     TEST_CASE("case folding name translator")

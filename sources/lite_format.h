@@ -2,6 +2,7 @@
 
 #include "crypto.h"
 #include "fuse_high_level_ops_base.h"
+#include "fuse_hook.h"
 #include "lite_stream.h"
 #include "lock_guard.h"
 #include "mystring.h"
@@ -274,6 +275,7 @@ public:
                             StreamOpener& opener,
                             NameTranslator& name_trans,
                             XattrCryptor& xattr,
+                            FuseHook& fuse_hook,
                             ANNOTATED(tXattrMasterKey, const key_type&) xattr_key,
                             ANNOTATED(tEnableXattr, bool) enable_xattr,
                             ANNOTATED(tAllowSensitiveLogging, bool) allow_sensitive_logging))
@@ -283,6 +285,7 @@ public:
         , xattr_(xattr)
         , enable_xattr_(enable_xattr)
         , allow_sensitive_logging_(allow_sensitive_logging)
+        , fuse_hook_(fuse_hook)
     {
         if (!is_apple())
         {
@@ -379,6 +382,7 @@ private:
     bool enable_xattr_;
     bool read_dir_plus_ = false;
     bool allow_sensitive_logging_;
+    FuseHook& fuse_hook_;   
 
 private:
     std::unique_ptr<File> open(std::string_view path, int flags, unsigned mode);

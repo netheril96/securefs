@@ -45,6 +45,7 @@ namespace
                                            : Directory::DirNameComparison{&binary_compare};
                 })
             .registerProvider([]() { return OwnerOverride{}; })
+            .registerProvider([]() -> FuseHook* { return new NoOpFuseHook(); })
             .bindInstance(*os);
     }
     TEST_CASE("Full format test (case sensitive)")
