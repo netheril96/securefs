@@ -548,10 +548,8 @@ namespace
     class PathNormalizingNameTranslator : public NameTranslator
     {
     public:
-        (PathNormalizingNameTranslator(std::unique_ptr<NameTranslator> delegate,
-                                       bool case_fold,
-                                       bool nfc))
-            : delegate_(std::move(delegate)), case_fold_(case_fold), nfc_(nfc)
+        PathNormalizingNameTranslator(NameTranslator& delegate, bool case_fold, bool nfc)
+            : delegate_(delegate), case_fold_(case_fold), nfc_(nfc)
         {
         }
 
@@ -572,37 +570,37 @@ namespace
                     normed_string = una::cases::to_casefold_utf8(subject);
                     subject = normed_string;
                 }
-                return delegate_->encrypt_full_path(normed_string, out_encrypted_last_component);
+                return delegate_.encrypt_full_path(normed_string, out_encrypted_last_component);
             }
             catch (const std::exception& e)
             {
                 WARN_LOG("Failed to normalize path %s: %s", path, e.what());
-                return delegate_->encrypt_full_path(path, out_encrypted_last_component);
+                return delegate_.encrypt_full_path(path, out_encrypted_last_component);
             }
         }
 
         absl::variant<InvalidNameTag, LongNameTag, std::string>
         decrypt_path_component(std::string_view path) override
         {
-            return delegate_->decrypt_path_component(path);
+            return delegate_.decrypt_path_component(path);
         }
 
         std::string encrypt_path_for_symlink(std::string_view path) override
         {
-            return delegate_->encrypt_path_for_symlink(path);
+            return delegate_.encrypt_path_for_symlink(path);
         }
         std::string decrypt_path_from_symlink(std::string_view path) override
         {
-            return delegate_->decrypt_path_from_symlink(path);
+            return delegate_.decrypt_path_from_symlink(path);
         }
 
         unsigned max_virtual_path_component_size(unsigned physical_path_component_size) override
         {
-            return delegate_->max_virtual_path_component_size(physical_path_component_size);
+            return delegate_.max_virtual_path_component_size(physical_path_component_size);
         }
 
     private:
-        std::unique_ptr<NameTranslator> delegate_;
+        NameTranslator& delegate_;
         bool case_fold_;
         bool nfc_;
     };
@@ -1278,46 +1276,31 @@ void FuseHighLevelOps::process_possible_long_name(
     }
     callback(std::move(enc_path));
 }
-fruit::Component<
-    fruit::Required<const NameNormalizationFlags, fruit::Annotated<tNameMasterKey, key_type>>,
-    NameTranslator>
-get_name_translator_component()
+
+static fruit::Component<fruit::Required<NewStyleNameTranslator, LegacyNameTranslator>,
+                        fruit::Annotated<tInner, NameTranslator>>
+get_inner_name_translater_component(unsigned long_name_threshold)
 {
+    if (long_name_threshold > 0)
+        return fruit::createComponent()
+            .bind<fruit::Annotated<tInner, NameTranslator>, NewStyleNameTranslator>();
     return fruit::createComponent()
-        .registerProvider<fruit::Annotated<tLongNameThreshold, unsigned>(
-            const NameNormalizationFlags&)>([](const NameNormalizationFlags& flags)
-                                            { return flags.long_name_threshold; })
-        .registerProvider(
-            [](const NameNormalizationFlags& flags,
-               const std::function<std::unique_ptr<NoOpNameTranslator>()>& no_op_factory,
-               const std::function<std::unique_ptr<NewStyleNameTranslator>()>& new_style_factory,
-               const std::function<std::unique_ptr<LegacyNameTranslator>()>& legacy_factory)
-                -> NameTranslator*
-            {
-                if (flags.no_op)
-                {
-                    return no_op_factory().release();
-                }
-                std::unique_ptr<NameTranslator> inner;
-                if (flags.long_name_threshold > 0)
-                {
-                    inner = new_style_factory();
-                }
-                else
-                {
-                    inner = legacy_factory();
-                }
-                if (!flags.should_case_fold && !flags.should_normalize_nfc)
-                {
-                    return inner.release();
-                }
-                return new PathNormalizingNameTranslator(
-                    std::move(inner), flags.should_case_fold, flags.should_normalize_nfc);
-            });
+        .bind<fruit::Annotated<tInner, NameTranslator>, LegacyNameTranslator>();
+}
+
+static fruit::Component<
+    fruit::Required<fruit::Annotated<tInner, NameTranslator>, PathNormalizingNameTranslator>,
+    NameTranslator>
+get_outer_name_translater_component(bool should_case_fold, bool should_normalize_nfc)
+{
+    if (!should_case_fold && !should_normalize_nfc)
+        return fruit::createComponent()
+            .bind<NameTranslator, fruit::Annotated<tInner, NameTranslator>>();
+    return fruit::createComponent().bind<NameTranslator, PathNormalizingNameTranslator>();
 }
 
 fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
-get_name_translator_component(const NameNormalizationFlags* flags)
+get_name_translator_component(std::shared_ptr<NameNormalizationFlags> flags)
 {
     if (flags->no_op)
     {
@@ -1325,27 +1308,20 @@ get_name_translator_component(const NameNormalizationFlags* flags)
     }
     return fruit::createComponent()
         .bindInstance(*flags)
-        .registerProvider<NameTranslator*(const NameNormalizationFlags&,
-                                          fruit::Annotated<tNameMasterKey, const key_type&>)>(
-            [](const NameNormalizationFlags& flags, const key_type& key) -> NameTranslator*
+        .install(get_inner_name_translater_component, flags->long_name_threshold)
+        .install(get_outer_name_translater_component,
+                 flags->should_case_fold,
+                 flags->should_normalize_nfc)
+        .registerProvider<fruit::Annotated<tLongNameThreshold, unsigned>(
+            const NameNormalizationFlags&)>([](const NameNormalizationFlags& flags)
+                                            { return flags.long_name_threshold; })
+        .registerProvider<PathNormalizingNameTranslator*(
+            const NameNormalizationFlags&, fruit::Annotated<tInner, NameTranslator&>)>((
+            [](const NameNormalizationFlags& flags, NameTranslator& inner)
             {
-                std::unique_ptr<NameTranslator> inner;
-                if (flags.long_name_threshold > 0)
-                {
-                    inner
-                        = std::make_unique<NewStyleNameTranslator>(key, flags.long_name_threshold);
-                }
-                else
-                {
-                    inner = std::make_unique<LegacyNameTranslator>(key);
-                }
-                if (!flags.should_case_fold && !flags.should_normalize_nfc)
-                {
-                    return inner.release();
-                }
                 return new PathNormalizingNameTranslator(
-                    std::move(inner), flags.should_case_fold, flags.should_normalize_nfc);
-            });
+                    inner, flags.should_case_fold, flags.should_normalize_nfc);
+            }));
 }
 
 std::string_view NameTranslator::get_last_component(std::string_view path)

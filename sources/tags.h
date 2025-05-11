@@ -47,4 +47,7 @@ struct tEnableXattr
 struct tAllowSensitiveLogging
 {
 };
+struct tInner
+{
+};
 }    // namespace securefs

@@ -18,6 +18,7 @@
 #include <fruit/injector.h>
 
 #include <array>
+#include <memory>
 #include <string>
 #include <string_view>
 
@@ -74,19 +75,16 @@ namespace
 
     TEST_CASE("case folding name translator")
     {
-        fruit::Injector<NameTranslator> injector(+[]() -> fruit::Component<NameTranslator>
-                                                 {
-                                                     return fruit::createComponent()
-                                                         .registerProvider(
-                                                             []()
-                                                             {
-                                                                 NameNormalizationFlags flags{};
-                                                                 flags.should_case_fold = true;
-                                                                 return flags;
-                                                             })
-                                                         .install(get_name_translator_component)
-                                                         .install(get_test_component);
-                                                 });
+        fruit::Injector<NameTranslator> injector(
+            +[](std::shared_ptr<NameNormalizationFlags> name_normalization_flags)
+                -> fruit::Component<NameTranslator>
+            {
+                return fruit::createComponent()
+                    .install(get_name_translator_component, name_normalization_flags)
+                    .install(get_test_component);
+            },
+            std::make_shared<NameNormalizationFlags>(
+                NameNormalizationFlags{.should_case_fold = true}));
         auto t = injector.get<NameTranslator*>();
         CHECK(t->encrypt_full_path(u8"/abCDe/ß", nullptr)
               == t->encrypt_full_path(u8"/ABCde/ss", nullptr));
@@ -94,19 +92,16 @@ namespace
 
     TEST_CASE("Unicode normalizing name translator")
     {
-        fruit::Injector<NameTranslator> injector(+[]() -> fruit::Component<NameTranslator>
-                                                 {
-                                                     return fruit::createComponent()
-                                                         .registerProvider(
-                                                             []()
-                                                             {
-                                                                 NameNormalizationFlags flags{};
-                                                                 flags.should_normalize_nfc = true;
-                                                                 return flags;
-                                                             })
-                                                         .install(get_name_translator_component)
-                                                         .install(get_test_component);
-                                                 });
+        fruit::Injector<NameTranslator> injector(
+            +[](std::shared_ptr<NameNormalizationFlags> name_normalization_flags)
+                -> fruit::Component<NameTranslator>
+            {
+                return fruit::createComponent()
+                    .install(get_name_translator_component, name_normalization_flags)
+                    .install(get_test_component);
+            },
+            std::make_shared<NameNormalizationFlags>(
+                NameNormalizationFlags{.should_normalize_nfc = true}));
         auto t = injector.get<NameTranslator*>();
 
         CHECK(t->encrypt_full_path("/aaa/\xc3\x84\xc3\x84\xc3\x84", nullptr)
@@ -120,15 +115,10 @@ namespace
     {
         auto whole_component = [](OSService* os) -> fruit::Component<FuseHighLevelOps>
         {
+            auto flags = std::make_shared<NameNormalizationFlags>();
+            flags->long_name_threshold = 133;
             return fruit::createComponent()
-                .registerProvider(
-                    []()
-                    {
-                        NameNormalizationFlags flags{};
-                        flags.long_name_threshold = 133;
-                        return flags;
-                    })
-                .install(get_name_translator_component)
+                .install(get_name_translator_component, flags)
                 .install(get_test_component)
                 .bindInstance(*os);
         };
