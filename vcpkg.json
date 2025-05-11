@@ -16,6 +16,11 @@
         "uni-algo",
         "protobuf"
     ],
+    "vcpkg-configuration": {
+        "overlay-ports": [
+            "./overlay_ports"
+        ]
+    },
     "features": {
         "mimalloc": {
             "description": "Enable linking to mimalloc",
