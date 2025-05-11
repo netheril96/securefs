@@ -6,5 +6,9 @@ set(VCPKG_BUILD_TYPE release)
 
 set(VCPKG_CMAKE_SYSTEM_NAME Linux)
 
-set(VCPKG_C_FLAGS_RELEASE "-flto")
-set(VCPKG_CXX_FLAGS_RELEASE "-flto")
+set(VCPKG_C_FLAGS_RELEASE
+    "-flto -fvisibility-inlines-hidden -fno-fat-lto-objects -fvisibility=hidden"
+)
+set(VCPKG_CXX_FLAGS_RELEASE
+    "-flto -fvisibility-inlines-hidden -fno-fat-lto-objects -fvisibility=hidden"
+)
