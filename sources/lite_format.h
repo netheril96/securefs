@@ -219,10 +219,8 @@ struct NameNormalizationFlags
     unsigned long_name_threshold;
 };
 
-fruit::Component<
-    fruit::Required<const NameNormalizationFlags, fruit::Annotated<tNameMasterKey, key_type>>,
-    NameTranslator>
-get_name_translator_component();
+fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
+get_name_translator_component(std::shared_ptr<NameNormalizationFlags> flags);
 
 class XattrVerificationException : public std::exception
 {

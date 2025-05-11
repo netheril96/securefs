@@ -694,39 +694,11 @@ private:
         return fruit::createComponent()
             .bindInstance(*cmd)
             .install(+internal_binder, cmd->fsparams.format_specific_params_case())
-            .install(::securefs::lite_format::get_name_translator_component)
+            .install(::securefs::lite_format::get_name_translator_component,
+                     std::make_shared<lite_format::NameNormalizationFlags>(
+                         cmd->get_name_normalization_flags()))
             .install(full_format::get_table_io_component,
                      cmd->fsparams.full_format_params().legacy_file_table_io())
-            .registerProvider<lite_format::NameNormalizationFlags(const MountCommand&)>(
-                [](const MountCommand& cmd)
-                {
-                    lite_format::NameNormalizationFlags flags{};
-                    if (cmd.plain_text_names.getValue())
-                    {
-                        flags.no_op = true;
-                    }
-                    else if (cmd.normalization.getValue() == "nfc")
-                    {
-                        flags.should_normalize_nfc = true;
-                    }
-                    else if (cmd.normalization.getValue() == "casefold")
-                    {
-                        flags.should_case_fold = true;
-                    }
-                    else if (cmd.normalization.getValue() == "casefold+nfc")
-                    {
-                        flags.should_normalize_nfc = true;
-                        flags.should_case_fold = true;
-                    }
-                    else if (cmd.normalization.getValue() != "none")
-                    {
-                        throw_runtime_error("Invalid flag of --normalization: "
-                                            + cmd.normalization.getValue());
-                    }
-                    flags.long_name_threshold
-                        = cmd.fsparams.lite_format_params().long_name_threshold();
-                    return flags;
-                })
             .registerProvider<fruit::Annotated<tVerify, bool>(const MountCommand&)>(
                 [](const MountCommand& cmd) { return !cmd.insecure.getValue(); })
             .registerProvider<fruit::Annotated<tStoreTimeWithinFs, bool>(const MountCommand&)>(
@@ -1079,6 +1051,34 @@ public:
     char short_name() const noexcept override { return 'm'; }
 
     const char* help_message() const noexcept override { return "Mount an existing filesystem"; }
+
+    lite_format::NameNormalizationFlags get_name_normalization_flags() const
+    {
+        lite_format::NameNormalizationFlags flags{};
+        if (plain_text_names.getValue())
+        {
+            flags.no_op = true;
+        }
+        else if (normalization.getValue() == "nfc")
+        {
+            flags.should_normalize_nfc = true;
+        }
+        else if (normalization.getValue() == "casefold")
+        {
+            flags.should_case_fold = true;
+        }
+        else if (normalization.getValue() == "casefold+nfc")
+        {
+            flags.should_normalize_nfc = true;
+            flags.should_case_fold = true;
+        }
+        else if (normalization.getValue() != "none")
+        {
+            throw_runtime_error("Invalid flag of --normalization: " + normalization.getValue());
+        }
+        flags.long_name_threshold = fsparams.lite_format_params().long_name_threshold();
+        return flags;
+    }
 };
 
 class VersionCommand : public CommandBase
