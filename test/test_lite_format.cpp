@@ -50,8 +50,7 @@ namespace
                      fruit::Annotated<tNameMasterKey, key_type>,
                      fruit::Annotated<tXattrMasterKey, key_type>,
                      fruit::Annotated<tEnableXattr, bool>,
-                     fruit::Annotated<tAllowSensitiveLogging, bool>,
-                     FuseHook>
+                     fruit::Annotated<tAllowSensitiveLogging, bool>>
     get_test_component()
     {
         return fruit::createComponent()
@@ -69,8 +68,7 @@ namespace
             .registerProvider<fruit::Annotated<tMaxPaddingSize, unsigned>()>([]() { return 24u; })
             .registerProvider<fruit::Annotated<tEnableXattr, bool>()>([]() { return true; })
             .registerProvider<fruit::Annotated<tAllowSensitiveLogging, bool>()>([]()
-                                                                                { return true; })
-            .registerProvider([]() -> FuseHook* { return new NoOpFuseHook(); });
+                                                                                { return true; });
     }
 
     TEST_CASE("case folding name translator")
