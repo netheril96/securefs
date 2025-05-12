@@ -6,6 +6,7 @@
 #include "full_format.h"
 #include "fuse2_workaround.h"
 #include "fuse_high_level_ops_base.h"
+#include "fuse_hook.h"
 #include "git-version.h"
 #include "lite_format.h"
 #include "lock_enabled.h"
@@ -670,35 +671,53 @@ private:
         return key_type{reinterpret_cast<const byte*>(view.data()), view.size()};
     }
 
+    static fruit::Component<
+        fruit::Required<lite_format::FuseHighLevelOps, full_format::FuseHighLevelOps>,
+        fruit::Annotated<tInner, FuseHighLevelOpsBase>>
+    get_inner_fuse_op_component(DecryptedSecurefsParams::FormatSpecificParamsCase format_case)
+    {
+        switch (format_case)
+        {
+        case DecryptedSecurefsParams::kLiteFormatParams:
+            return fruit::createComponent()
+                .bind<fruit::Annotated<tInner, FuseHighLevelOpsBase>,
+                      lite_format::FuseHighLevelOps>();
+        case DecryptedSecurefsParams::kFullFormatParams:
+            return fruit::createComponent()
+                .bind<fruit::Annotated<tInner, FuseHighLevelOpsBase>,
+                      full_format::FuseHighLevelOps>();
+        default:
+            throwInvalidArgumentException("Unknown format case");
+        }
+    }
+
+    static fruit::Component<
+        fruit::Required<fruit::Annotated<tInner, FuseHighLevelOpsBase>, HookedFuseHighLevelOps>,
+        FuseHighLevelOpsBase>
+    get_fuse_high_ops_maybe_hooked_component(int max_idle_seconds)
+    {
+        if (max_idle_seconds > 0)
+        {
+            return fruit::createComponent().bind<FuseHighLevelOpsBase, HookedFuseHighLevelOps>();
+        }
+        return fruit::createComponent()
+            .bind<FuseHighLevelOpsBase, fruit::Annotated<tInner, FuseHighLevelOpsBase>>();
+    }
+
     static fruit::Component<FuseHighLevelOpsBase>
     get_fuse_high_ops_component(const MountCommand* cmd)
     {
-        auto internal_binder = [](DecryptedSecurefsParams::FormatSpecificParamsCase format_case)
-            -> fruit::Component<
-                fruit::Required<lite_format::FuseHighLevelOps, full_format::FuseHighLevelOps>,
-                FuseHighLevelOpsBase>
-        {
-            switch (format_case)
-            {
-            case DecryptedSecurefsParams::kLiteFormatParams:
-                return fruit::createComponent()
-                    .bind<FuseHighLevelOpsBase, lite_format::FuseHighLevelOps>();
-            case DecryptedSecurefsParams::kFullFormatParams:
-                return fruit::createComponent()
-                    .bind<FuseHighLevelOpsBase, full_format::FuseHighLevelOps>();
-            default:
-                throwInvalidArgumentException("Unknown format case");
-            }
-        };
-
         return fruit::createComponent()
             .bindInstance(*cmd)
-            .install(+internal_binder, cmd->fsparams.format_specific_params_case())
+            .install(+get_inner_fuse_op_component, cmd->fsparams.format_specific_params_case())
+            .install(+get_fuse_high_ops_maybe_hooked_component, cmd->max_idle_seconds.getValue())
             .install(::securefs::lite_format::get_name_translator_component,
                      std::make_shared<lite_format::NameNormalizationFlags>(
                          cmd->get_name_normalization_flags()))
             .install(full_format::get_table_io_component,
                      cmd->fsparams.full_format_params().legacy_file_table_io())
+            .registerConstructor<HookedFuseHighLevelOps(
+                fruit::Annotated<tInner, FuseHighLevelOpsBase&>, FuseHook&)>()
             .registerProvider<fruit::Annotated<tVerify, bool>(const MountCommand&)>(
                 [](const MountCommand& cmd) { return !cmd.insecure.getValue(); })
             .registerProvider<fruit::Annotated<tStoreTimeWithinFs, bool>(const MountCommand&)>(

@@ -752,14 +752,12 @@ void FuseHighLevelOps::initialize(fuse_conn_info* info)
 
 int FuseHighLevelOps::vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     root_.statfs(buf);
     buf->f_namemax = name_trans_.max_virtual_path_component_size(buf->f_namemax);
     return 0;
 }
 int FuseHighLevelOps::vgetattr(const char* path, fuse_stat* buf, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     auto enc_path = name_trans_.encrypt_full_path(path, nullptr);
     if (!root_.stat(enc_path, buf))
         return -ENOENT;
@@ -828,7 +826,6 @@ int FuseHighLevelOps::vfgetattr(const char* path,
                                 fuse_file_info* info,
                                 const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     auto fp = get_base(info);
     LockGuard<Base> lg(*fp);
     fp->fstat(st);
@@ -836,7 +833,6 @@ int FuseHighLevelOps::vfgetattr(const char* path,
 }
 int FuseHighLevelOps::vopendir(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     auto dir = std::make_unique<DirectoryImpl>(
         root_.norm_path_narrowed(name_trans_.encrypt_full_path(path, nullptr)),
         name_trans_,
@@ -847,7 +843,6 @@ int FuseHighLevelOps::vopendir(const char* path, fuse_file_info* info, const fus
 }
 int FuseHighLevelOps::vreleasedir(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     delete get_base(info);
     return 0;
 }
@@ -858,7 +853,6 @@ int FuseHighLevelOps::vreaddir(const char* path,
                                fuse_file_info* info,
                                const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     auto dir = get_dir_checked(info);
     LockGuard<Directory> lg(*dir);
 
@@ -882,19 +876,16 @@ int FuseHighLevelOps::vcreate(const char* path,
                               fuse_file_info* info,
                               const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     info->fh = reinterpret_cast<uintptr_t>(open(path, O_CREAT | O_EXCL | O_RDWR, mode).release());
     return 0;
 }
 int FuseHighLevelOps::vopen(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     info->fh = reinterpret_cast<uintptr_t>(open(path, info->flags, 0).release());
     return 0;
 }
 int FuseHighLevelOps::vrelease(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     delete get_base(info);
     return 0;
 }
@@ -905,7 +896,6 @@ int FuseHighLevelOps::vread(const char* path,
                             fuse_file_info* info,
                             const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     auto fp = get_file_checked(info);
     LockGuard<File> lg(*fp);
     return static_cast<int>(fp->read(buf, offset, size));
@@ -917,7 +907,6 @@ int FuseHighLevelOps::vwrite(const char* path,
                              fuse_file_info* info,
                              const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     auto fp = get_file_checked(info);
     LockGuard<File> lg(*fp);
     fp->write(buf, offset, size);
@@ -925,7 +914,6 @@ int FuseHighLevelOps::vwrite(const char* path,
 }
 int FuseHighLevelOps::vflush(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     auto fp = get_file_checked(info);
     LockGuard<File> lg(*fp);
     fp->flush();
@@ -936,7 +924,6 @@ int FuseHighLevelOps::vftruncate(const char* path,
                                  fuse_file_info* info,
                                  const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     auto fp = get_file_checked(info);
     LockGuard<File> lg(*fp);
     fp->resize(len);
@@ -944,7 +931,6 @@ int FuseHighLevelOps::vftruncate(const char* path,
 }
 int FuseHighLevelOps::vunlink(const char* path, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     process_possible_long_name(path,
                                LongNameComponentAction::kDelete,
                                [&](std::string&& enc_path) { root_.remove_file(enc_path); });
@@ -952,7 +938,6 @@ int FuseHighLevelOps::vunlink(const char* path, const fuse_context* ctx)
 };
 int FuseHighLevelOps::vmkdir(const char* path, fuse_mode_t mode, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     process_possible_long_name(path,
                                LongNameComponentAction::kCreate,
                                [&](std::string&& enc_path) { root_.mkdir(enc_path, mode); });
@@ -960,7 +945,6 @@ int FuseHighLevelOps::vmkdir(const char* path, fuse_mode_t mode, const fuse_cont
 }
 int FuseHighLevelOps::vrmdir(const char* path, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     process_possible_long_name(path,
                                LongNameComponentAction::kDelete,
                                [&](std::string&& enc_path)
@@ -973,7 +957,6 @@ int FuseHighLevelOps::vrmdir(const char* path, const fuse_context* ctx)
 }
 int FuseHighLevelOps::vchmod(const char* path, fuse_mode_t mode, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     root_.chmod(name_trans_.encrypt_full_path(path, nullptr), mode);
     return 0;
 }
@@ -982,13 +965,11 @@ int FuseHighLevelOps::vchown(const char* path,
                              fuse_gid_t gid,
                              const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     root_.chown(name_trans_.encrypt_full_path(path, nullptr), uid, gid);
     return 0;
 }
 int FuseHighLevelOps::vsymlink(const char* to, const char* from, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     process_possible_long_name(
         from,
         LongNameComponentAction::kCreate,
@@ -998,7 +979,6 @@ int FuseHighLevelOps::vsymlink(const char* to, const char* from, const fuse_cont
 }
 int FuseHighLevelOps::vlink(const char* src, const char* dest, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     process_possible_long_name(
         dest,
         LongNameComponentAction::kCreate,
@@ -1008,7 +988,6 @@ int FuseHighLevelOps::vlink(const char* src, const char* dest, const fuse_contex
 }
 int FuseHighLevelOps::vreadlink(const char* path, char* buf, size_t size, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     memset(buf, 0, size);
     if (size <= 1)
     {
@@ -1026,7 +1005,6 @@ int FuseHighLevelOps::vreadlink(const char* path, char* buf, size_t size, const 
 }
 int FuseHighLevelOps::vrename(const char* from, const char* to, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     std::string encrypted_last_component_from, encrypted_last_component_to;
     auto enc_from = name_trans_.encrypt_full_path(from, &encrypted_last_component_from);
     auto enc_to = name_trans_.encrypt_full_path(to, &encrypted_last_component_to);
@@ -1059,7 +1037,6 @@ int FuseHighLevelOps::vfsync(const char* path,
                              fuse_file_info* info,
                              const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     auto fp = get_file_checked(info);
     LockGuard<File> lg(*fp);
     fp->flush();
@@ -1068,7 +1045,6 @@ int FuseHighLevelOps::vfsync(const char* path,
 }
 int FuseHighLevelOps::vtruncate(const char* path, fuse_off_t len, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     auto fp = open(path, O_WRONLY, 0);
     LockGuard<File> lg(*fp);
     fp->resize(len);
@@ -1076,13 +1052,11 @@ int FuseHighLevelOps::vtruncate(const char* path, fuse_off_t len, const fuse_con
 }
 int FuseHighLevelOps::vutimens(const char* path, const fuse_timespec* ts, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     root_.utimens(name_trans_.encrypt_full_path(path, nullptr), ts);
     return 0;
 }
 int FuseHighLevelOps::vlistxattr(const char* path, char* list, size_t size, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     auto encrypted_path = name_trans_.encrypt_full_path(path, nullptr);
     if (xattr_name_cryptor_)
     {
@@ -1109,7 +1083,6 @@ int FuseHighLevelOps::vgetxattr(const char* path,
                                 uint32_t position,
                                 const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     if (position != 0)
     {
         return -EINVAL;
@@ -1156,7 +1129,6 @@ int FuseHighLevelOps::vsetxattr(const char* path,
                                 uint32_t position,
                                 const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     if (position != 0)
     {
         return -EINVAL;
@@ -1186,7 +1158,6 @@ int FuseHighLevelOps::vsetxattr(const char* path,
 }
 int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fuse_context* ctx)
 {
-    fuse_hook_.notify_activity();
     if (is_apple())
     {
         int rc = securefs::apple_xattr::precheck_removexattr(&name);
