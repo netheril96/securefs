@@ -70,6 +70,8 @@ namespace
 
     TEST_CASE("case folding name translator")
     {
+        auto case_fold_flags = std::make_shared<NameNormalizationFlags>();
+        case_fold_flags->should_case_fold = true;
         fruit::Injector<NameTranslator> injector(
             +[](std::shared_ptr<NameNormalizationFlags> name_normalization_flags)
                 -> fruit::Component<NameTranslator>
@@ -78,8 +80,7 @@ namespace
                     .install(get_name_translator_component, name_normalization_flags)
                     .install(get_test_component);
             },
-            std::make_shared<NameNormalizationFlags>(
-                NameNormalizationFlags{.should_case_fold = true}));
+            case_fold_flags);
         auto t = injector.get<NameTranslator*>();
         CHECK(t->encrypt_full_path(u8"/abCDe/ß", nullptr)
               == t->encrypt_full_path(u8"/ABCde/ss", nullptr));
@@ -87,6 +88,8 @@ namespace
 
     TEST_CASE("Unicode normalizing name translator")
     {
+        auto normalize_nfc_flags = std::make_shared<NameNormalizationFlags>();
+        normalize_nfc_flags->should_normalize_nfc = true;
         fruit::Injector<NameTranslator> injector(
             +[](std::shared_ptr<NameNormalizationFlags> name_normalization_flags)
                 -> fruit::Component<NameTranslator>
@@ -95,8 +98,7 @@ namespace
                     .install(get_name_translator_component, name_normalization_flags)
                     .install(get_test_component);
             },
-            std::make_shared<NameNormalizationFlags>(
-                NameNormalizationFlags{.should_normalize_nfc = true}));
+            normalize_nfc_flags);
         auto t = injector.get<NameTranslator*>();
 
         CHECK(t->encrypt_full_path("/aaa/\xc3\x84\xc3\x84\xc3\x84", nullptr)

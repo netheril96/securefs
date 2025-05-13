@@ -315,6 +315,7 @@ jobs:
             **/*.log
             **/*.out
             **/*.err
+            !**/bazel_root/*
 
   build-freebsd:
     runs-on: ubuntu-latest
