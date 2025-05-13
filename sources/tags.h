@@ -44,10 +44,11 @@ struct tCaseInsensitive
 struct tEnableXattr
 {
 };
-struct tAllowSensitiveLogging
+struct tInner
 {
 };
-struct tInner
+template <unsigned Layer>
+struct tWrapped
 {
 };
 }    // namespace securefs
