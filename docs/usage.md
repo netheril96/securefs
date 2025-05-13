@@ -30,6 +30,7 @@ Mount an existing filesystem
 - **--uid-override**: Forces every file to be owned by this uid in the virtual filesystem. If the value is -1, then no override is in place. *Default: -1.*
 - **--gid-override**: Forces every file to be owned by this gid in the virtual filesystem. If the value is -1, then no override is in place. *Default: -1.*
 - **--allow-sensitive-logging**: Allow sensitive information in logs. *This is a switch arg. Default: false.*
+- **--max-idle-seconds**: Maximum idle time before the filesystem is unmounted automatically. Default is 0 (no auto unmount).. *Default: 0.*
 ## create (short name: c)
 Create a new filesystem
 
