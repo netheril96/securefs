@@ -438,4 +438,15 @@ public:
 protected:
     FuseHighLevelOpsBase& delegate_;
 };
+
+class AllowSensitiveLoggingFuseHighLevelOps : public DelegateFuseHighLevelOps
+{
+public:
+    explicit AllowSensitiveLoggingFuseHighLevelOps(FuseHighLevelOpsBase& delegate)
+        : DelegateFuseHighLevelOps(delegate)
+    {
+    }
+
+    bool allow_sensitive_logging() const override { return true; }
+};
 }    // namespace securefs

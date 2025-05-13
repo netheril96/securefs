@@ -673,18 +673,18 @@ private:
 
     static fruit::Component<
         fruit::Required<lite_format::FuseHighLevelOps, full_format::FuseHighLevelOps>,
-        fruit::Annotated<tInner, FuseHighLevelOpsBase>>
-    get_inner_fuse_op_component(DecryptedSecurefsParams::FormatSpecificParamsCase format_case)
+        fruit::Annotated<tWrapped<1>, FuseHighLevelOpsBase>>
+    get_layer1_fuse_op_component(DecryptedSecurefsParams::FormatSpecificParamsCase format_case)
     {
         switch (format_case)
         {
         case DecryptedSecurefsParams::kLiteFormatParams:
             return fruit::createComponent()
-                .bind<fruit::Annotated<tInner, FuseHighLevelOpsBase>,
+                .bind<fruit::Annotated<tWrapped<1>, FuseHighLevelOpsBase>,
                       lite_format::FuseHighLevelOps>();
         case DecryptedSecurefsParams::kFullFormatParams:
             return fruit::createComponent()
-                .bind<fruit::Annotated<tInner, FuseHighLevelOpsBase>,
+                .bind<fruit::Annotated<tWrapped<1>, FuseHighLevelOpsBase>,
                       full_format::FuseHighLevelOps>();
         default:
             throwInvalidArgumentException("Unknown format case");
@@ -692,16 +692,46 @@ private:
     }
 
     static fruit::Component<
-        fruit::Required<fruit::Annotated<tInner, FuseHighLevelOpsBase>, HookedFuseHighLevelOps>,
-        FuseHighLevelOpsBase>
-    get_fuse_high_ops_maybe_hooked_component(int max_idle_seconds)
+        fruit::Required<fruit::Annotated<tWrapped<1>, FuseHighLevelOpsBase>, FuseHook>,
+        fruit::Annotated<tWrapped<2>, FuseHighLevelOpsBase>>
+    get_layer2_fuse_op_component(int max_idle_seconds)
     {
         if (max_idle_seconds > 0)
         {
-            return fruit::createComponent().bind<FuseHighLevelOpsBase, HookedFuseHighLevelOps>();
+            return fruit::createComponent()
+                .registerConstructor<HookedFuseHighLevelOps(
+                    fruit::Annotated<tWrapped<1>, FuseHighLevelOpsBase&>, FuseHook&)>()
+                .bind<fruit::Annotated<tWrapped<2>, FuseHighLevelOpsBase>,
+                      HookedFuseHighLevelOps>();
         }
         return fruit::createComponent()
-            .bind<FuseHighLevelOpsBase, fruit::Annotated<tInner, FuseHighLevelOpsBase>>();
+            .bind<fruit::Annotated<tWrapped<2>, FuseHighLevelOpsBase>,
+                  fruit::Annotated<tWrapped<1>, FuseHighLevelOpsBase>>();
+    }
+
+    static fruit::Component<fruit::Required<fruit::Annotated<tWrapped<2>, FuseHighLevelOpsBase>>,
+                            fruit::Annotated<tWrapped<3>, FuseHighLevelOpsBase>>
+    get_layer3_fuse_op_component(bool allow_sensitive_logging)
+    {
+        if (allow_sensitive_logging)
+        {
+            return fruit::createComponent()
+                .registerConstructor<AllowSensitiveLoggingFuseHighLevelOps(
+                    fruit::Annotated<tWrapped<2>, FuseHighLevelOpsBase&>)>()
+                .bind<fruit::Annotated<tWrapped<3>, FuseHighLevelOpsBase>,
+                      AllowSensitiveLoggingFuseHighLevelOps>();
+        }
+        return fruit::createComponent()
+            .bind<fruit::Annotated<tWrapped<3>, FuseHighLevelOpsBase>,
+                  fruit::Annotated<tWrapped<2>, FuseHighLevelOpsBase>>();
+    }
+
+    static fruit::Component<fruit::Required<fruit::Annotated<tWrapped<3>, FuseHighLevelOpsBase>>,
+                            FuseHighLevelOpsBase>
+    get_final_fuse_op_component()
+    {
+        return fruit::createComponent()
+            .bind<FuseHighLevelOpsBase, fruit::Annotated<tWrapped<3>, FuseHighLevelOpsBase>>();
     }
 
     static fruit::Component<FuseHighLevelOpsBase>
@@ -709,15 +739,15 @@ private:
     {
         return fruit::createComponent()
             .bindInstance(*cmd)
-            .install(+get_inner_fuse_op_component, cmd->fsparams.format_specific_params_case())
-            .install(+get_fuse_high_ops_maybe_hooked_component, cmd->max_idle_seconds.getValue())
+            .install(+get_layer1_fuse_op_component, cmd->fsparams.format_specific_params_case())
+            .install(+get_layer2_fuse_op_component, cmd->max_idle_seconds.getValue())
+            .install(+get_layer3_fuse_op_component, cmd->allow_sensitive_logging.getValue())
+            .install(+get_final_fuse_op_component)
             .install(::securefs::lite_format::get_name_translator_component,
                      std::make_shared<lite_format::NameNormalizationFlags>(
                          cmd->get_name_normalization_flags()))
             .install(full_format::get_table_io_component,
                      cmd->fsparams.full_format_params().legacy_file_table_io())
-            .registerConstructor<HookedFuseHighLevelOps(
-                fruit::Annotated<tInner, FuseHighLevelOpsBase&>, FuseHook&)>()
             .registerProvider<fruit::Annotated<tVerify, bool>(const MountCommand&)>(
                 [](const MountCommand& cmd) { return !cmd.insecure.getValue(); })
             .registerProvider<fruit::Annotated<tStoreTimeWithinFs, bool>(const MountCommand&)>(
@@ -818,8 +848,6 @@ private:
             .registerProvider<fruit::Annotated<tCaseInsensitive, bool>(const MountCommand&)>(
                 [](const MountCommand& cmd)
                 { return cmd.fsparams.full_format_params().case_insensitive(); })
-            .registerProvider<fruit::Annotated<tAllowSensitiveLogging, bool>(const MountCommand&)>(
-                [](const MountCommand& cmd) { return cmd.allow_sensitive_logging.getValue(); })
             .registerProvider(
                 [](const MountCommand& cmd) -> FuseHook*
                 {
