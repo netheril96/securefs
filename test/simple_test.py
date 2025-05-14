@@ -113,12 +113,12 @@ def securefs_mount(
     try:
         for _ in range(600):
             try:
-                p.wait(timeout=0.1)
+                p.wait(timeout=0.01)
             except subprocess.TimeoutExpired:
                 pass
             if p.returncode:
                 raise subprocess.CalledProcessError(p.returncode, p.args)
-            if is_mount_then_statvfs(mount_point):
+            if subprocess.call([SECUREFS_BINARY, "ismount", mount_point]) == 0:
                 return p
 
         raise TimeoutError(f"Failed to mount {repr(mount_point)} after many attempts")
@@ -129,15 +129,7 @@ def securefs_mount(
 
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
     with p:
-        if sys.platform == "win32":
-            p.send_signal(signal.CTRL_BREAK_EVENT)
-        else:
-            p.send_signal(signal.SIGINT)
-        time.sleep(0.017)
-        try:
-            os.lstat(mount_point)  # Trigger the next action of FUSE to unmount
-        except EnvironmentError:
-            pass
+        subprocess.check_call([SECUREFS_BINARY, "unmount", mount_point])
         p.wait(timeout=5)
         if p.returncode:
             logging.error("securefs exited with non-zero code: %d", p.returncode)
