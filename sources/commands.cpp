@@ -32,6 +32,7 @@
 #include <fruit/fruit.h>
 #include <fruit/fruit_forward_decls.h>
 #include <google/protobuf/util/json_util.h>
+#include <sys/stat.h>
 #include <tclap/CmdLine.h>
 #include <tclap/SwitchArg.h>
 #include <tclap/ValueArg.h>
@@ -1478,6 +1479,58 @@ public:
     }
 };
 
+class IsMountCommand : public CommandBase
+{
+private:
+    TCLAP::UnlabeledValueArg<std::string> mount_point{
+        "mount_point", "Mount point to check", true, "", "mount_point", cmdline()};
+
+public:
+    const char* long_name() const noexcept override { return "ismount"; }
+    char short_name() const noexcept override { return 0; }
+    const char* help_message() const noexcept override
+    {
+        return "Check if the given path is a securefs mount point";
+    }
+
+    int execute() override
+    {
+        try
+        {
+            fuse_stat st{};
+            OSService(mount_point.getValue())
+                .stat(std::string(SpecialFiledFuseHighLevelOps::kSpecialFileName), &st);
+            return (S_IFMT & st.st_mode) == S_IFDIR ? 0 : 1;
+        }
+        catch (const std::exception& e)
+        {
+            return 1;
+        }
+    }
+};
+
+class UnmountCommand : public CommandBase
+{
+private:
+    TCLAP::UnlabeledValueArg<std::string> mount_point{
+        "mount_point", "Mount point to unmount", true, "", "mount_point", cmdline()};
+
+public:
+    const char* long_name() const noexcept override { return "unmount"; }
+    char short_name() const noexcept override { return 'u'; }
+    const char* help_message() const noexcept override
+    {
+        return "Unmount the given securefs mount point";
+    }
+
+    int execute() override
+    {
+        OSService(mount_point.getValue())
+            .remove_directory(std::string(SpecialFiledFuseHighLevelOps::kSpecialFileName));
+        return 0;
+    }
+};
+
 int commands_main(int argc, const char* const* argv)
 {
     try
@@ -1489,6 +1542,8 @@ int commands_main(int argc, const char* const* argv)
                                                make_unique<VersionCommand>(),
                                                make_unique<InfoCommand>(),
                                                make_unique<MigrateLongNameCommand>(),
+                                               make_unique<IsMountCommand>(),
+                                               make_unique<UnmountCommand>(),
                                                make_unique<DocCommand>()};
 
         const char* const program_name = argv[0];
