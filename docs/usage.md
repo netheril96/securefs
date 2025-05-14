@@ -30,6 +30,7 @@ Mount an existing filesystem
 - **--uid-override**: Forces every file to be owned by this uid in the virtual filesystem. If the value is -1, then no override is in place. *Default: -1.*
 - **--gid-override**: Forces every file to be owned by this gid in the virtual filesystem. If the value is -1, then no override is in place. *Default: -1.*
 - **--allow-sensitive-logging**: Allow sensitive information in logs. *This is a switch arg. Default: false.*
+- **--max-idle-seconds**: Maximum idle time before the filesystem is unmounted automatically. Default is 0 (no auto unmount).. *Default: 0.*
 ## create (short name: c)
 Create a new filesystem
 
@@ -85,6 +86,14 @@ Migrate a lite format repository without long name support.
 - **--argon2-t**: The time cost for argon2 algorithm. *Default: 30.*
 - **--argon2-m**: The memory cost for argon2 algorithm (in terms of KiB). *Default: 262144.*
 - **--argon2-p**: The parallelism for argon2 algorithm. *Default: 4.*
+## ismount
+Check if the given path is a securefs mount point
+
+- **mount_point**: (*positional*) (required)  Mount point to check
+## unmount (short name: u)
+Unmount the given securefs mount point
+
+- **mount_point**: (*positional*) (required)  Mount point to unmount
 ## doc
 Display the full help message of all commands in markdown format
 
