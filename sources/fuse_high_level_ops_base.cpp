@@ -1,6 +1,7 @@
 #include "fuse_high_level_ops_base.h"
 #include "apple_xattr_workaround.h"
 #include "exceptions.h"
+#include "fuse2_workaround.h"
 #include "fuse_tracer_v2.h"
 #include "logger.h"
 
@@ -427,6 +428,30 @@ fuse_operations FuseHighLevelOpsBase::build_ops(const FuseHighLevelOpsBase* op)
         : nullptr;
     opt.removexattr = op->has_removexattr() ? &FuseHighLevelOpsBase::static_removexattr : nullptr;
     return opt;
+}
+
+int SpecialFiledFuseHighLevelOps::vgetattr(const char* path, fuse_stat* st, const fuse_context* ctx)
+{
+    if (path && path[0] == '/' && path + 1 == kSpecialFileName)
+    {
+        memset(st, 0, sizeof(*st));
+        st->st_mode = S_IFDIR | 0777;
+        st->st_nlink = 2;
+        st->st_uid = ctx->uid;
+        st->st_gid = ctx->gid;
+        return 0;
+    }
+    return DelegateFuseHighLevelOps::vgetattr(path, st, ctx);
+}
+
+int SpecialFiledFuseHighLevelOps::vrmdir(const char* path, const fuse_context* ctx)
+{
+    if (path && path[0] == '/' && path + 1 == kSpecialFileName)
+    {
+        clean_exit_fuse();
+        return 0;
+    }
+    return DelegateFuseHighLevelOps::vrmdir(path, ctx);
 }
 
 }    // namespace securefs

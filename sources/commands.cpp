@@ -731,7 +731,9 @@ private:
     get_final_fuse_op_component()
     {
         return fruit::createComponent()
-            .bind<FuseHighLevelOpsBase, fruit::Annotated<tWrapped<3>, FuseHighLevelOpsBase>>();
+            .registerConstructor<SpecialFiledFuseHighLevelOps(
+                fruit::Annotated<tWrapped<3>, FuseHighLevelOpsBase&>)>()
+            .bind<FuseHighLevelOpsBase, SpecialFiledFuseHighLevelOps>();
     }
 
     static fruit::Component<FuseHighLevelOpsBase>
