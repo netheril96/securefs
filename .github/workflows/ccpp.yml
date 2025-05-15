@@ -79,9 +79,13 @@ jobs:
             ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-
             ccpp-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
+        env:
+          CFLAGS: -fsanitize=address
+          CXXFLAGS: -fsanitize=address
+          VCPKG_KEEP_ENV_VARS: "CFLAGS;CXXFLAGS"
         run: |
           source .venv/bin/activate
-          python build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build --build_type Debug
+          python build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build --build_type Debug --cmake_defines SECUREFS_ADDRESS_SANITIZE=ON
           ./build/securefs doc > docs/usage.md
       - name: upload
         uses: actions/upload-artifact@v4
@@ -146,7 +150,7 @@ jobs:
         with:
           name: ${{ github.job }}-logs
           path: |
+            !**/fruit/*
             **/*.log
             **/*.out
             **/*.err
-            !**/bazel_root/*
