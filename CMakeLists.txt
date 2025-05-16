@@ -15,9 +15,6 @@ option(SECUREFS_ENABLE_INTEGRATION_TEST
        "Whether to run integration test over real FUSE mounts" ON)
 option(SECUREFS_USE_FUSET
        "Use FUSE-T instead of MacFUSE (only makes sense on macOS)" OFF)
-option(SECUREFS_ADDRESS_SANITIZE
-       "Enable address sanitizer during building. Mainly for development use."
-       OFF)
 option(SECUREFS_LINK_PROFILER "Enable linking with gperftools profiler" OFF)
 option(SECUREFS_ENABLE_MIMALLOC "Enable linking with mimalloc." OFF)
 option(SECUREFS_ENABLE_JEMALLOC "Enable linking with jemalloc." OFF)
@@ -28,10 +25,8 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-if(SECUREFS_ADDRESS_SANITIZE)
-    add_compile_options(-fsanitize=address)
-    add_link_options(-fsanitize=address)
-endif()
+add_compile_options($<$<CONFIG:Debug>:-fsanitize=address>)
+add_link_options($<$<CONFIG:Debug>:-fsanitize=address>)
 
 if(${SECUREFS_LINK_PROFILER})
     add_compile_options(-g)
