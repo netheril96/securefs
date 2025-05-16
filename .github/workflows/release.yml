@@ -54,7 +54,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
-          key: release-${{ matrix.os }}-${{ matrix.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
+          key: release-${{ matrix.os }}-${{ matrix.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
           restore-keys: |
             release-${{ matrix.os }}-${{ matrix.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
             release-${{ matrix.os }}-${{ matrix.arch }}-
@@ -143,7 +143,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
-          key: release-alpine-${{ matrix.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
+          key: release-alpine-${{ matrix.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
           restore-keys: |
             release-alpine-${{ matrix.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
             release-alpine-${{ matrix.arch }}-
@@ -236,7 +236,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
-          key: release-macOS-${{ matrix.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
+          key: release-macOS-${{ matrix.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
           restore-keys: |
             release-macOS-${{ matrix.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
             release-macOS-${{ matrix.arch }}-
@@ -295,7 +295,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
-          key: release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json') }}
+          key: release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
           restore-keys: |
             release-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
             release-${{ runner.os }}-${{ runner.arch }}-
@@ -333,7 +333,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
-          key: release-freebsd-'2025.01.13'-${{ hashFiles('vcpkg.json') }}
+          key: release-freebsd-'2025.01.13'-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
           restore-keys: |
             release-freebsd-'2025.01.13'-
             release-freebsd-

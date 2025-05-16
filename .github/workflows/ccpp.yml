@@ -74,10 +74,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
-          key: ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-${{ hashFiles('vcpkg.json') }}
+          key: release-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
           restore-keys: |
-            ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-
-            ccpp-${{ runner.os }}-${{ runner.arch }}-
+            release-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-
+            release-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
         run: |
           source .venv/bin/activate
@@ -134,10 +134,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
-          key: ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-${{ hashFiles('vcpkg.json') }}
+          key: release-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
           restore-keys: |
-            ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-
-            ccpp-${{ runner.os }}-${{ runner.arch }}-
+            release-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-
+            release-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
         run: python3 build.py --clang_cl --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build --build_type Debug
       - name: Upload Logs Always
