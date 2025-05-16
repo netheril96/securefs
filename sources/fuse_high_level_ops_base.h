@@ -4,6 +4,7 @@
 #include "platform.h"    // IWYU pragma: keep
 
 #include <cstring>
+#include <memory>
 #include <optional>
 #include <string_view>
 
@@ -211,245 +212,121 @@ private:
 class DelegateFuseHighLevelOps : public FuseHighLevelOpsBase
 {
 public:
-    explicit DelegateFuseHighLevelOps(FuseHighLevelOpsBase& delegate) : delegate_(delegate) {}
+    explicit DelegateFuseHighLevelOps(std::shared_ptr<FuseHighLevelOpsBase> delegate);
 
-    bool allow_sensitive_logging() const override { return delegate_.allow_sensitive_logging(); }
-
-    void initialize(fuse_conn_info* info) override { delegate_.initialize(info); }
-
-    bool has_statfs() const override { return delegate_.has_statfs(); }
-    int vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx) override
-    {
-        return delegate_.vstatfs(path, buf, ctx);
-    }
-
-    bool has_getattr() const override { return delegate_.has_getattr(); }
-    int vgetattr(const char* path, fuse_stat* st, const fuse_context* ctx) override
-    {
-        return delegate_.vgetattr(path, st, ctx);
-    }
-
-    bool has_fgetattr() const override { return delegate_.has_fgetattr(); }
+    bool allow_sensitive_logging() const override;
+    void initialize(fuse_conn_info* info) override;
+    bool has_statfs() const override;
+    int vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx) override;
+    bool has_getattr() const override;
+    int vgetattr(const char* path, fuse_stat* st, const fuse_context* ctx) override;
+    bool has_fgetattr() const override;
     int vfgetattr(const char* path,
                   fuse_stat* st,
                   fuse_file_info* info,
-                  const fuse_context* ctx) override
-    {
-        return delegate_.vfgetattr(path, st, info, ctx);
-    }
-
-    bool has_opendir() const override { return delegate_.has_opendir(); }
-    int vopendir(const char* path, fuse_file_info* info, const fuse_context* ctx) override
-    {
-        return delegate_.vopendir(path, info, ctx);
-    }
-
-    bool has_releasedir() const override { return delegate_.has_releasedir(); }
-    int vreleasedir(const char* path, fuse_file_info* info, const fuse_context* ctx) override
-    {
-        return delegate_.vreleasedir(path, info, ctx);
-    }
-
-    bool has_readdir() const override { return delegate_.has_readdir(); }
+                  const fuse_context* ctx) override;
+    bool has_opendir() const override;
+    int vopendir(const char* path, fuse_file_info* info, const fuse_context* ctx) override;
+    bool has_releasedir() const override;
+    int vreleasedir(const char* path, fuse_file_info* info, const fuse_context* ctx) override;
+    bool has_readdir() const override;
     int vreaddir(const char* path,
                  void* buf,
                  fuse_fill_dir_t filler,
                  fuse_off_t off,
                  fuse_file_info* info,
-                 const fuse_context* ctx) override
-    {
-        return delegate_.vreaddir(path, buf, filler, off, info, ctx);
-    }
-
-    bool has_create() const override { return delegate_.has_create(); }
+                 const fuse_context* ctx) override;
+    bool has_create() const override;
     int vcreate(const char* path,
                 fuse_mode_t mode,
                 fuse_file_info* info,
-                const fuse_context* ctx) override
-    {
-        return delegate_.vcreate(path, mode, info, ctx);
-    }
-
-    bool has_open() const override { return delegate_.has_open(); }
-    int vopen(const char* path, fuse_file_info* info, const fuse_context* ctx) override
-    {
-        return delegate_.vopen(path, info, ctx);
-    }
-
-    bool has_release() const override { return delegate_.has_release(); }
-    int vrelease(const char* path, fuse_file_info* info, const fuse_context* ctx) override
-    {
-        return delegate_.vrelease(path, info, ctx);
-    }
-
-    bool has_read() const override { return delegate_.has_read(); }
+                const fuse_context* ctx) override;
+    bool has_open() const override;
+    int vopen(const char* path, fuse_file_info* info, const fuse_context* ctx) override;
+    bool has_release() const override;
+    int vrelease(const char* path, fuse_file_info* info, const fuse_context* ctx) override;
+    bool has_read() const override;
     int vread(const char* path,
               char* buf,
               size_t size,
               fuse_off_t offset,
               fuse_file_info* info,
-              const fuse_context* ctx) override
-    {
-        return delegate_.vread(path, buf, size, offset, info, ctx);
-    }
-
-    bool has_write() const override { return delegate_.has_write(); }
+              const fuse_context* ctx) override;
+    bool has_write() const override;
     int vwrite(const char* path,
                const char* buf,
                size_t size,
                fuse_off_t offset,
                fuse_file_info* info,
-               const fuse_context* ctx) override
-    {
-        return delegate_.vwrite(path, buf, size, offset, info, ctx);
-    }
-
-    bool has_flush() const override { return delegate_.has_flush(); }
-    int vflush(const char* path, fuse_file_info* info, const fuse_context* ctx) override
-    {
-        return delegate_.vflush(path, info, ctx);
-    }
-
-    bool has_ftruncate() const override { return delegate_.has_ftruncate(); }
+               const fuse_context* ctx) override;
+    bool has_flush() const override;
+    int vflush(const char* path, fuse_file_info* info, const fuse_context* ctx) override;
+    bool has_ftruncate() const override;
     int vftruncate(const char* path,
                    fuse_off_t len,
                    fuse_file_info* info,
-                   const fuse_context* ctx) override
-    {
-        return delegate_.vftruncate(path, len, info, ctx);
-    }
-
-    bool has_unlink() const override { return delegate_.has_unlink(); }
-    int vunlink(const char* path, const fuse_context* ctx) override
-    {
-        return delegate_.vunlink(path, ctx);
-    }
-
-    bool has_mkdir() const override { return delegate_.has_mkdir(); }
-    int vmkdir(const char* path, fuse_mode_t mode, const fuse_context* ctx) override
-    {
-        return delegate_.vmkdir(path, mode, ctx);
-    }
-
-    bool has_rmdir() const override { return delegate_.has_rmdir(); }
-    int vrmdir(const char* path, const fuse_context* ctx) override
-    {
-        return delegate_.vrmdir(path, ctx);
-    }
-
-    bool has_chmod() const override { return delegate_.has_chmod(); }
-    int vchmod(const char* path, fuse_mode_t mode, const fuse_context* ctx) override
-    {
-        return delegate_.vchmod(path, mode, ctx);
-    }
-
-    bool has_chown() const override { return delegate_.has_chown(); }
-    int vchown(const char* path, fuse_uid_t uid, fuse_gid_t gid, const fuse_context* ctx) override
-    {
-        return delegate_.vchown(path, uid, gid, ctx);
-    }
-
-    bool has_symlink() const override { return delegate_.has_symlink(); }
-    int vsymlink(const char* to, const char* from, const fuse_context* ctx) override
-    {
-        return delegate_.vsymlink(to, from, ctx);
-    }
-
-    bool has_link() const override { return delegate_.has_link(); }
-    int vlink(const char* src, const char* dest, const fuse_context* ctx) override
-    {
-        return delegate_.vlink(src, dest, ctx);
-    }
-
-    bool has_readlink() const override { return delegate_.has_readlink(); }
-    int vreadlink(const char* path, char* buf, size_t size, const fuse_context* ctx) override
-    {
-        return delegate_.vreadlink(path, buf, size, ctx);
-    }
-
-    bool has_rename() const override { return delegate_.has_rename(); }
-    int vrename(const char* from, const char* to, const fuse_context* ctx) override
-    {
-        return delegate_.vrename(from, to, ctx);
-    }
-
-    bool has_fsync() const override { return delegate_.has_fsync(); }
+                   const fuse_context* ctx) override;
+    bool has_unlink() const override;
+    int vunlink(const char* path, const fuse_context* ctx) override;
+    bool has_mkdir() const override;
+    int vmkdir(const char* path, fuse_mode_t mode, const fuse_context* ctx) override;
+    bool has_rmdir() const override;
+    int vrmdir(const char* path, const fuse_context* ctx) override;
+    bool has_chmod() const override;
+    int vchmod(const char* path, fuse_mode_t mode, const fuse_context* ctx) override;
+    bool has_chown() const override;
+    int vchown(const char* path, fuse_uid_t uid, fuse_gid_t gid, const fuse_context* ctx) override;
+    bool has_symlink() const override;
+    int vsymlink(const char* to, const char* from, const fuse_context* ctx) override;
+    bool has_link() const override;
+    int vlink(const char* src, const char* dest, const fuse_context* ctx) override;
+    bool has_readlink() const override;
+    int vreadlink(const char* path, char* buf, size_t size, const fuse_context* ctx) override;
+    bool has_rename() const override;
+    int vrename(const char* from, const char* to, const fuse_context* ctx) override;
+    bool has_fsync() const override;
     int
-    vfsync(const char* path, int datasync, fuse_file_info* info, const fuse_context* ctx) override
-    {
-        return delegate_.vfsync(path, datasync, info, ctx);
-    }
-
-    bool has_truncate() const override { return delegate_.has_truncate(); }
-    int vtruncate(const char* path, fuse_off_t len, const fuse_context* ctx) override
-    {
-        return delegate_.vtruncate(path, len, ctx);
-    }
-
-    bool has_utimens() const override { return delegate_.has_utimens(); }
-    int vutimens(const char* path, const fuse_timespec* ts, const fuse_context* ctx) override
-    {
-        return delegate_.vutimens(path, ts, ctx);
-    }
-
-    bool has_listxattr() const override { return delegate_.has_listxattr(); }
-    int vlistxattr(const char* path, char* list, size_t size, const fuse_context* ctx) override
-    {
-        return delegate_.vlistxattr(path, list, size, ctx);
-    }
-
-    bool has_getxattr() const override { return delegate_.has_getxattr(); }
+    vfsync(const char* path, int datasync, fuse_file_info* info, const fuse_context* ctx) override;
+    bool has_truncate() const override;
+    int vtruncate(const char* path, fuse_off_t len, const fuse_context* ctx) override;
+    bool has_utimens() const override;
+    int vutimens(const char* path, const fuse_timespec* ts, const fuse_context* ctx) override;
+    bool has_listxattr() const override;
+    int vlistxattr(const char* path, char* list, size_t size, const fuse_context* ctx) override;
+    bool has_getxattr() const override;
     int vgetxattr(const char* path,
                   const char* name,
                   char* value,
                   size_t size,
                   uint32_t position,
-                  const fuse_context* ctx) override
-    {
-        return delegate_.vgetxattr(path, name, value, size, position, ctx);
-    }
-
-    bool has_setxattr() const override { return delegate_.has_setxattr(); }
+                  const fuse_context* ctx) override;
+    bool has_setxattr() const override;
     int vsetxattr(const char* path,
                   const char* name,
                   const char* value,
                   size_t size,
                   int flags,
                   uint32_t position,
-                  const fuse_context* ctx) override
-    {
-        return delegate_.vsetxattr(path, name, value, size, flags, position, ctx);
-    }
-
-    bool has_removexattr() const override { return delegate_.has_removexattr(); }
-    int vremovexattr(const char* path, const char* name, const fuse_context* ctx) override
-    {
-        return delegate_.vremovexattr(path, name, ctx);
-    }
-
-    bool has_getpath() const override { return delegate_.has_getpath(); }
+                  const fuse_context* ctx) override;
+    bool has_removexattr() const override;
+    int vremovexattr(const char* path, const char* name, const fuse_context* ctx) override;
+    bool has_getpath() const override;
     int vgetpath(const char* path,
                  char* buf,
                  size_t size,
                  fuse_file_info* info,
-                 const fuse_context* ctx) override
-    {
-        return delegate_.vgetpath(path, buf, size, info, ctx);
-    }
+                 const fuse_context* ctx) override;
 
 protected:
-    FuseHighLevelOpsBase& delegate_;
+    std::shared_ptr<FuseHighLevelOpsBase> delegate_;
 };
 
 class AllowSensitiveLoggingFuseHighLevelOps : public DelegateFuseHighLevelOps
 {
 public:
-    explicit AllowSensitiveLoggingFuseHighLevelOps(FuseHighLevelOpsBase& delegate)
-        : DelegateFuseHighLevelOps(delegate)
-    {
-    }
+    explicit AllowSensitiveLoggingFuseHighLevelOps(std::shared_ptr<FuseHighLevelOpsBase> delegate);
 
-    bool allow_sensitive_logging() const override { return true; }
+    bool allow_sensitive_logging() const override;
 };
 
 class SpecialFiledFuseHighLevelOps : public DelegateFuseHighLevelOps
@@ -480,8 +357,8 @@ public:
           "\xf4\x80\x80\x80";
 
 public:
-    explicit SpecialFiledFuseHighLevelOps(FuseHighLevelOpsBase& delegate)
-        : DelegateFuseHighLevelOps(delegate)
+    explicit SpecialFiledFuseHighLevelOps(std::shared_ptr<FuseHighLevelOpsBase> delegate)
+        : DelegateFuseHighLevelOps(std::move(delegate))
     {
     }
 

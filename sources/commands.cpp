@@ -701,7 +701,8 @@ private:
         {
             return fruit::createComponent()
                 .registerConstructor<HookedFuseHighLevelOps(
-                    fruit::Annotated<tWrapped<1>, FuseHighLevelOpsBase&>, FuseHook&)>()
+                    fruit::Annotated<tWrapped<1>, std::shared_ptr<FuseHighLevelOpsBase>>,
+                    std::shared_ptr<FuseHook>)>()
                 .bind<fruit::Annotated<tWrapped<2>, FuseHighLevelOpsBase>,
                       HookedFuseHighLevelOps>();
         }
@@ -718,7 +719,7 @@ private:
         {
             return fruit::createComponent()
                 .registerConstructor<AllowSensitiveLoggingFuseHighLevelOps(
-                    fruit::Annotated<tWrapped<2>, FuseHighLevelOpsBase&>)>()
+                    fruit::Annotated<tWrapped<2>, std::shared_ptr<FuseHighLevelOpsBase>>)>()
                 .bind<fruit::Annotated<tWrapped<3>, FuseHighLevelOpsBase>,
                       AllowSensitiveLoggingFuseHighLevelOps>();
         }
@@ -733,7 +734,7 @@ private:
     {
         return fruit::createComponent()
             .registerConstructor<SpecialFiledFuseHighLevelOps(
-                fruit::Annotated<tWrapped<3>, FuseHighLevelOpsBase&>)>()
+                fruit::Annotated<tWrapped<3>, std::shared_ptr<FuseHighLevelOpsBase>>)>()
             .bind<FuseHighLevelOpsBase, SpecialFiledFuseHighLevelOps>();
     }
 

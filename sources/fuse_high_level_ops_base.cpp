@@ -430,6 +430,268 @@ fuse_operations FuseHighLevelOpsBase::build_ops(const FuseHighLevelOpsBase* op)
     return opt;
 }
 
+// DelegateFuseHighLevelOps implementation
+DelegateFuseHighLevelOps::DelegateFuseHighLevelOps(std::shared_ptr<FuseHighLevelOpsBase> delegate)
+    : delegate_(std::move(delegate))
+{
+}
+
+bool DelegateFuseHighLevelOps::allow_sensitive_logging() const
+{
+    return delegate_->allow_sensitive_logging();
+}
+
+void DelegateFuseHighLevelOps::initialize(fuse_conn_info* info) { delegate_->initialize(info); }
+
+bool DelegateFuseHighLevelOps::has_statfs() const { return delegate_->has_statfs(); }
+int DelegateFuseHighLevelOps::vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx)
+{
+    return delegate_->vstatfs(path, buf, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_getattr() const { return delegate_->has_getattr(); }
+int DelegateFuseHighLevelOps::vgetattr(const char* path, fuse_stat* st, const fuse_context* ctx)
+{
+    return delegate_->vgetattr(path, st, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_fgetattr() const { return delegate_->has_fgetattr(); }
+int DelegateFuseHighLevelOps::vfgetattr(const char* path,
+                                        fuse_stat* st,
+                                        fuse_file_info* info,
+                                        const fuse_context* ctx)
+{
+    return delegate_->vfgetattr(path, st, info, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_opendir() const { return delegate_->has_opendir(); }
+int DelegateFuseHighLevelOps::vopendir(const char* path,
+                                       fuse_file_info* info,
+                                       const fuse_context* ctx)
+{
+    return delegate_->vopendir(path, info, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_releasedir() const { return delegate_->has_releasedir(); }
+int DelegateFuseHighLevelOps::vreleasedir(const char* path,
+                                          fuse_file_info* info,
+                                          const fuse_context* ctx)
+{
+    return delegate_->vreleasedir(path, info, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_readdir() const { return delegate_->has_readdir(); }
+int DelegateFuseHighLevelOps::vreaddir(const char* path,
+                                       void* buf,
+                                       fuse_fill_dir_t filler,
+                                       fuse_off_t off,
+                                       fuse_file_info* info,
+                                       const fuse_context* ctx)
+{
+    return delegate_->vreaddir(path, buf, filler, off, info, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_create() const { return delegate_->has_create(); }
+int DelegateFuseHighLevelOps::vcreate(const char* path,
+                                      fuse_mode_t mode,
+                                      fuse_file_info* info,
+                                      const fuse_context* ctx)
+{
+    return delegate_->vcreate(path, mode, info, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_open() const { return delegate_->has_open(); }
+int DelegateFuseHighLevelOps::vopen(const char* path, fuse_file_info* info, const fuse_context* ctx)
+{
+    return delegate_->vopen(path, info, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_release() const { return delegate_->has_release(); }
+int DelegateFuseHighLevelOps::vrelease(const char* path,
+                                       fuse_file_info* info,
+                                       const fuse_context* ctx)
+{
+    return delegate_->vrelease(path, info, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_read() const { return delegate_->has_read(); }
+int DelegateFuseHighLevelOps::vread(const char* path,
+                                    char* buf,
+                                    size_t size,
+                                    fuse_off_t offset,
+                                    fuse_file_info* info,
+                                    const fuse_context* ctx)
+{
+    return delegate_->vread(path, buf, size, offset, info, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_write() const { return delegate_->has_write(); }
+int DelegateFuseHighLevelOps::vwrite(const char* path,
+                                     const char* buf,
+                                     size_t size,
+                                     fuse_off_t offset,
+                                     fuse_file_info* info,
+                                     const fuse_context* ctx)
+{
+    return delegate_->vwrite(path, buf, size, offset, info, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_flush() const { return delegate_->has_flush(); }
+int DelegateFuseHighLevelOps::vflush(const char* path,
+                                     fuse_file_info* info,
+                                     const fuse_context* ctx)
+{
+    return delegate_->vflush(path, info, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_ftruncate() const { return delegate_->has_ftruncate(); }
+int DelegateFuseHighLevelOps::vftruncate(const char* path,
+                                         fuse_off_t len,
+                                         fuse_file_info* info,
+                                         const fuse_context* ctx)
+{
+    return delegate_->vftruncate(path, len, info, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_unlink() const { return delegate_->has_unlink(); }
+int DelegateFuseHighLevelOps::vunlink(const char* path, const fuse_context* ctx)
+{
+    return delegate_->vunlink(path, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_mkdir() const { return delegate_->has_mkdir(); }
+int DelegateFuseHighLevelOps::vmkdir(const char* path, fuse_mode_t mode, const fuse_context* ctx)
+{
+    return delegate_->vmkdir(path, mode, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_rmdir() const { return delegate_->has_rmdir(); }
+int DelegateFuseHighLevelOps::vrmdir(const char* path, const fuse_context* ctx)
+{
+    return delegate_->vrmdir(path, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_chmod() const { return delegate_->has_chmod(); }
+int DelegateFuseHighLevelOps::vchmod(const char* path, fuse_mode_t mode, const fuse_context* ctx)
+{
+    return delegate_->vchmod(path, mode, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_chown() const { return delegate_->has_chown(); }
+int DelegateFuseHighLevelOps::vchown(const char* path,
+                                     fuse_uid_t uid,
+                                     fuse_gid_t gid,
+                                     const fuse_context* ctx)
+{
+    return delegate_->vchown(path, uid, gid, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_symlink() const { return delegate_->has_symlink(); }
+int DelegateFuseHighLevelOps::vsymlink(const char* to, const char* from, const fuse_context* ctx)
+{
+    return delegate_->vsymlink(to, from, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_link() const { return delegate_->has_link(); }
+int DelegateFuseHighLevelOps::vlink(const char* src, const char* dest, const fuse_context* ctx)
+{
+    return delegate_->vlink(src, dest, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_readlink() const { return delegate_->has_readlink(); }
+int DelegateFuseHighLevelOps::vreadlink(const char* path,
+                                        char* buf,
+                                        size_t size,
+                                        const fuse_context* ctx)
+{
+    return delegate_->vreadlink(path, buf, size, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_rename() const { return delegate_->has_rename(); }
+int DelegateFuseHighLevelOps::vrename(const char* from, const char* to, const fuse_context* ctx)
+{
+    return delegate_->vrename(from, to, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_fsync() const { return delegate_->has_fsync(); }
+int DelegateFuseHighLevelOps::vfsync(const char* path,
+                                     int datasync,
+                                     fuse_file_info* info,
+                                     const fuse_context* ctx)
+{
+    return delegate_->vfsync(path, datasync, info, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_truncate() const { return delegate_->has_truncate(); }
+int DelegateFuseHighLevelOps::vtruncate(const char* path, fuse_off_t len, const fuse_context* ctx)
+{
+    return delegate_->vtruncate(path, len, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_utimens() const { return delegate_->has_utimens(); }
+int DelegateFuseHighLevelOps::vutimens(const char* path,
+                                       const fuse_timespec* ts,
+                                       const fuse_context* ctx)
+{
+    return delegate_->vutimens(path, ts, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_listxattr() const { return delegate_->has_listxattr(); }
+int DelegateFuseHighLevelOps::vlistxattr(const char* path,
+                                         char* list,
+                                         size_t size,
+                                         const fuse_context* ctx)
+{
+    return delegate_->vlistxattr(path, list, size, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_getxattr() const { return delegate_->has_getxattr(); }
+int DelegateFuseHighLevelOps::vgetxattr(const char* path,
+                                        const char* name,
+                                        char* value,
+                                        size_t size,
+                                        uint32_t position,
+                                        const fuse_context* ctx)
+{
+    return delegate_->vgetxattr(path, name, value, size, position, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_setxattr() const { return delegate_->has_setxattr(); }
+int DelegateFuseHighLevelOps::vsetxattr(const char* path,
+                                        const char* name,
+                                        const char* value,
+                                        size_t size,
+                                        int flags,
+                                        uint32_t position,
+                                        const fuse_context* ctx)
+{
+    return delegate_->vsetxattr(path, name, value, size, flags, position, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_removexattr() const { return delegate_->has_removexattr(); }
+int DelegateFuseHighLevelOps::vremovexattr(const char* path,
+                                           const char* name,
+                                           const fuse_context* ctx)
+{
+    return delegate_->vremovexattr(path, name, ctx);
+}
+
+bool DelegateFuseHighLevelOps::has_getpath() const { return delegate_->has_getpath(); }
+int DelegateFuseHighLevelOps::vgetpath(
+    const char* path, char* buf, size_t size, fuse_file_info* info, const fuse_context* ctx)
+{
+    return delegate_->vgetpath(path, buf, size, info, ctx);
+}
+
+// AllowSensitiveLoggingFuseHighLevelOps implementation
+AllowSensitiveLoggingFuseHighLevelOps::AllowSensitiveLoggingFuseHighLevelOps(
+    std::shared_ptr<FuseHighLevelOpsBase> delegate)
+    : DelegateFuseHighLevelOps(std::move(delegate))
+{
+}
+
+bool AllowSensitiveLoggingFuseHighLevelOps::allow_sensitive_logging() const { return true; }
+
 int SpecialFiledFuseHighLevelOps::vgetattr(const char* path, fuse_stat* st, const fuse_context* ctx)
 {
     if (path && path[0] == '/' && path + 1 == kSpecialFileName)
