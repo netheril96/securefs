@@ -50,20 +50,21 @@ private:
 class HookedFuseHighLevelOps final : public DelegateFuseHighLevelOps
 {
 public:
-    HookedFuseHighLevelOps(FuseHighLevelOpsBase& delegate, FuseHook& hook)
-        : DelegateFuseHighLevelOps(delegate), hook_(hook)
+    HookedFuseHighLevelOps(std::shared_ptr<FuseHighLevelOpsBase> delegate,
+                           std::shared_ptr<FuseHook> hook)
+        : DelegateFuseHighLevelOps(std::move(delegate)), hook_(std::move(hook))
     {
     }
 
     int vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vstatfs(path, buf, ctx);
     }
 
     int vgetattr(const char* path, fuse_stat* st, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vgetattr(path, st, ctx);
     }
 
@@ -72,19 +73,19 @@ public:
                   fuse_file_info* info,
                   const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vfgetattr(path, st, info, ctx);
     }
 
     int vopendir(const char* path, fuse_file_info* info, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vopendir(path, info, ctx);
     }
 
     int vreleasedir(const char* path, fuse_file_info* info, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vreleasedir(path, info, ctx);
     }
 
@@ -95,7 +96,7 @@ public:
                  fuse_file_info* info,
                  const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vreaddir(path, buf, filler, off, info, ctx);
     }
 
@@ -104,19 +105,19 @@ public:
                 fuse_file_info* info,
                 const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vcreate(path, mode, info, ctx);
     }
 
     int vopen(const char* path, fuse_file_info* info, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vopen(path, info, ctx);
     }
 
     int vrelease(const char* path, fuse_file_info* info, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vrelease(path, info, ctx);
     }
 
@@ -127,7 +128,7 @@ public:
               fuse_file_info* info,
               const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vread(path, buf, size, offset, info, ctx);
     }
 
@@ -138,13 +139,13 @@ public:
                fuse_file_info* info,
                const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vwrite(path, buf, size, offset, info, ctx);
     }
 
     int vflush(const char* path, fuse_file_info* info, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vflush(path, info, ctx);
     }
 
@@ -153,86 +154,86 @@ public:
                    fuse_file_info* info,
                    const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vftruncate(path, len, info, ctx);
     }
 
     int vunlink(const char* path, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vunlink(path, ctx);
     }
 
     int vmkdir(const char* path, fuse_mode_t mode, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vmkdir(path, mode, ctx);
     }
 
     int vrmdir(const char* path, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vrmdir(path, ctx);
     }
 
     int vchmod(const char* path, fuse_mode_t mode, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vchmod(path, mode, ctx);
     }
 
     int vchown(const char* path, fuse_uid_t uid, fuse_gid_t gid, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vchown(path, uid, gid, ctx);
     }
 
     int vsymlink(const char* to, const char* from, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vsymlink(to, from, ctx);
     }
 
     int vlink(const char* src, const char* dest, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vlink(src, dest, ctx);
     }
 
     int vreadlink(const char* path, char* buf, size_t size, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vreadlink(path, buf, size, ctx);
     }
 
     int vrename(const char* from, const char* to, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vrename(from, to, ctx);
     }
 
     int
     vfsync(const char* path, int datasync, fuse_file_info* info, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vfsync(path, datasync, info, ctx);
     }
 
     int vtruncate(const char* path, fuse_off_t len, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vtruncate(path, len, ctx);
     }
 
     int vutimens(const char* path, const fuse_timespec* ts, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vutimens(path, ts, ctx);
     }
 
     int vlistxattr(const char* path, char* list, size_t size, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vlistxattr(path, list, size, ctx);
     }
 
@@ -243,7 +244,7 @@ public:
                   uint32_t position,
                   const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vgetxattr(path, name, value, size, position, ctx);
     }
 
@@ -255,13 +256,13 @@ public:
                   uint32_t position,
                   const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vsetxattr(path, name, value, size, flags, position, ctx);
     }
 
     int vremovexattr(const char* path, const char* name, const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vremovexattr(path, name, ctx);
     }
 
@@ -271,12 +272,12 @@ public:
                  fuse_file_info* info,
                  const fuse_context* ctx) override
     {
-        hook_.notify_activity();
+        hook_->notify_activity();
         return DelegateFuseHighLevelOps::vgetpath(path, buf, size, info, ctx);
     }
 
 private:
-    FuseHook& hook_;
+    std::shared_ptr<FuseHook> hook_;
 };
 
 }    // namespace securefs
