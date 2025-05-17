@@ -23,6 +23,7 @@
 
 #include <memory>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -268,16 +269,16 @@ private:
 class FuseHighLevelOps : public ::securefs::FuseHighLevelOpsBase
 {
 public:
-    INJECT(FuseHighLevelOps(::securefs::OSService& root,
-                            StreamOpener& opener,
-                            NameTranslator& name_trans,
-                            XattrCryptor& xattr,
+    INJECT(FuseHighLevelOps(std::shared_ptr<::securefs::OSService> root,
+                            std::shared_ptr<StreamOpener> opener,
+                            std::shared_ptr<NameTranslator> name_trans,
+                            std::shared_ptr<XattrCryptor> xattr,
                             ANNOTATED(tXattrMasterKey, const key_type&) xattr_key,
                             ANNOTATED(tEnableXattr, bool) enable_xattr))
-        : root_(root)
-        , opener_(opener)
-        , name_trans_(name_trans)
-        , xattr_(xattr)
+        : root_(std::move(root))
+        , opener_(std::move(opener))
+        , name_trans_(std::move(name_trans))
+        , xattr_(std::move(xattr))
         , enable_xattr_(enable_xattr)
     {
         if (!is_apple())
@@ -365,10 +366,10 @@ public:
     int vremovexattr(const char* path, const char* name, const fuse_context* ctx) override;
 
 private:
-    ::securefs::OSService& root_;
-    StreamOpener& opener_;
-    NameTranslator& name_trans_;
-    XattrCryptor& xattr_;
+    std::shared_ptr<::securefs::OSService> root_;
+    std::shared_ptr<StreamOpener> opener_;
+    std::shared_ptr<NameTranslator> name_trans_;
+    std::shared_ptr<XattrCryptor> xattr_;
     std::optional<AES_SIV> xattr_name_cryptor_;
     bool enable_xattr_;
     bool read_dir_plus_ = false;

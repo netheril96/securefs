@@ -215,7 +215,7 @@ namespace
             {
                 return result;
             }
-            return InvalidNameTag();
+            return InvalidNameTag{};
         }
 
         std::string encrypt_path_for_symlink(std::string_view path) override
@@ -742,7 +742,7 @@ void FuseHighLevelOps::initialize(fuse_conn_info* info)
 {
     (void)info;
 #ifdef FSP_FUSE_CAP_READDIR_PLUS
-    if (opener_.can_compute_virtual_size() && (info->capable & FSP_FUSE_CAP_READDIR_PLUS))
+    if (opener_->can_compute_virtual_size() && (info->capable & FSP_FUSE_CAP_READDIR_PLUS))
     {
         info->want |= FSP_FUSE_CAP_READDIR_PLUS;
         read_dir_plus_ = true;
@@ -752,14 +752,14 @@ void FuseHighLevelOps::initialize(fuse_conn_info* info)
 
 int FuseHighLevelOps::vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx)
 {
-    root_.statfs(buf);
-    buf->f_namemax = name_trans_.max_virtual_path_component_size(buf->f_namemax);
+    root_->statfs(buf);
+    buf->f_namemax = name_trans_->max_virtual_path_component_size(buf->f_namemax);
     return 0;
 }
 int FuseHighLevelOps::vgetattr(const char* path, fuse_stat* buf, const fuse_context* ctx)
 {
-    auto enc_path = name_trans_.encrypt_full_path(path, nullptr);
-    if (!root_.stat(enc_path, buf))
+    auto enc_path = name_trans_->encrypt_full_path(path, nullptr);
+    if (!root_->stat(enc_path, buf))
         return -ENOENT;
     if (buf->st_size <= 0)
         return 0;
@@ -773,15 +773,15 @@ int FuseHighLevelOps::vgetattr(const char* path, fuse_stat* buf, const fuse_cont
         // 'buf->st_size' is the expected link size, but on NTFS volumes the link starts with
         // 'IntxLNK\1' followed by the UTF-16 encoded target.
         std::string buffer(buf->st_size, '\0');
-        ssize_t link_size = root_.readlink(enc_path, &buffer[0], buffer.size());
+        ssize_t link_size = root_->readlink(enc_path, &buffer[0], buffer.size());
         if (link_size != buf->st_size && link_size != (buf->st_size - 8) / 2)
             throwVFSException(EIO);
 
-        if (!name_trans_.is_no_op())
+        if (!name_trans_->is_no_op())
         {
             // Resize to actual size
             buffer.resize(static_cast<size_t>(link_size));
-            auto resolved = name_trans_.decrypt_path_from_symlink(buffer);
+            auto resolved = name_trans_->decrypt_path_from_symlink(buffer);
             buf->st_size = resolved.size();
         }
         else
@@ -795,15 +795,16 @@ int FuseHighLevelOps::vgetattr(const char* path, fuse_stat* buf, const fuse_cont
     case S_IFREG:
         if (buf->st_size > 0)
         {
-            if (opener_.can_compute_virtual_size())
+            if (opener_->can_compute_virtual_size())
             {
-                buf->st_size = opener_.compute_virtual_size(buf->st_size);
+                buf->st_size = opener_->compute_virtual_size(buf->st_size);
             }
             else
             {
                 try
                 {
-                    auto virtual_file = opener_.open(root_.open_file_stream(enc_path, O_RDONLY, 0));
+                    auto virtual_file
+                        = opener_->open(root_->open_file_stream(enc_path, O_RDONLY, 0));
                     buf->st_size = virtual_file->size();
                 }
                 catch (const std::exception& e)
@@ -834,9 +835,9 @@ int FuseHighLevelOps::vfgetattr(const char* path,
 int FuseHighLevelOps::vopendir(const char* path, fuse_file_info* info, const fuse_context* ctx)
 {
     auto dir = std::make_unique<DirectoryImpl>(
-        root_.norm_path_narrowed(name_trans_.encrypt_full_path(path, nullptr)),
-        name_trans_,
-        opener_,
+        root_->norm_path_narrowed(name_trans_->encrypt_full_path(path, nullptr)),
+        *name_trans_,
+        *opener_,
         read_dir_plus_);
     info->fh = reinterpret_cast<uintptr_t>(dir.release());
     return 0;
@@ -933,14 +934,14 @@ int FuseHighLevelOps::vunlink(const char* path, const fuse_context* ctx)
 {
     process_possible_long_name(path,
                                LongNameComponentAction::kDelete,
-                               [&](std::string&& enc_path) { root_.remove_file(enc_path); });
+                               [&](std::string&& enc_path) { root_->remove_file(enc_path); });
     return 0;
 };
 int FuseHighLevelOps::vmkdir(const char* path, fuse_mode_t mode, const fuse_context* ctx)
 {
     process_possible_long_name(path,
                                LongNameComponentAction::kCreate,
-                               [&](std::string&& enc_path) { root_.mkdir(enc_path, mode); });
+                               [&](std::string&& enc_path) { root_->mkdir(enc_path, mode); });
     return 0;
 }
 int FuseHighLevelOps::vrmdir(const char* path, const fuse_context* ctx)
@@ -949,15 +950,15 @@ int FuseHighLevelOps::vrmdir(const char* path, const fuse_context* ctx)
                                LongNameComponentAction::kDelete,
                                [&](std::string&& enc_path)
                                {
-                                   root_.remove_file_nothrow(
+                                   root_->remove_file_nothrow(
                                        absl::StrCat(enc_path, "/", kLongNameTableFileName));
-                                   root_.remove_directory(enc_path);
+                                   root_->remove_directory(enc_path);
                                });
     return 0;
 }
 int FuseHighLevelOps::vchmod(const char* path, fuse_mode_t mode, const fuse_context* ctx)
 {
-    root_.chmod(name_trans_.encrypt_full_path(path, nullptr), mode);
+    root_->chmod(name_trans_->encrypt_full_path(path, nullptr), mode);
     return 0;
 }
 int FuseHighLevelOps::vchown(const char* path,
@@ -965,7 +966,7 @@ int FuseHighLevelOps::vchown(const char* path,
                              fuse_gid_t gid,
                              const fuse_context* ctx)
 {
-    root_.chown(name_trans_.encrypt_full_path(path, nullptr), uid, gid);
+    root_->chown(name_trans_->encrypt_full_path(path, nullptr), uid, gid);
     return 0;
 }
 int FuseHighLevelOps::vsymlink(const char* to, const char* from, const fuse_context* ctx)
@@ -974,7 +975,7 @@ int FuseHighLevelOps::vsymlink(const char* to, const char* from, const fuse_cont
         from,
         LongNameComponentAction::kCreate,
         [&](std::string&& enc_path)
-        { root_.symlink(name_trans_.encrypt_path_for_symlink(to), enc_path); });
+        { root_->symlink(name_trans_->encrypt_path_for_symlink(to), enc_path); });
     return 0;
 }
 int FuseHighLevelOps::vlink(const char* src, const char* dest, const fuse_context* ctx)
@@ -983,7 +984,7 @@ int FuseHighLevelOps::vlink(const char* src, const char* dest, const fuse_contex
         dest,
         LongNameComponentAction::kCreate,
         [&](std::string&& enc_path)
-        { root_.link(name_trans_.encrypt_full_path(src, nullptr), enc_path); });
+        { root_->link(name_trans_->encrypt_full_path(src, nullptr), enc_path); });
     return 0;
 }
 int FuseHighLevelOps::vreadlink(const char* path, char* buf, size_t size, const fuse_context* ctx)
@@ -996,8 +997,8 @@ int FuseHighLevelOps::vreadlink(const char* path, char* buf, size_t size, const 
 
     auto max_size = size * 2 + 127;
     std::vector<char> buffer(max_size);
-    root_.readlink(name_trans_.encrypt_full_path(path, nullptr), buffer.data(), max_size - 1);
-    std::string resolved = name_trans_.decrypt_path_from_symlink(std::string_view(buffer.data()));
+    root_->readlink(name_trans_->encrypt_full_path(path, nullptr), buffer.data(), max_size - 1);
+    std::string resolved = name_trans_->decrypt_path_from_symlink(std::string_view(buffer.data()));
     size_t copy_size = std::min(resolved.size(), size - 1);
     memcpy(buf, resolved.data(), copy_size);
     buf[copy_size] = '\0';
@@ -1006,13 +1007,13 @@ int FuseHighLevelOps::vreadlink(const char* path, char* buf, size_t size, const 
 int FuseHighLevelOps::vrename(const char* from, const char* to, const fuse_context* ctx)
 {
     std::string encrypted_last_component_from, encrypted_last_component_to;
-    auto enc_from = name_trans_.encrypt_full_path(from, &encrypted_last_component_from);
-    auto enc_to = name_trans_.encrypt_full_path(to, &encrypted_last_component_to);
+    auto enc_from = name_trans_->encrypt_full_path(from, &encrypted_last_component_from);
+    auto enc_to = name_trans_->encrypt_full_path(to, &encrypted_last_component_to);
 
     if (encrypted_last_component_from.empty() && encrypted_last_component_to.empty())
     {
         // Neither are long name, so fast path.
-        root_.rename(enc_from, enc_to);
+        root_->rename(enc_from, enc_to);
         return 0;
     }
 
@@ -1022,14 +1023,14 @@ int FuseHighLevelOps::vrename(const char* from, const char* to, const fuse_conte
 
     if (!encrypted_last_component_from.empty())
     {
-        table.remove_mapping_from_from_db(name_trans_.get_last_component(enc_from));
+        table.remove_mapping_from_from_db(name_trans_->get_last_component(enc_from));
     }
     if (!encrypted_last_component_to.empty())
     {
-        table.update_mapping_to_to_db(name_trans_.get_last_component(enc_to),
+        table.update_mapping_to_to_db(name_trans_->get_last_component(enc_to),
                                       encrypted_last_component_to);
     }
-    root_.rename(enc_from, enc_to);
+    root_->rename(enc_from, enc_to);
     return 0;
 }
 int FuseHighLevelOps::vfsync(const char* path,
@@ -1052,23 +1053,23 @@ int FuseHighLevelOps::vtruncate(const char* path, fuse_off_t len, const fuse_con
 }
 int FuseHighLevelOps::vutimens(const char* path, const fuse_timespec* ts, const fuse_context* ctx)
 {
-    root_.utimens(name_trans_.encrypt_full_path(path, nullptr), ts);
+    root_->utimens(name_trans_->encrypt_full_path(path, nullptr), ts);
     return 0;
 }
 int FuseHighLevelOps::vlistxattr(const char* path, char* list, size_t size, const fuse_context* ctx)
 {
-    auto encrypted_path = name_trans_.encrypt_full_path(path, nullptr);
+    auto encrypted_path = name_trans_->encrypt_full_path(path, nullptr);
     if (xattr_name_cryptor_)
     {
         return generic_xattr::wrapped_listxattr(
             [&](char* buffer, size_t size)
-            { return root_.listxattr(encrypted_path.c_str(), buffer, size); },
+            { return root_->listxattr(encrypted_path.c_str(), buffer, size); },
             *xattr_name_cryptor_,
             list,
             size);
     }
 
-    int rc = root_.listxattr(name_trans_.encrypt_full_path(path, nullptr).c_str(), list, size);
+    int rc = root_->listxattr(name_trans_->encrypt_full_path(path, nullptr).c_str(), list, size);
     if (rc < 0)
     {
         return rc;
@@ -1100,26 +1101,28 @@ int FuseHighLevelOps::vgetxattr(const char* path,
 
     if (!value)
     {
-        ssize_t rc = root_.getxattr(
-            name_trans_.encrypt_full_path(path, nullptr).c_str(), wrapped_name.c_str(), nullptr, 0);
+        ssize_t rc = root_->getxattr(name_trans_->encrypt_full_path(path, nullptr).c_str(),
+                                     wrapped_name.c_str(),
+                                     nullptr,
+                                     0);
         if (rc < 0)
         {
             return rc;
         }
-        return static_cast<int>(xattr_.infer_decrypted_size(rc));
+        return static_cast<int>(xattr_->infer_decrypted_size(rc));
     }
-    std::vector<byte> underlying_data(xattr_.infer_encrypted_size(size));
-    auto rc = root_.getxattr(name_trans_.encrypt_full_path(path, nullptr).c_str(),
-                             wrapped_name.c_str(),
-                             underlying_data.data(),
-                             underlying_data.size());
+    std::vector<byte> underlying_data(xattr_->infer_encrypted_size(size));
+    auto rc = root_->getxattr(name_trans_->encrypt_full_path(path, nullptr).c_str(),
+                              wrapped_name.c_str(),
+                              underlying_data.data(),
+                              underlying_data.size());
     if (rc < 0)
     {
         return static_cast<int>(rc);
     }
-    xattr_.decrypt(
+    xattr_->decrypt(
         underlying_data.data(), underlying_data.size(), reinterpret_cast<byte*>(value), size);
-    return static_cast<int>(xattr_.infer_decrypted_size(rc));
+    return static_cast<int>(xattr_->infer_decrypted_size(rc));
 }
 int FuseHighLevelOps::vsetxattr(const char* path,
                                 const char* name,
@@ -1149,12 +1152,12 @@ int FuseHighLevelOps::vsetxattr(const char* path,
         ? generic_xattr::encrypt_xattr_name(*xattr_name_cryptor_, name)
         : name;
 
-    auto data = xattr_.encrypt(value, size);
-    return root_.setxattr(name_trans_.encrypt_full_path(path, nullptr).c_str(),
-                          wrapped_name.c_str(),
-                          data.data(),
-                          data.size(),
-                          flags);
+    auto data = xattr_->encrypt(value, size);
+    return root_->setxattr(name_trans_->encrypt_full_path(path, nullptr).c_str(),
+                           wrapped_name.c_str(),
+                           data.data(),
+                           data.size(),
+                           flags);
 }
 int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fuse_context* ctx)
 {
@@ -1171,8 +1174,8 @@ int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fus
         ? generic_xattr::encrypt_xattr_name(*xattr_name_cryptor_, name)
         : name;
 
-    return root_.removexattr(name_trans_.encrypt_full_path(path, nullptr).c_str(),
-                             wrapped_name.c_str());
+    return root_->removexattr(name_trans_->encrypt_full_path(path, nullptr).c_str(),
+                              wrapped_name.c_str());
 }
 std::unique_ptr<File> FuseHighLevelOps::open(std::string_view path, int flags, unsigned mode)
 {
@@ -1199,7 +1202,7 @@ std::unique_ptr<File> FuseHighLevelOps::open(std::string_view path, int flags, u
         path,
         (flags & O_CREAT) ? LongNameComponentAction::kCreate : LongNameComponentAction::kIgnore,
         [&](std::string&& enc_path)
-        { fp = std::make_unique<File>(root_.open_file_stream(enc_path, flags, mode), opener_); });
+        { fp = std::make_unique<File>(root_->open_file_stream(enc_path, flags, mode), *opener_); });
 
     if (flags & O_TRUNC)
     {
@@ -1210,8 +1213,8 @@ std::unique_ptr<File> FuseHighLevelOps::open(std::string_view path, int flags, u
 }
 std::string FuseHighLevelOps::long_name_table_file_name(absl::string_view enc_path)
 {
-    return root_.norm_path_narrowed(
-        absl::StrCat(name_trans_.remove_last_component(enc_path), "/", kLongNameTableFileName));
+    return root_->norm_path_narrowed(
+        absl::StrCat(name_trans_->remove_last_component(enc_path), "/", kLongNameTableFileName));
 }
 void FuseHighLevelOps::process_possible_long_name(
     absl::string_view path,
@@ -1220,11 +1223,11 @@ void FuseHighLevelOps::process_possible_long_name(
 {
     if (action == LongNameComponentAction::kIgnore)
     {
-        callback(name_trans_.encrypt_full_path(path, nullptr));
+        callback(name_trans_->encrypt_full_path(path, nullptr));
         return;
     }
     std::string encrypted_last_component, enc_path;
-    enc_path = name_trans_.encrypt_full_path(path, &encrypted_last_component);
+    enc_path = name_trans_->encrypt_full_path(path, &encrypted_last_component);
 
     if (encrypted_last_component.empty())
     {
@@ -1237,10 +1240,10 @@ void FuseHighLevelOps::process_possible_long_name(
     switch (action)
     {
     case LongNameComponentAction::kCreate:
-        table.update_mapping(name_trans_.get_last_component(enc_path), encrypted_last_component);
+        table.update_mapping(name_trans_->get_last_component(enc_path), encrypted_last_component);
         break;
     case LongNameComponentAction::kDelete:
-        table.remove_mapping(name_trans_.get_last_component(enc_path));
+        table.remove_mapping(name_trans_->get_last_component(enc_path));
         break;
     default:
         throw_runtime_error("Unspecified action");
