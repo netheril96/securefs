@@ -1,4 +1,3 @@
-
 #include "files.h"
 #include "myutils.h"
 #include "object.h"
@@ -35,6 +34,10 @@ public:
 fruit::Component<fruit::Required<OSService, fruit::Annotated<tReadOnly, bool>>, FileTableIO>
 get_table_io_component(bool legacy);
 
+std::shared_ptr<FileTableIO> make_table_io(std::shared_ptr<OSService> os_service,
+                                           StrongType<bool, tLegacy> legacy,
+                                           StrongType<bool, tReadOnly> readonly);
+
 class FileTable;
 class FileTableCloser;
 
@@ -48,11 +51,11 @@ public:
         std::shared_ptr<FileStream>, std::shared_ptr<FileStream>, const id_type&)>;
 
 public:
-    INJECT(FileTable(FileTableIO& io,
+    INJECT(FileTable(std::shared_ptr<FileTableIO> io,
                      Factory<RegularFile> regular_file_factory,
                      Factory<Directory> directory_factory,
                      Factory<Symlink> symlink_factory))
-        : io_(io)
+        : io_(std::move(io))
         , regular_file_factory_(std::move(regular_file_factory))
         , directory_factory_(std::move(directory_factory))
         , symlink_factory_(std::move(symlink_factory))
@@ -85,7 +88,7 @@ private:
     FilePtrHolder create_holder(std::unique_ptr<FileBase>& fb);
 
 private:
-    FileTableIO& io_;
+    std::shared_ptr<FileTableIO> io_;
     std::unique_ptr<FileBase> root_;
     Factory<RegularFile> regular_file_factory_;
     Factory<Directory> directory_factory_;

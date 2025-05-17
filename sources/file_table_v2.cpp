@@ -25,12 +25,12 @@ void FileTable::init()
     bool newly = false;
     try
     {
-        pair = io_.open(kRootId);
+        pair = io_->open(kRootId);
     }
     catch (const ExceptionBase& e)
     {
         INFO_LOG("Root directory not initialized, creating... (%s)", e.what());
-        pair = io_.create(kRootId);
+        pair = io_->create(kRootId);
         newly = true;
     }
     root_ = directory_factory_(pair.first, pair.second, kRootId);
@@ -78,7 +78,7 @@ FilePtrHolder FileTable::open_as(const id_type& id, int type)
         s.live_map.emplace(id, std::move(unique_base));
         return holder;
     }
-    auto [data, meta] = io_.open(id);
+    auto [data, meta] = io_->open(id);
     auto unique_base = construct(type, std::move(data), std::move(meta), id);
     auto holder = create_holder(unique_base);
     s.live_map.emplace(id, std::move(unique_base));
@@ -98,7 +98,7 @@ FilePtrHolder FileTable::create_as(int type)
     generate_random(id.data(), id.size());
     auto& s = find_shard(id);
     LockGuard<Mutex> lg(s.mu);
-    auto [data, meta] = io_.create(id);
+    auto [data, meta] = io_->create(id);
     auto fp = construct(type, std::move(data), std::move(meta), id);
     auto holder = create_holder(fp);
     s.live_map.emplace(id, std::move(fp));
@@ -178,7 +178,7 @@ void FileTable::close_internal(const id_type id)
     else
     {
         holder.reset();
-        io_.unlink(id);
+        io_->unlink(id);
     }
     if (s.cache.size() > kMaxCached)
     {
@@ -222,7 +222,7 @@ namespace
     class FileTableIOVersion1 : public FileTableIO
     {
     private:
-        OSService& m_root;
+        std::shared_ptr<OSService> m_root;
         bool m_readonly;
 
         static const size_t FIRST_LEVEL = 1, SECOND_LEVEL = 5;
@@ -244,8 +244,14 @@ namespace
         }
 
     public:
-        INJECT(FileTableIOVersion1(OSService& root, ANNOTATED(tReadOnly, bool) readonly))
-            : m_root(root), m_readonly(readonly)
+        INJECT(FileTableIOVersion1(std::shared_ptr<OSService> root,
+                                   ANNOTATED(tReadOnly, bool) readonly))
+            : m_root(std::move(root)), m_readonly(readonly)
+        {
+        }
+
+        FileTableIOVersion1(std::shared_ptr<OSService> root, StrongType<bool, tReadOnly> readonly)
+            : m_root(std::move(root)), m_readonly(readonly.get())
         {
         }
 
@@ -255,36 +261,36 @@ namespace
             calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
 
             int open_flags = m_readonly ? O_RDONLY : O_RDWR;
-            return std::make_pair(m_root.open_file_stream(filename, open_flags, 0),
-                                  m_root.open_file_stream(metaname, open_flags, 0));
+            return std::make_pair(m_root->open_file_stream(filename, open_flags, 0),
+                                  m_root->open_file_stream(metaname, open_flags, 0));
         }
 
         FileStreamPtrPair create(const id_type& id) override
         {
             std::string first_level_dir, second_level_dir, filename, metaname;
             calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
-            m_root.ensure_directory(first_level_dir, 0755);
-            m_root.ensure_directory(second_level_dir, 0755);
+            m_root->ensure_directory(first_level_dir, 0755);
+            m_root->ensure_directory(second_level_dir, 0755);
             int open_flags = O_RDWR | O_CREAT | O_EXCL;
-            return std::make_pair(m_root.open_file_stream(filename, open_flags, 0644),
-                                  m_root.open_file_stream(metaname, open_flags, 0644));
+            return std::make_pair(m_root->open_file_stream(filename, open_flags, 0644),
+                                  m_root->open_file_stream(metaname, open_flags, 0644));
         }
 
         void unlink(const id_type& id) noexcept override
         {
             std::string first_level_dir, second_level_dir, filename, metaname;
             calculate_paths(id, first_level_dir, second_level_dir, filename, metaname);
-            m_root.remove_file_nothrow(filename);
-            m_root.remove_file_nothrow(metaname);
-            m_root.remove_directory_nothrow(second_level_dir);
-            m_root.remove_directory_nothrow(second_level_dir);
+            m_root->remove_file_nothrow(filename);
+            m_root->remove_file_nothrow(metaname);
+            m_root->remove_directory_nothrow(second_level_dir);
+            m_root->remove_directory_nothrow(second_level_dir);
         }
     };
 
     class FileTableIOVersion2 : public FileTableIO
     {
     private:
-        OSService& m_root;
+        std::shared_ptr<OSService> m_root;
         bool m_readonly;
 
         static void calculate_paths(const id_type& id,
@@ -298,8 +304,14 @@ namespace
         }
 
     public:
-        INJECT(FileTableIOVersion2(OSService& root, ANNOTATED(tReadOnly, bool) readonly))
-            : m_root(root), m_readonly(readonly)
+        INJECT(FileTableIOVersion2(std::shared_ptr<OSService> root,
+                                   ANNOTATED(tReadOnly, bool) readonly))
+            : m_root(std::move(root)), m_readonly(readonly)
+        {
+        }
+
+        FileTableIOVersion2(std::shared_ptr<OSService> root, StrongType<bool, tReadOnly> readonly)
+            : m_root(std::move(root)), m_readonly(readonly.get())
         {
         }
 
@@ -309,27 +321,27 @@ namespace
             calculate_paths(id, dir, filename, metaname);
 
             int open_flags = m_readonly ? O_RDONLY : O_RDWR;
-            return std::make_pair(m_root.open_file_stream(filename, open_flags, 0),
-                                  m_root.open_file_stream(metaname, open_flags, 0));
+            return std::make_pair(m_root->open_file_stream(filename, open_flags, 0),
+                                  m_root->open_file_stream(metaname, open_flags, 0));
         }
 
         FileStreamPtrPair create(const id_type& id) override
         {
             std::string dir, filename, metaname;
             calculate_paths(id, dir, filename, metaname);
-            m_root.ensure_directory(dir, 0755);
+            m_root->ensure_directory(dir, 0755);
             int open_flags = O_RDWR | O_CREAT | O_EXCL;
-            return std::make_pair(m_root.open_file_stream(filename, open_flags, 0644),
-                                  m_root.open_file_stream(metaname, open_flags, 0644));
+            return std::make_pair(m_root->open_file_stream(filename, open_flags, 0644),
+                                  m_root->open_file_stream(metaname, open_flags, 0644));
         }
 
         void unlink(const id_type& id) noexcept override
         {
             std::string dir, filename, metaname;
             calculate_paths(id, dir, filename, metaname);
-            m_root.remove_file_nothrow(filename);
-            m_root.remove_file_nothrow(metaname);
-            m_root.remove_directory_nothrow(dir);
+            m_root->remove_file_nothrow(filename);
+            m_root->remove_file_nothrow(metaname);
+            m_root->remove_directory_nothrow(dir);
         }
     };
 
@@ -350,5 +362,15 @@ void FileTableCloser::operator()(FileBase* fb) const
     {
         table_->close(fb->get_id());
     }
+}
+std::shared_ptr<FileTableIO> make_table_io(std::shared_ptr<OSService> os_service,
+                                           StrongType<bool, tLegacy> legacy,
+                                           StrongType<bool, tReadOnly> readonly)
+{
+    if (legacy.get())
+    {
+        return std::make_shared<FileTableIOVersion1>(os_service, readonly);
+    }
+    return std::make_shared<FileTableIOVersion2>(os_service, readonly);
 }
 }    // namespace securefs::full_format
