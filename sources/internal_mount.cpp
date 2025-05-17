@@ -4,6 +4,7 @@
 #include "files.h"
 #include "full_format.h"
 #include "fuse_high_level_ops_base.h"
+#include "platform.h"
 #include "tags.h"
 
 #include <memory>
@@ -101,6 +102,31 @@ namespace
                                                         std::move(directory_factory),
                                                         std::move(symlink_factory));
     };
+    std::shared_ptr<full_format::FuseHighLevelOps>
+    make_full_format_fuse_high_level_ops(std::shared_ptr<OSService> os_service,
+                                         const DecryptedSecurefsParams& params,
+                                         const MountOptions& mount_options)
+    {
+        auto file_table = make_file_table(os_service, params, mount_options);
+        auto locker
+            = std::make_shared<full_format::RepoLocker>(os_service, mount_options.read_only());
+        OwnerOverride owner_override{};
+        if (mount_options.has_uid_override())
+        {
+            owner_override.uid_override = mount_options.uid_override();
+        }
+        if (mount_options.has_gid_override())
+        {
+            owner_override.gid_override = mount_options.gid_override();
+        }
+        return std::make_shared<full_format::FuseHighLevelOps>(
+            os_service,
+            file_table,
+            locker,
+            owner_override,
+            StrongType<bool, tCaseInsensitive>(params.full_format_params().case_insensitive()),
+            StrongType<bool, tEnableXattr>(mount_options.enable_xattr()));
+    }
 }    // namespace
 
 std::shared_ptr<FuseHighLevelOpsBase>

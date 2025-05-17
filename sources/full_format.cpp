@@ -33,7 +33,7 @@ void FuseHighLevelOps::initialize(struct fuse_conn_info* conn)
 }
 int FuseHighLevelOps::vstatfs(const char* path, fuse_statvfs* buf, const fuse_context* ctx)
 {
-    root_.statfs(buf);
+    root_->statfs(buf);
     return 0;
 };
 int FuseHighLevelOps::vgetattr(const char* path, fuse_stat* st, const fuse_context* ctx)
@@ -80,7 +80,7 @@ int FuseHighLevelOps::vreleasedir(const char* path, fuse_file_info* info, const 
     {
         return -ENOTDIR;
     }
-    FilePtrHolder holder(fp, FileTableCloser(&ft_));
+    FilePtrHolder holder(fp, FileTableCloser(ft_.get()));
     // Let destructor does its job.
     return 0;
 };
@@ -152,7 +152,7 @@ int FuseHighLevelOps::vrelease(const char* path, fuse_file_info* info, const fus
     {
         return -EINVAL;
     }
-    FilePtrHolder holder(fp, FileTableCloser(&ft_));
+    FilePtrHolder holder(fp, FileTableCloser(ft_.get()));
     // Let destructor does its job.
     return 0;
 };
@@ -210,7 +210,7 @@ int FuseHighLevelOps::vunlink(const char* path, const fuse_context* ctx)
         }
     }
 
-    auto fp = ft_.open_as(id, type);
+    auto fp = ft_->open_as(id, type);
     FileLockGuard lg(*fp);
     fp->unlink();
     return 0;
@@ -234,7 +234,7 @@ int FuseHighLevelOps::vrmdir(const char* path, const fuse_context* ctx)
         }
     }
 
-    auto fp = ft_.open_as(id, type);
+    auto fp = ft_->open_as(id, type);
     FileLockGuard lg(*fp);
     fp->cast_as<Directory>()->iterate_over_entries(
         [](const std::string& name, const id_type& id, int type) -> bool
@@ -348,7 +348,7 @@ int FuseHighLevelOps::vrename(const char* from, const char* to, const fuse_conte
     }
     if (has_to_item)
     {
-        auto holder = ft_.open_as(to_id, to_type);
+        auto holder = ft_->open_as(to_id, to_type);
         FileLockGuard lg(*holder);
         holder->unlink();
     }
@@ -490,7 +490,7 @@ int FuseHighLevelOps::vgetpath(
     }
     absl::InlinedVector<std::string_view, 7> splits = absl::StrSplit(path, '/', absl::SkipEmpty());
     auto parent_id = kRootId;
-    FilePtrHolder holder = ft_.open_as(kRootId, Directory::class_type());
+    FilePtrHolder holder = ft_->open_as(kRootId, Directory::class_type());
     for (auto& split : splits)
     {
         id_type id;
@@ -505,7 +505,7 @@ int FuseHighLevelOps::vgetpath(
             }
             normed_name = *get_result;
         }
-        holder = ft_.open_as(id, type);
+        holder = ft_->open_as(id, type);
         holder->set_parent_id(parent_id);
         parent_id = holder->get_id();
         split = normed_name;
@@ -539,7 +539,7 @@ FuseHighLevelOps::generic_open(id_type parent_id,
         if (splits[i] == "..")
         {
             parent_id = parent->get_parent_id();
-            parent = ft_.open_as(parent_id, Directory::class_type());
+            parent = ft_->open_as(parent_id, Directory::class_type());
             continue;
         }
         id_type id;
@@ -551,7 +551,7 @@ FuseHighLevelOps::generic_open(id_type parent_id,
                 return {};
             }
         }
-        auto child = ft_.open_as(id, type);
+        auto child = ft_->open_as(id, type);
         child->set_parent_id(parent_id);
 
         if (type == Symlink::class_type())
@@ -580,7 +580,7 @@ FuseHighLevelOps::generic_open(id_type parent_id,
 FuseHighLevelOps::OpenBaseResult FuseHighLevelOps::open_base(absl::string_view path)
 {
     absl::InlinedVector<std::string_view, 7> splits = absl::StrSplit(path, '/', absl::SkipEmpty());
-    auto root = ft_.open_as(kRootId, Directory::class_type());
+    auto root = ft_->open_as(kRootId, Directory::class_type());
     if (splits.empty())
     {
         return {std::move(root), std::string_view()};
@@ -601,7 +601,7 @@ FilePtrHolder
 FuseHighLevelOps::create(absl::string_view path, unsigned mode, int type, int uid, int gid)
 {
     auto [base_dir, last_component] = open_base(path);
-    auto holder = ft_.create_as(type);
+    auto holder = ft_->create_as(type);
     {
         FileLockGuard lg(*holder);
         holder->initialize_empty((mode & 0777) | FileBase::mode_for_type(type), uid, gid);
@@ -625,7 +625,7 @@ std::optional<FilePtrHolder> FuseHighLevelOps::open_all(absl::string_view path,
 {
     if (path.empty() || path == "/")
     {
-        return ft_.open_as(kRootId, Directory::class_type());
+        return ft_->open_as(kRootId, Directory::class_type());
     }
     auto [base_dir, last_component] = open_base(path);
     bool success = false;
@@ -640,7 +640,7 @@ std::optional<FilePtrHolder> FuseHighLevelOps::open_all(absl::string_view path,
     {
         return {};
     }
-    auto holder = ft_.open_as(id, type);
+    auto holder = ft_->open_as(id, type);
     holder->set_parent_id(base_dir->get_id());
     if (resolve_last_symlink && holder->type() == Symlink::class_type())
     {
@@ -687,7 +687,7 @@ std::shared_ptr<FileStream> RepoLocker::open_lock_stream_checked()
 {
     try
     {
-        return root_.open_file_stream(kLockFileName, O_RDWR | O_CREAT | O_EXCL, 0644);
+        return root_->open_file_stream(kLockFileName, O_RDWR | O_CREAT | O_EXCL, 0644);
     }
     catch (const ExceptionBase& e)
     {
@@ -696,13 +696,13 @@ std::shared_ptr<FileStream> RepoLocker::open_lock_stream_checked()
             throw;
         }
 
-        auto result = root_.open_file_stream(kLockFileName, O_RDWR, 0644);
+        auto result = root_->open_file_stream(kLockFileName, O_RDWR, 0644);
         pid_t pid{};
         if (absl::SimpleAtoi(result->as_string(), &pid) && OSService::is_process_running(pid))
         {
             ERROR_LOG("Failed to acquire lock file %s. Process %d is holding "
                       "the lock.",
-                      root_.norm_path_narrowed(kLockFileName),
+                      root_->norm_path_narrowed(kLockFileName),
                       pid);
             throw;
         }
@@ -710,7 +710,7 @@ std::shared_ptr<FileStream> RepoLocker::open_lock_stream_checked()
         {
             WARN_LOG("Lock file %s exists but the process holding it has exited. The previous "
                      "securefs probably exited abnormally.",
-                     root_.norm_path_narrowed(kLockFileName));
+                     root_->norm_path_narrowed(kLockFileName));
             return result;
         }
     }

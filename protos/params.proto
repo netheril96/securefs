@@ -88,6 +88,9 @@ message MountOptions
 {
     bool read_only = 1;
     bool disable_verification = 2;
+    optional int32 uid_override = 3;
+    optional int32 gid_override = 4;
+    bool enable_xattr = 5;
 }
 
 message InternalMountData
