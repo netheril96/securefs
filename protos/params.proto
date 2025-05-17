@@ -83,3 +83,16 @@ message EncryptedSecurefsParams
         Argon2idParams argon2id_params = 5;
     }
 }
+
+message MountOptions
+{
+    bool read_only = 1;
+    bool disable_verification = 2;
+}
+
+message InternalMountData
+{
+    DecryptedSecurefsParams decrypted_params = 1;
+    MountOptions mount_options = 2;
+    repeated string fuse_args = 3;
+}
