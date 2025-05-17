@@ -191,6 +191,29 @@ public:
     {
     }
 
+    BtreeDirectory(DirNameComparison cmpfn,
+                   std::shared_ptr<FileStream> data_stream,
+                   std::shared_ptr<FileStream> meta_stream,
+                   const StrongType<key_type, tMasterKey>& key_,
+                   const id_type& id_,
+                   StrongType<bool, tVerify> check,
+                   StrongType<unsigned, tBlockSize> block_size,
+                   StrongType<unsigned, tIvSize> iv_size,
+                   StrongType<unsigned, tMaxPaddingSize> max_padding_size,
+                   StrongType<bool, tStoreTimeWithinFs> store_time)
+        : Directory(cmpfn,
+                    std::move(data_stream),
+                    std::move(meta_stream),
+                    key_.get(),
+                    id_,
+                    check.get(),
+                    block_size.get(),
+                    iv_size.get(),
+                    max_padding_size.get(),
+                    store_time.get())
+    {
+    }
+
     ~BtreeDirectory() override;
 
 protected:
