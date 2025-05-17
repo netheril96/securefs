@@ -21,7 +21,8 @@ class RepoLocker
 public:
     static inline constexpr const char* kLockFileName = ".securefs.lock";
 
-    INJECT(RepoLocker(OSService& root, ANNOTATED(tReadOnly, bool) readonly)) : root_(root)
+    INJECT(RepoLocker(std::shared_ptr<OSService> root, ANNOTATED(tReadOnly, bool) readonly))
+        : root_(std::move(root))
     {
         if (readonly)
         {
@@ -37,7 +38,7 @@ public:
             return;
         }
         lock_stream_.reset();
-        root_.remove_file_nothrow(kLockFileName);
+        root_->remove_file_nothrow(kLockFileName);
     }
 
 private:
@@ -46,24 +47,38 @@ private:
     void check_lock_file();
     std::shared_ptr<FileStream> open_lock_stream_checked();
 
-    OSService& root_;
+    std::shared_ptr<OSService> root_;
     std::shared_ptr<FileStream> lock_stream_;
 };
 class FuseHighLevelOps : public ::securefs::FuseHighLevelOpsBase
 {
 public:
-    INJECT(FuseHighLevelOps(OSService& root,
-                            FileTable& ft,
-                            RepoLocker& locker,
+    INJECT(FuseHighLevelOps(std::shared_ptr<OSService> root,
+                            std::shared_ptr<FileTable> ft,
+                            std::shared_ptr<RepoLocker> locker,
                             const OwnerOverride& owner_override,
                             ANNOTATED(tCaseInsensitive, bool) case_insensitive,
                             ANNOTATED(tEnableXattr, bool) enable_xattr))
-        : root_(root)
-        , ft_(ft)
-        , locker_(locker)
+        : root_(std::move(root))
+        , ft_(std::move(ft))
+        , locker_(std::move(locker))
         , owner_override_(owner_override)
         , case_insensitive_(case_insensitive)
         , enable_xattr_(enable_xattr)
+    {
+    }
+    FuseHighLevelOps(std::shared_ptr<OSService> root,
+                     std::shared_ptr<FileTable> ft,
+                     std::shared_ptr<RepoLocker> locker,
+                     const OwnerOverride& owner_override,
+                     StrongType<bool, tCaseInsensitive> case_insensitive,
+                     StrongType<bool, tEnableXattr> enable_xattr)
+        : root_(std::move(root))
+        , ft_(std::move(ft))
+        , locker_(std::move(locker))
+        , owner_override_(owner_override)
+        , case_insensitive_(case_insensitive.get())
+        , enable_xattr_(enable_xattr.get())
     {
     }
 
@@ -146,9 +161,10 @@ public:
     bool has_removexattr() const override { return enable_xattr_; }
 
 private:
-    OSService& root_;
-    FileTable& ft_;
-    [[maybe_unused]] RepoLocker& locker_;    // We only needs this to construct and destruct.
+    std::shared_ptr<OSService> root_;
+    std::shared_ptr<FileTable> ft_;
+    [[maybe_unused]] std::shared_ptr<RepoLocker>
+        locker_;    // We only needs this to construct and destruct.
     OwnerOverride owner_override_;
     bool case_insensitive_;
     bool enable_xattr_;
