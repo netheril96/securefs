@@ -22,11 +22,6 @@
 #include <cryptopp/blake2.h>
 #include <cryptopp/sha.h>
 #include <cstdio>
-#include <fruit/component.h>
-#include <fruit/fruit.h>
-#include <fruit/fruit_forward_decls.h>
-#include <fruit/macro.h>
-#include <functional>
 #include <uni_algo/case.h>
 #include <uni_algo/norm.h>
 
@@ -168,7 +163,7 @@ namespace
     class LegacyNameTranslator : public AESSIVBasedNameTranslator
     {
     public:
-        INJECT(LegacyNameTranslator(ANNOTATED(tNameMasterKey, const key_type&) name_master_key))
+        LegacyNameTranslator(const key_type& name_master_key)
             : AESSIVBasedNameTranslator(name_master_key)
         {
         }
@@ -334,8 +329,7 @@ namespace
 
         static constexpr std::string_view kLongNameSuffix = "...";
 
-        INJECT(NewStyleNameTranslator(ANNOTATED(tNameMasterKey, const key_type&) name_master_key,
-                                      ANNOTATED(tLongNameThreshold, unsigned) long_name_threshold))
+        NewStyleNameTranslator(const key_type& name_master_key, unsigned long_name_threshold)
             : AESSIVBasedNameTranslator(name_master_key), threshold_(long_name_threshold)
         {
         }
@@ -512,7 +506,7 @@ namespace
     class NoOpNameTranslator : public NameTranslator
     {
     public:
-        INJECT(NoOpNameTranslator()) {}
+        NoOpNameTranslator() = default;
         bool is_no_op() const noexcept override { return true; }
         std::string encrypt_full_path(std::string_view path,
                                       std::string* out_encrypted_last_component) override
@@ -1251,56 +1245,6 @@ void FuseHighLevelOps::process_possible_long_name(
         throw_runtime_error("Unspecified action");
     }
     callback(std::move(enc_path));
-}
-
-static fruit::Component<fruit::Required<NewStyleNameTranslator, LegacyNameTranslator>,
-                        fruit::Annotated<tInner, NameTranslator>>
-get_inner_name_translater_component(unsigned long_name_threshold)
-{
-    if (long_name_threshold > 0)
-        return fruit::createComponent()
-            .bind<fruit::Annotated<tInner, NameTranslator>, NewStyleNameTranslator>();
-    return fruit::createComponent()
-        .bind<fruit::Annotated<tInner, NameTranslator>, LegacyNameTranslator>();
-}
-
-static fruit::Component<
-    fruit::Required<fruit::Annotated<tInner, NameTranslator>, PathNormalizingNameTranslator>,
-    NameTranslator>
-get_outer_name_translater_component(bool should_case_fold, bool should_normalize_nfc)
-{
-    if (!should_case_fold && !should_normalize_nfc)
-        return fruit::createComponent()
-            .bind<NameTranslator, fruit::Annotated<tInner, NameTranslator>>();
-    return fruit::createComponent().bind<NameTranslator, PathNormalizingNameTranslator>();
-}
-
-fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
-get_name_translator_component(std::shared_ptr<NameNormalizationFlags> flags)
-{
-    if (flags->no_op)
-    {
-        return fruit::createComponent().bind<NameTranslator, NoOpNameTranslator>();
-    }
-    return fruit::createComponent()
-        .bindInstance(*flags)
-        .install(get_inner_name_translater_component, flags->long_name_threshold)
-        .install(get_outer_name_translater_component,
-                 flags->should_case_fold,
-                 flags->should_normalize_nfc)
-        .registerProvider<fruit::Annotated<tLongNameThreshold, unsigned>(
-            const NameNormalizationFlags&)>([](const NameNormalizationFlags& flags)
-                                            { return flags.long_name_threshold; })
-        .registerProvider<PathNormalizingNameTranslator*(
-            const NameNormalizationFlags&, fruit::Annotated<tInner, NameTranslator&>)>((
-            [](const NameNormalizationFlags& flags, NameTranslator& inner)
-            {
-                // Change to shared_ptr
-                return new PathNormalizingNameTranslator(
-                    std::shared_ptr<NameTranslator>(&inner, [](NameTranslator*) {}),
-                    flags.should_case_fold,
-                    flags.should_normalize_nfc);
-            }));
 }
 
 std::shared_ptr<NameTranslator>

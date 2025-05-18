@@ -138,23 +138,23 @@ namespace
             BtreeDirectory dir(cmp,
                                service.open_file_stream(tmp1, flags, 0644),
                                service.open_file_stream(tmp2, flags, 0644),
-                               key,
+                               StrongType<key_type, tMasterKey>(key),
                                null_id,
-                               true,
-                               8000,
-                               12,
-                               max_padding_size,
-                               false);
+                               StrongType<bool, tVerify>(true),
+                               StrongType<unsigned, tBlockSize>(8000),
+                               StrongType<unsigned, tIvSize>(12),
+                               StrongType<unsigned, tMaxPaddingSize>(max_padding_size),
+                               StrongType<bool, tStoreTimeWithinFs>(false));
             SimpleDirectory ref_dir(cmp,
                                     service.open_file_stream(tmp3, flags, 0644),
                                     service.open_file_stream(tmp4, flags, 0644),
-                                    key,
+                                    StrongType<key_type, tMasterKey>(key),
                                     null_id,
-                                    true,
-                                    8000,
-                                    12,
-                                    max_padding_size,
-                                    false);
+                                    StrongType<bool, tVerify>(true),
+                                    StrongType<unsigned, tBlockSize>(8000),
+                                    StrongType<unsigned, tIvSize>(12),
+                                    StrongType<unsigned, tMaxPaddingSize>(max_padding_size),
+                                    StrongType<bool, tStoreTimeWithinFs>(false));
             DoubleFileLockGuard dflg(dir, ref_dir);
             test(dir, ref_dir, rounds, 0.3, 0.5, 0.1, 1);
             test(dir, ref_dir, rounds, 0.3, 0.1, 0.5, 2);
@@ -167,23 +167,23 @@ namespace
             BtreeDirectory dir(cmp,
                                service.open_file_stream(tmp1, O_RDWR, 0),
                                service.open_file_stream(tmp2, O_RDWR, 0),
-                               key,
+                               StrongType<key_type, tMasterKey>(key),
                                null_id,
-                               true,
-                               8000,
-                               12,
-                               max_padding_size,
-                               false);
+                               StrongType<bool, tVerify>(true),
+                               StrongType<unsigned, tBlockSize>(8000),
+                               StrongType<unsigned, tIvSize>(12),
+                               StrongType<unsigned, tMaxPaddingSize>(max_padding_size),
+                               StrongType<bool, tStoreTimeWithinFs>(false));
             SimpleDirectory ref_dir(cmp,
                                     service.open_file_stream(tmp3, O_RDWR, 0),
                                     service.open_file_stream(tmp4, O_RDWR, 0),
-                                    key,
+                                    StrongType<key_type, tMasterKey>(key),
                                     null_id,
-                                    true,
-                                    8000,
-                                    12,
-                                    max_padding_size,
-                                    false);
+                                    StrongType<bool, tVerify>(true),
+                                    StrongType<unsigned, tBlockSize>(8000),
+                                    StrongType<unsigned, tIvSize>(12),
+                                    StrongType<unsigned, tMaxPaddingSize>(max_padding_size),
+                                    StrongType<bool, tStoreTimeWithinFs>(false));
             DoubleFileLockGuard dflg(dir, ref_dir);
             test(dir, ref_dir, rounds, 0.3, 0.3, 0.3, 4);
             dir.flush();

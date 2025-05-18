@@ -18,8 +18,6 @@
 #include <cryptopp/modes.h>
 #include <cstddef>
 #include <exception>
-#include <fruit/fruit.h>
-#include <fruit/macro.h>
 
 #include <memory>
 #include <string_view>
@@ -32,13 +30,13 @@ namespace securefs::lite_format
 constexpr std::string_view kLongNameTableFileName = ".long_names.db";
 class StreamOpener : public lite::AESGCMCryptStream::ParamCalculator
 {
-public:
-    INJECT(StreamOpener(ANNOTATED(tContentMasterKey, const key_type&) content_master_key,
-                        ANNOTATED(tPaddingMasterKey, const key_type&) padding_master_key,
-                        ANNOTATED(tBlockSize, unsigned) block_size,
-                        ANNOTATED(tIvSize, unsigned) iv_size,
-                        ANNOTATED(tMaxPaddingSize, unsigned) max_padding_size,
-                        ANNOTATED(tVerify, bool) verify))
+private:
+    StreamOpener(const key_type& content_master_key,
+                 const key_type& padding_master_key,
+                 unsigned block_size,
+                 unsigned iv_size,
+                 unsigned max_padding_size,
+                 bool verify)
         : content_master_key_(content_master_key)
         , padding_master_key_(padding_master_key)
         , block_size_(block_size)
@@ -59,6 +57,7 @@ public:
         validate();
     }
 
+public:
     StreamOpener(const StrongType<key_type, tContentMasterKey>& content_master_key,
                  const StrongType<key_type, tPaddingMasterKey>& padding_master_key,
                  StrongType<unsigned, tBlockSize> block_size,
@@ -234,9 +233,6 @@ struct NameNormalizationFlags
     unsigned long_name_threshold;
 };
 
-fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
-get_name_translator_component(std::shared_ptr<NameNormalizationFlags> flags);
-
 std::shared_ptr<NameTranslator>
 make_name_translator(const NameNormalizationFlags& flags,
                      const StrongType<key_type, tNameMasterKey>& name_master_key);
@@ -249,16 +245,15 @@ public:
 
 class XattrCryptor
 {
-public:
-    INJECT(XattrCryptor(ANNOTATED(tXattrMasterKey, const key_type&) key,
-                        ANNOTATED(tIvSize, unsigned) iv_size,
-                        ANNOTATED(tVerify, bool) verify))
+private:
+    XattrCryptor(const key_type& key, unsigned iv_size, bool verify)
         : crypt_([key]() { return std::make_unique<Cryptor>(key); })
         , iv_size_(iv_size)
         , verify_(verify)
     {
     }
 
+public:
     // Added constructor with StrongType arguments
     XattrCryptor(const StrongType<key_type, tXattrMasterKey>& key,
                  StrongType<unsigned, tIvSize> iv_size,
@@ -295,13 +290,13 @@ private:
 
 class FuseHighLevelOps : public ::securefs::FuseHighLevelOpsBase
 {
-public:
-    INJECT(FuseHighLevelOps(std::shared_ptr<::securefs::OSService> root,
-                            std::shared_ptr<StreamOpener> opener,
-                            std::shared_ptr<NameTranslator> name_trans,
-                            std::shared_ptr<XattrCryptor> xattr,
-                            ANNOTATED(tXattrMasterKey, const key_type&) xattr_key,
-                            ANNOTATED(tEnableXattr, bool) enable_xattr))
+private:
+    FuseHighLevelOps(std::shared_ptr<::securefs::OSService> root,
+                     std::shared_ptr<StreamOpener> opener,
+                     std::shared_ptr<NameTranslator> name_trans,
+                     std::shared_ptr<XattrCryptor> xattr,
+                     const key_type& xattr_key,
+                     bool enable_xattr)
         : root_(std::move(root))
         , opener_(std::move(opener))
         , name_trans_(std::move(name_trans))
@@ -314,6 +309,7 @@ public:
         }
     }
 
+public:
     // Added constructor with StrongType arguments
     FuseHighLevelOps(std::shared_ptr<::securefs::OSService> root,
                      std::shared_ptr<StreamOpener> opener,

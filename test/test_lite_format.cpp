@@ -1,7 +1,8 @@
-#include "fuse_hook.h"
+#include "internal_mount.h"
 #include "lite_format.h"
 #include "mystring.h"
 #include "myutils.h"
+#include "params.pb.h"
 #include "platform.h"
 #include "tags.h"
 #include "test_common.h"
@@ -13,9 +14,6 @@
 #include <absl/utility/utility.h>
 #include <cryptopp/sha.h>
 #include <doctest/doctest.h>
-#include <fruit/component.h>
-#include <fruit/fruit.h>
-#include <fruit/injector.h>
 
 #include <array>
 #include <memory>
@@ -45,43 +43,13 @@ namespace
         CHECK(NameTranslator::remove_last_component("/cc/abcde") == "/cc/");
     }
 
-    fruit::Component<StreamOpener,
-                     XattrCryptor,
-                     fruit::Annotated<tNameMasterKey, key_type>,
-                     fruit::Annotated<tXattrMasterKey, key_type>,
-                     fruit::Annotated<tEnableXattr, bool>>
-    get_test_component()
-    {
-        return fruit::createComponent()
-            .registerProvider<fruit::Annotated<tContentMasterKey, key_type>()>(
-                []() { return key_type(100); })
-            .registerProvider<fruit::Annotated<tPaddingMasterKey, key_type>()>(
-                []() { return key_type(111); })
-            .registerProvider<fruit::Annotated<tNameMasterKey, key_type>()>(
-                []() { return key_type(122); })
-            .registerProvider<fruit::Annotated<tXattrMasterKey, key_type>()>(
-                []() { return key_type(108); })
-            .registerProvider<fruit::Annotated<tVerify, bool>()>([]() { return true; })
-            .registerProvider<fruit::Annotated<tBlockSize, unsigned>()>([]() { return 64u; })
-            .registerProvider<fruit::Annotated<tIvSize, unsigned>()>([]() { return 12u; })
-            .registerProvider<fruit::Annotated<tMaxPaddingSize, unsigned>()>([]() { return 24u; })
-            .registerProvider<fruit::Annotated<tEnableXattr, bool>()>([]() { return true; });
-    }
-
     TEST_CASE("case folding name translator")
     {
         auto case_fold_flags = std::make_shared<NameNormalizationFlags>();
         case_fold_flags->should_case_fold = true;
-        fruit::Injector<NameTranslator> injector(
-            +[](std::shared_ptr<NameNormalizationFlags> name_normalization_flags)
-                -> fruit::Component<NameTranslator>
-            {
-                return fruit::createComponent()
-                    .install(get_name_translator_component, name_normalization_flags)
-                    .install(get_test_component);
-            },
-            case_fold_flags);
-        auto t = injector.get<NameTranslator*>();
+
+        auto t = make_name_translator(*case_fold_flags,
+                                      StrongType<key_type, tNameMasterKey>(key_type(-1)));
         CHECK(t->encrypt_full_path(u8"/abCDe/ß", nullptr)
               == t->encrypt_full_path(u8"/ABCde/ss", nullptr));
     }
@@ -90,17 +58,8 @@ namespace
     {
         auto normalize_nfc_flags = std::make_shared<NameNormalizationFlags>();
         normalize_nfc_flags->should_normalize_nfc = true;
-        fruit::Injector<NameTranslator> injector(
-            +[](std::shared_ptr<NameNormalizationFlags> name_normalization_flags)
-                -> fruit::Component<NameTranslator>
-            {
-                return fruit::createComponent()
-                    .install(get_name_translator_component, name_normalization_flags)
-                    .install(get_test_component);
-            },
-            normalize_nfc_flags);
-        auto t = injector.get<NameTranslator*>();
-
+        auto t = make_name_translator(*normalize_nfc_flags,
+                                      StrongType<key_type, tNameMasterKey>(key_type(-1)));
         CHECK(t->encrypt_full_path("/aaa/\xc3\x84\xc3\x84\xc3\x84", nullptr)
               == t->encrypt_full_path("/aaa/A\xcc\x88"
                                       "A\xcc\x88"
@@ -110,23 +69,24 @@ namespace
 
     TEST_CASE("Lite FuseHighLevelOps")
     {
-        auto whole_component = [](OSService* os) -> fruit::Component<FuseHighLevelOps>
-        {
-            auto flags = std::make_shared<NameNormalizationFlags>();
-            flags->long_name_threshold = 133;
-            return fruit::createComponent()
-                .install(get_name_translator_component, flags)
-                .install(get_test_component)
-                .bindInstance(*os);
-        };
-
         auto temp_dir_name = OSService::temp_name("tmp/lite", "dir");
         OSService::get_default().ensure_directory(temp_dir_name, 0755);
-        OSService root(temp_dir_name);
+        auto root = std::make_shared<OSService>(temp_dir_name);
 
-        fruit::Injector<FuseHighLevelOps> injector(+whole_component, &root);
-        auto& ops = injector.get<FuseHighLevelOps&>();
-        testing::test_fuse_ops(ops, root);
+        DecryptedSecurefsParams params;
+        params.mutable_size_params()->set_block_size(4096);
+        params.mutable_size_params()->set_iv_size(16);
+        params.mutable_size_params()->set_max_padding_size(0);
+        params.mutable_lite_format_params()->set_content_key("12345678901234567890123456789012");
+        params.mutable_lite_format_params()->set_padding_key("12345678901234567890123456789012");
+        params.mutable_lite_format_params()->set_name_key("12345678901234567890123456789012");
+        params.mutable_lite_format_params()->set_xattr_key("12345678901234567890123456789012");
+        params.mutable_lite_format_params()->set_long_name_threshold(9);
+
+        MountOptions mount_options;
+        mount_options.set_enable_xattr(true);
+        testing::test_fuse_ops(*make_lite_format_fuse_high_level_ops(root, params, mount_options),
+                               *root);
     }
 }    // namespace
 }    // namespace securefs::lite_format

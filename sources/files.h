@@ -14,7 +14,6 @@
 #include <cryptopp/gcm.h>
 #include <cryptopp/osrng.h>
 #include <cryptopp/rng.h>
-#include <fruit/macro.h>
 
 #include <atomic>
 #include <chrono>
@@ -144,7 +143,7 @@ public:
         return "unknown";
     }
 
-public:
+private:
     explicit FileBase(std::shared_ptr<FileStream> data_stream,
                       std::shared_ptr<FileStream> meta_stream,
                       const key_type& key_,
@@ -154,6 +153,28 @@ public:
                       unsigned iv_size,
                       unsigned max_padding_size,
                       bool store_time);
+
+public:
+    explicit FileBase(std::shared_ptr<FileStream> data_stream,
+                      std::shared_ptr<FileStream> meta_stream,
+                      const StrongType<key_type, tMasterKey>& key_,
+                      const id_type& id_,
+                      StrongType<bool, tVerify> check,
+                      StrongType<unsigned, tBlockSize> block_size,
+                      StrongType<unsigned, tIvSize> iv_size,
+                      StrongType<unsigned, tMaxPaddingSize> max_padding_size,
+                      StrongType<bool, tStoreTimeWithinFs> store_time)
+        : FileBase(std::move(data_stream),
+                   std::move(meta_stream),
+                   key_.get(),
+                   id_,
+                   check.get(),
+                   block_size.get(),
+                   iv_size.get(),
+                   max_padding_size.get(),
+                   store_time.get())
+    {
+    }
 
     virtual ~FileBase();
     DISABLE_COPY_MOVE(FileBase)
@@ -351,47 +372,7 @@ class RegularFile : public FileBase
 public:
     constexpr static int class_type() { return FileBase::REGULAR_FILE; }
 
-    INJECT(RegularFile(ASSISTED(std::shared_ptr<FileStream>) data_stream,
-                       ASSISTED(std::shared_ptr<FileStream>) meta_stream,
-                       ANNOTATED(tMasterKey, const key_type&) key_,
-                       ASSISTED(const id_type&) id_,
-                       ANNOTATED(tVerify, bool) check,
-                       ANNOTATED(tBlockSize, unsigned) block_size,
-                       ANNOTATED(tIvSize, unsigned) iv_size,
-                       ANNOTATED(tMaxPaddingSize, unsigned) max_padding_size,
-                       ANNOTATED(tStoreTimeWithinFs, bool) store_time))
-        : FileBase(std::move(data_stream),
-                   std::move(meta_stream),
-                   key_,
-                   id_,
-                   check,
-                   block_size,
-                   iv_size,
-                   max_padding_size,
-                   store_time)
-    {
-    }
-
-    RegularFile(std::shared_ptr<FileStream> data_stream,
-                std::shared_ptr<FileStream> meta_stream,
-                const StrongType<key_type, tMasterKey>& key_,
-                const id_type& id_,
-                StrongType<bool, tVerify> check,
-                StrongType<unsigned, tBlockSize> block_size,
-                StrongType<unsigned, tIvSize> iv_size,
-                StrongType<unsigned, tMaxPaddingSize> max_padding_size,
-                StrongType<bool, tStoreTimeWithinFs> store_time)
-        : FileBase(std::move(data_stream),
-                   std::move(meta_stream),
-                   key_.get(),
-                   id_,
-                   check.get(),
-                   block_size.get(),
-                   iv_size.get(),
-                   max_padding_size.get(),
-                   store_time.get())
-    {
-    }
+    using FileBase::FileBase;
 
     int type() const noexcept override { return class_type(); }
 
@@ -426,47 +407,7 @@ class Symlink : public FileBase
 public:
     constexpr static int class_type() { return FileBase::SYMLINK; }
 
-    INJECT(Symlink(ASSISTED(std::shared_ptr<FileStream>) data_stream,
-                   ASSISTED(std::shared_ptr<FileStream>) meta_stream,
-                   ANNOTATED(tMasterKey, const key_type&) key_,
-                   ASSISTED(const id_type&) id_,
-                   ANNOTATED(tVerify, bool) check,
-                   ANNOTATED(tBlockSize, unsigned) block_size,
-                   ANNOTATED(tIvSize, unsigned) iv_size,
-                   ANNOTATED(tMaxPaddingSize, unsigned) max_padding_size,
-                   ANNOTATED(tStoreTimeWithinFs, bool) store_time))
-        : FileBase(std::move(data_stream),
-                   std::move(meta_stream),
-                   key_,
-                   id_,
-                   check,
-                   block_size,
-                   iv_size,
-                   max_padding_size,
-                   store_time)
-    {
-    }
-
-    Symlink(std::shared_ptr<FileStream> data_stream,
-            std::shared_ptr<FileStream> meta_stream,
-            const StrongType<key_type, tMasterKey>& key_,
-            const id_type& id_,
-            StrongType<bool, tVerify> check,
-            StrongType<unsigned, tBlockSize> block_size,
-            StrongType<unsigned, tIvSize> iv_size,
-            StrongType<unsigned, tMaxPaddingSize> max_padding_size,
-            StrongType<bool, tStoreTimeWithinFs> store_time)
-        : FileBase(std::move(data_stream),
-                   std::move(meta_stream),
-                   key_.get(),
-                   id_,
-                   check.get(),
-                   block_size.get(),
-                   iv_size.get(),
-                   max_padding_size.get(),
-                   store_time.get())
-    {
-    }
+    using FileBase::FileBase;
 
     int type() const noexcept override { return class_type(); }
 

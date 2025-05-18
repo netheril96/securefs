@@ -1,3 +1,4 @@
+#pragma once
 #include "file_table_v2.h"
 #include "files.h"
 #include "fuse_high_level_ops_base.h"
@@ -9,7 +10,6 @@
 
 #include <cstdint>
 #include <exception>
-#include <fruit/macro.h>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -21,10 +21,10 @@ class RepoLocker
 public:
     static inline constexpr const char* kLockFileName = ".securefs.lock";
 
-    INJECT(RepoLocker(std::shared_ptr<OSService> root, ANNOTATED(tReadOnly, bool) readonly))
+    RepoLocker(std::shared_ptr<OSService> root, StrongType<bool, tReadOnly> readonly)
         : root_(std::move(root))
     {
-        if (readonly)
+        if (readonly.get())
         {
             return;
         }
@@ -53,20 +53,6 @@ private:
 class FuseHighLevelOps : public ::securefs::FuseHighLevelOpsBase
 {
 public:
-    INJECT(FuseHighLevelOps(std::shared_ptr<OSService> root,
-                            std::shared_ptr<FileTable> ft,
-                            std::shared_ptr<RepoLocker> locker,
-                            const OwnerOverride& owner_override,
-                            ANNOTATED(tCaseInsensitive, bool) case_insensitive,
-                            ANNOTATED(tEnableXattr, bool) enable_xattr))
-        : root_(std::move(root))
-        , ft_(std::move(ft))
-        , locker_(std::move(locker))
-        , owner_override_(owner_override)
-        , case_insensitive_(case_insensitive)
-        , enable_xattr_(enable_xattr)
-    {
-    }
     FuseHighLevelOps(std::shared_ptr<OSService> root,
                      std::shared_ptr<FileTable> ft,
                      std::shared_ptr<RepoLocker> locker,

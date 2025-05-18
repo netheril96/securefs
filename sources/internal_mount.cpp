@@ -111,76 +111,6 @@ namespace
                                                         std::move(directory_factory),
                                                         std::move(symlink_factory));
     };
-    std::shared_ptr<full_format::FuseHighLevelOps>
-    make_full_format_fuse_high_level_ops(std::shared_ptr<OSService> os_service,
-                                         const DecryptedSecurefsParams& params,
-                                         const MountOptions& mount_options)
-    {
-        auto file_table = make_file_table(os_service, params, mount_options);
-        auto locker
-            = std::make_shared<full_format::RepoLocker>(os_service, mount_options.read_only());
-        OwnerOverride owner_override{};
-        if (mount_options.has_uid_override())
-        {
-            owner_override.uid_override = mount_options.uid_override();
-        }
-        if (mount_options.has_gid_override())
-        {
-            owner_override.gid_override = mount_options.gid_override();
-        }
-        return std::make_shared<full_format::FuseHighLevelOps>(
-            std::move(os_service),
-            std::move(file_table),
-            std::move(locker),
-            owner_override,
-            StrongType<bool, tCaseInsensitive>(params.full_format_params().case_insensitive()),
-            StrongType<bool, tEnableXattr>(mount_options.enable_xattr()));
-    }
-    std::shared_ptr<lite_format::FuseHighLevelOps>
-    make_lite_format_fuse_high_level_ops(std::shared_ptr<OSService> os_service,
-                                         const DecryptedSecurefsParams& params,
-                                         const MountOptions& mount_options)
-    {
-        // Extract keys from params
-
-        const auto& lite_params = params.lite_format_params();
-        auto content_master_key
-            = StrongType<key_type, tContentMasterKey>(from_byte_string(lite_params.content_key()));
-        auto padding_master_key
-            = StrongType<key_type, tPaddingMasterKey>(from_byte_string(lite_params.padding_key()));
-        auto name_master_key
-            = StrongType<key_type, tNameMasterKey>(from_byte_string(lite_params.name_key()));
-        auto xattr_master_key
-            = StrongType<key_type, tXattrMasterKey>(from_byte_string(lite_params.xattr_key()));
-
-        auto block_size = StrongType<unsigned, tBlockSize>(params.size_params().block_size());
-        auto iv_size = StrongType<unsigned, tIvSize>(params.size_params().iv_size());
-        auto max_padding_size
-            = StrongType<unsigned, tMaxPaddingSize>(params.size_params().max_padding_size());
-        auto verify = StrongType<bool, tVerify>(!mount_options.disable_verification());
-        auto enable_xattr = StrongType<bool, tEnableXattr>(mount_options.enable_xattr());
-
-        // StreamOpener
-        auto opener = std::make_shared<lite_format::StreamOpener>(
-            content_master_key, padding_master_key, block_size, iv_size, max_padding_size, verify);
-
-        // NameNormalizationFlags
-        lite_format::NameNormalizationFlags name_flags{};
-        name_flags.no_op = mount_options.plain_text_names();
-        name_flags.should_case_fold = mount_options.case_fold();
-        name_flags.should_normalize_nfc = mount_options.unicode_normalize_nfc();
-        name_flags.long_name_threshold = lite_params.long_name_threshold();
-
-        // NameTranslator
-        auto name_trans = lite_format::make_name_translator(name_flags, name_master_key);
-
-        // XattrCryptor
-        auto xattr = std::make_shared<lite_format::XattrCryptor>(xattr_master_key, iv_size, verify);
-
-        // Construct and return FuseHighLevelOps
-        return std::make_shared<lite_format::FuseHighLevelOps>(
-            os_service, opener, name_trans, xattr, xattr_master_key, enable_xattr);
-    }
     std::shared_ptr<FuseHighLevelOpsBase>
     make_inner_fuse_high_level_ops(std::shared_ptr<OSService> os_service,
                                    const DecryptedSecurefsParams& params,
@@ -227,6 +157,77 @@ namespace
     }
 
 }    // namespace
+
+std::shared_ptr<full_format::FuseHighLevelOps>
+make_full_format_fuse_high_level_ops(std::shared_ptr<OSService> os_service,
+                                     const DecryptedSecurefsParams& params,
+                                     const MountOptions& mount_options)
+{
+    auto file_table = make_file_table(os_service, params, mount_options);
+    auto locker = std::make_shared<full_format::RepoLocker>(
+        os_service, StrongType<bool, tReadOnly>(mount_options.read_only()));
+    OwnerOverride owner_override{};
+    if (mount_options.has_uid_override())
+    {
+        owner_override.uid_override = mount_options.uid_override();
+    }
+    if (mount_options.has_gid_override())
+    {
+        owner_override.gid_override = mount_options.gid_override();
+    }
+    return std::make_shared<full_format::FuseHighLevelOps>(
+        std::move(os_service),
+        std::move(file_table),
+        std::move(locker),
+        owner_override,
+        StrongType<bool, tCaseInsensitive>(params.full_format_params().case_insensitive()),
+        StrongType<bool, tEnableXattr>(mount_options.enable_xattr()));
+}
+std::shared_ptr<lite_format::FuseHighLevelOps>
+make_lite_format_fuse_high_level_ops(std::shared_ptr<OSService> os_service,
+                                     const DecryptedSecurefsParams& params,
+                                     const MountOptions& mount_options)
+{
+    // Extract keys from params
+
+    const auto& lite_params = params.lite_format_params();
+    auto content_master_key
+        = StrongType<key_type, tContentMasterKey>(from_byte_string(lite_params.content_key()));
+    auto padding_master_key
+        = StrongType<key_type, tPaddingMasterKey>(from_byte_string(lite_params.padding_key()));
+    auto name_master_key
+        = StrongType<key_type, tNameMasterKey>(from_byte_string(lite_params.name_key()));
+    auto xattr_master_key
+        = StrongType<key_type, tXattrMasterKey>(from_byte_string(lite_params.xattr_key()));
+
+    auto block_size = StrongType<unsigned, tBlockSize>(params.size_params().block_size());
+    auto iv_size = StrongType<unsigned, tIvSize>(params.size_params().iv_size());
+    auto max_padding_size
+        = StrongType<unsigned, tMaxPaddingSize>(params.size_params().max_padding_size());
+    auto verify = StrongType<bool, tVerify>(!mount_options.disable_verification());
+    auto enable_xattr = StrongType<bool, tEnableXattr>(mount_options.enable_xattr());
+
+    // StreamOpener
+    auto opener = std::make_shared<lite_format::StreamOpener>(
+        content_master_key, padding_master_key, block_size, iv_size, max_padding_size, verify);
+
+    // NameNormalizationFlags
+    lite_format::NameNormalizationFlags name_flags{};
+    name_flags.no_op = mount_options.plain_text_names();
+    name_flags.should_case_fold = mount_options.case_fold();
+    name_flags.should_normalize_nfc = mount_options.unicode_normalize_nfc();
+    name_flags.long_name_threshold = lite_params.long_name_threshold();
+
+    // NameTranslator
+    auto name_trans = lite_format::make_name_translator(name_flags, name_master_key);
+
+    // XattrCryptor
+    auto xattr = std::make_shared<lite_format::XattrCryptor>(xattr_master_key, iv_size, verify);
+
+    // Construct and return FuseHighLevelOps
+    return std::make_shared<lite_format::FuseHighLevelOps>(
+        os_service, opener, name_trans, xattr, xattr_master_key, enable_xattr);
+}
 
 std::shared_ptr<FuseHighLevelOpsBase>
 make_fuse_high_level_ops(std::shared_ptr<OSService> os_service,
