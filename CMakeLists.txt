@@ -132,9 +132,6 @@ if(SECUREFS_ENABLE_JEMALLOC)
     target_link_libraries(securefs-static PUBLIC ${JEMALLOC_LDFLAGS})
 endif()
 
-find_library(FRUIT_LIBRARY NAMES fruit)
-target_link_libraries(securefs-static PUBLIC ${FRUIT_LIBRARY})
-
 if(UNIX)
     find_package(PkgConfig REQUIRED)
 

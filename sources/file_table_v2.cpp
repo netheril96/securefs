@@ -13,8 +13,6 @@
 #include <absl/strings/str_cat.h>
 #include <algorithm>
 #include <exception>
-#include <fruit/component.h>
-#include <fruit/macro.h>
 #include <memory>
 
 namespace securefs::full_format
@@ -244,12 +242,6 @@ namespace
         }
 
     public:
-        INJECT(FileTableIOVersion1(std::shared_ptr<OSService> root,
-                                   ANNOTATED(tReadOnly, bool) readonly))
-            : m_root(std::move(root)), m_readonly(readonly)
-        {
-        }
-
         FileTableIOVersion1(std::shared_ptr<OSService> root, StrongType<bool, tReadOnly> readonly)
             : m_root(std::move(root)), m_readonly(readonly.get())
         {
@@ -304,12 +296,6 @@ namespace
         }
 
     public:
-        INJECT(FileTableIOVersion2(std::shared_ptr<OSService> root,
-                                   ANNOTATED(tReadOnly, bool) readonly))
-            : m_root(std::move(root)), m_readonly(readonly)
-        {
-        }
-
         FileTableIOVersion2(std::shared_ptr<OSService> root, StrongType<bool, tReadOnly> readonly)
             : m_root(std::move(root)), m_readonly(readonly.get())
         {
@@ -347,15 +333,6 @@ namespace
 
 }    // namespace
 
-fruit::Component<fruit::Required<OSService, fruit::Annotated<tReadOnly, bool>>, FileTableIO>
-get_table_io_component(bool legacy)
-{
-    if (legacy)
-    {
-        return fruit::createComponent().bind<FileTableIO, FileTableIOVersion1>();
-    }
-    return fruit::createComponent().bind<FileTableIO, FileTableIOVersion2>();
-}
 void FileTableCloser::operator()(FileBase* fb) const
 {
     if (fb && table_ && fb->decref() <= 0)

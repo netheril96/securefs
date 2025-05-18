@@ -6,7 +6,6 @@
         "tclap",
         "doctest",
         "sqlite3",
-        "fruit",
         {
             "name": "abseil",
             "features": [
@@ -17,9 +16,6 @@
         "protobuf"
     ],
     "vcpkg-configuration": {
-        "overlay-ports": [
-            "./overlay_ports"
-        ],
         "overlay-triplets": [
             "./overlay_triplets"
         ]

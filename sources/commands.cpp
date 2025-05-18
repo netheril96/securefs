@@ -29,9 +29,6 @@
 #include <cryptopp/osrng.h>
 #include <cryptopp/scrypt.h>
 #include <cryptopp/secblock.h>
-#include <fruit/component.h>
-#include <fruit/fruit.h>
-#include <fruit/fruit_forward_decls.h>
 #include <google/protobuf/util/json_util.h>
 #include <sys/stat.h>
 #include <tclap/CmdLine.h>

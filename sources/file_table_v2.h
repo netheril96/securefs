@@ -10,9 +10,6 @@
 
 #include <array>
 #include <cstddef>
-#include <fruit/component.h>
-#include <fruit/fruit_forward_decls.h>
-#include <fruit/macro.h>
 #include <functional>
 #include <memory>
 #include <utility>
@@ -32,9 +29,6 @@ public:
     virtual void unlink(const id_type& id) noexcept = 0;
 };
 
-fruit::Component<fruit::Required<OSService, fruit::Annotated<tReadOnly, bool>>, FileTableIO>
-get_table_io_component(bool legacy);
-
 std::shared_ptr<FileTableIO> make_table_io(std::shared_ptr<OSService> os_service,
                                            StrongType<bool, tLegacy> legacy,
                                            StrongType<bool, tReadOnly> readonly);
@@ -52,10 +46,10 @@ public:
         std::shared_ptr<FileStream>, std::shared_ptr<FileStream>, const id_type&)>;
 
 public:
-    INJECT(FileTable(std::shared_ptr<FileTableIO> io,
+    FileTable(std::shared_ptr<FileTableIO> io,
                      Factory<RegularFile> regular_file_factory,
                      Factory<Directory> directory_factory,
-                     Factory<Symlink> symlink_factory))
+                     Factory<Symlink> symlink_factory)
         : io_(std::move(io))
         , regular_file_factory_(std::move(regular_file_factory))
         , directory_factory_(std::move(directory_factory))

@@ -168,51 +168,7 @@ protected:
     void subflush() override ABSL_EXCLUSIVE_LOCKS_REQUIRED(*this);
 
 public:
-    INJECT(BtreeDirectory(DirNameComparison cmpfn,
-                          ASSISTED(std::shared_ptr<FileStream>) data_stream,
-                          ASSISTED(std::shared_ptr<FileStream>) meta_stream,
-                          ANNOTATED(tMasterKey, const key_type&) key_,
-                          ASSISTED(const id_type&) id_,
-                          ANNOTATED(tVerify, bool) check,
-                          ANNOTATED(tBlockSize, unsigned) block_size,
-                          ANNOTATED(tIvSize, unsigned) iv_size,
-                          ANNOTATED(tMaxPaddingSize, unsigned) max_padding_size,
-                          ANNOTATED(tStoreTimeWithinFs, bool) store_time))
-        : Directory(cmpfn,
-                    std::move(data_stream),
-                    std::move(meta_stream),
-                    key_,
-                    id_,
-                    check,
-                    block_size,
-                    iv_size,
-                    max_padding_size,
-                    store_time)
-    {
-    }
-
-    BtreeDirectory(DirNameComparison cmpfn,
-                   std::shared_ptr<FileStream> data_stream,
-                   std::shared_ptr<FileStream> meta_stream,
-                   const StrongType<key_type, tMasterKey>& key_,
-                   const id_type& id_,
-                   StrongType<bool, tVerify> check,
-                   StrongType<unsigned, tBlockSize> block_size,
-                   StrongType<unsigned, tIvSize> iv_size,
-                   StrongType<unsigned, tMaxPaddingSize> max_padding_size,
-                   StrongType<bool, tStoreTimeWithinFs> store_time)
-        : Directory(cmpfn,
-                    std::move(data_stream),
-                    std::move(meta_stream),
-                    key_.get(),
-                    id_,
-                    check.get(),
-                    block_size.get(),
-                    iv_size.get(),
-                    max_padding_size.get(),
-                    store_time.get())
-    {
-    }
+    using Directory::Directory;
 
     ~BtreeDirectory() override;
 
