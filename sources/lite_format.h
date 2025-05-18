@@ -59,6 +59,21 @@ public:
         validate();
     }
 
+    StreamOpener(const StrongType<key_type, tContentMasterKey>& content_master_key,
+                 const StrongType<key_type, tPaddingMasterKey>& padding_master_key,
+                 StrongType<unsigned, tBlockSize> block_size,
+                 StrongType<unsigned, tIvSize> iv_size,
+                 StrongType<unsigned, tMaxPaddingSize> max_padding_size,
+                 StrongType<bool, tVerify> verify)
+        : StreamOpener(content_master_key.get(),
+                       padding_master_key.get(),
+                       block_size.get(),
+                       iv_size.get(),
+                       max_padding_size.get(),
+                       verify.get())
+    {
+    }
+
     std::unique_ptr<securefs::lite::AESGCMCryptStream> open(std::shared_ptr<StreamBase> base);
 
     length_type compute_virtual_size(length_type physical_size) const noexcept
@@ -222,6 +237,10 @@ struct NameNormalizationFlags
 fruit::Component<fruit::Required<fruit::Annotated<tNameMasterKey, key_type>>, NameTranslator>
 get_name_translator_component(std::shared_ptr<NameNormalizationFlags> flags);
 
+std::shared_ptr<NameTranslator>
+make_name_translator(const NameNormalizationFlags& flags,
+                     const StrongType<key_type, tNameMasterKey>& name_master_key);
+
 class XattrVerificationException : public std::exception
 {
 public:
@@ -237,6 +256,14 @@ public:
         : crypt_([key]() { return std::make_unique<Cryptor>(key); })
         , iv_size_(iv_size)
         , verify_(verify)
+    {
+    }
+
+    // Added constructor with StrongType arguments
+    XattrCryptor(const StrongType<key_type, tXattrMasterKey>& key,
+                 StrongType<unsigned, tIvSize> iv_size,
+                 StrongType<bool, tVerify> verify)
+        : XattrCryptor(key.get(), iv_size.get(), verify.get())
     {
     }
 
@@ -285,6 +312,22 @@ public:
         {
             xattr_name_cryptor_.emplace(xattr_key.data(), xattr_key.size());
         }
+    }
+
+    // Added constructor with StrongType arguments
+    FuseHighLevelOps(std::shared_ptr<::securefs::OSService> root,
+                     std::shared_ptr<StreamOpener> opener,
+                     std::shared_ptr<NameTranslator> name_trans,
+                     std::shared_ptr<XattrCryptor> xattr,
+                     const StrongType<key_type, tXattrMasterKey>& xattr_key,
+                     StrongType<bool, tEnableXattr> enable_xattr)
+        : FuseHighLevelOps(std::move(root),
+                           std::move(opener),
+                           std::move(name_trans),
+                           std::move(xattr),
+                           xattr_key.get(),
+                           enable_xattr.get())
+    {
     }
 
     bool has_symlink() const override { return !is_windows(); }

@@ -548,8 +548,10 @@ namespace
     class PathNormalizingNameTranslator : public NameTranslator
     {
     public:
-        PathNormalizingNameTranslator(NameTranslator& delegate, bool case_fold, bool nfc)
-            : delegate_(delegate), case_fold_(case_fold), nfc_(nfc)
+        PathNormalizingNameTranslator(std::shared_ptr<NameTranslator> delegate,
+                                      bool case_fold,
+                                      bool nfc)
+            : delegate_(std::move(delegate)), case_fold_(case_fold), nfc_(nfc)
         {
         }
 
@@ -570,37 +572,37 @@ namespace
                     normed_string = una::cases::to_casefold_utf8(subject);
                     subject = normed_string;
                 }
-                return delegate_.encrypt_full_path(normed_string, out_encrypted_last_component);
+                return delegate_->encrypt_full_path(normed_string, out_encrypted_last_component);
             }
             catch (const std::exception& e)
             {
                 WARN_LOG("Failed to normalize path %s: %s", path, e.what());
-                return delegate_.encrypt_full_path(path, out_encrypted_last_component);
+                return delegate_->encrypt_full_path(path, out_encrypted_last_component);
             }
         }
 
         absl::variant<InvalidNameTag, LongNameTag, std::string>
         decrypt_path_component(std::string_view path) override
         {
-            return delegate_.decrypt_path_component(path);
+            return delegate_->decrypt_path_component(path);
         }
 
         std::string encrypt_path_for_symlink(std::string_view path) override
         {
-            return delegate_.encrypt_path_for_symlink(path);
+            return delegate_->encrypt_path_for_symlink(path);
         }
         std::string decrypt_path_from_symlink(std::string_view path) override
         {
-            return delegate_.decrypt_path_from_symlink(path);
+            return delegate_->decrypt_path_from_symlink(path);
         }
 
         unsigned max_virtual_path_component_size(unsigned physical_path_component_size) override
         {
-            return delegate_.max_virtual_path_component_size(physical_path_component_size);
+            return delegate_->max_virtual_path_component_size(physical_path_component_size);
         }
 
     private:
-        NameTranslator& delegate_;
+        std::shared_ptr<NameTranslator> delegate_;
         bool case_fold_;
         bool nfc_;
     };
@@ -1293,9 +1295,34 @@ get_name_translator_component(std::shared_ptr<NameNormalizationFlags> flags)
             const NameNormalizationFlags&, fruit::Annotated<tInner, NameTranslator&>)>((
             [](const NameNormalizationFlags& flags, NameTranslator& inner)
             {
+                // Change to shared_ptr
                 return new PathNormalizingNameTranslator(
-                    inner, flags.should_case_fold, flags.should_normalize_nfc);
+                    std::shared_ptr<NameTranslator>(&inner, [](NameTranslator*) {}),
+                    flags.should_case_fold,
+                    flags.should_normalize_nfc);
             }));
+}
+
+std::shared_ptr<NameTranslator>
+make_name_translator(const NameNormalizationFlags& flags,
+                     const StrongType<key_type, tNameMasterKey>& name_master_key)
+{
+    std::shared_ptr<NameTranslator> inner;
+    if (flags.long_name_threshold > 0)
+    {
+        inner = std::make_shared<NewStyleNameTranslator>(name_master_key.get(),
+                                                         flags.long_name_threshold);
+    }
+    else
+    {
+        inner = std::make_shared<LegacyNameTranslator>(name_master_key.get());
+    }
+    if (flags.should_case_fold || flags.should_normalize_nfc)
+    {
+        return std::make_shared<PathNormalizingNameTranslator>(
+            inner, flags.should_case_fold, flags.should_normalize_nfc);
+    }
+    return inner;
 }
 
 std::string_view NameTranslator::get_last_component(std::string_view path)

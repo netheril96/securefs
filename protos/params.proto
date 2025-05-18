@@ -91,6 +91,9 @@ message MountOptions
     optional int32 uid_override = 3;
     optional int32 gid_override = 4;
     bool enable_xattr = 5;
+    bool case_fold = 6;
+    bool unicode_normalize_nfc = 7;
+    bool plain_text_names = 8;
 }
 
 message InternalMountData
