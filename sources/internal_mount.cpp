@@ -19,11 +19,6 @@ namespace
     {
         return key_type{reinterpret_cast<const uint8_t*>(key.data()), key.size()};
     }
-    StrongType<key_type, tMasterKey> params_to_master_key(const DecryptedSecurefsParams& params)
-    {
-        return StrongType<key_type, tMasterKey>(
-            from_byte_string(params.full_format_params().master_key()));
-    }
     Directory::DirNameComparison
     params_to_dir_name_comparison(const DecryptedSecurefsParams& params)
     {
@@ -46,60 +41,64 @@ namespace
                                                             const DecryptedSecurefsParams& params,
                                                             const MountOptions& mount_options)
     {
-        full_format::FileTable::Factory<RegularFile> regular_file_factory
-            = [=](std::shared_ptr<FileStream> file_stream,
-                  std::shared_ptr<FileStream> meta_stream,
-                  const id_type& id)
+        auto master_key = StrongType<key_type, tMasterKey>(
+            from_byte_string(params.full_format_params().master_key()));
+        auto verify = StrongType<bool, tVerify>(!mount_options.disable_verification());
+        auto block_size = StrongType<unsigned, tBlockSize>(params.size_params().block_size());
+        auto iv_size = StrongType<unsigned, tIvSize>(params.size_params().iv_size());
+        auto max_padding_size
+            = StrongType<unsigned, tMaxPaddingSize>(params.size_params().max_padding_size());
+        auto store_time
+            = StrongType<bool, tStoreTimeWithinFs>(params.full_format_params().store_time());
+
+        auto regular_file_factory = [=](std::shared_ptr<FileStream> file_stream,
+                                        std::shared_ptr<FileStream> meta_stream,
+                                        const id_type& id)
         {
-            return std::make_unique<RegularFile>(
-                std::move(file_stream),
-                std::move(meta_stream),
-                params_to_master_key(params),
-                id,
-                StrongType<bool, tVerify>(!mount_options.disable_verification()),
-                StrongType<unsigned, tBlockSize>(params.size_params().block_size()),
-                StrongType<unsigned, tIvSize>(params.size_params().iv_size()),
-                StrongType<unsigned, tMaxPaddingSize>(params.size_params().max_padding_size()),
-                StrongType<bool, tStoreTimeWithinFs>(params.full_format_params().store_time()));
+            return std::make_unique<RegularFile>(std::move(file_stream),
+                                                 std::move(meta_stream),
+                                                 master_key,
+                                                 id,
+                                                 verify,
+                                                 block_size,
+                                                 iv_size,
+                                                 max_padding_size,
+                                                 store_time);
         };
-        full_format::FileTable::Factory<Directory> directory_factory
-            = [=](std::shared_ptr<FileStream> file_stream,
-                  std::shared_ptr<FileStream> meta_stream,
-                  const id_type& id)
+        auto directory_factory = [=](std::shared_ptr<FileStream> file_stream,
+                                     std::shared_ptr<FileStream> meta_stream,
+                                     const id_type& id)
         {
-            return std::make_unique<BtreeDirectory>(
-                params_to_dir_name_comparison(params),
-                std::move(file_stream),
-                std::move(meta_stream),
-                params_to_master_key(params),
-                id,
-                StrongType<bool, tVerify>(!mount_options.disable_verification()),
-                StrongType<unsigned, tBlockSize>(params.size_params().block_size()),
-                StrongType<unsigned, tIvSize>(params.size_params().iv_size()),
-                StrongType<unsigned, tMaxPaddingSize>(params.size_params().max_padding_size()),
-                StrongType<bool, tStoreTimeWithinFs>(params.full_format_params().store_time()));
+            return std::make_unique<BtreeDirectory>(params_to_dir_name_comparison(params),
+                                                    std::move(file_stream),
+                                                    std::move(meta_stream),
+                                                    master_key,
+                                                    id,
+                                                    verify,
+                                                    block_size,
+                                                    iv_size,
+                                                    max_padding_size,
+                                                    store_time);
         };
-        full_format::FileTable::Factory<Symlink> symlink_factory
-            = [=](std::shared_ptr<FileStream> file_stream,
-                  std::shared_ptr<FileStream> meta_stream,
-                  const id_type& id)
+        auto symlink_factory = [=](std::shared_ptr<FileStream> file_stream,
+                                   std::shared_ptr<FileStream> meta_stream,
+                                   const id_type& id)
         {
-            return std::make_unique<Symlink>(
-                std::move(file_stream),
-                std::move(meta_stream),
-                params_to_master_key(params),
-                id,
-                StrongType<bool, tVerify>(!mount_options.disable_verification()),
-                StrongType<unsigned, tBlockSize>(params.size_params().block_size()),
-                StrongType<unsigned, tIvSize>(params.size_params().iv_size()),
-                StrongType<unsigned, tMaxPaddingSize>(params.size_params().max_padding_size()),
-                StrongType<bool, tStoreTimeWithinFs>(params.full_format_params().store_time()));
+            return std::make_unique<Symlink>(std::move(file_stream),
+                                             std::move(meta_stream),
+                                             master_key,
+                                             id,
+                                             verify,
+                                             block_size,
+                                             iv_size,
+                                             max_padding_size,
+                                             store_time);
         };
         auto file_table_io = full_format::make_table_io(
             os_service,
             StrongType<bool, tLegacy>(params.full_format_params().legacy_file_table_io()),
             StrongType<bool, tReadOnly>(mount_options.read_only()));
-        return std::make_shared<full_format::FileTable>(file_table_io,
+        return std::make_shared<full_format::FileTable>(std::move(file_table_io),
                                                         std::move(regular_file_factory),
                                                         std::move(directory_factory),
                                                         std::move(symlink_factory));
@@ -122,9 +121,9 @@ namespace
             owner_override.gid_override = mount_options.gid_override();
         }
         return std::make_shared<full_format::FuseHighLevelOps>(
-            os_service,
-            file_table,
-            locker,
+            std::move(os_service),
+            std::move(file_table),
+            std::move(locker),
             owner_override,
             StrongType<bool, tCaseInsensitive>(params.full_format_params().case_insensitive()),
             StrongType<bool, tEnableXattr>(mount_options.enable_xattr()));
