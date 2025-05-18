@@ -3,13 +3,21 @@
 #include "file_table_v2.h"
 #include "files.h"
 #include "full_format.h"
+#include "fuse2_workaround.h"
 #include "fuse_high_level_ops_base.h"
+#include "fuse_hook.h"
 #include "lite_format.h"
+#include "logger.h"
 #include "platform.h"
 #include "tags.h"
 
+#include <absl/strings/escaping.h>
+#include <absl/time/time.h>
+#include <google/protobuf/repeated_ptr_field.h>
+
 #include <memory>
 #include <utility>
+#include <vector>
 
 namespace securefs
 {
@@ -173,6 +181,51 @@ namespace
         return std::make_shared<lite_format::FuseHighLevelOps>(
             os_service, opener, name_trans, xattr, xattr_master_key, enable_xattr);
     }
+    std::shared_ptr<FuseHighLevelOpsBase>
+    make_inner_fuse_high_level_ops(std::shared_ptr<OSService> os_service,
+                                   const DecryptedSecurefsParams& params,
+                                   const MountOptions& mount_options)
+    {
+        if (params.has_full_format_params())
+        {
+            return make_full_format_fuse_high_level_ops(
+                std::move(os_service), params, mount_options);
+        }
+        else if (params.has_lite_format_params())
+        {
+            return make_lite_format_fuse_high_level_ops(
+                std::move(os_service), params, mount_options);
+        }
+        throw std::runtime_error("Unsupported format");
+    }
+    std::vector<char*>
+    to_c_style_args(const ::google::protobuf::RepeatedPtrField<std::string>& args)
+    {
+        std::vector<char*> c_style_args;
+        c_style_args.reserve(args.size());
+        for (const auto& arg : args)
+        {
+            c_style_args.push_back(const_cast<char*>(arg.c_str()));
+        }
+        return c_style_args;
+    }
+    std::string escape_args(const ::google::protobuf::RepeatedPtrField<std::string>& args)
+    {
+        std::string result;
+        for (const auto& a : args)
+        {
+            result.push_back('\"');
+            result.append(absl::Utf8SafeCEscape(a));
+            result.push_back('\"');
+            result.push_back(' ');
+        }
+        if (!result.empty())
+        {
+            result.pop_back();
+        }
+        return result;
+    }
+
 }    // namespace
 
 std::shared_ptr<FuseHighLevelOpsBase>
@@ -180,14 +233,29 @@ make_fuse_high_level_ops(std::shared_ptr<OSService> os_service,
                          const DecryptedSecurefsParams& params,
                          const MountOptions& mount_options)
 {
-    if (params.has_full_format_params())
+    auto ops = make_inner_fuse_high_level_ops(os_service, params, mount_options);
+    if (mount_options.max_idle_seconds() > 0)
     {
-        return make_full_format_fuse_high_level_ops(std::move(os_service), params, mount_options);
+        ops = std::make_shared<HookedFuseHighLevelOps>(
+            std::move(ops),
+            std::make_shared<IdleShutdownHook>(absl::Seconds(mount_options.max_idle_seconds())));
     }
-    else if (params.has_lite_format_params())
+    if (mount_options.allow_sensitive_logging())
     {
-        return make_lite_format_fuse_high_level_ops(std::move(os_service), params, mount_options);
+        ops = std::make_shared<AllowSensitiveLoggingFuseHighLevelOps>(std::move(ops));
     }
-    throw std::runtime_error("Unsupported format");
+    return std::make_shared<SpecialFiledFuseHighLevelOps>(ops);
+}
+int internal_mount(const InternalMountData& mount_data)
+{
+    auto os_service = std::make_shared<OSService>(mount_data.data_dir());
+    auto fuse_high_level_ops = make_fuse_high_level_ops(
+        os_service, mount_data.decrypted_params(), mount_data.mount_options());
+    auto fuse_callbacks = FuseHighLevelOpsBase::build_ops(fuse_high_level_ops.get());
+    VERBOSE_LOG("Calling fuse_main with arguments: %s", escape_args(mount_data.fuse_args()));
+    return my_fuse_main(mount_data.fuse_args_size(),
+                        to_c_style_args(mount_data.fuse_args()).data(),
+                        &fuse_callbacks,
+                        fuse_high_level_ops.get());
 }
 }    // namespace securefs
