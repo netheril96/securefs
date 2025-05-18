@@ -8,6 +8,7 @@
 #include "fuse_high_level_ops_base.h"
 #include "fuse_hook.h"
 #include "git-version.h"
+#include "internal_mount.h"
 #include "lite_format.h"
 #include "lock_enabled.h"
 #include "logger.h"
@@ -629,15 +630,6 @@ private:
     DecryptedSecurefsParams fsparams{};
 
 private:
-    std::vector<const char*> to_c_style_args(const std::vector<std::string>& args)
-    {
-        std::vector<const char*> result(args.size());
-        std::transform(args.begin(),
-                       args.end(),
-                       result.begin(),
-                       [](const std::string& s) { return s.c_str(); });
-        return result;
-    }
 #ifdef _WIN32
     static bool is_letter(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
     static bool is_drive_mount(std::string_view mount_point)
@@ -649,219 +641,6 @@ private:
         return absl::StartsWith(mount_point, "\\\\") && !absl::StartsWith(mount_point, "\\\\?\\");
     }
 #endif
-
-    static std::string escape_args(const std::vector<std::string>& args)
-    {
-        std::string result;
-        for (const auto& a : args)
-        {
-            result.push_back('\"');
-            result.append(absl::Utf8SafeCEscape(a));
-            result.push_back('\"');
-            result.push_back(' ');
-        }
-        if (!result.empty())
-        {
-            result.pop_back();
-        }
-        return result;
-    }
-
-    static key_type from_byte_string(std::string_view view)
-    {
-        return key_type{reinterpret_cast<const byte*>(view.data()), view.size()};
-    }
-
-    static fruit::Component<
-        fruit::Required<lite_format::FuseHighLevelOps, full_format::FuseHighLevelOps>,
-        fruit::Annotated<tWrapped<1>, FuseHighLevelOpsBase>>
-    get_layer1_fuse_op_component(DecryptedSecurefsParams::FormatSpecificParamsCase format_case)
-    {
-        switch (format_case)
-        {
-        case DecryptedSecurefsParams::kLiteFormatParams:
-            return fruit::createComponent()
-                .bind<fruit::Annotated<tWrapped<1>, FuseHighLevelOpsBase>,
-                      lite_format::FuseHighLevelOps>();
-        case DecryptedSecurefsParams::kFullFormatParams:
-            return fruit::createComponent()
-                .bind<fruit::Annotated<tWrapped<1>, FuseHighLevelOpsBase>,
-                      full_format::FuseHighLevelOps>();
-        default:
-            throwInvalidArgumentException("Unknown format case");
-        }
-    }
-
-    static fruit::Component<
-        fruit::Required<fruit::Annotated<tWrapped<1>, FuseHighLevelOpsBase>, FuseHook>,
-        fruit::Annotated<tWrapped<2>, FuseHighLevelOpsBase>>
-    get_layer2_fuse_op_component(int max_idle_seconds)
-    {
-        if (max_idle_seconds > 0)
-        {
-            return fruit::createComponent()
-                .registerConstructor<HookedFuseHighLevelOps(
-                    fruit::Annotated<tWrapped<1>, std::shared_ptr<FuseHighLevelOpsBase>>,
-                    std::shared_ptr<FuseHook>)>()
-                .bind<fruit::Annotated<tWrapped<2>, FuseHighLevelOpsBase>,
-                      HookedFuseHighLevelOps>();
-        }
-        return fruit::createComponent()
-            .bind<fruit::Annotated<tWrapped<2>, FuseHighLevelOpsBase>,
-                  fruit::Annotated<tWrapped<1>, FuseHighLevelOpsBase>>();
-    }
-
-    static fruit::Component<fruit::Required<fruit::Annotated<tWrapped<2>, FuseHighLevelOpsBase>>,
-                            fruit::Annotated<tWrapped<3>, FuseHighLevelOpsBase>>
-    get_layer3_fuse_op_component(bool allow_sensitive_logging)
-    {
-        if (allow_sensitive_logging)
-        {
-            return fruit::createComponent()
-                .registerConstructor<AllowSensitiveLoggingFuseHighLevelOps(
-                    fruit::Annotated<tWrapped<2>, std::shared_ptr<FuseHighLevelOpsBase>>)>()
-                .bind<fruit::Annotated<tWrapped<3>, FuseHighLevelOpsBase>,
-                      AllowSensitiveLoggingFuseHighLevelOps>();
-        }
-        return fruit::createComponent()
-            .bind<fruit::Annotated<tWrapped<3>, FuseHighLevelOpsBase>,
-                  fruit::Annotated<tWrapped<2>, FuseHighLevelOpsBase>>();
-    }
-
-    static fruit::Component<fruit::Required<fruit::Annotated<tWrapped<3>, FuseHighLevelOpsBase>>,
-                            FuseHighLevelOpsBase>
-    get_final_fuse_op_component()
-    {
-        return fruit::createComponent()
-            .registerConstructor<SpecialFiledFuseHighLevelOps(
-                fruit::Annotated<tWrapped<3>, std::shared_ptr<FuseHighLevelOpsBase>>)>()
-            .bind<FuseHighLevelOpsBase, SpecialFiledFuseHighLevelOps>();
-    }
-
-    static fruit::Component<FuseHighLevelOpsBase>
-    get_fuse_high_ops_component(const MountCommand* cmd)
-    {
-        return fruit::createComponent()
-            .bindInstance(*cmd)
-            .install(+get_layer1_fuse_op_component, cmd->fsparams.format_specific_params_case())
-            .install(+get_layer2_fuse_op_component, cmd->max_idle_seconds.getValue())
-            .install(+get_layer3_fuse_op_component, cmd->allow_sensitive_logging.getValue())
-            .install(+get_final_fuse_op_component)
-            .install(::securefs::lite_format::get_name_translator_component,
-                     std::make_shared<lite_format::NameNormalizationFlags>(
-                         cmd->get_name_normalization_flags()))
-            .install(full_format::get_table_io_component,
-                     cmd->fsparams.full_format_params().legacy_file_table_io())
-            .registerProvider<fruit::Annotated<tVerify, bool>(const MountCommand&)>(
-                [](const MountCommand& cmd) { return !cmd.insecure.getValue(); })
-            .registerProvider<fruit::Annotated<tStoreTimeWithinFs, bool>(const MountCommand&)>(
-                [](const MountCommand& cmd)
-                { return cmd.fsparams.full_format_params().store_time(); })
-            .registerProvider<fruit::Annotated<tReadOnly, bool>(const MountCommand&)>(
-                [](const MountCommand& cmd)
-                {
-                    // TODO: Support readonly mounts.
-                    return false;
-                })
-            .bind<Directory, BtreeDirectory>()
-            .registerProvider<fruit::Annotated<tMaxPaddingSize, unsigned>(const MountCommand&)>(
-                [](const MountCommand& cmd)
-                { return cmd.fsparams.size_params().max_padding_size(); })
-            .registerProvider<fruit::Annotated<tIvSize, unsigned>(const MountCommand&)>(
-                [](const MountCommand& cmd) { return cmd.fsparams.size_params().iv_size(); })
-            .registerProvider<fruit::Annotated<tBlockSize, unsigned>(const MountCommand&)>(
-                [](const MountCommand& cmd) { return cmd.fsparams.size_params().block_size(); })
-            .registerProvider<OwnerOverride(const MountCommand&)>(
-                [](const MountCommand& cmd)
-                {
-                    OwnerOverride result{};
-                    if (cmd.uid_override.getValue() != -1)
-                    {
-                        result.uid_override = cmd.uid_override.getValue();
-                    }
-                    if (cmd.gid_override.getValue() != -1)
-                    {
-                        result.gid_override = cmd.gid_override.getValue();
-                    }
-                    return result;
-                })
-            .registerProvider<fruit::Annotated<tMasterKey, key_type>(const MountCommand&)>(
-                [](const MountCommand& cmd)
-                { return from_byte_string(cmd.fsparams.full_format_params().master_key()); })
-            .registerProvider<fruit::Annotated<tNameMasterKey, key_type>(const MountCommand&)>(
-                [](const MountCommand& cmd)
-                { return from_byte_string(cmd.fsparams.lite_format_params().name_key()); })
-            .registerProvider<fruit::Annotated<tContentMasterKey, key_type>(const MountCommand&)>(
-                [](const MountCommand& cmd)
-                { return from_byte_string(cmd.fsparams.lite_format_params().content_key()); })
-            .registerProvider<fruit::Annotated<tXattrMasterKey, key_type>(const MountCommand&)>(
-                [](const MountCommand& cmd)
-                { return from_byte_string(cmd.fsparams.lite_format_params().xattr_key()); })
-            .registerProvider<fruit::Annotated<tPaddingMasterKey, key_type>(const MountCommand&)>(
-                [](const MountCommand& cmd)
-                {
-                    if (cmd.fsparams.size_params().max_padding_size() > 0
-                        || !cmd.fsparams.lite_format_params().padding_key().empty())
-                        return from_byte_string(cmd.fsparams.lite_format_params().padding_key());
-                    return key_type();
-                })
-            .registerProvider(
-                [](const MountCommand& cmd)
-                { return new OSService(cmd.single_pass_holder_.data_dir.getValue()); })
-            .registerProvider(
-                [](const MountCommand& cmd)
-                {
-                    const auto& p = cmd.fsparams.full_format_params();
-                    if (p.case_insensitive() && p.unicode_normalization_agnostic())
-                    {
-                        return Directory::DirNameComparison{&case_uni_norm_insensitve_compare};
-                    }
-                    if (p.case_insensitive())
-                    {
-                        return Directory::DirNameComparison{&case_insensitive_compare};
-                    }
-                    if (p.unicode_normalization_agnostic())
-                    {
-                        return Directory::DirNameComparison{&uni_norm_insensitive_compare};
-                    }
-                    return Directory::DirNameComparison{&binary_compare};
-                })
-            .registerProvider<fruit::Annotated<tEnableXattr, bool>(const MountCommand&)>(
-                [](const MountCommand& cmd)
-                {
-                    if (is_windows())
-                    {
-                        return false;
-                    }
-                    if (cmd.noxattr.getValue())
-                    {
-                        return false;
-                    }
-                    auto rc = OSService::get_default().listxattr(
-                        cmd.single_pass_holder_.data_dir.getValue().c_str(), nullptr, 0);
-                    if (rc < 0)
-                    {
-                        absl::FPrintF(stderr,
-                                      "Warning: the filesystem under %s has no extended attribute "
-                                      "support.\nXattr is disabled\n",
-                                      cmd.single_pass_holder_.data_dir.getValue());
-                        return false;
-                    }
-                    return true;
-                })
-            .registerProvider<fruit::Annotated<tCaseInsensitive, bool>(const MountCommand&)>(
-                [](const MountCommand& cmd)
-                { return cmd.fsparams.full_format_params().case_insensitive(); })
-            .registerProvider(
-                [](const MountCommand& cmd) -> FuseHook*
-                {
-                    if (cmd.max_idle_seconds.getValue() > 0)
-                    {
-                        return new IdleShutdownHook(absl::Seconds(cmd.max_idle_seconds.getValue()));
-                    }
-                    return new NoOpFuseHook();
-                });
-    }
 
     bool should_use_ino()
     {
@@ -894,55 +673,10 @@ private:
         throw_runtime_error("Invalid --use_ino. Must be true/false/auto.");
     }
 
-public:
-    void parse_cmdline(int argc, const char* const* argv) override
+private:
+    InternalMountData build_internal_mount_data()
     {
-        CommandBase::parse_cmdline(argc, argv);
-
-        single_pass_holder_.get_password(false);
-
-        if (global_logger && verbose.getValue())
-            global_logger->set_level(LoggingLevel::kLogVerbose);
-        if (global_logger && trace.getValue())
-            global_logger->set_level(LoggingLevel::kLogTrace);
-
-        set_lock_enabled(!noflock.getValue());
-        if (noflock.getValue() && !single_threaded.getValue())
-        {
-            WARN_LOG("Using --noflock without --single is highly dangerous");
-        }
-    }
-
-    void recreate_logger()
-    {
-        if (log.isSet())
-        {
-            auto logger = Logger::create_file_logger(log.getValue());
-            delete global_logger;
-            global_logger = logger;
-        }
-        else if (background.getValue())
-        {
-            WARN_LOG("securefs is about to enter background without a log file. You "
-                     "won't be able to inspect what goes wrong. You can remount with "
-                     "option --log instead.");
-            delete global_logger;
-            global_logger = nullptr;
-        }
-        if (global_logger && verbose.getValue())
-            global_logger->set_level(LoggingLevel::kLogVerbose);
-        if (global_logger && trace.getValue())
-            global_logger->set_level(LoggingLevel::kLogTrace);
-    }
-
-    int execute() override
-    {
-        recreate_logger();
-        if (background.getValue())
-        {
-            OSService::enter_background();
-        }
-
+        InternalMountData internal_mount_data;
         if (single_pass_holder_.data_dir.getValue() == mount_point.getValue())
         {
             WARN_LOG("Mounting a directory on itself may cause securefs to hang");
@@ -978,27 +712,57 @@ public:
                     "Config file %s does not exist. Perhaps you forget to run `create` command "
                     "first?",
                     single_pass_holder_.get_real_config_path_for_reading());
-                return 19;
+                throw;
             }
             throw;
         }
-        fsparams
+        *internal_mount_data.mutable_decrypted_params()
             = decrypt(config_content,
                       {single_pass_holder_.password.data(), single_pass_holder_.password.size()},
                       maybe_open_key_stream(single_pass_holder_.keyfile.getValue()).get());
         CryptoPP::SecureWipeBuffer(single_pass_holder_.password.data(),
                                    single_pass_holder_.password.size());
 
-        try
+        // Populate mount_options from TCL Args
         {
-            int fd_limit = OSService::raise_fd_limit();
-            VERBOSE_LOG("Raising the number of file descriptor limit to %d", fd_limit);
-        }
-        catch (const std::exception& e)
-        {
-            WARN_LOG("Failure to raise the maximum file descriptor limit (%s: %s)",
-                     get_type_name(e).get(),
-                     e.what());
+            auto* mount_options = internal_mount_data.mutable_mount_options();
+            // read_only is always false for now (see tReadOnly provider)
+            mount_options->set_read_only(false);
+            mount_options->set_disable_verification(insecure.getValue());
+            if (uid_override.getValue() != -1)
+                mount_options->set_uid_override(uid_override.getValue());
+            if (gid_override.getValue() != -1)
+                mount_options->set_gid_override(gid_override.getValue());
+            // enable_xattr logic matches tEnableXattr provider
+            bool enable_xattr = true;
+            if (is_windows() || noxattr.getValue())
+            {
+                enable_xattr = false;
+            }
+            else
+            {
+                auto rc = OSService::get_default().listxattr(
+                    single_pass_holder_.data_dir.getValue().c_str(), nullptr, 0);
+                if (rc < 0)
+                    enable_xattr = false;
+            }
+            mount_options->set_enable_xattr(enable_xattr);
+            // case_fold and unicode_normalize_nfc from normalization arg
+            if (plain_text_names.getValue())
+            {
+                mount_options->set_plain_text_names(true);
+            }
+            else
+            {
+                mount_options->set_plain_text_names(false);
+                if (normalization.getValue() == "casefold"
+                    || normalization.getValue() == "casefold+nfc")
+                    mount_options->set_case_fold(true);
+                if (normalization.getValue() == "nfc" || normalization.getValue() == "casefold+nfc")
+                    mount_options->set_unicode_normalize_nfc(true);
+            }
+            mount_options->set_allow_sensitive_logging(allow_sensitive_logging.getValue());
+            mount_options->set_max_idle_seconds(max_idle_seconds.getValue());
         }
 
         std::vector<std::string> fuse_args{
@@ -1086,15 +850,62 @@ public:
         if (!network_mount)
 #endif
             fuse_args.emplace_back(mount_point.getValue());
+        internal_mount_data.mutable_fuse_args()->Assign(fuse_args.begin(), fuse_args.end());
+        internal_mount_data.set_data_dir(single_pass_holder_.data_dir.getValue());
+        return internal_mount_data;
+    }
 
-        fruit::Injector<FuseHighLevelOpsBase> injector(get_fuse_high_ops_component, this);
-        auto high_level_ops = injector.get<FuseHighLevelOpsBase*>();
-        auto fuse_callbacks = FuseHighLevelOpsBase::build_ops(high_level_ops);
-        VERBOSE_LOG("Calling fuse_main with arguments: %s", escape_args(fuse_args));
-        return my_fuse_main(static_cast<int>(fuse_args.size()),
-                            const_cast<char**>(to_c_style_args(fuse_args).data()),
-                            &fuse_callbacks,
-                            high_level_ops);
+public:
+    void parse_cmdline(int argc, const char* const* argv) override
+    {
+        CommandBase::parse_cmdline(argc, argv);
+
+        single_pass_holder_.get_password(false);
+
+        if (global_logger && verbose.getValue())
+            global_logger->set_level(LoggingLevel::kLogVerbose);
+        if (global_logger && trace.getValue())
+            global_logger->set_level(LoggingLevel::kLogTrace);
+
+        set_lock_enabled(!noflock.getValue());
+        if (noflock.getValue() && !single_threaded.getValue())
+        {
+            WARN_LOG("Using --noflock without --single is highly dangerous");
+        }
+    }
+
+    void recreate_logger()
+    {
+        if (log.isSet())
+        {
+            auto logger = Logger::create_file_logger(log.getValue());
+            delete global_logger;
+            global_logger = logger;
+        }
+        else if (background.getValue())
+        {
+            WARN_LOG("securefs is about to enter background without a log file. You "
+                     "won't be able to inspect what goes wrong. You can remount with "
+                     "option --log instead.");
+            delete global_logger;
+            global_logger = nullptr;
+        }
+        if (global_logger && verbose.getValue())
+            global_logger->set_level(LoggingLevel::kLogVerbose);
+        if (global_logger && trace.getValue())
+            global_logger->set_level(LoggingLevel::kLogTrace);
+    }
+
+    int execute() override
+    {
+        recreate_logger();
+        if (background.getValue())
+        {
+            OSService::enter_background();
+        }
+
+        InternalMountData internal_mount_data = build_internal_mount_data();
+        return internal_mount(internal_mount_data);
     }
 
     const char* long_name() const noexcept override { return "mount"; }

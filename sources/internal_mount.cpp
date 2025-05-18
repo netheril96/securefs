@@ -248,6 +248,17 @@ make_fuse_high_level_ops(std::shared_ptr<OSService> os_service,
 }
 int internal_mount(const InternalMountData& mount_data)
 {
+    try
+    {
+        int fd_limit = OSService::raise_fd_limit();
+        VERBOSE_LOG("Raising the number of file descriptor limit to %d", fd_limit);
+    }
+    catch (const std::exception& e)
+    {
+        WARN_LOG("Failure to raise the maximum file descriptor limit (%s: %s)",
+                 get_type_name(e).get(),
+                 e.what());
+    }
     auto os_service = std::make_shared<OSService>(mount_data.data_dir());
     auto fuse_high_level_ops = make_fuse_high_level_ops(
         os_service, mount_data.decrypted_params(), mount_data.mount_options());
