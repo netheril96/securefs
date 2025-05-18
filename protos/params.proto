@@ -94,6 +94,8 @@ message MountOptions
     bool case_fold = 6;
     bool unicode_normalize_nfc = 7;
     bool plain_text_names = 8;
+    bool allow_sensitive_logging = 9;
+    int64 max_idle_seconds = 10;
 }
 
 message InternalMountData
@@ -101,4 +103,5 @@ message InternalMountData
     DecryptedSecurefsParams decrypted_params = 1;
     MountOptions mount_options = 2;
     repeated string fuse_args = 3;
+    string data_dir = 4;
 }

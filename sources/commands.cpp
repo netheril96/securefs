@@ -617,14 +617,14 @@ private:
         cmdline()};
     TCLAP::SwitchArg allow_sensitive_logging{
         "", "allow-sensitive-logging", "Allow sensitive information in logs", cmdline()};
-    TCLAP::ValueArg<int> max_idle_seconds{
+    TCLAP::ValueArg<int64_t> max_idle_seconds{
         "",
         "max-idle-seconds",
         "Maximum idle time before the filesystem is "
         "unmounted automatically. Default is 0 (no auto unmount).",
         false,
         0,
-        "int",
+        "int64",
         cmdline()};
     DecryptedSecurefsParams fsparams{};
 
