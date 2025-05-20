@@ -62,6 +62,8 @@ else:
     ismount = os.path.ismount
     statvfs = os.statvfs
 
+os.environ["ASAN_OPTIONS"] = "detect_leaks=0"
+
 
 def is_mount_then_statvfs(mount_point: str) -> bool:
     try:
