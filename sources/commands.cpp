@@ -1206,14 +1206,11 @@ public:
             for (auto&& pair : prioritizedArgs)
             {
                 TCLAP::Arg* arg = pair.second;
+                if (auto a = dynamic_cast<TCLAP::UnlabeledValueArg<std::string>*>(arg); a)
                 {
-                    auto a = dynamic_cast<TCLAP::UnlabeledValueArg<std::string>*>(arg);
-                    if (a)
-                    {
-                        absl::PrintF(
-                            "- **%s**: (*positional*) %s\n", a->getName(), a->getDescription());
-                        continue;
-                    }
+                    absl::PrintF(
+                        "- **%s**: (*positional*) %s\n", a->getName(), a->getDescription());
+                    continue;
                 }
                 if (arg->getName() == "ignore_rest" || arg->getName() == "version"
                     || arg->getName() == "help")
@@ -1228,59 +1225,54 @@ public:
                 }
                 absl::PrintF("**%s%s**", arg->nameStartString(), arg->getName());
                 absl::PrintF(": %s. ", arg->getDescription());
+                if (auto a = dynamic_cast<TCLAP::SwitchArg*>(arg); a)
                 {
-                    auto a = dynamic_cast<TCLAP::SwitchArg*>(arg);
-                    if (a)
+                    if (a->getValue())
                     {
-                        if (a->getValue())
-                        {
-                            fputs("*This is a switch arg. Default: true.*\n", stdout);
-                        }
-                        else
-                        {
-                            fputs("*This is a switch arg. Default: false.*\n", stdout);
-                        }
-                        continue;
+                        fputs("*This is a switch arg. Default: true.*\n", stdout);
                     }
+                    else
+                    {
+                        fputs("*This is a switch arg. Default: false.*\n", stdout);
+                    }
+                    continue;
                 }
+                if (auto a = dynamic_cast<TCLAP::ValueArg<std::string>*>(arg); a)
                 {
-                    auto a = dynamic_cast<TCLAP::ValueArg<std::string>*>(arg);
-                    if (a)
+                    if (a->getValue().empty())
                     {
-                        if (a->getValue().empty())
-                        {
-                            fputs("*Unset by default.*\n", stdout);
-                        }
-                        else
-                        {
-                            absl::PrintF("*Default: %s.*\n", a->getValue());
-                        }
-                        continue;
+                        fputs("*Unset by default.*\n", stdout);
                     }
+                    else
+                    {
+                        absl::PrintF("*Default: %s.*\n", a->getValue());
+                    }
+                    continue;
                 }
+                if (auto a = dynamic_cast<TCLAP::ValueArg<unsigned>*>(arg); a)
                 {
-                    auto a = dynamic_cast<TCLAP::ValueArg<unsigned>*>(arg);
-                    if (a)
-                    {
-                        absl::PrintF("*Default: %u.*\n", a->getValue());
-                        continue;
-                    }
+                    absl::PrintF("*Default: %u.*\n", a->getValue());
+                    continue;
                 }
+                if (auto a = dynamic_cast<TCLAP::ValueArg<int>*>(arg); a)
                 {
-                    auto a = dynamic_cast<TCLAP::ValueArg<int>*>(arg);
-                    if (a)
-                    {
-                        absl::PrintF("*Default: %d.*\n", a->getValue());
-                        continue;
-                    }
+                    absl::PrintF("*Default: %d.*\n", a->getValue());
+                    continue;
                 }
+                if (auto a = dynamic_cast<TCLAP::ValueArg<int64_t>*>(arg); a)
                 {
-                    auto a = dynamic_cast<TCLAP::MultiArg<std::string>*>(arg);
-                    if (a)
-                    {
-                        fputs("*This option can be specified multiple times.*\n", stdout);
-                        continue;
-                    }
+                    absl::PrintF("*Default: %d.*\n", a->getValue());
+                    continue;
+                }
+                if (auto a = dynamic_cast<TCLAP::ValueArg<uint64_t>*>(arg); a)
+                {
+                    absl::PrintF("*Default: %d.*\n", a->getValue());
+                    continue;
+                }
+                if (auto a = dynamic_cast<TCLAP::MultiArg<std::string>*>(arg); a)
+                {
+                    fputs("*This option can be specified multiple times.*\n", stdout);
+                    continue;
                 }
                 throw_runtime_error(std::string("Unknown type of arg ") + typeid(*arg).name());
             }
