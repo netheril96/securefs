@@ -69,6 +69,10 @@ void StreamOpener::validate()
     if (max_padding_size_ > 0)
     {
         warn_if_key_not_random(padding_master_key_, __FILE__, __LINE__);
+        if (padding_master_key_ == decltype(padding_master_key_)())
+        {
+            throw_runtime_error("Padding key is empty");
+        }
     }
 }
 
@@ -1251,6 +1255,10 @@ std::shared_ptr<NameTranslator>
 make_name_translator(const NameNormalizationFlags& flags,
                      const StrongType<key_type, tNameMasterKey>& name_master_key)
 {
+    if (flags.no_op)
+    {
+        return std::make_shared<NoOpNameTranslator>();
+    }
     std::shared_ptr<NameTranslator> inner;
     if (flags.long_name_threshold > 0)
     {

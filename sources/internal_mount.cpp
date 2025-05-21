@@ -193,8 +193,9 @@ make_lite_format_fuse_high_level_ops(std::shared_ptr<OSService> os_service,
     const auto& lite_params = params.lite_format_params();
     auto content_master_key
         = StrongType<key_type, tContentMasterKey>(from_byte_string(lite_params.content_key()));
-    auto padding_master_key
-        = StrongType<key_type, tPaddingMasterKey>(from_byte_string(lite_params.padding_key()));
+    auto padding_master_key = StrongType<key_type, tPaddingMasterKey>(
+        lite_params.padding_key().size() > 0 ? from_byte_string(lite_params.padding_key())
+                                             : key_type{});
     auto name_master_key
         = StrongType<key_type, tNameMasterKey>(from_byte_string(lite_params.name_key()));
     auto xattr_master_key
