@@ -15,11 +15,6 @@
         "uni-algo",
         "protobuf"
     ],
-    "vcpkg-configuration": {
-        "overlay-triplets": [
-            "./overlay_triplets"
-        ]
-    },
     "features": {
         "mimalloc": {
             "description": "Enable linking to mimalloc",

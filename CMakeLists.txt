@@ -18,6 +18,7 @@ option(SECUREFS_USE_FUSET
 option(SECUREFS_LINK_PROFILER "Enable linking with gperftools profiler" OFF)
 option(SECUREFS_ENABLE_MIMALLOC "Enable linking with mimalloc." OFF)
 option(SECUREFS_ENABLE_JEMALLOC "Enable linking with jemalloc." OFF)
+option(SECUREFS_ADDRESS_SANITIZE "Enable address sanitizer" OFF)
 project(securefs)
 enable_testing()
 
@@ -25,8 +26,10 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-add_compile_options($<$<CONFIG:Debug>:-fsanitize=address>)
-add_link_options($<$<CONFIG:Debug>:-fsanitize=address>)
+if(SECUREFS_ADDRESS_SANITIZE)
+    add_compile_options($<$<CONFIG:Debug>:-fsanitize=address>)
+    add_link_options($<$<CONFIG:Debug>:-fsanitize=address>)
+endif()
 
 if(${SECUREFS_LINK_PROFILER})
     add_compile_options(-g)
