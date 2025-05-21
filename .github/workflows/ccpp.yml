@@ -74,14 +74,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
-          key: release-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
+          key: ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
           restore-keys: |
-            release-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-
-            release-${{ runner.os }}-${{ runner.arch }}-
+            ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-
+            ccpp-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
         run: |
           source .venv/bin/activate
-          python build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build --build_type Debug
+          python build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg \
+            --build_root=./build --build_type Debug --cmake_defines SECUREFS_ADDRESS_SANITIZE \
+            --triplet x64-linux-asan --cmake_defines VCPKG_OVERLAY_TRIPLETS=${{ github.workspace }}/overlay_triplets
           ./build/securefs doc > docs/usage.md
       - name: upload
         uses: actions/upload-artifact@v4
@@ -134,10 +136,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
-          key: release-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
+          key: ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
           restore-keys: |
-            release-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-
-            release-${{ runner.os }}-${{ runner.arch }}-
+            ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-
+            ccpp-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
         run: python3 build.py --clang_cl --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build --build_type Debug
       - name: Upload Logs Always
