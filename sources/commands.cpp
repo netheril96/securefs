@@ -24,6 +24,7 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <argon2.h>
+#include <cerrno>
 #include <cryptopp/cpu.h>
 #include <cryptopp/hmac.h>
 #include <cryptopp/osrng.h>
@@ -1334,8 +1335,18 @@ public:
 
     int execute() override
     {
-        OSService(mount_point.getValue())
-            .remove_directory(std::string(SpecialFiledFuseHighLevelOps::kSpecialFileName));
+        try
+        {
+            OSService(mount_point.getValue())
+                .remove_directory(std::string(SpecialFiledFuseHighLevelOps::kSpecialFileName));
+        }
+        catch (const ExceptionBase& e)
+        {
+            if (e.error_number() != EIO && e.error_number() != ENODEV && e.error_number() != ENXIO)
+            {
+                throw;
+            }
+        }
         return 0;
     }
 };
