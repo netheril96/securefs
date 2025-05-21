@@ -82,7 +82,8 @@ target_link_libraries(
            absl::flat_hash_map
            absl::strings
            absl::str_format
-           absl::span)
+           absl::span
+           absl::failure_signal_handler)
 add_library(securefs-proto OBJECT protos/params.proto)
 target_link_libraries(securefs-proto PUBLIC protobuf::libprotobuf)
 set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
@@ -179,9 +180,8 @@ endif()
 if(SECUREFS_ENABLE_UNIT_TEST)
     add_executable(securefs_test ${TEST_SOURCES})
     find_package(doctest CONFIG REQUIRED)
-    target_link_libraries(
-        securefs_test PRIVATE doctest::doctest absl::failure_signal_handler
-                              securefs-static)
+    target_link_libraries(securefs_test PRIVATE doctest::doctest
+                                                securefs-static)
     add_test(
         NAME sec_test
         COMMAND
