@@ -247,10 +247,11 @@ int FuseHighLevelOpsBase::static_listxattr(const char* path, char* list, size_t 
 {
     auto ctx = fuse_get_context();
     auto op = static_cast<FuseHighLevelOpsBase*>(ctx->private_data);
-    return trace::FuseTracer::traced_call([=]() { return op->vlistxattr(path, list, size, ctx); },
-                                          "listxattr",
-                                          __LINE__,
-                                          {{"path", {path}}, {"list", {list}}, {"size", {size}}});
+    return trace::FuseTracer::traced_call(
+        [=]() { return op->vlistxattr(path, list, size, ctx); },
+        "listxattr",
+        __LINE__,
+        {{"path", {path}}, {"list", {static_cast<const void*>(list)}}, {"size", {size}}});
 }
 int FuseHighLevelOpsBase::static_getxattr(
     const char* path, const char* name, char* value, size_t size, uint32_t position)
@@ -263,7 +264,7 @@ int FuseHighLevelOpsBase::static_getxattr(
         __LINE__,
         {{"path", {path}},
          {"name", {name}},
-         {"value", {value}},
+         {"value", {static_cast<const void*>(value)}},
          {"size", {size}},
          {"position", {position}}});
 }
@@ -282,7 +283,7 @@ int FuseHighLevelOpsBase::static_setxattr(const char* path,
         __LINE__,
         {{"path", {path}},
          {"name", {name}},
-         {"value", {value}},
+         {"value", {static_cast<const void*>(value)}},
          {"size", {size}},
          {"flags", {flags}},
          {"position", {position}}});
