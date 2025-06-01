@@ -1,4 +1,5 @@
 #include "fuse2_workaround.h"
+#include "is_fuse_t.h"
 
 #include <fuse.h>
 
@@ -107,7 +108,17 @@ namespace
         }
     }
 }    // namespace
-void clean_exit_fuse() { self_pipe_signal_handler(SIGINT); }
+void clean_exit_fuse()
+{
+    if (is_fuse_t())
+    {
+        kill(0, SIGINT);
+    }
+    else
+    {
+        self_pipe_signal_handler(SIGINT);
+    }
+}
 #endif
 
 int my_fuse_main(int argc, char** argv, fuse_operations* op, void* user_data)
@@ -115,6 +126,10 @@ int my_fuse_main(int argc, char** argv, fuse_operations* op, void* user_data)
 #ifdef _WIN32
     return fuse_main(argc, argv, op, user_data);
 #else
+    if (is_fuse_t())
+    {
+        return fuse_main(argc, argv, op, user_data);
+    }
     char* mountpoint;
     int multithreaded;
     if (pipe(signal_pipefd) < 0)

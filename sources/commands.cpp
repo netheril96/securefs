@@ -1326,8 +1326,14 @@ public:
 
     int execute() override
     {
-        OSService(mount_point.getValue())
-            .remove_directory(std::string(SpecialFiledFuseHighLevelOps::kSpecialFileName));
+        try
+        {
+            OSService(mount_point.getValue())
+                .remove_directory(std::string(SpecialFiledFuseHighLevelOps::kSpecialFileName));
+        }
+        catch (const ExceptionBase&)
+        {
+        }
         return 0;
     }
 };
