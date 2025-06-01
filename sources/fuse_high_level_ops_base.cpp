@@ -697,7 +697,7 @@ int SpecialFiledFuseHighLevelOps::vgetattr(const char* path, fuse_stat* st, cons
     if (path && path[0] == '/' && path + 1 == kSpecialFileName)
     {
         memset(st, 0, sizeof(*st));
-        st->st_mode = S_IFDIR | 0700;
+        st->st_mode = S_IFDIR | 0777;
         st->st_nlink = 2;
         st->st_uid = ctx->uid;
         st->st_gid = ctx->gid;

@@ -81,10 +81,6 @@ namespace
                 continue;
             if (res < 0)
             {
-                if (fuse_session_exited(session))
-                {
-                    return;
-                }
                 ERROR_LOG(
                     "fuse_session_receive_buf failed with error code %d, exiting abnormally...",
                     res);
@@ -181,15 +177,14 @@ int my_fuse_main(int argc, char** argv, fuse_operations* op, void* user_data)
 
             for (auto&& w : workers)
             {
-                w.detach();
+                pthread_cancel(w.native_handle());
             }
         });
     waiter.join();
 
     for (auto&& w : workers)
     {
-        if (w.joinable())
-            w.join();
+        w.join();
     }
 
     return error_code;
