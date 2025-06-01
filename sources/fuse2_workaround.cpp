@@ -112,7 +112,7 @@ void clean_exit_fuse()
 {
     if (is_fuse_t())
     {
-        kill(0, SIGINT);
+        kill(getpid(), SIGINT);
     }
     else
     {
