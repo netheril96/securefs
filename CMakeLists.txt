@@ -42,11 +42,25 @@ if(APPLE)
     add_compile_options(-fvisibility=hidden -fvisibility-inlines-hidden)
 endif()
 
+# Generate is_fuse_t.h based on SECUREFS_USE_FUSET option
+set(SECUREFS_GENERATED_HEADERS_DIR
+    ${CMAKE_CURRENT_BINARY_DIR}/securefs_generated_headers)
+file(MAKE_DIRECTORY ${SECUREFS_GENERATED_HEADERS_DIR})
+
+if(SECUREFS_USE_FUSET)
+    set(SECUREFS_IS_FUSE_T_VALUE_FOR_HEADER "true")
+else()
+    set(SECUREFS_IS_FUSE_T_VALUE_FOR_HEADER "false")
+endif()
+
+configure_file("${CMAKE_SOURCE_DIR}/sources/is_fuse_t.h.in"
+               "${SECUREFS_GENERATED_HEADERS_DIR}/is_fuse_t.h" @ONLY)
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake-modules/")
 include(GetGitRevisionDescription)
 git_describe(GIT_VERSION --tags)
 configure_file(${CMAKE_SOURCE_DIR}/sources/git-version.cpp.in
-               ${CMAKE_BINARY_DIR}/git-version.cpp)
+               ${SECUREFS_GENERATED_HEADERS_DIR}/git-version.cpp @ONLY)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(-Wthread-safety)
@@ -60,6 +74,11 @@ include_directories(BEFORE sources)
 file(GLOB SOURCES sources/*.cpp sources/*.h ${CMAKE_BINARY_DIR}/git-version.cpp)
 file(GLOB TEST_SOURCES test/*.h test/*.cpp)
 add_library(securefs-static STATIC ${SOURCES})
+
+# Add generated headers directory for is_fuse_t.h to securefs-static's include
+# directories
+target_include_directories(
+    securefs-static PUBLIC $<BUILD_INTERFACE:${SECUREFS_GENERATED_HEADERS_DIR}>)
 
 if(WIN32)
     add_executable(securefs main.cpp securefs.manifest)
