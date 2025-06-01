@@ -43,9 +43,8 @@ if(APPLE)
 endif()
 
 # Generate is_fuse_t.h based on SECUREFS_USE_FUSET option
-set(SECUREFS_GENERATED_HEADERS_DIR
-    ${CMAKE_CURRENT_BINARY_DIR}/securefs_generated_headers)
-file(MAKE_DIRECTORY ${SECUREFS_GENERATED_HEADERS_DIR})
+set(SECUREFS_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/securefs_generated)
+file(MAKE_DIRECTORY ${SECUREFS_GENERATED_DIR})
 
 if(SECUREFS_USE_FUSET)
     set(SECUREFS_IS_FUSE_T_VALUE_FOR_HEADER "true")
@@ -54,13 +53,13 @@ else()
 endif()
 
 configure_file("${CMAKE_SOURCE_DIR}/sources/is_fuse_t.h.in"
-               "${SECUREFS_GENERATED_HEADERS_DIR}/is_fuse_t.h" @ONLY)
+               "${SECUREFS_GENERATED_DIR}/is_fuse_t.h" @ONLY)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake-modules/")
 include(GetGitRevisionDescription)
 git_describe(GIT_VERSION --tags)
 configure_file(${CMAKE_SOURCE_DIR}/sources/git-version.cpp.in
-               ${SECUREFS_GENERATED_HEADERS_DIR}/git-version.cpp @ONLY)
+               ${SECUREFS_GENERATED_DIR}/git-version.cpp @ONLY)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(-Wthread-safety)
@@ -71,14 +70,15 @@ endif()
 
 include_directories(BEFORE sources)
 
-file(GLOB SOURCES sources/*.cpp sources/*.h ${CMAKE_BINARY_DIR}/git-version.cpp)
+file(GLOB SOURCES sources/*.cpp sources/*.h
+     ${SECUREFS_GENERATED_DIR}/git-version.cpp)
 file(GLOB TEST_SOURCES test/*.h test/*.cpp)
 add_library(securefs-static STATIC ${SOURCES})
 
 # Add generated headers directory for is_fuse_t.h to securefs-static's include
 # directories
-target_include_directories(
-    securefs-static PUBLIC $<BUILD_INTERFACE:${SECUREFS_GENERATED_HEADERS_DIR}>)
+target_include_directories(securefs-static
+                           PUBLIC $<BUILD_INTERFACE:${SECUREFS_GENERATED_DIR}>)
 
 if(WIN32)
     add_executable(securefs main.cpp securefs.manifest)
@@ -108,7 +108,7 @@ target_link_libraries(
            absl::failure_signal_handler)
 add_library(securefs-proto OBJECT protos/params.proto)
 target_link_libraries(securefs-proto PUBLIC protobuf::libprotobuf)
-set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+set(PROTO_BINARY_DIR "${SECUREFS_GENERATED_DIR}")
 target_include_directories(securefs-proto
                            PUBLIC "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>")
 protobuf_generate(TARGET securefs-proto IMPORT_DIRS "protos" PROTOC_OUT_DIR
