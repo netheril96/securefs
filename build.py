@@ -84,7 +84,8 @@ def main():
     parser.add_argument(
         "--cmake_defines",
         default=[],
-        nargs="*",
+        nargs="+",
+        action="extend",
         help="Additional CMake definitions. Example: FOO=BAR",
     )
     parser.add_argument("--build_type", default="Release", help="CMake build type")
