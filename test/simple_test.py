@@ -28,6 +28,7 @@ import io
 
 faulthandler.enable()
 
+os.environ["ASAN_OPTIONS"] = "detect_leaks=0"
 
 SECUREFS_BINARY = os.environ["SECUREFS_BINARY"]
 if not os.path.isfile(SECUREFS_BINARY):
@@ -61,8 +62,6 @@ if sys.platform == "win32":
 else:
     ismount = os.path.ismount
     statvfs = os.statvfs
-
-os.environ["ASAN_OPTIONS"] = "detect_leaks=0"
 
 
 def is_mount_then_statvfs(mount_point: str) -> bool:
@@ -115,12 +114,12 @@ def securefs_mount(
     try:
         for _ in range(600):
             try:
-                p.wait(timeout=0.01)
+                p.wait(timeout=0.1)
             except subprocess.TimeoutExpired:
                 pass
             if p.returncode:
                 raise subprocess.CalledProcessError(p.returncode, p.args)
-            if subprocess.call([SECUREFS_BINARY, "ismount", mount_point]) == 0:
+            if is_mount_then_statvfs(mount_point):
                 return p
 
         raise TimeoutError(f"Failed to mount {repr(mount_point)} after many attempts")
@@ -131,7 +130,15 @@ def securefs_mount(
 
 def securefs_unmount(p: subprocess.Popen, mount_point: str):
     with p:
-        subprocess.check_call([SECUREFS_BINARY, "unmount", mount_point])
+        if sys.platform == "win32":
+            p.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            p.send_signal(signal.SIGINT)
+        time.sleep(0.017)
+        try:
+            os.lstat(mount_point)  # Trigger the next action of FUSE to unmount
+        except EnvironmentError:
+            pass
         p.wait(timeout=5)
         if p.returncode:
             logging.error("securefs exited with non-zero code: %d", p.returncode)
