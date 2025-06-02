@@ -58,7 +58,7 @@ jobs:
         with:
           submodules: true
       - name: install
-        run: sudo apt-get install fuse libfuse-dev python3-venv
+        run: sudo apt update && sudo apt upgrade && sudo apt install -y fuse libfuse-dev python3-venv clang
       - name: venv
         run: |
           python3 -m venv .venv;
@@ -79,6 +79,10 @@ jobs:
             ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-
             ccpp-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
+        env:
+          CC: clang
+          CXX: clang++
+          VCPKG_KEEP_ENV_VARS: "CC;CXX"
         run: |
           source .venv/bin/activate
           python build.py --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg \
