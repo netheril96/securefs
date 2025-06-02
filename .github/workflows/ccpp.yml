@@ -145,7 +145,7 @@ jobs:
             ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-
             ccpp-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
-        run: python3 build.py --clang_cl --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build --build_type Debug
+        run: python3 build.py --clang_cl --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-clang-cl --build_root=./build --build_type Debug --cmake_defines VCPKG_OVERLAY_TRIPLETS=${{ github.workspace }}/overlay_triplets
       - name: Upload Logs Always
         if: always()
         uses: actions/upload-artifact@v4
