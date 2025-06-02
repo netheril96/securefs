@@ -49,7 +49,7 @@ jobs:
 
   build-ubuntu:
     needs: get-latest-vcpkg-release
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 75
     env:
       SECUREFS_TEST_FORCE_XATTR: 1
