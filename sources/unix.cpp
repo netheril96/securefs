@@ -1,3 +1,6 @@
+#include "myutils.h"
+#include <cerrno>
+#include <fuse.h>
 #ifndef _WIN32
 #define _DARWIN_BETTER_REALPATH 1
 #include "exceptions.h"
@@ -11,12 +14,14 @@
 
 #include <cxxabi.h>
 #include <dirent.h>
+#include <dlfcn.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/file.h>
+#include <sys/ioctl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
@@ -594,6 +599,23 @@ int OSService::setxattr(
 
 int OSService::removexattr(const char* path, const char* name) const noexcept { return -ENOSYS; }
 #endif
+
+unsigned OSService::get_cmd_for_query_ioctl() noexcept { return _IOR('s', 1, unsigned); }
+unsigned OSService::get_cmd_for_trigger_unmount_ioctl() noexcept { return _IO('s', 2); }
+bool OSService::query_if_mounted_by_ioctl() const
+{
+    unsigned magic = 0;
+    return ioctl(m_dir_fd, get_cmd_for_query_ioctl(), &magic) == 0
+        && magic == get_magic_for_mounted_status();
+}
+void OSService::trigger_unmount_by_ioctl() const
+{
+    if (ioctl(m_dir_fd, get_cmd_for_trigger_unmount_ioctl()) < 0)
+    {
+        THROW_POSIX_EXCEPTION(
+            errno, absl::StrFormat("ioctl(%d, %d)", m_dir_fd, get_cmd_for_trigger_unmount_ioctl()));
+    }
+}
 
 void OSService::read_password_no_confirmation(const char* prompt,
                                               CryptoPP::AlignedSecByteBlock* output)

@@ -3,6 +3,7 @@
 #include "object.h"
 #include "platform.h"    // IWYU pragma: keep
 
+#include <absl/strings/string_view.h>
 #include <cstring>
 #include <memory>
 #include <optional>
@@ -157,6 +158,17 @@ public:
     {
         return -ENOSYS;
     }
+    virtual bool has_ioctl() const { return false; }
+    virtual int vioctl(const char*,
+                       int cmd,
+                       void* arg,
+                       struct fuse_file_info* fi,
+                       unsigned int flags,
+                       void* data,
+                       const fuse_context* ctx)
+    {
+        return -ENOSYS;
+    }
 
 private:
     static int static_statfs(const char* path, fuse_statvfs* buf);
@@ -207,6 +219,12 @@ private:
     }
     static int static_removexattr(const char* path, const char* name);
     static int static_getpath(const char* path, char* buf, size_t size, fuse_file_info* info);
+    static int static_ioctl(const char* path,
+                            int cmd,
+                            void* arg,
+                            struct fuse_file_info* fi,
+                            unsigned int flags,
+                            void* data);
 };
 
 class DelegateFuseHighLevelOps : public FuseHighLevelOpsBase
@@ -316,6 +334,14 @@ public:
                  size_t size,
                  fuse_file_info* info,
                  const fuse_context* ctx) override;
+    bool has_ioctl() const override;
+    int vioctl(const char* path,
+               int cmd,
+               void* arg,
+               struct fuse_file_info* fi,
+               unsigned int flags,
+               void* data,
+               const fuse_context* ctx) override;
 
 protected:
     std::shared_ptr<FuseHighLevelOpsBase> delegate_;
@@ -329,33 +355,9 @@ public:
     bool allow_sensitive_logging() const override;
 };
 
-class SpecialFiledFuseHighLevelOps : public DelegateFuseHighLevelOps
-{
-public:
-    // The special file name is 60 of U+100000.
-    // It is longer than most file names, and it is a private use character. So no sane program
-    // should use it.
-    static constexpr std::string_view kSpecialFileName
-        = "\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80"
-          "\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80"
-          "\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80"
-          "\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80"
-          "\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80"
-          "\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80"
-          "\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80"
-          "\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80"
-          "\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80"
-          "\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80"
-          "\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80";
+std::shared_ptr<FuseHighLevelOpsBase>
+wrap_as_unmountable_fuse(std::shared_ptr<FuseHighLevelOpsBase> ops);
 
-public:
-    explicit SpecialFiledFuseHighLevelOps(std::shared_ptr<FuseHighLevelOpsBase> delegate)
-        : DelegateFuseHighLevelOps(std::move(delegate))
-    {
-    }
-
-    int vgetattr(const char* path, fuse_stat* st, const fuse_context* ctx) override;
-
-    int vrmdir(const char* path, const fuse_context* ctx) override;
-};
+bool is_mounted_by_fuse(std::string_view path);
+void trigger_unmount_by_fuse(std::string_view path);
 }    // namespace securefs

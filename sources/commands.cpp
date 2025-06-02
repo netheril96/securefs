@@ -1294,20 +1294,7 @@ public:
         return "Check if the given path is a securefs mount point";
     }
 
-    int execute() override
-    {
-        try
-        {
-            fuse_stat st{};
-            OSService(mount_point.getValue())
-                .stat(std::string(SpecialFiledFuseHighLevelOps::kSpecialFileName), &st);
-            return (S_IFMT & st.st_mode) == S_IFDIR ? 0 : 1;
-        }
-        catch (const std::exception& e)
-        {
-            return 1;
-        }
-    }
+    int execute() override { return is_mounted_by_fuse(mount_point.getValue()) ? 0 : 1; }
 };
 
 class UnmountCommand : public CommandBase
@@ -1326,14 +1313,7 @@ public:
 
     int execute() override
     {
-        try
-        {
-            OSService(mount_point.getValue())
-                .remove_directory(std::string(SpecialFiledFuseHighLevelOps::kSpecialFileName));
-        }
-        catch (const ExceptionBase&)
-        {
-        }
+        trigger_unmount_by_fuse(mount_point.getValue());
         return 0;
     }
 };

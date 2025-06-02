@@ -276,6 +276,19 @@ public:
         return DelegateFuseHighLevelOps::vgetpath(path, buf, size, info, ctx);
     }
 
+    int vioctl(const char* path,
+               int cmd,
+               void* arg,
+               struct fuse_file_info* fi,
+               unsigned int flags,
+               void* data,
+               const fuse_context* ctx) override
+    {
+        hook_->notify_activity();
+        return DelegateFuseHighLevelOps::vioctl(path, cmd, arg, fi, flags, data, ctx);
+    }
+
+
 private:
     std::shared_ptr<FuseHook> hook_;
 };

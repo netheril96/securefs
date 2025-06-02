@@ -3,9 +3,17 @@
 #include "exceptions.h"
 #include "fuse2_workaround.h"
 #include "fuse_tracer_v2.h"
+#include "is_fuse_t.h"
 #include "logger.h"
+#include "platform.h"
 
 #include <absl/functional/function_ref.h>
+#include <cerrno>
+#include <memory>
+
+#if __has_include(<sys/ioctl.h>)
+#include <sys/ioctl.h>
+#endif
 
 namespace securefs
 {
@@ -349,6 +357,23 @@ int FuseHighLevelOpsBase::static_getpath(const char* path,
                                            {"info", {info}}});
 }
 
+int FuseHighLevelOpsBase::static_ioctl(
+    const char* path, int cmd, void* arg, fuse_file_info* fi, unsigned int flags, void* data)
+{
+    auto ctx = fuse_get_context();
+    auto op = static_cast<FuseHighLevelOpsBase*>(ctx->private_data);
+    return trace::FuseTracer::traced_call(
+        [=]() { return op->vioctl(path, cmd, arg, fi, flags, data, ctx); },
+        "ioctl",
+        __LINE__,
+        {{"path", {path}},
+         {"cmd", {cmd}},
+         {"arg", {static_cast<const void*>(arg)}},
+         {"fi", {fi}},
+         {"flags", {flags}},
+         {"data", {static_cast<const void*>(data)}}});
+}
+
 namespace
 {
     void enable_if_capable(fuse_conn_info* info, int cap)
@@ -383,6 +408,9 @@ fuse_operations FuseHighLevelOpsBase::build_ops(const FuseHighLevelOpsBase* op)
 #endif
 #ifdef FUSE_CAP_WRITEBACK_CACHE
         enable_if_capable(info, FUSE_CAP_WRITEBACK_CACHE);
+#endif
+#ifdef FUSE_CAP_IOCTL_DIR
+        enable_if_capable(info, FUSE_CAP_IOCTL_DIR);
 #endif
         auto op = static_cast<FuseHighLevelOpsBase*>(fuse_get_context()->private_data);
         op->initialize(info);
@@ -427,6 +455,7 @@ fuse_operations FuseHighLevelOpsBase::build_ops(const FuseHighLevelOpsBase* op)
         ? static_cast<decltype(opt.setxattr)>(&FuseHighLevelOpsBase::static_setxattr)
         : nullptr;
     opt.removexattr = op->has_removexattr() ? &FuseHighLevelOpsBase::static_removexattr : nullptr;
+    opt.ioctl = op->has_ioctl() ? &FuseHighLevelOpsBase::static_ioctl : nullptr;
     return opt;
 }
 
@@ -683,6 +712,19 @@ int DelegateFuseHighLevelOps::vgetpath(
     return delegate_->vgetpath(path, buf, size, info, ctx);
 }
 
+bool DelegateFuseHighLevelOps::has_ioctl() const { return delegate_->has_ioctl(); }
+
+int DelegateFuseHighLevelOps::vioctl(const char* path,
+                                     int cmd,
+                                     void* arg,
+                                     struct fuse_file_info* fi,
+                                     unsigned int flags,
+                                     void* data,
+                                     const fuse_context* ctx)
+{
+    return delegate_->vioctl(path, cmd, arg, fi, flags, data, ctx);
+}
+
 // AllowSensitiveLoggingFuseHighLevelOps implementation
 AllowSensitiveLoggingFuseHighLevelOps::AllowSensitiveLoggingFuseHighLevelOps(
     std::shared_ptr<FuseHighLevelOpsBase> delegate)
@@ -691,6 +733,70 @@ AllowSensitiveLoggingFuseHighLevelOps::AllowSensitiveLoggingFuseHighLevelOps(
 }
 
 bool AllowSensitiveLoggingFuseHighLevelOps::allow_sensitive_logging() const { return true; }
+
+class SpecialIoctlFuseHighLevelOps : public DelegateFuseHighLevelOps
+{
+public:
+    using DelegateFuseHighLevelOps::DelegateFuseHighLevelOps;
+
+    int vioctl(const char* path,
+               int cmd,
+               void* arg,
+               struct fuse_file_info* fi,
+               unsigned int flags,
+               void* data,
+               const fuse_context* ctx) override
+    {
+        if (cmd == OSService::get_cmd_for_query_ioctl())
+        {
+#ifdef _IOC_SIZE
+            if (_IOC_SIZE(cmd) != sizeof(unsigned))
+            {
+                throw_runtime_error("Invalid coding for ioctl!!! A programming error!!!");
+            }
+#endif
+            *(unsigned*)data = OSService::get_magic_for_mounted_status();
+            TRACE_LOG("Received request for magic status");
+            return 0;
+        }
+        else if (cmd == OSService::get_cmd_for_trigger_unmount_ioctl())
+        {
+            TRACE_LOG("Received request for clean exit");
+            securefs::clean_exit_fuse();
+            return 0;
+        }
+        int delegate_result
+            = DelegateFuseHighLevelOps::vioctl(path, cmd, arg, fi, flags, data, ctx);
+        return delegate_result == -ENOSYS ? -ENOTSUP : delegate_result;
+    }
+};
+
+class SpecialFiledFuseHighLevelOps : public DelegateFuseHighLevelOps
+{
+public:
+    // The special file name is 60 of U+100000.
+    // It is longer than most file names, and it is a private use character. So no sane program
+    // should use it.
+    static constexpr std::string_view kSpecialFileName
+        = "\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80"
+          "\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80"
+          "\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80"
+          "\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80"
+          "\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80"
+          "\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80"
+          "\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80"
+          "\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80"
+          "\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80"
+          "\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80"
+          "\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80\xf4\x80\x80\x80";
+
+public:
+    using DelegateFuseHighLevelOps::DelegateFuseHighLevelOps;
+
+    int vgetattr(const char* path, fuse_stat* st, const fuse_context* ctx) override;
+
+    int vrmdir(const char* path, const fuse_context* ctx) override;
+};
 
 int SpecialFiledFuseHighLevelOps::vgetattr(const char* path, fuse_stat* st, const fuse_context* ctx)
 {
@@ -714,6 +820,47 @@ int SpecialFiledFuseHighLevelOps::vrmdir(const char* path, const fuse_context* c
         return 0;
     }
     return DelegateFuseHighLevelOps::vrmdir(path, ctx);
+}
+
+std::shared_ptr<FuseHighLevelOpsBase>
+wrap_as_unmountable_fuse(std::shared_ptr<FuseHighLevelOpsBase> ops)
+{
+    if (is_fuse_t())
+    {
+        return std::make_shared<SpecialFiledFuseHighLevelOps>(std::move(ops));
+    }
+    return std::make_shared<SpecialIoctlFuseHighLevelOps>(std::move(ops));
+}
+
+bool is_mounted_by_fuse(std::string_view path)
+{
+    if (is_fuse_t())
+    {
+        fuse_stat st{};
+        try
+        {
+            OSService(std::string(path))
+                .stat(std::string(SpecialFiledFuseHighLevelOps::kSpecialFileName), &st);
+            return (st.st_mode & S_IFMT) == S_IFDIR;
+        }
+        catch (const ExceptionBase& e)
+        {
+            return false;
+        }
+    }
+    return OSService(std::string(path)).query_if_mounted_by_ioctl();
+}
+void trigger_unmount_by_fuse(std::string_view path)
+{
+    if (is_fuse_t())
+    {
+        OSService(std::string(path))
+            .remove_directory_nothrow(std::string(SpecialFiledFuseHighLevelOps::kSpecialFileName));
+    }
+    else
+    {
+        OSService(std::string(path)).trigger_unmount_by_ioctl();
+    }
 }
 
 }    // namespace securefs

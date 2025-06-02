@@ -246,7 +246,7 @@ make_fuse_high_level_ops(std::shared_ptr<OSService> os_service,
     {
         ops = std::make_shared<AllowSensitiveLoggingFuseHighLevelOps>(std::move(ops));
     }
-    return std::make_shared<SpecialFiledFuseHighLevelOps>(ops);
+    return wrap_as_unmountable_fuse(ops);
 }
 int internal_mount(const InternalMountData& mount_data)
 {
