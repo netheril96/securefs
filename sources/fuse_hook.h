@@ -288,7 +288,6 @@ public:
         return DelegateFuseHighLevelOps::vioctl(path, cmd, arg, fi, flags, data, ctx);
     }
 
-
 private:
     std::shared_ptr<FuseHook> hook_;
 };

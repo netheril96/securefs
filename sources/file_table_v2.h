@@ -47,9 +47,9 @@ public:
 
 public:
     FileTable(std::shared_ptr<FileTableIO> io,
-                     Factory<RegularFile> regular_file_factory,
-                     Factory<Directory> directory_factory,
-                     Factory<Symlink> symlink_factory)
+              Factory<RegularFile> regular_file_factory,
+              Factory<Directory> directory_factory,
+              Factory<Symlink> symlink_factory)
         : io_(std::move(io))
         , regular_file_factory_(std::move(regular_file_factory))
         , directory_factory_(std::move(directory_factory))
