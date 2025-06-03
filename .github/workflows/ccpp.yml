@@ -146,7 +146,7 @@ jobs:
             ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-
             ccpp-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
-        run: python3 build.py --clang_cl --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build --build_type Debug
+        run: python3 build.py --clang_cl --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build --build_type Release
       - name: Upload Logs Always
         if: always()
         uses: actions/upload-artifact@v4
