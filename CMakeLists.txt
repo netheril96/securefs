@@ -65,6 +65,10 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(-Wthread-safety)
     if(MINGW)
         add_compile_options(-fansi-escape-codes -fcolor-diagnostics)
+    elseif(MSVC) # This implies clang-cl
+        # Disable -Winvalid-offsetof for clang-cl as it can be noisy when
+        # compiling protobuf files.
+        add_compile_options(-Wno-invalid-offsetof)
     endif()
 endif()
 
