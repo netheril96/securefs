@@ -769,6 +769,8 @@ public:
             = DelegateFuseHighLevelOps::vioctl(path, cmd, arg, fi, flags, data, ctx);
         return delegate_result == -ENOSYS ? -ENOTSUP : delegate_result;
     }
+
+    bool has_ioctl() const override { return true; }
 };
 
 class SpecialFiledFuseHighLevelOps : public DelegateFuseHighLevelOps
@@ -796,6 +798,9 @@ public:
     int vgetattr(const char* path, fuse_stat* st, const fuse_context* ctx) override;
 
     int vrmdir(const char* path, const fuse_context* ctx) override;
+
+    bool has_getattr() const override { return true; }
+    bool has_rmdir() const override { return true; }
 };
 
 int SpecialFiledFuseHighLevelOps::vgetattr(const char* path, fuse_stat* st, const fuse_context* ctx)
@@ -843,7 +848,7 @@ bool is_mounted_by_fuse(std::string_view path)
                 .stat(std::string(SpecialFiledFuseHighLevelOps::kSpecialFileName), &st);
             return (st.st_mode & S_IFMT) == S_IFDIR;
         }
-        catch (const ExceptionBase& e)
+        catch (const ExceptionBase&)
         {
             return false;
         }
