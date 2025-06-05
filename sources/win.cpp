@@ -1381,6 +1381,78 @@ void OSService::trigger_unmount_by_ioctl() const
                                nullptr,
                                nullptr));
 }
+
+std::string OSService::win_quote_argv(std::string_view arg)
+{
+    // Rules based on CommandLineToArgvW parsing:
+    // 1. Arguments are separated by whitespace (space, tab).
+    // 2. Double quotes ("") delimit arguments with whitespace.
+    // 3. A double quote preceded by a backslash (\"") is a literal quote.
+    // 4. Backslashes are literal unless they precede a double quote.
+    // 5. 2N backslashes + "" -> N backslashes + delimiter quote.
+    // 6. 2N+1 backslashes + "" -> N backslashes + literal quote.
+
+    // Quoting is needed if the argument is empty, contains whitespace, or contains a double quote.
+    bool needs_quoting = arg.empty() || arg.find_first_of(" \t\"") != std::string_view::npos;
+
+    if (!needs_quoting)
+    {
+        return std::string(arg);
+    }
+
+    std::string quoted_arg;
+    quoted_arg.reserve(arg.size() + 2);    // Estimate minimum size
+    quoted_arg.push_back('"');
+
+    size_t i = 0;
+    while (i < arg.size())
+    {
+        if (arg[i] == '\\')
+        {
+            size_t backslash_count = 0;
+            while (i + backslash_count < arg.size() && arg[i + backslash_count] == '\\')
+            {
+                backslash_count++;
+            }
+            // Append the backslashes
+            for (size_t j = 0; j < backslash_count; ++j)
+            {
+                quoted_arg.push_back('\\');
+            }
+            // If the sequence is followed by a quote, double the backslashes again
+            if (i + backslash_count < arg.size() && arg[i + backslash_count] == '"')
+            {
+                for (size_t j = 0; j < backslash_count; ++j)
+                {
+                    quoted_arg.push_back('\\');
+                }
+            }
+            i += backslash_count;
+        }
+        else if (arg[i] == '"')
+        {
+            // Escape the quote
+            quoted_arg.push_back('\\');
+            quoted_arg.push_back('"');
+            i++;
+        }
+        else
+        {
+            // Append other characters as is
+            quoted_arg.push_back(arg[i]);
+            i++;
+        }
+    }
+
+    quoted_arg.push_back('"');
+    return quoted_arg;
+}
+
+int OSService::execute_child_process_with_data_and_wait(absl::Span<const std::string_view> args,
+                                                        std::string_view stdin_data)
+{
+    return 0;
+}
 }    // namespace securefs
 
 #endif
