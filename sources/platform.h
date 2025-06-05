@@ -7,6 +7,7 @@
 #include <absl/base/thread_annotations.h>
 #include <absl/functional/function_ref.h>
 #include <absl/synchronization/mutex.h>
+#include <absl/types/span.h>
 #include <cerrno>
 #include <uni_algo/conv.h>
 
@@ -261,6 +262,11 @@ public:
     static void enter_background();
     static bool is_process_running(pid_t pid);
     static pid_t get_current_process_id();
+#ifdef _WIN32
+    static std::string win_quote_argv(std::string_view arg);
+#endif
+    static int execute_child_process_with_data_and_wait(absl::Span<const std::string_view> args,
+                                                        std::string_view stdin_data);
 };
 
 struct Colour
