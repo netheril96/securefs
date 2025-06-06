@@ -26,6 +26,7 @@
 #include <absl/synchronization/mutex.h>
 #include <absl/time/time.h>
 #include <argon2.h>
+#include <chrono>
 #include <cryptopp/cpu.h>
 #include <cryptopp/hmac.h>
 #include <cryptopp/osrng.h>
@@ -49,6 +50,7 @@
 #include <string.h>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <typeinfo>
 #include <utility>
 #include <vector>
@@ -528,10 +530,11 @@ private:
     SinglePasswordHolder single_pass_holder_{cmdline()};
 
     TCLAP::SwitchArg single_threaded{"s", "single", "Single threaded mode", cmdline()};
-    TCLAP::SwitchArg background{"b",
-                                "background",
-                                "Run securefs in the background (currently no effect on Windows)",
-                                cmdline()};
+    TCLAP::SwitchArg background{
+        "b",
+        "background",
+        "Spawn a child process to mount in the background (also available on Windows)",
+        cmdline()};
     TCLAP::SwitchArg insecure{
         "i", "insecure", "Disable all integrity verification (insecure mode)", cmdline()};
     TCLAP::SwitchArg noxattr{"x", "noxattr", "Disable built-in xattr support", cmdline()};
@@ -925,73 +928,29 @@ private:
         if (!background.getValue())
             return internal_mount(internal_mount_data);
 
-        absl::Mutex mutex;
-        bool mounted = false;
-        std::optional<int> child_exit_code{};
-        auto finish_condition = [&]() { return mounted || child_exit_code.has_value(); };
-
-        std::thread(
-            [&]()
-            {
-                std::array<std::string_view, 2> args = {executable_name_, "protomount"};
-                try
-                {
-                    int code = OSService::execute_child_process_with_data_and_wait(
-                        args, internal_mount_data.SerializeAsString());
-                    absl::MutexLock l(&mutex);
-                    child_exit_code = code;
-                }
-                catch (const ExceptionBase& e)
-                {
-                    ERROR_LOG("Failed to spawn child (code %d): %s", e.error_number(), e.message());
-                    absl::MutexLock l(&mutex);
-                    child_exit_code = -1;
-                }
-            })
-            .detach();
-
-        std::thread(
-            [&]()
-            {
-                absl::MutexLock l(&mutex);
-                while (true)
-                {
-                    if (mutex.AwaitWithTimeout(absl::Condition(&finish_condition),
-                                               absl::Milliseconds(100)))
-                    {
-                        // The other thread finished first, which means that the child process has
-                        // already exited. No more polling for us.
-                        return;
-                    }
-                    try
-                    {
-                        if (is_mounted_by_fuse(mount_point.getValue()))
-                        {
-                            mounted = true;
-                            return;
-                        }
-                    }
-                    catch (const ExceptionBase&)
-                    {
-                        continue;
-                    }
-                }
-            })
-            .detach();
-        absl::MutexLock l(&mutex);
-        mutex.Await(absl::Condition(&finish_condition));
-        if (mounted)
+        std::array<std::string_view, 2> args = {executable_name_, "protomount"};
+        auto child = OSService::execute_child_process_with_data(
+            args, internal_mount_data.SerializeAsString());
+        while (true)
         {
-            // Mount success.
-            return 0;
+            try
+            {
+                if (is_mounted_by_fuse(mount_point.getValue()))
+                {
+                    return 0;
+                }
+            }
+            catch (const ExceptionBase&)
+            {
+                // pass
+            }
+            auto exit_code = child->exit_code();
+            if (exit_code.has_value())
+            {
+                return *exit_code ? *exit_code : -1;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
-        if (!child_exit_code.has_value())
-        {
-            throw_runtime_error("Invariant not held");
-        }
-        absl::FPrintF(
-            stderr, "Child process exited during mounting with code %d", *child_exit_code);
-        return *child_exit_code ? *child_exit_code : -1;
     }
 
     const char* long_name() const noexcept override { return "mount"; }

@@ -876,6 +876,213 @@ int OSService::execute_child_process_with_data_and_wait(absl::Span<const std::st
     return -1;    // Should generally not be reached if waitpid succeeds
 }
 
+class POSIXChildProcess final : public OSService::ChildProcess
+{
+private:
+    pid_t m_pid;
+
+public:
+    explicit POSIXChildProcess(pid_t pid) : m_pid(pid)
+    {
+        if (m_pid <= 0)
+        {
+            throwInvalidArgumentException(
+                absl::StrFormat("Invalid PID %d for POSIXChildProcess", m_pid));
+        }
+    }
+
+    ~POSIXChildProcess() override = default;
+
+    std::optional<int> exit_code() override
+    {
+        if (m_pid <= 0)
+        {
+            // PID was invalid or process already fully handled/error state
+            return {};
+        }
+
+        int status;
+        pid_t result = ::waitpid(m_pid, &status, WNOHANG);
+
+        if (result == 0)
+        {
+            // Child is still running
+            return {};
+        }
+        else if (result == m_pid)
+        {
+            // Child has terminated
+            if (WIFEXITED(status))
+            {
+                return WEXITSTATUS(status);
+            }
+            else if (WIFSIGNALED(status))
+            {
+                return 128 + WTERMSIG(status);
+            }
+            else
+            {
+                return -1;    // Indicate an error
+            }
+        }
+        else    // result == -1
+        {
+            // Error in waitpid
+            if (errno == ECHILD)
+            {
+                // Child process does not exist (e.g., already reaped by another call/thread, or
+                // invalid PID) We can't get the exit code if we didn't reap it. Mark PID as invalid
+                // to prevent further attempts.
+                m_pid = -1;    // Or some other indicator that it's no longer valid to wait on.
+                return {};     // Exit code is unavailable
+            }
+            // Other errors (e.g., EINTR, though WNOHANG makes it less critical)
+            // Status is currently unavailable.
+            return {};
+        }
+    }
+};
+
+std::unique_ptr<OSService::ChildProcess>
+OSService::execute_child_process_with_data(absl::Span<const std::string_view> args,
+                                           std::string_view stdin_data)
+{
+    if (args.empty())
+    {
+        throwInvalidArgumentException("Empty argument list");
+    }
+
+    std::vector<std::string> c_argv_storage;
+    c_argv_storage.reserve(args.size());
+    for (const auto& sv : args)
+    {
+        c_argv_storage.emplace_back(sv);
+    }
+
+    std::vector<char*> c_argv_ptrs;
+    c_argv_ptrs.reserve(args.size() + 1);
+    for (const auto& s : c_argv_storage)
+    {
+        c_argv_ptrs.push_back(const_cast<char*>(s.c_str()));
+    }
+    c_argv_ptrs.push_back(nullptr);
+    char* const* argv_for_spawn = c_argv_ptrs.data();
+    const char* file_to_exec = argv_for_spawn[0];
+
+    pid_t pid = -1;
+    int pipefd[2] = {-1, -1};    // pipefd[0] is read end, pipefd[1] is write end
+    posix_spawn_file_actions_t file_actions;
+    bool file_actions_initialized = false;
+    posix_spawnattr_t attr;
+    bool attr_initialized = false;
+
+    DEFER({
+        if (pipefd[0] != -1)
+            ::close(pipefd[0]);
+        if (pipefd[1] != -1)
+            ::close(pipefd[1]);
+        if (file_actions_initialized)
+            posix_spawn_file_actions_destroy(&file_actions);
+        if (attr_initialized)
+            posix_spawnattr_destroy(&attr);
+    });
+
+    if (::pipe(pipefd) == -1)
+    {
+        THROW_POSIX_EXCEPTION(errno, "pipe for stdin");
+    }
+
+    int ret;
+    if ((ret = posix_spawn_file_actions_init(&file_actions)) != 0)
+    {
+        THROW_POSIX_EXCEPTION(ret, "posix_spawn_file_actions_init");
+    }
+    file_actions_initialized = true;
+
+    // Child: close write end of pipe
+    if ((ret = posix_spawn_file_actions_addclose(&file_actions, pipefd[1])) != 0)
+    {
+        THROW_POSIX_EXCEPTION(ret, "posix_spawn_file_actions_addclose (pipe write end)");
+    }
+    // Child: dup read end of pipe to stdin
+    if ((ret = posix_spawn_file_actions_adddup2(&file_actions, pipefd[0], STDIN_FILENO)) != 0)
+    {
+        THROW_POSIX_EXCEPTION(ret, "posix_spawn_file_actions_adddup2 (stdin)");
+    }
+    // Child: close original read end of pipe (it's now stdin)
+    if ((ret = posix_spawn_file_actions_addclose(&file_actions, pipefd[0])) != 0)
+    {
+        THROW_POSIX_EXCEPTION(ret, "posix_spawn_file_actions_addclose (pipe read end)");
+    }
+
+    if ((ret = posix_spawnattr_init(&attr)) != 0)
+    {
+        THROW_POSIX_EXCEPTION(ret, "posix_spawnattr_init");
+    }
+    attr_initialized = true;
+
+    short spawn_flags = 0;
+#ifdef POSIX_SPAWN_SETSID
+    spawn_flags |= POSIX_SPAWN_SETSID;
+#else
+    WARN_LOG("POSIX_SPAWN_SETSID not defined, child process will not get a new session ID via "
+             "posix_spawnattr_setflags.");
+#endif
+    if (spawn_flags != 0)
+    {
+        if ((ret = posix_spawnattr_setflags(&attr, spawn_flags)) != 0)
+        {
+            THROW_POSIX_EXCEPTION(ret, "posix_spawnattr_setflags");
+        }
+    }
+
+    if ((ret = posix_spawnp(&pid, file_to_exec, &file_actions, &attr, argv_for_spawn, environ))
+        != 0)
+    {
+        THROW_POSIX_EXCEPTION(ret, absl::StrCat("posix_spawnp failed for ", file_to_exec));
+    }
+
+    // Parent: close read end of pipe, it's not needed by parent
+    ::close(pipefd[0]);
+    pipefd[0] = -1;
+
+    std::unique_ptr<POSIXChildProcess> child_process_obj = std::make_unique<POSIXChildProcess>(pid);
+
+    if (!stdin_data.empty())
+    {
+        const char* current_data_ptr = stdin_data.data();
+        size_t remaining_data_size = stdin_data.size();
+        while (remaining_data_size > 0)
+        {
+            ssize_t bytes_written_this_call
+                = ::write(pipefd[1], current_data_ptr, remaining_data_size);
+            if (bytes_written_this_call < 0)
+            {
+                if (errno == EINTR)
+                    continue;
+                // Error writing to pipe. Child is running. Terminate child.
+                ::kill(pid, SIGKILL);          // Send SIGKILL directly
+                ::waitpid(pid, nullptr, 0);    // Reap the killed child
+                THROW_POSIX_EXCEPTION(errno, "write to child stdin");
+            }
+            if (bytes_written_this_call == 0)
+            {
+                ::kill(pid, SIGKILL);
+                ::waitpid(pid, nullptr, 0);
+                THROW_POSIX_EXCEPTION(EPIPE, "write to child stdin wrote 0 bytes unexpectedly");
+            }
+            current_data_ptr += bytes_written_this_call;
+            remaining_data_size -= bytes_written_this_call;
+        }
+    }
+
+    // Parent: close write end of pipe, signals EOF to child.
+    ::close(pipefd[1]);
+    pipefd[1] = -1;
+
+    return child_process_obj;
+}
+
 void OSService::set_file_descriptor_in_binary_mode(int fd)
 {
     // No-op on Unix-like systems as text/binary mode is a Windows concept.

@@ -9,11 +9,14 @@
 #include <absl/synchronization/mutex.h>
 #include <absl/types/span.h>
 #include <cerrno>
+
 #include <uni_algo/conv.h>
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stddef.h>
 #include <stdint.h>
 #include <string>
@@ -266,8 +269,17 @@ public:
 #ifdef _WIN32
     static std::string win_quote_argv(std::string_view arg);
 #endif
+
+    struct ChildProcess : public Object
+    {
+        // Returns `nullopt` if not exited yet.
+        virtual std::optional<int> exit_code() = 0;
+    };
     static int execute_child_process_with_data_and_wait(absl::Span<const std::string_view> args,
                                                         std::string_view stdin_data);
+    static std::unique_ptr<ChildProcess>
+    execute_child_process_with_data(absl::Span<const std::string_view> args,
+                                    std::string_view stdin_data);
 };
 
 struct Colour
