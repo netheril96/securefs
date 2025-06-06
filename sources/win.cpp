@@ -14,6 +14,7 @@
 #include <cerrno>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/utime.h>
@@ -1611,6 +1612,168 @@ int OSService::execute_child_process_with_data_and_wait(absl::Span<const std::st
     // Other handles (hStdInRead, hStdInWrite, hThread) are already marked INVALID_HANDLE_VALUE.
 
     return static_cast<int>(exitCode);
+}
+
+class WindowsChildProcess final : public OSService::ChildProcess
+{
+private:
+    HANDLE m_process_handle;
+
+public:
+    explicit WindowsChildProcess(HANDLE process_handle) : m_process_handle(process_handle)
+    {
+        if (m_process_handle == INVALID_HANDLE_VALUE || m_process_handle == nullptr)
+        {
+            throw WindowsException(ERROR_INVALID_HANDLE, L"WindowsChildProcess constructor");
+        }
+    }
+
+    ~WindowsChildProcess() override
+    {
+        if (m_process_handle != INVALID_HANDLE_VALUE && m_process_handle != nullptr)
+        {
+            CloseHandle(m_process_handle);
+        }
+    }
+
+    std::optional<int> exit_code() override;
+};
+
+std::optional<int> WindowsChildProcess::exit_code()
+{
+    DWORD current_exit_code;
+    if (!GetExitCodeProcess(m_process_handle, &current_exit_code))
+    {
+        THROW_WINDOWS_EXCEPTION(GetLastError(), L"GetExitCodeProcess");
+    }
+
+    if (current_exit_code == STILL_ACTIVE)
+    {
+        return {};
+    }
+    return static_cast<int>(current_exit_code);
+}
+
+std::unique_ptr<OSService::ChildProcess>
+OSService::execute_child_process_with_data(absl::Span<const std::string_view> args,
+                                           std::string_view stdin_data)
+{
+    if (args.empty())
+    {
+        throwInvalidArgumentException("Empty argument list");
+    }
+
+    std::string cmd_line_utf8;
+    for (size_t i = 0; i < args.size(); ++i)
+    {
+        cmd_line_utf8 += win_quote_argv(args[i]);
+        if (i < args.size() - 1)
+        {
+            cmd_line_utf8 += " ";
+        }
+    }
+    std::wstring cmd_line_utf16 = widen_string(cmd_line_utf8);
+    std::vector<wchar_t> mutable_cmd_line(cmd_line_utf16.begin(), cmd_line_utf16.end());
+    mutable_cmd_line.push_back(L'\0');
+
+    HANDLE hStdInRead = INVALID_HANDLE_VALUE;
+    HANDLE hStdInWrite = INVALID_HANDLE_VALUE;
+    PROCESS_INFORMATION pi{};
+    pi.hProcess = INVALID_HANDLE_VALUE;
+    pi.hThread = INVALID_HANDLE_VALUE;
+
+    DEFER({
+        CloseHandle(hStdInRead);
+        CloseHandle(hStdInWrite);
+        CloseHandle(pi.hThread);
+        // Process ID is managed by the destructor of `WindowsChildProcess`.
+    });
+
+    SECURITY_ATTRIBUTES sa;
+    sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+    sa.bInheritHandle = TRUE;
+    sa.lpSecurityDescriptor = nullptr;
+
+    if (!CreatePipe(&hStdInRead, &hStdInWrite, &sa, 0))
+    {
+        THROW_WINDOWS_EXCEPTION(GetLastError(), L"CreatePipe for stdin");
+    }
+
+    if (!SetHandleInformation(hStdInWrite, HANDLE_FLAG_INHERIT, 0))
+    {
+        THROW_WINDOWS_EXCEPTION(GetLastError(), L"SetHandleInformation for hStdInWrite");
+    }
+
+    STARTUPINFOW si;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+    si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+    si.hStdInput = hStdInRead;
+    si.dwFlags |= STARTF_USESTDHANDLES;
+    si.dwFlags |= STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+
+    if (!CreateProcessW(nullptr,
+                        mutable_cmd_line.data(),
+                        nullptr,
+                        nullptr,
+                        TRUE,
+                        CREATE_NO_WINDOW,
+                        nullptr,
+                        nullptr,
+                        &si,
+                        &pi))
+    {
+        THROW_WINDOWS_EXCEPTION_WITH_PATH(GetLastError(), L"CreateProcessW", cmd_line_utf16);
+    }
+    auto result = std::make_unique<WindowsChildProcess>(pi.hProcess);
+
+    // Close the read end of the pipe in the parent process.
+    CloseHandle(hStdInRead);
+    hStdInRead = INVALID_HANDLE_VALUE;
+
+    try
+    {
+        if (!stdin_data.empty())
+        {
+            const char* pCurrentData = stdin_data.data();
+            SIZE_T remainingDataSize = stdin_data.size();
+
+            while (remainingDataSize > 0)
+            {
+                DWORD bytesToWriteThisCall = (remainingDataSize > MAX_SINGLE_BLOCK)
+                    ? MAX_SINGLE_BLOCK
+                    : static_cast<DWORD>(remainingDataSize);
+                DWORD bytesActuallyWritten = 0;
+                if (!WriteFile(hStdInWrite,
+                               pCurrentData,
+                               bytesToWriteThisCall,
+                               &bytesActuallyWritten,
+                               nullptr))
+                {
+                    THROW_WINDOWS_EXCEPTION(GetLastError(), L"WriteFile to child stdin");
+                }
+                if (bytesActuallyWritten == 0 && bytesToWriteThisCall > 0)
+                {
+                    throw WindowsException(ERROR_WRITE_FAULT,
+                                           L"WriteFile to child stdin wrote 0 bytes unexpectedly");
+                }
+                pCurrentData += bytesActuallyWritten;
+                remainingDataSize -= bytesActuallyWritten;
+            }
+        }
+    }
+    catch (...)
+    {
+        TerminateProcess(pi.hProcess, 1);
+        throw;
+    }
+
+    CloseHandle(hStdInWrite);
+    hStdInWrite = INVALID_HANDLE_VALUE;
+
+    return result;
 }
 }    // namespace securefs
 

@@ -4,13 +4,13 @@
 #include "platform.h"
 
 #include <cerrno>
-#include <corecrt_io.h>
 #include <cstdint>
-#include <errhandlingapi.h>
 #include <stdio.h>
 
 #ifdef _WIN32
 #include <Windows.h>
+#include <corecrt_io.h>
+#include <errhandlingapi.h>
 #include <fcntl.h>
 #include <io.h>
 #include <time.h>

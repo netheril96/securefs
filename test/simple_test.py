@@ -85,7 +85,8 @@ def securefs_mount(
     keyfile: Optional[str] = None,
     config_filename: Optional[str] = None,
     plain_text_names: bool = False,
-) -> subprocess.Popen:
+    background: bool = False,
+) -> subprocess.Popen | None:
     command = [
         SECUREFS_BINARY,
         "mount",
@@ -94,6 +95,8 @@ def securefs_mount(
         "--normalization",
         "none",
     ]
+    if background:
+        command.append("-b")
     if password:
         command.append("--pass")
         command.append(password)
@@ -112,6 +115,11 @@ def securefs_mount(
             subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
         ),
     )
+    if background:
+        if p.wait(timeout=10):
+            raise subprocess.CalledProcessError(p.returncode, p.args)
+        return None
+
     try:
         for _ in range(600):
             try:
@@ -129,7 +137,10 @@ def securefs_mount(
         raise
 
 
-def securefs_unmount(p: subprocess.Popen, mount_point: str):
+def securefs_unmount(p: subprocess.Popen | None, mount_point: str):
+    if p is None:
+        subprocess.check_call([SECUREFS_BINARY, "unmount", mount_point])
+        return
     with p:
         subprocess.check_call([SECUREFS_BINARY, "unmount", mount_point])
         p.wait(timeout=5)
@@ -314,6 +325,7 @@ def is_freebsd():
             [False],
             [Sensitivity.SENSITIVE],
             [Sensitivity.SENSITIVE],
+            [False, True],
         )
     )
     + [
@@ -324,6 +336,7 @@ def is_freebsd():
             True,
             Sensitivity.SENSITIVE,
             Sensitivity.SENSITIVE,
+            False,
         ),
         (
             RepoFormat.FULL,
@@ -332,6 +345,7 @@ def is_freebsd():
             False,
             Sensitivity.INSENSITIVE,
             Sensitivity.SENSITIVE,
+            False,
         ),
         (
             RepoFormat.FULL,
@@ -340,6 +354,7 @@ def is_freebsd():
             False,
             Sensitivity.SENSITIVE,
             Sensitivity.INSENSITIVE,
+            False,
         ),
     ]
 )
@@ -350,6 +365,7 @@ def make_test_case(
     plain_text_names: bool,
     case: Sensitivity = Sensitivity.SENSITIVE,
     uninorm: Sensitivity = Sensitivity.SENSITIVE,
+    background: bool = False,
 ):
     class SimpleSecureFSTestBase(unittest.TestCase):
         data_dir: str
@@ -392,6 +408,7 @@ def make_test_case(
                 keyfile=cls.keyfile,
                 config_filename=cls.config_file,
                 plain_text_names=plain_text_names,
+                background=background,
             )
 
         @classmethod
