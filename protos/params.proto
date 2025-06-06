@@ -104,4 +104,8 @@ message InternalMountData
     MountOptions mount_options = 2;
     repeated string fuse_args = 3;
     string data_dir = 4;
+
+    // Only present if mounting continues in a child process.
+    // This is the inherited handle that the child process should reuse for logger.
+    optional int64 logger_handle = 5;
 }
