@@ -156,6 +156,25 @@ namespace
         return result;
     }
 
+    LoggingLevel proto_to_logger_level(InternalMountData::LogLevel proto_level)
+    {
+        switch (proto_level)
+        {
+        case InternalMountData::kLogTrace:
+            return LoggingLevel::kLogTrace;
+        case InternalMountData::kLogVerbose:
+            return LoggingLevel::kLogVerbose;
+        case InternalMountData::kLogInfo:
+            return LoggingLevel::kLogInfo;
+        case InternalMountData::kLogWarning:
+            return LoggingLevel::kLogWarning;
+        case InternalMountData::kLogError:
+            return LoggingLevel::kLogError;
+        default:
+            return LoggingLevel::kLogInfo;    // Default to Info if unknown
+        }
+    }
+
 }    // namespace
 
 std::shared_ptr<full_format::FuseHighLevelOps>
@@ -250,10 +269,19 @@ make_fuse_high_level_ops(std::shared_ptr<OSService> os_service,
 }
 int internal_mount(const InternalMountData& mount_data)
 {
-    if (mount_data.has_logger_handle())
+    if (mount_data.has_background_logging())
     {
         delete global_logger;
-        global_logger = Logger::create_logger_from_native_handle(mount_data.logger_handle());
+        if (mount_data.background_logging().has_logger_handle())
+        {
+            global_logger = Logger::create_logger_from_native_handle(
+                mount_data.background_logging().logger_handle());
+            if (mount_data.background_logging().has_log_level())
+            {
+                global_logger->set_level(
+                    proto_to_logger_level(mount_data.background_logging().log_level()));
+            }
+        }
     }
     try
     {

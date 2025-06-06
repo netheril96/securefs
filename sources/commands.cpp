@@ -688,9 +688,25 @@ private:
     InternalMountData build_internal_mount_data()
     {
         InternalMountData internal_mount_data;
-        if (background.getValue() && global_logger)
+        if (background.getValue())
         {
-            internal_mount_data.set_logger_handle(global_logger->get_native_handle());
+            internal_mount_data
+                .mutable_background_logging();    // Ensure this message is not empty.
+            if (global_logger)
+            {
+                internal_mount_data.mutable_background_logging()->set_logger_handle(
+                    global_logger->get_native_handle());
+            }
+            if (verbose.getValue())
+            {
+                internal_mount_data.mutable_background_logging()->set_log_level(
+                    InternalMountData::kLogVerbose);
+            }
+            if (trace.getValue())
+            {
+                internal_mount_data.mutable_background_logging()->set_log_level(
+                    InternalMountData::kLogTrace);
+            }
         }
         if (single_pass_holder_.data_dir.getValue() == mount_point.getValue())
         {

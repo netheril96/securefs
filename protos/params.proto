@@ -105,7 +105,21 @@ message InternalMountData
     repeated string fuse_args = 3;
     string data_dir = 4;
 
+    enum LogLevel {
+        kLogTrace = 0;
+        kLogVerbose = 1;
+        kLogInfo = 2;
+        kLogWarning = 3;
+        kLogError = 4;
+    }
+
+    message BackgroundLogging
+    {
+        // If not present, then disable logging in the background process.
+        optional int64 logger_handle = 1;
+        optional LogLevel log_level = 2;
+    }
+
     // Only present if mounting continues in a child process.
-    // This is the inherited handle that the child process should reuse for logger.
-    optional int64 logger_handle = 5;
+    BackgroundLogging background_logging = 5;
 }
