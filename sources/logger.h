@@ -20,23 +20,7 @@ enum class LoggingLevel : unsigned char
     kLogError = 4
 };
 
-inline const char* stringify(LoggingLevel lvl)
-{
-    switch (lvl)
-    {
-    case LoggingLevel::kLogTrace:
-        return "Trace";
-    case LoggingLevel::kLogVerbose:
-        return "Verbose";
-    case LoggingLevel::kLogInfo:
-        return "Info";
-    case LoggingLevel::kLogWarning:
-        return "Warning";
-    case LoggingLevel::kLogError:
-        return "Error";
-    }
-    return "UNKNOWN";
-}
+const char* stringify(LoggingLevel lvl);
 
 namespace trace
 {

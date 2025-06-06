@@ -29,6 +29,25 @@ static const void* current_thread_id(void) { return (void*)(pthread_self()); }
 
 namespace securefs
 {
+const char* stringify(LoggingLevel lvl)
+{
+    switch (lvl)
+    {
+    case LoggingLevel::kLogTrace:
+        return "Trace";
+    case LoggingLevel::kLogVerbose:
+        return "Verbose";
+    case LoggingLevel::kLogInfo:
+        return "Info";
+    case LoggingLevel::kLogWarning:
+        return "Warning";
+    case LoggingLevel::kLogError:
+        return "Error";
+    }
+    // This part should ideally not be reached if all enum values are handled.
+    return "UNKNOWN";
+}
+
 Logger::Logger(FILE* fp, bool close_on_exit)
     : m_level(LoggingLevel::kLogInfo), m_fp(fp), m_close_on_exit(close_on_exit)
 {
