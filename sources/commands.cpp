@@ -23,6 +23,8 @@
 #include <absl/strings/match.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
+#include <absl/synchronization/mutex.h>
+#include <absl/time/time.h>
 #include <argon2.h>
 #include <cryptopp/cpu.h>
 #include <cryptopp/hmac.h>
@@ -30,6 +32,7 @@
 #include <cryptopp/scrypt.h>
 #include <cryptopp/secblock.h>
 #include <google/protobuf/util/json_util.h>
+#include <optional>
 #include <sys/stat.h>
 #include <tclap/CmdLine.h>
 #include <tclap/SwitchArg.h>
@@ -496,6 +499,14 @@ public:
 
 class MountCommand : public CommandBase
 {
+
+public:
+    MountCommand(std::string executable_name)
+        : CommandBase(), executable_name_(std::move(executable_name))
+    {
+    }
+
+public:
 private:
 #ifdef __linux__
     static constexpr inline long kKnownFileSystemTypesWithStableInodes[] = {
@@ -625,6 +636,9 @@ private:
         "int64",
         cmdline()};
     DecryptedSecurefsParams fsparams{};
+
+private:
+    std::string executable_name_;
 
 private:
 #ifdef _WIN32
@@ -767,7 +781,7 @@ private:
         }
 
         std::vector<std::string> fuse_args{
-            "securefs",
+            executable_name_,
             "-o",
             "hard_remove",
             "-o",
@@ -856,7 +870,6 @@ private:
         return internal_mount_data;
     }
 
-public:
     void parse_cmdline(int argc, const char* const* argv) override
     {
         CommandBase::parse_cmdline(argc, argv);
@@ -892,13 +905,77 @@ public:
     int execute() override
     {
         recreate_logger();
-        if (background.getValue())
-        {
-            OSService::enter_background();
-        }
-
         InternalMountData internal_mount_data = build_internal_mount_data();
-        return internal_mount(internal_mount_data);
+        if (!background.getValue())
+            return internal_mount(internal_mount_data);
+
+        absl::Mutex mutex;
+        bool mounted = false;
+        std::optional<int> child_exit_code{};
+        auto finish_condition = [&]() { return mounted || child_exit_code.has_value(); };
+
+        std::thread(
+            [&]()
+            {
+                std::array<std::string_view, 2> args = {executable_name_, "protomount"};
+                try
+                {
+                    int code = OSService::execute_child_process_with_data_and_wait(
+                        args, internal_mount_data.SerializeAsString());
+                    absl::MutexLock l(&mutex);
+                    child_exit_code = code;
+                }
+                catch (const ExceptionBase& e)
+                {
+                    ERROR_LOG("Failed to spawn child (code %d): %s", e.error_number(), e.message());
+                    absl::MutexLock l(&mutex);
+                    child_exit_code = -1;
+                }
+            })
+            .detach();
+
+        std::thread(
+            [&]()
+            {
+                absl::MutexLock l(&mutex);
+                while (true)
+                {
+                    if (mutex.AwaitWithTimeout(absl::Condition(&finish_condition),
+                                               absl::Milliseconds(100)))
+                    {
+                        // The other thread finished first, which means that the child process has
+                        // already exited. No more polling for us.
+                        return;
+                    }
+                    try
+                    {
+                        if (is_mounted_by_fuse(mount_point.getValue()))
+                        {
+                            mounted = true;
+                            return;
+                        }
+                    }
+                    catch (const ExceptionBase&)
+                    {
+                        continue;
+                    }
+                }
+            })
+            .detach();
+        absl::MutexLock l(&mutex);
+        mutex.Await(absl::Condition(&finish_condition));
+        if (mounted)
+        {
+            // Mount success.
+            return 0;
+        }
+        if (!child_exit_code.has_value())
+        {
+            throw_runtime_error("Invariant not held");
+        }
+        absl::FPrintF(
+            stderr, "Child process exited during mounting with code %d", *child_exit_code);
+        return *child_exit_code ? *child_exit_code : -1;
     }
 
     const char* long_name() const noexcept override { return "mount"; }
@@ -1152,6 +1229,29 @@ public:
     }
 };
 
+class ProtoMountCommand : public CommandBase
+{
+public:
+    const char* long_name() const noexcept override { return "protomount"; }
+    char short_name() const noexcept override { return 0; }
+    const char* help_message() const noexcept override
+    {
+        return "Internal only command to mount by protobuf message";
+    }
+    bool is_hidden() const noexcept override { return true; }
+    int execute() override
+    {
+        OSService::set_file_descriptor_in_binary_mode(0);
+        InternalMountData internal_mount_data;
+        if (!internal_mount_data.ParseFromFileDescriptor(0))
+        {
+            ERROR_LOG("Failed to parse internal_mount_data from STDIN");
+            return -1;
+        }
+        return internal_mount(internal_mount_data);
+    }
+};
+
 class DocCommand : public CommandBase
 {
 private:
@@ -1175,6 +1275,10 @@ public:
               stdout);
         for (auto c : commands)
         {
+            if (c->is_hidden())
+            {
+                continue;
+            }
             if (c->short_name())
                 absl::PrintF("## %s (short name: %c)\n", c->long_name(), c->short_name());
             else
@@ -1319,7 +1423,7 @@ int commands_main(int argc, const char* const* argv)
     try
     {
         std::ios_base::sync_with_stdio(false);
-        std::unique_ptr<CommandBase> cmds[] = {make_unique<MountCommand>(),
+        std::unique_ptr<CommandBase> cmds[] = {make_unique<MountCommand>(argv[0]),
                                                make_unique<CreateCommand>(),
                                                make_unique<ChangePasswordCommand>(),
                                                make_unique<VersionCommand>(),
@@ -1327,6 +1431,7 @@ int commands_main(int argc, const char* const* argv)
                                                make_unique<MigrateLongNameCommand>(),
                                                make_unique<IsMountCommand>(),
                                                make_unique<UnmountCommand>(),
+                                               make_unique<ProtoMountCommand>(),
                                                make_unique<DocCommand>()};
 
         const char* const program_name = argv[0];
@@ -1342,6 +1447,10 @@ int commands_main(int argc, const char* const* argv)
 
             for (auto&& command : cmds)
             {
+                if (command->is_hidden())
+                {
+                    continue;
+                }
                 if (command->short_name())
                 {
                     absl::FPrintF(stderr,
