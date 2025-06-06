@@ -3,10 +3,16 @@
 #include "myutils.h"
 #include "platform.h"
 
+#include <cerrno>
+#include <corecrt_io.h>
+#include <cstdint>
+#include <errhandlingapi.h>
 #include <stdio.h>
 
 #ifdef _WIN32
 #include <Windows.h>
+#include <fcntl.h>
+#include <io.h>
 #include <time.h>
 
 static void flockfile(FILE* fp) { _lock_file(fp); }
@@ -117,7 +123,66 @@ Logger* Logger::create_file_logger(const std::string& path)
 #endif
     if (!fp)
         THROW_POSIX_EXCEPTION(errno, path);
+#ifdef _WIN32
+    int fd = _fileno(fp);
+    if (fd < 0)
+    {
+        THROW_POSIX_EXCEPTION(errno, "_fileno");
+    }
+    auto fileHandle = (HANDLE)_get_osfhandle(fd);
+    if (fileHandle == INVALID_HANDLE_VALUE)
+    {
+        throw_windows_exception(L"_get_osfhandle");
+    }
+    // Make sure a forked child can open the same logger.
+    if (!SetHandleInformation(fileHandle, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT))
+    {
+        throw_windows_exception(L"SetHandleInformation");
+    }
+#endif
     return new Logger(fp, true);
+}
+
+Logger* Logger::create_logger_from_native_handle(int64_t native_handle)
+{
+#ifdef _WIN32
+    int fd = _open_osfhandle(native_handle, _O_APPEND);
+    if (fd < 0)
+    {
+        THROW_POSIX_EXCEPTION(errno, "_open_osfhandle");
+    }
+    auto fp = _fdopen(fd, "a");
+    if (!fp)
+    {
+        THROW_POSIX_EXCEPTION(errno, "_fdopen");
+    }
+    return new Logger(fp, true);
+#else
+    auto fp = fdopen(static_cast<int>(native_handle), "a");
+    if (!fp)
+    {
+        THROW_POSIX_EXCEPTION(errno, "fdopen");
+    }
+    return new Logger(fp, true);
+#endif
+}
+int64_t Logger::get_native_handle() const
+{
+#ifdef _WIN32
+    int fd = _fileno(m_fp);
+    if (fd < 0)
+    {
+        THROW_POSIX_EXCEPTION(errno, "_fileno");
+    }
+    auto fileHandle = (HANDLE)_get_osfhandle(fd);
+    if (fileHandle == INVALID_HANDLE_VALUE)
+    {
+        throw_windows_exception(L"_get_osfhandle");
+    }
+    return reinterpret_cast<int64_t>(fileHandle);
+#else
+    return fileno(m_fp);
+#endif
 }
 
 Logger* global_logger = Logger::create_stderr_logger();

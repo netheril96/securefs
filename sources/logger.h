@@ -4,6 +4,7 @@
 #include <absl/functional/function_ref.h>
 #include <absl/strings/str_format.h>
 
+#include <cstdint>
 #include <memory>
 #include <stdio.h>
 #include <string>
@@ -69,6 +70,8 @@ private:
 public:
     static Logger* create_stderr_logger();
     static Logger* create_file_logger(const std::string& path);
+    static Logger* create_logger_from_native_handle(int64_t native_handle);
+    int64_t get_native_handle() const;
 
     template <typename... Args>
     void log_v2(LoggingLevel level,

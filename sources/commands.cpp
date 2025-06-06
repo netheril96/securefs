@@ -879,14 +879,6 @@ public:
             delete global_logger;
             global_logger = logger;
         }
-        else if (background.getValue())
-        {
-            WARN_LOG("securefs is about to enter background without a log file. You "
-                     "won't be able to inspect what goes wrong. You can remount with "
-                     "option --log instead.");
-            delete global_logger;
-            global_logger = nullptr;
-        }
         if (global_logger && verbose.getValue())
             global_logger->set_level(LoggingLevel::kLogVerbose);
         if (global_logger && trace.getValue())
