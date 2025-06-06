@@ -674,6 +674,10 @@ private:
     InternalMountData build_internal_mount_data()
     {
         InternalMountData internal_mount_data;
+        if (background.getValue() && global_logger)
+        {
+            internal_mount_data.set_logger_handle(global_logger->get_native_handle());
+        }
         if (single_pass_holder_.data_dir.getValue() == mount_point.getValue())
         {
             WARN_LOG("Mounting a directory on itself may cause securefs to hang");

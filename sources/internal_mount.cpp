@@ -250,9 +250,14 @@ make_fuse_high_level_ops(std::shared_ptr<OSService> os_service,
 }
 int internal_mount(const InternalMountData& mount_data)
 {
+    if (mount_data.has_logger_handle())
+    {
+        delete global_logger;
+        global_logger = Logger::create_logger_from_native_handle(mount_data.logger_handle());
+    }
     try
     {
-        int fd_limit = OSService::raise_fd_limit();
+        auto fd_limit = OSService::raise_fd_limit();
         VERBOSE_LOG("Raising the number of file descriptor limit to %d", fd_limit);
     }
     catch (const std::exception& e)
