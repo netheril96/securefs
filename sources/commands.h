@@ -21,6 +21,7 @@ public:
     virtual const char* long_name() const noexcept = 0;
     virtual char short_name() const noexcept = 0;
     virtual const char* help_message() const noexcept = 0;
+    virtual bool is_hidden() const noexcept { return false; }
     TCLAP::CmdLine& cmdline()
     {
         if (!cmdline_)

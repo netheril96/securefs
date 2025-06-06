@@ -17,6 +17,7 @@
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,10 +28,9 @@
 #include <sys/statvfs.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <termios.h>
 #include <time.h>
-#include <spawn.h>
-#include <sys/wait.h>
 #include <typeinfo>
 #include <unistd.h>
 
@@ -813,7 +813,8 @@ int OSService::execute_child_process_with_data_and_wait(absl::Span<const std::st
 #ifdef POSIX_SPAWN_SETSID
     spawn_flags |= POSIX_SPAWN_SETSID;
 #else
-    WARN_LOG("POSIX_SPAWN_SETSID not defined, child process will not get a new session ID via posix_spawnattr_setflags.");
+    WARN_LOG("POSIX_SPAWN_SETSID not defined, child process will not get a new session ID via "
+             "posix_spawnattr_setflags.");
 #endif
     if (spawn_flags != 0)
     {
@@ -826,7 +827,8 @@ int OSService::execute_child_process_with_data_and_wait(absl::Span<const std::st
     ::close(pipefd[0]);
     pipefd[0] = -1;
 
-    if ((ret = posix_spawnp(&pid, file_to_exec, &file_actions, &attr, argv_for_spawn, environ)) != 0)
+    if ((ret = posix_spawnp(&pid, file_to_exec, &file_actions, &attr, argv_for_spawn, environ))
+        != 0)
     {
         THROW_POSIX_EXCEPTION(ret, absl::StrCat("posix_spawnp failed for ", file_to_exec));
     }
@@ -837,14 +839,17 @@ int OSService::execute_child_process_with_data_and_wait(absl::Span<const std::st
         size_t remaining_data_size = stdin_data.size();
         while (remaining_data_size > 0)
         {
-            ssize_t bytes_written_this_call = ::write(pipefd[1], current_data_ptr, remaining_data_size);
+            ssize_t bytes_written_this_call
+                = ::write(pipefd[1], current_data_ptr, remaining_data_size);
             if (bytes_written_this_call < 0)
             {
-                if (errno == EINTR) continue;
+                if (errno == EINTR)
+                    continue;
                 THROW_POSIX_EXCEPTION(errno, "write to child stdin");
             }
-            if (bytes_written_this_call == 0) { // Should not happen for blocking pipe if read end is open
-                 THROW_POSIX_EXCEPTION(EPIPE, "write to child stdin wrote 0 bytes unexpectedly");
+            if (bytes_written_this_call == 0)
+            {    // Should not happen for blocking pipe if read end is open
+                THROW_POSIX_EXCEPTION(EPIPE, "write to child stdin wrote 0 bytes unexpectedly");
             }
             current_data_ptr += bytes_written_this_call;
             remaining_data_size -= bytes_written_this_call;
@@ -868,7 +873,12 @@ int OSService::execute_child_process_with_data_and_wait(absl::Span<const std::st
     {
         return 128 + WTERMSIG(status);
     }
-    return -1; // Should generally not be reached if waitpid succeeds
+    return -1;    // Should generally not be reached if waitpid succeeds
+}
+
+void OSService::set_file_descriptor_in_binary_mode(int fd)
+{
+    // No-op on Unix-like systems as text/binary mode is a Windows concept.
 }
 
 const char* PATH_SEPARATOR_STRING = "/";

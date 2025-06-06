@@ -248,6 +248,7 @@ public:
     static uint32_t getuid() noexcept;
     static uint32_t getgid() noexcept;
     static int64_t raise_fd_limit() noexcept;
+    static void set_file_descriptor_in_binary_mode(int fd);
 
     static std::string temp_name(std::string_view prefix, std::string_view suffix);
     static const OSService& get_default();

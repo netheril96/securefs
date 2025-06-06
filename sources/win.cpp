@@ -23,6 +23,7 @@
 
 #include <VersionHelpers.h>
 #include <Windows.h>
+#include <fcntl.h>
 #include <io.h>
 #include <sddl.h>
 #include <strsafe.h>
@@ -1084,6 +1085,14 @@ int64_t OSService::raise_fd_limit() noexcept
 void OSService::enter_background()
 {
     WARN_LOG("Entering background mode is not allowed on Windows, because you can't unmount then");
+}
+
+void OSService::set_file_descriptor_in_binary_mode(int fd)
+{
+    if (_setmode(fd, _O_BINARY) == -1)
+    {
+        THROW_POSIX_EXCEPTION(errno, "Failed to set file descriptor to binary mode");
+    }
 }
 
 class WindowsDirectoryTraverser final : public DirectoryTraverser
