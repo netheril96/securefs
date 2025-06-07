@@ -828,7 +828,7 @@ OSService::execute_child_process_with_data(absl::Span<const std::string_view> ar
     const char* file_to_exec = argv_for_spawn[0];
 
     pid_t pid = -1;
-    int pipefd[2] = {-1, -1};    // pipefd[0] is read end, pipefd[1] is write end
+    std::array<int, 2> pipefd = {-1, -1};    // pipefd[0] is read end, pipefd[1] is write end
     posix_spawn_file_actions_t file_actions;
     bool file_actions_initialized = false;
     posix_spawnattr_t attr;
@@ -845,35 +845,35 @@ OSService::execute_child_process_with_data(absl::Span<const std::string_view> ar
             posix_spawnattr_destroy(&attr);
     });
 
-    if (::pipe(pipefd) == -1)
+    if (::pipe(pipefd.data()) == -1)
     {
         THROW_POSIX_EXCEPTION(errno, "pipe for stdin");
     }
 
-    int ret;
-    if ((ret = posix_spawn_file_actions_init(&file_actions)) != 0)
+    if (int ret = posix_spawn_file_actions_init(&file_actions); ret != 0)
     {
         THROW_POSIX_EXCEPTION(ret, "posix_spawn_file_actions_init");
     }
     file_actions_initialized = true;
 
     // Child: close write end of pipe
-    if ((ret = posix_spawn_file_actions_addclose(&file_actions, pipefd[1])) != 0)
+    if (int ret = posix_spawn_file_actions_addclose(&file_actions, pipefd[1]); ret != 0)
     {
         THROW_POSIX_EXCEPTION(ret, "posix_spawn_file_actions_addclose (pipe write end)");
     }
     // Child: dup read end of pipe to stdin
-    if ((ret = posix_spawn_file_actions_adddup2(&file_actions, pipefd[0], STDIN_FILENO)) != 0)
+    if (int ret = posix_spawn_file_actions_adddup2(&file_actions, pipefd[0], STDIN_FILENO);
+        ret != 0)
     {
         THROW_POSIX_EXCEPTION(ret, "posix_spawn_file_actions_adddup2 (stdin)");
     }
     // Child: close original read end of pipe (it's now stdin)
-    if ((ret = posix_spawn_file_actions_addclose(&file_actions, pipefd[0])) != 0)
+    if (int ret = posix_spawn_file_actions_addclose(&file_actions, pipefd[0]); ret != 0)
     {
         THROW_POSIX_EXCEPTION(ret, "posix_spawn_file_actions_addclose (pipe read end)");
     }
 
-    if ((ret = posix_spawnattr_init(&attr)) != 0)
+    if (int ret = posix_spawnattr_init(&attr); ret != 0)
     {
         THROW_POSIX_EXCEPTION(ret, "posix_spawnattr_init");
     }
@@ -881,21 +881,21 @@ OSService::execute_child_process_with_data(absl::Span<const std::string_view> ar
 
     short spawn_flags = 0;
 #ifdef POSIX_SPAWN_SETSID
-    spawn_flags |= POSIX_SPAWN_SETSID;
+    spawn_flags |= POSIX_SPAWN_SETSID;    // NOLINT(hicpp-signed-bitwise)
 #else
     WARN_LOG("POSIX_SPAWN_SETSID not defined, child process will not get a new session ID via "
              "posix_spawnattr_setflags.");
 #endif
     if (spawn_flags != 0)
     {
-        if ((ret = posix_spawnattr_setflags(&attr, spawn_flags)) != 0)
+        if (int ret = posix_spawnattr_setflags(&attr, spawn_flags); ret != 0)
         {
             THROW_POSIX_EXCEPTION(ret, "posix_spawnattr_setflags");
         }
     }
 
-    if ((ret = posix_spawnp(&pid, file_to_exec, &file_actions, &attr, argv_for_spawn, environ))
-        != 0)
+    if (int ret = posix_spawnp(&pid, file_to_exec, &file_actions, &attr, argv_for_spawn, environ);
+        ret != 0)
     {
         THROW_POSIX_EXCEPTION(ret, absl::StrCat("posix_spawnp failed for ", file_to_exec));
     }
