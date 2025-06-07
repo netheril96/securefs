@@ -839,21 +839,21 @@ wrap_as_unmountable_fuse(std::shared_ptr<FuseHighLevelOpsBase> ops)
 
 bool is_mounted_by_fuse(std::string_view path)
 {
-    if (is_fuse_t())
+    try
     {
-        fuse_stat st{};
-        try
+        if (is_fuse_t())
         {
+            fuse_stat st{};
             OSService(std::string(path))
                 .stat(std::string(SpecialFiledFuseHighLevelOps::kSpecialFileName), &st);
             return (st.st_mode & S_IFMT) == S_IFDIR;
         }
-        catch (const ExceptionBase&)
-        {
-            return false;
-        }
+        return OSService(std::string(path)).query_if_mounted_by_ioctl();
     }
-    return OSService(std::string(path)).query_if_mounted_by_ioctl();
+    catch (const ExceptionBase&)
+    {
+        return false;
+    }
 }
 void trigger_unmount_by_fuse(std::string_view path)
 {

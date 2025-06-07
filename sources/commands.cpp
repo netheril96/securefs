@@ -933,16 +933,9 @@ private:
             args, internal_mount_data.SerializeAsString());
         while (true)
         {
-            try
+            if (is_mounted_by_fuse(mount_point.getValue()))
             {
-                if (is_mounted_by_fuse(mount_point.getValue()))
-                {
-                    return 0;
-                }
-            }
-            catch (const ExceptionBase&)
-            {
-                // pass
+                return 0;
             }
             auto exit_code = child->exit_code();
             if (exit_code.has_value())
