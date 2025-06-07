@@ -139,7 +139,10 @@ def securefs_mount(
 
 def securefs_unmount(p: subprocess.Popen | None, mount_point: str):
     if p is None:
+        logging.info("Unmounting %s", mount_point)
         subprocess.check_call([SECUREFS_BINARY, "unmount", mount_point])
+        while ismount(mount_point):
+            time.sleep(0.01)
         return
     with p:
         subprocess.check_call([SECUREFS_BINARY, "unmount", mount_point])
@@ -374,6 +377,7 @@ def make_test_case(
         mount_point: str
         securefs_process: Optional[subprocess.Popen]
         config_file: Optional[str]
+        has_mounted: bool = False
 
         @classmethod
         def setUpClass(cls):
@@ -410,13 +414,15 @@ def make_test_case(
                 plain_text_names=plain_text_names,
                 background=background,
             )
+            cls.has_mounted = True
 
         @classmethod
         def unmount(cls):
-            if cls.securefs_process is None:
+            if not cls.has_mounted:
                 return
             securefs_unmount(cls.securefs_process, cls.mount_point)
             cls.securefs_process = None
+            cls.has_mounted = False
 
         if fmt == RepoFormat.LITE and not plain_text_names and not is_freebsd:
 
