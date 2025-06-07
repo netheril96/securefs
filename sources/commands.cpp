@@ -940,6 +940,8 @@ private:
             auto exit_code = child->exit_code();
             if (exit_code.has_value())
             {
+                ERROR_LOG("Child process for mounting unexpectedly exited with code %d",
+                          *exit_code);
                 return *exit_code ? *exit_code : -1;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
