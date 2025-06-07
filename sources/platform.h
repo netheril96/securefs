@@ -263,7 +263,6 @@ public:
     static void read_password_with_confirmation(const char* prompt,
                                                 CryptoPP::AlignedSecByteBlock* output);
     static std::string stringify_system_error(int errcode);
-    static void enter_background();
     static bool is_process_running(pid_t pid);
     static pid_t get_current_process_id();
 #ifdef _WIN32
@@ -275,8 +274,6 @@ public:
         // Returns `nullopt` if not exited yet.
         virtual std::optional<int> exit_code() = 0;
     };
-    static int execute_child_process_with_data_and_wait(absl::Span<const std::string_view> args,
-                                                        std::string_view stdin_data);
     static std::unique_ptr<ChildProcess>
     execute_child_process_with_data(absl::Span<const std::string_view> args,
                                     std::string_view stdin_data);
