@@ -12,7 +12,7 @@ Mount an existing filesystem
 - **--keyfile**: An optional path to a key file to use in addition to or in place of password. *Unset by default.*
 - **--askpass**: When provided, ask for password even if a key file is used. password+keyfile provides even stronger security than one of them alone.. *This is a switch arg. Default: false.*
 - **-s** or **--single**: Single threaded mode. *This is a switch arg. Default: false.*
-- **-b** or **--background**: Run securefs in the background (currently no effect on Windows). *This is a switch arg. Default: false.*
+- **-b** or **--background**: Spawn a child process to mount in the background (also available on Windows). *This is a switch arg. Default: false.*
 - **-i** or **--insecure**: Disable all integrity verification (insecure mode). *This is a switch arg. Default: false.*
 - **-x** or **--noxattr**: Disable built-in xattr support. *This is a switch arg. Default: false.*
 - **-v** or **--verbose**: Logs more verbose messages. *This is a switch arg. Default: false.*
