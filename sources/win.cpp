@@ -1426,7 +1426,7 @@ std::string OSService::win_quote_argv(std::string_view arg)
                 quoted_arg.push_back('\\');
             }
             // If the sequence is followed by a quote, double the backslashes again
-            if (i + backslash_count < arg.size() && arg[i + backslash_count] == '"')
+            if (i + backslash_count >= arg.size() || arg[i + backslash_count] == '"')
             {
                 for (size_t j = 0; j < backslash_count; ++j)
                 {
