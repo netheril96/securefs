@@ -71,7 +71,7 @@ public:
                                    const char* funcsig,
                                    int lineno,
                                    const std::initializer_list<WrappedFuseArg>& args,
-                                   Logger* logger = global_logger) -> decltype(func())
+                                   Logger* logger = global_logger.get()) -> decltype(func())
     {
         print_function_starts(logger, funcsig, lineno, args.begin(), args.size());
         try

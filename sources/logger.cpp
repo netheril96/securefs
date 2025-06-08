@@ -131,9 +131,12 @@ Logger::~Logger()
         fclose(m_fp);
 }
 
-Logger* Logger::create_stderr_logger() { return new Logger(stderr, false); }
+std::unique_ptr<Logger> Logger::create_stderr_logger()
+{
+    return std::unique_ptr<Logger>{new Logger(stderr, false)};
+}
 
-Logger* Logger::create_file_logger(const std::string& path)
+std::unique_ptr<Logger> Logger::create_file_logger(const std::string& path)
 {
 #ifdef _WIN32
     FILE* fp = _wfopen(widen_string(path).c_str(), L"a");
@@ -159,10 +162,10 @@ Logger* Logger::create_file_logger(const std::string& path)
         throw_windows_exception(L"SetHandleInformation");
     }
 #endif
-    return new Logger(fp, true);
+    return std::unique_ptr<Logger>{new Logger(fp, true)};
 }
 
-Logger* Logger::create_logger_from_native_handle(int64_t native_handle)
+std::unique_ptr<Logger> Logger::create_logger_from_native_handle(int64_t native_handle)
 {
 #ifdef _WIN32
     int fd = _open_osfhandle(native_handle, _O_APPEND);
@@ -175,15 +178,14 @@ Logger* Logger::create_logger_from_native_handle(int64_t native_handle)
     {
         THROW_POSIX_EXCEPTION(errno, "_fdopen");
     }
-    return new Logger(fp, true);
 #else
     auto fp = fdopen(static_cast<int>(native_handle), "a");
     if (!fp)
     {
         THROW_POSIX_EXCEPTION(errno, "fdopen");
     }
-    return new Logger(fp, true);
 #endif
+    return std::unique_ptr<Logger>{new Logger(fp, true)};
 }
 int64_t Logger::get_native_handle() const
 {
@@ -204,5 +206,5 @@ int64_t Logger::get_native_handle() const
 #endif
 }
 
-Logger* global_logger = Logger::create_stderr_logger();
+std::unique_ptr<Logger> global_logger = Logger::create_stderr_logger();
 }    // namespace securefs

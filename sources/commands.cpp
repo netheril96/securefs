@@ -911,9 +911,7 @@ private:
     {
         if (log.isSet())
         {
-            auto logger = Logger::create_file_logger(log.getValue());
-            delete global_logger;
-            global_logger = logger;
+            global_logger = Logger::create_file_logger(log.getValue());
         }
         if (global_logger && verbose.getValue())
             global_logger->set_level(LoggingLevel::kLogVerbose);
