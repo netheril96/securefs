@@ -271,7 +271,7 @@ int internal_mount(const InternalMountData& mount_data)
 {
     if (mount_data.has_background_logging())
     {
-        delete global_logger;
+        global_logger.reset();
         if (mount_data.background_logging().has_logger_handle())
         {
             global_logger = Logger::create_logger_from_native_handle(

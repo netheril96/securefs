@@ -52,9 +52,9 @@ private:
                 absl::FunctionRef<void(std::FILE*)> output_fun);
 
 public:
-    static Logger* create_stderr_logger();
-    static Logger* create_file_logger(const std::string& path);
-    static Logger* create_logger_from_native_handle(int64_t native_handle);
+    static std::unique_ptr<Logger> create_stderr_logger();
+    static std::unique_ptr<Logger> create_file_logger(const std::string& path);
+    static std::unique_ptr<Logger> create_logger_from_native_handle(int64_t native_handle);
     int64_t get_native_handle() const;
 
     template <typename... Args>
@@ -76,7 +76,7 @@ public:
     ~Logger();
 };
 
-extern Logger* global_logger;
+extern std::unique_ptr<Logger> global_logger;
 
 #ifdef _MSC_VER
 #define FULL_FUNCTION_NAME __FUNCSIG__
