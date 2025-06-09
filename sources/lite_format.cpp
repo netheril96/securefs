@@ -331,7 +331,7 @@ namespace
         static constexpr size_t kHashSize = 32;
         static constexpr size_t kComponentSizeInSymlink = 60;
 
-        static constexpr std::string_view kLongNameSuffix = "___", kLegacyLongNameSuffix = "...";
+        static constexpr std::string_view kLongNameSuffix = "...";
 
         NewStyleNameTranslator(const key_type& name_master_key, unsigned long_name_threshold)
             : AESSIVBasedNameTranslator(name_master_key), threshold_(long_name_threshold)
@@ -415,8 +415,7 @@ namespace
         std::variant<InvalidNameTag, LongNameTag, std::string>
         decrypt_path_component(std::string_view path) override
         {
-            if (absl::EndsWith(path, kLongNameSuffix)
-                || absl::EndsWith(path, kLegacyLongNameSuffix))
+            if (absl::EndsWith(path, kLongNameSuffix))
             {
                 return LongNameTag{};
             }
