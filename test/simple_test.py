@@ -813,7 +813,7 @@ reference_data_dir = shutil.copytree(
 )
 
 
-def _compare_directory(self: unittest.TestCase, dir1: str, dir2: str):
+def _compare_directory(self: unittest.TestCase, dir1: str, dir2: str) -> None:
     listing1 = list_dir_recursive(dir1, relpath=True)
     listing2 = list_dir_recursive(dir2, relpath=True)
 
@@ -883,6 +883,63 @@ def make_regression_test(version: int, pbkdf: str, mode: SecretInputMode, padded
     return RegressionTestBase
 
 
+@parametrize(
+    tuple(
+        itertools.product(
+            RepoFormat,
+            SecretInputMode,
+            [False, True],
+        )
+    )
+)
+def make_new_regression_test(
+    repo_format: RepoFormat, mode: SecretInputMode, padded: bool
+) -> None | type[unittest.TestCase]:
+    if (
+        mode == SecretInputMode.KEYFILE2
+        or mode == SecretInputMode.PASSWORD_WITH_KEYFILE2
+    ):
+        return
+
+    class NewRegressionTestBase(unittest.TestCase):
+        """
+        Ensures that future versions of securefs can read old versions just fine.
+        """
+
+        def test_regression(self):
+            mount_point = get_mount_point()
+            if repo_format == RepoFormat.LITE:
+                data_dir = "new-lite"
+            elif repo_format == RepoFormat.FULL:
+                data_dir = "new-full"
+            else:
+                raise ValueError(f"Unknown repo format: {repo_format}")
+            if padded:
+                data_dir += "-padded"
+            config_filename = os.path.join(
+                reference_data_dir, data_dir, f".config.{mode.name}.pb"
+            )
+            p = securefs_mount(
+                os.path.join(reference_data_dir, data_dir),
+                mount_point,
+                password="abc" if mode & SecretInputMode.PASSWORD else None,
+                keyfile=(
+                    os.path.join(reference_data_dir, "keyfile")
+                    if mode & SecretInputMode.KEYFILE
+                    else None
+                ),
+                config_filename=config_filename,
+            )
+            try:
+                _compare_directory(
+                    self, os.path.join(reference_data_dir, "new-plain"), mount_point
+                )
+            finally:
+                securefs_unmount(p, mount_point)
+
+    return NewRegressionTestBase
+
+
 class PlainTextNamesRegressionTestCase(unittest.TestCase):
     def test_regression(self):
         mount_point = get_mount_point()
@@ -924,6 +981,7 @@ class RepoLockerTestCase(unittest.TestCase):
         with open(os.path.join(data_dir, ".securefs.lock"), "w") as f:
             f.write(str(2**31 - 1))
         p = securefs_mount(data_dir=data_dir, mount_point=mount_point, password="123")
+        assert p
         try:
             with open(os.path.join(data_dir, ".securefs.lock"), "r") as f:
                 self.assertEqual(f.read(), str(p.pid))
