@@ -803,8 +803,10 @@ int FuseHighLevelOps::vgetattr(const char* path, fuse_stat* buf, const fuse_cont
             {
                 try
                 {
-                    auto virtual_file
-                        = opener_->open(root_->open_file_stream(enc_path, O_RDONLY, 0));
+                    auto physical_file = root_->open_file_stream(enc_path, O_RDONLY, 0);
+                    physical_file->lock(true);
+                    DEFER(physical_file->unlock());
+                    auto virtual_file = opener_->open(physical_file);
                     buf->st_size = virtual_file->size();
                 }
                 catch (const std::exception& e)
