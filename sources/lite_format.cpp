@@ -815,6 +815,7 @@ int FuseHighLevelOps::vgetattr(const char* path, fuse_stat* buf, const fuse_cont
                               get_type_name(e).get(),
                               path,
                               e.what());
+                    throw;
                 }
             }
         }
