@@ -807,10 +807,42 @@ def make_test_case(
     return SimpleSecureFSTestBase
 
 
-reference_data_dir = shutil.copytree(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "reference"),
-    f"tmp/{uuid.uuid4()}",
-)
+def list_dir_recursive(dirname: str, relpath=False) -> Set[str]:
+    # Note: os.walk does not work on Windows when crossing filesystem boundary.
+    # So we use this crude version instead.
+    try:
+        sub_filenames = os.listdir(dirname)
+    except OSError:
+        return set()
+    result = set()
+    for fn in sub_filenames:
+        fn = os.path.join(dirname, fn)
+        result.add(fn)
+        result.update(list_dir_recursive(fn))
+    if relpath:
+        return set(os.path.relpath(f, dirname) for f in result)
+    return result
+
+
+def copy_and_reform_reference_data():
+    reference_data_dir = shutil.copytree(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "reference"),
+        f"tmp/{uuid.uuid4()}",
+    )
+    # Normal Windows applications cannot deal with filenames ending with ...
+    # This is a mistake but for backwards compat we still have to test them.
+    # The workaround is to rename them after copying.
+    for dirpath, dirnames, filenames in os.walk(reference_data_dir):
+        for fn in itertools.chain(dirnames, filenames):
+            if fn.endswith("___"):
+                new_name = os.path.join(dirpath, fn[:-3] + "...")
+                if sys.platform == "win32":
+                    new_name = "\\\\?\\" + os.path.abspath(new_name)
+                os.rename(os.path.join(dirpath, fn), new_name)
+    return reference_data_dir
+
+
+reference_data_dir = copy_and_reform_reference_data()
 
 
 def _compare_directory(self: unittest.TestCase, dir1: str, dir2: str) -> None:
@@ -987,23 +1019,6 @@ class RepoLockerTestCase(unittest.TestCase):
                 self.assertEqual(f.read(), str(p.pid))
         finally:
             securefs_unmount(p, mount_point)
-
-
-def list_dir_recursive(dirname: str, relpath=False) -> Set[str]:
-    # Note: os.walk does not work on Windows when crossing filesystem boundary.
-    # So we use this crude version instead.
-    try:
-        sub_filenames = os.listdir(dirname)
-    except OSError:
-        return set()
-    result = set()
-    for fn in sub_filenames:
-        fn = os.path.join(dirname, fn)
-        result.add(fn)
-        result.update(list_dir_recursive(fn))
-    if relpath:
-        return set(os.path.relpath(f, dirname) for f in result)
-    return result
 
 
 def generate_keyfile():
