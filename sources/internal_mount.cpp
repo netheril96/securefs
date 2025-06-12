@@ -237,6 +237,7 @@ make_lite_format_fuse_high_level_ops(std::shared_ptr<OSService> os_service,
     name_flags.should_case_fold = mount_options.case_fold();
     name_flags.should_normalize_nfc = mount_options.unicode_normalize_nfc();
     name_flags.long_name_threshold = lite_params.long_name_threshold();
+    name_flags.long_name_suffix = lite_params.long_name_suffix();
 
     // NameTranslator
     auto name_trans = lite_format::make_name_translator(name_flags, name_master_key);

@@ -7,6 +7,7 @@
 #include "logger.h"
 #include "mystring.h"
 #include "myutils.h"
+#include "params.pb.h"
 #include "platform.h"
 #include "tags.h"
 #include "xattr_name.h"
@@ -325,17 +326,26 @@ namespace
     class NewStyleNameTranslator : public AESSIVBasedNameTranslator
     {
     private:
+        std::string long_name_suffix_;
         unsigned threshold_;
 
     public:
         static constexpr size_t kHashSize = 32;
         static constexpr size_t kComponentSizeInSymlink = 60;
 
-        static constexpr std::string_view kLongNameSuffix = "...";
-
-        NewStyleNameTranslator(const key_type& name_master_key, unsigned long_name_threshold)
-            : AESSIVBasedNameTranslator(name_master_key), threshold_(long_name_threshold)
+        static constexpr std::string_view kLegacyLongNameSuffix = "...";
+        // Default to "..." for backward compatibility if not specified.
+        NewStyleNameTranslator(const key_type& name_master_key,
+                               unsigned long_name_threshold,
+                               std::string long_name_suffix)
+            : AESSIVBasedNameTranslator(name_master_key)
+            , threshold_(long_name_threshold)
+            , long_name_suffix_(std::move(long_name_suffix))
         {
+            if (long_name_suffix_.empty())
+            {
+                long_name_suffix_ = kLegacyLongNameSuffix;
+            }
         }
 
         std::string encrypt_full_path(std::string_view path,
@@ -393,7 +403,7 @@ namespace
                                                  aes_buffer.data());
                     base32_encode(aes_buffer.data(), aes_buffer.size(), part);
                     result.append(part);
-                    result.append(kLongNameSuffix);
+                    result.append(long_name_suffix_);
                 }
             }
             if (out_encrypted_last_component != nullptr && !splits.empty()
@@ -415,7 +425,7 @@ namespace
         std::variant<InvalidNameTag, LongNameTag, std::string>
         decrypt_path_component(std::string_view path) override
         {
-            if (absl::EndsWith(path, kLongNameSuffix))
+            if (absl::EndsWith(path, long_name_suffix_))
             {
                 return LongNameTag{};
             }
@@ -1265,8 +1275,8 @@ make_name_translator(const NameNormalizationFlags& flags,
     std::shared_ptr<NameTranslator> inner;
     if (flags.long_name_threshold > 0)
     {
-        inner = std::make_shared<NewStyleNameTranslator>(name_master_key.get(),
-                                                         flags.long_name_threshold);
+        inner = std::make_shared<NewStyleNameTranslator>(
+            name_master_key.get(), flags.long_name_threshold, flags.long_name_suffix);
     }
     else
     {
@@ -1288,5 +1298,61 @@ std::string_view NameTranslator::get_last_component(std::string_view path)
 std::string_view NameTranslator::remove_last_component(std::string_view path)
 {
     return path.substr(0, path.rfind('/') + 1);
+}
+
+void change_long_name_suffix(const std::string& data_dir,
+                             DecryptedSecurefsParams& mutable_params,
+                             const std::string& new_long_name_suffix)
+{
+    if (new_long_name_suffix.empty())
+    {
+        throwInvalidArgumentException("new_long_name_suffix cannot be empty");
+    }
+    std::string_view old_suffix = mutable_params.lite_format_params().long_name_suffix();
+    if (old_suffix.empty())
+    {
+        old_suffix = NewStyleNameTranslator::kLegacyLongNameSuffix;
+    }
+    if (old_suffix == new_long_name_suffix)
+    {
+        return;
+    }
+
+    OSService root(data_dir);
+    std::vector<std::string> dirs_with_long_name_table;
+    root.recursive_traverse(".",
+                            [&](const std::string& dir, const std::string& name, int)
+                            {
+                                if (name == kLongNameTableFileName)
+                                {
+                                    dirs_with_long_name_table.push_back(dir);
+                                }
+                            });
+
+    for (const auto& dir : dirs_with_long_name_table)
+    {
+        auto full_dir_name = root.norm_path_narrowed(dir);
+        auto full_table_file_name
+            = root.norm_path_narrowed(absl::StrCat(dir, "/", kLongNameTableFileName));
+
+        LongNameLookupTable table(full_table_file_name, false);
+        LockGuard<LongNameLookupTable> lg(table);
+        auto hashes = table.list_hashes();
+        for (const auto& hash : hashes)
+        {
+            if (!absl::EndsWith(hash, old_suffix))
+            {
+                continue;
+            }
+            auto new_hash = absl::StrCat(hash.substr(0, hash.size() - old_suffix.size()),
+                                         new_long_name_suffix);
+            auto old_value = table.lookup(hash);
+            table.update_mapping(new_hash, old_value);
+            table.remove_mapping(hash);
+            root.rename(absl::StrCat(dir, "/", hash), absl::StrCat(dir, "/", new_hash));
+        }
+    }
+
+    mutable_params.mutable_lite_format_params()->set_long_name_suffix(new_long_name_suffix);
 }
 }    // namespace securefs::lite_format

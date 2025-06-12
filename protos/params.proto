@@ -46,6 +46,7 @@ message DecryptedSecurefsParams
         bytes xattr_key = 3;
         bytes padding_key = 4;
         optional uint32 long_name_threshold = 5;
+        string long_name_suffix = 6;
     }
 
     message FullFormatParams

@@ -260,6 +260,15 @@ private:
         128,
         "integer",
         cmdline()};
+    TCLAP::ValueArg<std::string> long_name_suffix_arg{
+        "",
+        "long-name-suffix",
+        "(For lite format only) The suffix to append to the encrypted names to indicate its real "
+        "name is in DB.",
+        false,
+        ".ll",
+        "integer",
+        cmdline()};
     TCLAP::ValueArg<std::string> case_handling{
         "",
         "case",
@@ -314,6 +323,8 @@ public:
                 params.mutable_lite_format_params()->set_long_name_threshold(
                     long_name_threshold.getValue());
             }
+            params.mutable_lite_format_params()->set_long_name_suffix(
+                long_name_suffix_arg.getValue());
         }
         else if (absl::EqualsIgnoreCase(format.getValue(), "full") || format.getValue() == "2")
         {
@@ -951,34 +962,6 @@ private:
     char short_name() const noexcept override { return 'm'; }
 
     const char* help_message() const noexcept override { return "Mount an existing filesystem"; }
-
-    lite_format::NameNormalizationFlags get_name_normalization_flags() const
-    {
-        lite_format::NameNormalizationFlags flags{};
-        if (plain_text_names.getValue())
-        {
-            flags.no_op = true;
-        }
-        else if (normalization.getValue() == "nfc")
-        {
-            flags.should_normalize_nfc = true;
-        }
-        else if (normalization.getValue() == "casefold")
-        {
-            flags.should_case_fold = true;
-        }
-        else if (normalization.getValue() == "casefold+nfc")
-        {
-            flags.should_normalize_nfc = true;
-            flags.should_case_fold = true;
-        }
-        else if (normalization.getValue() != "none")
-        {
-            throw_runtime_error("Invalid flag of --normalization: " + normalization.getValue());
-        }
-        flags.long_name_threshold = fsparams.lite_format_params().long_name_threshold();
-        return flags;
-    }
 };
 
 class VersionCommand : public CommandBase
@@ -1125,6 +1108,15 @@ class MigrateLongNameCommand : public CommandBase
 private:
     SinglePasswordHolder single_pass_holder_{cmdline()};
     Argon2idArgsHolder argon2{cmdline()};
+    TCLAP::ValueArg<std::string> long_name_suffix_arg{
+        "",
+        "long-name-suffix",
+        "(For lite format only) The suffix to append to the encrypted names to indicate its real "
+        "name is in DB.",
+        false,
+        ".ll",
+        "integer",
+        cmdline()};
 
     static constexpr size_t kDefaultLongNameThreshold = 128;
 
@@ -1154,30 +1146,35 @@ public:
         }
         if (params.lite_format_params().long_name_threshold() > 0)
         {
-            WARN_LOG("Already supports long name.");
-            return 0;
-        }
-        size_t max_filename_length = 0;
-        OSService::get_default().recursive_traverse(
-            single_pass_holder_.data_dir.getValue(),
-            [&](const std::string& dir, const std::string& name, int type)
-            {
-                if (type == S_IFLNK)
-                {
-                    throw_runtime_error("Cannot migrate when symbolic links are present.");
-                }
-                max_filename_length = std::max(max_filename_length, name.size());
-            });
-        size_t threshold;
-        if (max_filename_length < (kDefaultLongNameThreshold + 16) * 8 / 5)
-        {
-            threshold = kDefaultLongNameThreshold;
+            lite_format::change_long_name_suffix(
+                single_pass_holder_.data_dir.getValue(), params, long_name_suffix_arg.getValue());
         }
         else
         {
-            threshold = max_filename_length * 5 / 8 - 16;
+            size_t max_filename_length = 0;
+            OSService::get_default().recursive_traverse(
+                single_pass_holder_.data_dir.getValue(),
+                [&](const std::string& dir, const std::string& name, int type)
+                {
+                    if (type == S_IFLNK)
+                    {
+                        throw_runtime_error("Cannot migrate when symbolic links are present.");
+                    }
+                    max_filename_length = std::max(max_filename_length, name.size());
+                });
+            size_t threshold;
+            if (max_filename_length < (kDefaultLongNameThreshold + 16) * 8 / 5)
+            {
+                threshold = kDefaultLongNameThreshold;
+            }
+            else
+            {
+                threshold = max_filename_length * 5 / 8 - 16;
+            }
+            params.mutable_lite_format_params()->set_long_name_threshold(threshold);
+            params.mutable_lite_format_params()->set_long_name_suffix(
+                long_name_suffix_arg.getValue());
         }
-        params.mutable_lite_format_params()->set_long_name_threshold(threshold);
         auto encrypted_data
             = encrypt(params,
                       argon2.to_params(),
