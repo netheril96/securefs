@@ -6,6 +6,7 @@
 #include "lock_guard.h"
 #include "mystring.h"
 #include "myutils.h"
+#include "params.pb.h"
 #include "platform.h"
 #include "tags.h"
 #include "thread_local.h"
@@ -231,6 +232,7 @@ struct NameNormalizationFlags
     bool should_case_fold;
     bool should_normalize_nfc;
     unsigned long_name_threshold;
+    std::string long_name_suffix;
 };
 
 std::shared_ptr<NameTranslator>
@@ -429,4 +431,8 @@ private:
 
     std::string long_name_table_file_name(absl::string_view enc_path);
 };
+
+void change_long_name_suffix(const std::string& data_dir,
+                             DecryptedSecurefsParams& mutable_params,
+                             const std::string& new_long_name_suffix);
 }    // namespace securefs::lite_format

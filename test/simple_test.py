@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 # coding: utf-8
+import contextlib
 import ctypes
 import faulthandler
 import itertools
@@ -862,23 +863,53 @@ def make_regression_test(version: int, pbkdf: str, mode: SecretInputMode, padded
             config_filename = os.path.join(
                 reference_data_dir, data_dir, f".securefs.{pbkdf}.{mode.name}.json"
             )
-            p = securefs_mount(
-                os.path.join(reference_data_dir, data_dir),
-                mount_point,
-                password="abc" if mode & SecretInputMode.PASSWORD else None,
-                keyfile=(
-                    os.path.join(reference_data_dir, "keyfile")
-                    if mode & SecretInputMode.KEYFILE
-                    else None
-                ),
-                config_filename=config_filename,
-            )
-            try:
+
+            @contextlib.contextmanager
+            def mnt():
+                p = securefs_mount(
+                    os.path.join(reference_data_dir, data_dir),
+                    mount_point,
+                    password="abc" if mode & SecretInputMode.PASSWORD else None,
+                    keyfile=(
+                        os.path.join(reference_data_dir, "keyfile")
+                        if mode & SecretInputMode.KEYFILE
+                        else None
+                    ),
+                    config_filename=config_filename,
+                )
+                try:
+                    yield p
+                finally:
+                    securefs_unmount(p, mount_point)
+
+            with mnt():
                 _compare_directory(
                     self, os.path.join(reference_data_dir, "plain"), mount_point
                 )
-            finally:
-                securefs_unmount(p, mount_point)
+
+            if version == 4 and mode == SecretInputMode.PASSWORD:
+                # Test migration
+                subprocess.check_call(
+                    [
+                        SECUREFS_BINARY,
+                        "migrate-long-name",
+                        "--config",
+                        config_filename,
+                        os.path.join(reference_data_dir, data_dir),
+                        "--pass",
+                        "abc",
+                        "--argon2-m",
+                        "32",
+                        "--argon2-t",
+                        "2",
+                        "--argon2-p",
+                        "1",
+                    ]
+                )
+                with mnt():
+                    long_name = "k" * 217
+                    os.mkdir(os.path.join(mount_point, long_name))
+                    os.rmdir(os.path.join(mount_point, long_name))
 
     return RegressionTestBase
 
@@ -919,23 +950,51 @@ def make_new_regression_test(
             config_filename = os.path.join(
                 reference_data_dir, data_dir, f".config.{mode.name}.pb"
             )
-            p = securefs_mount(
-                os.path.join(reference_data_dir, data_dir),
-                mount_point,
-                password="abc" if mode & SecretInputMode.PASSWORD else None,
-                keyfile=(
-                    os.path.join(reference_data_dir, "keyfile")
-                    if mode & SecretInputMode.KEYFILE
-                    else None
-                ),
-                config_filename=config_filename,
-            )
-            try:
+
+            @contextlib.contextmanager
+            def mnt():
+                p = securefs_mount(
+                    os.path.join(reference_data_dir, data_dir),
+                    mount_point,
+                    password="abc" if mode & SecretInputMode.PASSWORD else None,
+                    keyfile=(
+                        os.path.join(reference_data_dir, "keyfile")
+                        if mode & SecretInputMode.KEYFILE
+                        else None
+                    ),
+                    config_filename=config_filename,
+                )
+                try:
+                    yield p
+                finally:
+                    securefs_unmount(p, mount_point)
+
+            with mnt():
                 _compare_directory(
                     self, os.path.join(reference_data_dir, "new-plain"), mount_point
                 )
-            finally:
-                securefs_unmount(p, mount_point)
+            if format == RepoFormat.LITE and mode == SecretInputMode.PASSWORD:
+                # Test migration
+                subprocess.check_call(
+                    [
+                        SECUREFS_BINARY,
+                        "migrate-long-name",
+                        "--config",
+                        config_filename,
+                        os.path.join(reference_data_dir, data_dir),
+                        "--pass",
+                        "abc",
+                        "--long-name-suffix",
+                        ".long",
+                    ]
+                )
+                with mnt():
+                    long_name = "k" * 217
+                    os.mkdir(os.path.join(mount_point, long_name))
+                    os.rmdir(os.path.join(mount_point, long_name))
+                    _compare_directory(
+                        self, os.path.join(reference_data_dir, "new-plain"), mount_point
+                    )
 
     return NewRegressionTestBase
 
