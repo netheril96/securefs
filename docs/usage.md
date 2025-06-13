@@ -47,6 +47,7 @@ Create a new filesystem
 - **--block-size**: Block size for files (ignored for fs format 1). *Default: 4096.*
 - **--max-padding**: Maximum number of padding (the unit is byte) to add to all files in order to obfuscate their sizes. Each file has a different padding. Enabling this has a large performance cost.. *Default: 0.*
 - **--long-name-threshold**: (For lite format only) when the filename component exceeds this length, it will be stored encrypted in a SQLite database.. *Default: 128.*
+- **--long-name-suffix**: (For lite format only) The suffix to append to the encrypted names to indicate its real name is in DB.. *Default: .ll.*
 - **--case**: Either sensitive or insensitive. Changes how full format stores its filenames. Not applicable to lite format.. *Default: sensitive.*
 - **--uninorm**: Either sensitive or insensitive. Changes how full format stores its filenames. Not applicable to lite format.. *Default: sensitive.*
 ## chpass
@@ -86,6 +87,7 @@ Migrate a lite format repository without long name support.
 - **--argon2-t**: The time cost for argon2 algorithm. *Default: 30.*
 - **--argon2-m**: The memory cost for argon2 algorithm (in terms of KiB). *Default: 262144.*
 - **--argon2-p**: The parallelism for argon2 algorithm. *Default: 4.*
+- **--long-name-suffix**: (For lite format only) The suffix to append to the encrypted names to indicate its real name is in DB.. *Default: .ll.*
 ## ismount
 Check if the given path is a securefs mount point
 
