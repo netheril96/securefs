@@ -1,3 +1,4 @@
+#include "myutils.h"
 #include "test_common.h"
 
 namespace securefs
@@ -13,6 +14,10 @@ namespace
 
     TEST_CASE("Test symlink, stat, and readlink")
     {
+        if (is_windows())
+        {
+            return;
+        }
         auto& os_service = OSService::get_default();
 
         // Create a temporary file and symlink

@@ -247,6 +247,7 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops,
                 == 0);
     }
 
+    if (resolve_symlinks == ResolveSymlinks::YES || !is_windows())
     {
         auto symlink_location = absl::StrCat("/cbd/", kLongFileNameExample2, "/", "sym");
         // Target is relative to the location of the symlink itself

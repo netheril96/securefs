@@ -630,7 +630,7 @@ public:
                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                                nullptr,
                                create_flags,
-                               FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
+                               FILE_ATTRIBUTE_NORMAL,
                                nullptr);
         if (m_handle == INVALID_HANDLE_VALUE)
         {
@@ -961,7 +961,7 @@ void OSService::utimens(const std::string& path, const fuse_timespec ts[2]) cons
                             FILE_SHARE_READ | FILE_SHARE_DELETE | FILE_SHARE_WRITE,
                             nullptr,
                             OPEN_EXISTING,
-                            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                            FILE_FLAG_BACKUP_SEMANTICS,
                             nullptr);
     if (hd == INVALID_HANDLE_VALUE)
         THROW_WINDOWS_EXCEPTION_WITH_PATH(GetLastError(), L"CreateFileW", npath);
@@ -983,7 +983,7 @@ bool OSService::stat(const std::string& path, fuse_stat* stat) const
                                 FILE_SHARE_READ | FILE_SHARE_DELETE | FILE_SHARE_WRITE,
                                 nullptr,
                                 OPEN_EXISTING,
-                                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                                FILE_FLAG_BACKUP_SEMANTICS,
                                 nullptr);
     if (handle == INVALID_HANDLE_VALUE)
     {
