@@ -58,7 +58,7 @@ jobs:
         with:
           submodules: true
       - name: install
-        run: sudo apt update && sudo apt upgrade && sudo apt install -y fuse libfuse-dev python3-venv clang
+        run: sudo apt update && sudo apt upgrade && sudo apt install -y fuse libfuse-dev python3-venv clang linux-libc-dev
       - name: venv
         run: |
           python3 -m venv .venv;

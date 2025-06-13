@@ -30,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: install
-        run: sudo apt update && sudo apt upgrade && sudo apt install fuse libfuse-dev clang-15 python3-venv
+        run: sudo apt update && sudo apt upgrade && sudo apt install fuse libfuse-dev clang-15 python3-venv linux-libc-dev
       - name: venv
         run: |
           python3 -m venv .venv;

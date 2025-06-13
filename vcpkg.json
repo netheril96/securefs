@@ -13,7 +13,8 @@
             ]
         },
         "uni-algo",
-        "protobuf"
+        "protobuf",
+        "openssl"
     ],
     "features": {
         "mimalloc": {
