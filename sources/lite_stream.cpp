@@ -1,5 +1,6 @@
 #include "lite_stream.h"
 #include "crypto.h"
+#include "crypto_wrappers.h"
 #include "logger.h"
 #include "myutils.h"
 
@@ -99,13 +100,14 @@ AESGCMCryptStream::AESGCMCryptStream(std::shared_ptr<StreamBase> stream,
 
     if (rc == 0)
     {
-        generate_random(id.data(), id.size());
+        securefs::libcrypto::generate_random(MutableRawBuffer(id.data(), id.size()));
         m_stream->write(id.data(), 0, id.size());
         m_padding_size = calc.compute_padding(id);
         m_auxiliary.resize(sizeof(std::uint32_t) + m_padding_size, 0);
         if (m_padding_size)
         {
-            generate_random(m_auxiliary.data(), m_auxiliary.size());
+            securefs::libcrypto::generate_random(
+                MutableRawBuffer(m_auxiliary.data(), m_auxiliary.size()));
             m_stream->write(m_auxiliary.data() + sizeof(std::uint32_t), id.size(), m_padding_size);
         }
     }
@@ -225,7 +227,7 @@ void AESGCMCryptStream::write_multi_blocks(offset_type start_block,
                              m_auxiliary.data());
             do
             {
-                generate_random(iv, get_iv_size());
+                securefs::libcrypto::generate_random(MutableRawBuffer(iv, get_iv_size()));
             } while (is_all_zeros(iv, get_iv_size()));
             m_encryptor.EncryptAndAuthenticate(ciphertext,
                                                mac,

@@ -2,6 +2,7 @@
 #include <doctest/doctest.h>
 
 #include "crypto.h"
+#include "crypto_wrappers.h"
 #include "lite_stream.h"
 #include "logger.h"
 #include "myutils.h"
@@ -314,7 +315,7 @@ TEST_CASE("Test streams")
         // Test that the `padding_aes` is stateless
         CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption second_padding_aes(key.data(), key.size());
         byte plaintext[16], ciphertext[16], second_ciphertext[16];
-        securefs::generate_random(plaintext, sizeof(plaintext));
+        securefs::libcrypto::generate_random(securefs::MutableRawBuffer(plaintext));
         padding_aes.ProcessData(ciphertext, plaintext, sizeof(ciphertext));
         second_padding_aes.ProcessData(second_ciphertext, plaintext, sizeof(second_ciphertext));
         REQUIRE(memcmp(ciphertext, second_ciphertext, sizeof(ciphertext)) == 0);

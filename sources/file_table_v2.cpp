@@ -1,5 +1,5 @@
 #include "file_table_v2.h"
-#include "crypto.h"
+#include "crypto_wrappers.h"
 #include "exceptions.h"
 #include "files.h"
 #include "lock_guard.h"
@@ -93,7 +93,7 @@ FileTable::Shard& FileTable::find_shard(const id_type& id)
 FilePtrHolder FileTable::create_as(int type)
 {
     id_type id;
-    generate_random(id.data(), id.size());
+    securefs::libcrypto::generate_random(MutableRawBuffer(id.data(), id.size()));
     auto& s = find_shard(id);
     LockGuard<Mutex> lg(s.mu);
     auto [data, meta] = io_->create(id);

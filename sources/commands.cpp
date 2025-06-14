@@ -1,6 +1,7 @@
 #include "commands.h"
 #include "btree_dir.h"
 #include "crypto.h"
+#include "crypto_wrappers.h"
 #include "exceptions.h"
 #include "files.h"
 #include "full_format.h"
@@ -292,7 +293,7 @@ private:
     static void randomize(std::string* str, size_t size)
     {
         str->resize(size);
-        generate_random(str->data(), str->size());
+        libcrypto::generate_random(MutableRawBuffer(*str));
     }
 
 public:
@@ -477,7 +478,7 @@ public:
     {
         auto original_path = data_dir_holder_.get_real_config_path_for_reading();
         byte buffer[16];
-        generate_random(buffer, array_length(buffer));
+        libcrypto::generate_random(MutableRawBuffer(buffer));
         auto tmp_path = original_path + hexify(buffer, array_length(buffer));
         auto stream = OSService::get_default().open_file_stream(original_path, O_RDONLY, 0644);
         auto params = decrypt(

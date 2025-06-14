@@ -1,6 +1,7 @@
 #include "lite_format.h"
 #include "apple_xattr_workaround.h"
 #include "crypto.h"
+#include "crypto_wrappers.h"
 #include "exceptions.h"
 #include "lite_long_name_lookup_table.h"
 #include "lock_guard.h"
@@ -80,7 +81,7 @@ void StreamOpener::validate()
 std::vector<byte> XattrCryptor::encrypt(const char* value, size_t size)
 {
     std::vector<byte> result(infer_encrypted_size(size));
-    generate_random(result.data(), iv_size_);
+    securefs::libcrypto::generate_random(MutableRawBuffer(result.data(), iv_size_));
     crypt_.get().enc.EncryptAndAuthenticate(result.data() + iv_size_,
                                             result.data() + (result.size() - kMacSize),
                                             kMacSize,

@@ -1,5 +1,6 @@
 #include "test_common.h"
 #include "crypto.h"
+#include "crypto_wrappers.h"
 #include "fuse_high_level_ops_base.h"
 #include "lite_format.h"
 #include "lite_long_name_lookup_table.h"
@@ -169,7 +170,7 @@ void test_fuse_ops(FuseHighLevelOpsBase& ops,
         // Asserts read and write
 
         std::vector<char> written(333), read(444);
-        generate_random(written.data(), written.size());
+        libcrypto::generate_random(MutableRawBuffer(written));
         fuse_file_info write_info{};
         write_info.flags = O_WRONLY;
         REQUIRE(ops.vopen(absl::StrCat("/", kLongFileNameExample1).c_str(), &write_info, &ctx)

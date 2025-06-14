@@ -1,6 +1,8 @@
 #include "crypto.h"
+#include "crypto_wrappers.h"
 #include "myutils.h"
 #include "platform.h"
+
 #include <doctest/doctest.h>
 
 #include <cryptopp/base32.h>
@@ -22,7 +24,7 @@ TEST_CASE("Test endian")
 TEST_CASE("Test conversion of hex")
 {
     securefs::id_type id;
-    securefs::generate_random(id.data(), id.size());
+    securefs::libcrypto::generate_random(securefs::MutableRawBuffer(id.data(), id.size()));
     auto hex = securefs::hexify(id);
     securefs::id_type id_copy;
     securefs::parse_hex(hex, id_copy.data(), id_copy.size());
@@ -56,7 +58,7 @@ TEST_CASE("our base32")
         if (i > 0)
         {
             input.resize(i, 0);
-            securefs::generate_random((byte*)input.data(), i);
+            securefs::libcrypto::generate_random(securefs::MutableRawBuffer(input));
         }
         securefs::base32_encode((const byte*)input.data(), i, output);
         CAPTURE(output);
@@ -75,7 +77,7 @@ TEST_CASE("our base32 against CryptoPP")
         if (i > 0)
         {
             input.resize(i, 0);
-            securefs::generate_random((byte*)input.data(), i);
+            securefs::libcrypto::generate_random(securefs::MutableRawBuffer(input));
         }
         securefs::base32_encode((const byte*)input.data(), i, output);
 

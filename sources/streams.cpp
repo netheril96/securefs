@@ -1,5 +1,6 @@
 #include "streams.h"
 #include "crypto.h"
+#include "crypto_wrappers.h"
 #include "exceptions.h"
 #include "myutils.h"
 
@@ -386,7 +387,7 @@ namespace internal
                 assert(meta_buffer <= buffer.data() + buffer.size());
                 do
                 {
-                    generate_random(meta_buffer, get_iv_size());
+                    libcrypto::generate_random(MutableRawBuffer(meta_buffer, get_iv_size()));
                 } while (is_all_zeros(meta_buffer, get_iv_size()));
                 auto this_block_size = std::min(m_block_size, data_buffer_size - i);
                 assert(data_buffer + this_block_size <= buffer.data() + buffer.size());
@@ -520,7 +521,7 @@ namespace internal
             byte* iv = buffer.get();
             byte* mac = iv + get_iv_size();
             byte* ciphertext = mac + get_mac_size();
-            generate_random(iv, get_iv_size());
+            libcrypto::generate_random(MutableRawBuffer(iv, get_iv_size()));
 
             m_enc.EncryptAndAuthenticate(ciphertext,
                                          mac,
@@ -597,7 +598,7 @@ PaddedStream::PaddedStream(std::shared_ptr<StreamBase> delegate, unsigned paddin
     if (m_delegate->size() < padding_size)
     {
         auto buffer = make_unique_array<byte>(padding_size);
-        generate_random(buffer.get(), padding_size);
+        libcrypto::generate_random(MutableRawBuffer(buffer.get(), padding_size));
         m_delegate->write(buffer.get(), 0, padding_size);
     }
 }

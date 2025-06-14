@@ -151,12 +151,6 @@ bool AES_SIV::decrypt_and_verify(const void* ciphertext,
     return CryptoPP::VerifyBufsEqual(static_cast<const byte*>(siv), temp_iv, AES_SIV::IV_SIZE);
 }
 
-void generate_random(void* buffer, size_t size)
-{
-    static thread_local CryptoPP::AutoSeededRandomPool rng;
-    rng.GenerateBlock(static_cast<byte*>(buffer), size);
-}
-
 void hmac_sha256_calculate(
     const void* message, size_t msg_len, const void* key, size_t key_len, void* mac, size_t mac_len)
 {

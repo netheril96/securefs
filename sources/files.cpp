@@ -1,5 +1,6 @@
 #include "files.h"
 #include "crypto.h"
+#include "crypto_wrappers.h"
 #include "exceptions.h"
 #include "myutils.h"
 #include "stat_workaround.h"
@@ -380,7 +381,7 @@ void FileBase::setxattr(const char* name, const char* value, size_t size, int fl
     byte meta[XATTR_MAC_LENGTH + XATTR_IV_LENGTH];
     byte* iv = meta;
     byte* mac = iv + XATTR_IV_LENGTH;
-    generate_random(iv, XATTR_IV_LENGTH);
+    libcrypto::generate_random(MutableRawBuffer(iv, XATTR_IV_LENGTH));
 
     auto name_len = wrapped_name.size();
     auto header = make_unique_array<byte>(name_len + ID_LENGTH);

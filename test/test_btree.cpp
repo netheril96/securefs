@@ -1,5 +1,6 @@
 #include "btree_dir.h"
 #include "crypto.h"
+#include "crypto_wrappers.h"
 #include "myutils.h"
 #include "test_common.h"
 
@@ -89,7 +90,7 @@ namespace
             else if (p < prob_get + prob_add)
             {
                 auto name = random_unicode_string(name_size_dist(get_random_number_engine()));
-                generate_random(id.data(), id.size());
+                libcrypto::generate_random(MutableRawBuffer(id.data(), id.size()));
                 type = S_IFREG;
                 bool added = dir.add_entry(name, id, type);
                 bool added_prime = reference.add_entry(name, id, type);

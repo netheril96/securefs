@@ -104,6 +104,7 @@ jobs:
           arch: ${{ matrix.qemu_arch }}
           apk-tools-url: ${{ matrix.apk_tools_url }}
           packages: >
+            bash
             curl
             git
             cmake
@@ -346,7 +347,7 @@ jobs:
           version: '14.2'
           shell: bash
           run: |
-            sudo pkg install -y cmake git python311 zip curl pkgconf ninja fusefs-libs
+            sudo pkg install -y cmake git python311 zip curl pkgconf ninja fusefs-libs gmake
             if ! sudo kldstat -m fusefs > /dev/null 2>&1; then
                sudo kldload fusefs
             fi

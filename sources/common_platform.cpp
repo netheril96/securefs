@@ -1,4 +1,4 @@
-#include "crypto.h"
+#include "crypto_wrappers.h"
 #include "exceptions.h"
 #include "myutils.h"
 #include "platform.h"
@@ -17,7 +17,7 @@ const OSService& OSService::get_default()
 std::string OSService::temp_name(std::string_view prefix, std::string_view suffix)
 {
     byte random[16];
-    generate_random(random, array_length(random));
+    libcrypto::generate_random(MutableRawBuffer(random));
     std::string result;
     result.reserve(prefix.size() + 32 + suffix.size());
     result.append(prefix.data(), prefix.size());

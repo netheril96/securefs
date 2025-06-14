@@ -1,6 +1,7 @@
 #include "params_io.h"
 
 #include "crypto.h"
+#include "crypto_wrappers.h"
 #include "exceptions.h"
 #include "mystring.h"
 #include "myutils.h"
@@ -147,7 +148,7 @@ namespace
     void randomize(std::string* str, size_t size)
     {
         str->resize(size);
-        generate_random(str->data(), str->size());
+        libcrypto::generate_random(MutableRawBuffer(*str));
     }
     key_type compute_password_derived_key(const EncryptedSecurefsParams& encparams,
                                           absl::Span<const byte> password,

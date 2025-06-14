@@ -125,22 +125,25 @@ if(SECUREFS_USE_VCPKG)
     target_link_libraries(securefs-static PUBLIC unofficial::argon2::libargon2)
     find_package(unofficial-sqlite3 CONFIG REQUIRED)
     target_link_libraries(securefs-static PUBLIC unofficial::sqlite3::sqlite3)
+    find_package(OpenSSL REQUIRED)
+    target_link_libraries(securefs-static PUBLIC OpenSSL::Crypto)
 else()
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(ARGON2 libargon2 REQUIRED)
     pkg_check_modules(SQLITE sqlite3 REQUIRED)
     pkg_check_modules(CRYPTOPP libcryptopp REQUIRED)
+    pkg_check_modules(OpenSSL libcrypto REQUIRED)
 
     target_include_directories(
         securefs-static SYSTEM
         PUBLIC ${ARGON2_INCLUDE_DIRS} ${SQLITE_INCLUDE_DIRS}
-               ${CRYPTOPP_INCLUDE_DIRS})
+               ${CRYPTOPP_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIRS})
     target_link_libraries(
         securefs-static PUBLIC ${CRYPTOPP_LDFLAGS} ${ARGON2_LDFLAGS}
-                               ${SQLITE_LDFLAGS})
+                               ${SQLITE_LDFLAGS} ${OPENSSL_LDFLAGS})
     target_compile_options(
         securefs-static PUBLIC ${CRYPTOPP_CFLAGS} ${ARGON2_CFLAGS}
-                               ${SQLITE_CFLAGS})
+                               ${SQLITE_CFLAGS} ${OPENSSL_CFLAGS})
 
 endif()
 
