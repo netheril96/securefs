@@ -171,27 +171,6 @@ bool hmac_sha256_verify(const void* message,
     return hmac.TruncatedVerify(static_cast<const byte*>(mac), mac_len);
 }
 
-unsigned int pbkdf_hmac_sha256(const void* password,
-                               size_t pass_len,
-                               const void* salt,
-                               size_t salt_len,
-                               unsigned int min_iterations,
-                               double min_seconds,
-                               void* derived,
-                               size_t derive_len)
-{
-    CryptoPP::PKCS5_PBKDF2_HMAC<CryptoPP::SHA256> kdf;
-    return kdf.DeriveKey(static_cast<byte*>(derived),
-                         derive_len,
-                         0,
-                         static_cast<const byte*>(password),
-                         pass_len,
-                         static_cast<const byte*>(salt),
-                         salt_len,
-                         min_iterations,
-                         min_seconds);
-}
-
 static void hkdf_expand(const void* distilled_key,
                         size_t dis_len,
                         const void* info,

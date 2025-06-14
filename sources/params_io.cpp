@@ -1,6 +1,5 @@
 #include "params_io.h"
 
-#include "crypto.h"
 #include "crypto_wrappers.h"
 #include "exceptions.h"
 #include "mystring.h"
@@ -12,14 +11,12 @@
 #include <absl/strings/escaping.h>
 #include <absl/strings/str_format.h>
 #include <absl/types/span.h>
-#include <algorithm>
 #include <argon2.h>
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
 #include <cryptopp/pwdbased.h>
 #include <cryptopp/scrypt.h>
 #include <cryptopp/sha.h>
-#include <cstdint>
 #include <google/protobuf/util/json_util.h>
 
 #include <string>
@@ -36,8 +33,8 @@ namespace
     constexpr size_t kParamIvSize = 12, kParamMacSize = 16, kParamSaltSize = 32;
 
     key_type legacy_compute_password_derived_key(const LegacySecurefsJsonParams& legacy,
-                                                 absl::Span<const byte> password,
-                                                 absl::Span<const byte> effective_salt)
+                                                 ConstRawBuffer password,
+                                                 ConstRawBuffer effective_salt)
     {
         key_type result;
         if (legacy.pbkdf() == PBKDF_ALGO_ARGON2ID)
@@ -71,15 +68,8 @@ namespace
         }
         else if (legacy.pbkdf() == PBKDF_ALGO_PKCS5 || legacy.pbkdf().empty())
         {
-            CryptoPP::PKCS5_PBKDF2_HMAC<CryptoPP::SHA256> kdf;
-            kdf.DeriveKey(result.data(),
-                          result.size(),
-                          0,
-                          password.data(),
-                          password.size(),
-                          effective_salt.data(),
-                          effective_salt.size(),
-                          legacy.iterations());
+            libcrypto::pbkdf2_hmac_sha256(
+                {password}, {effective_salt}, legacy.iterations(), MutableRawBuffer{result});
         }
         else
         {
@@ -110,7 +100,7 @@ namespace
     // Because we have had two historical ways of key derivation when key file is present, we need
     // to try them in sequence.
     bool try_legacy_password_derived_key(const LegacySecurefsJsonParams& legacy,
-                                         absl::Span<const byte> password,
+                                         ConstRawBuffer password,
                                          /* nullable */ StreamBase* key_stream,
                                          absl::FunctionRef<bool(const key_type&)> try_func)
     {
@@ -141,7 +131,7 @@ namespace
             throwInvalidArgumentException("Unknown format version");
         }
     }
-    void assign(std::string* str, absl::Span<const byte> span)
+    void assign(std::string* str, ConstRawBuffer span)
     {
         str->assign(reinterpret_cast<const char*>(span.data()), span.size());
     }
@@ -151,7 +141,7 @@ namespace
         libcrypto::generate_random(MutableRawBuffer(*str));
     }
     key_type compute_password_derived_key(const EncryptedSecurefsParams& encparams,
-                                          absl::Span<const byte> password,
+                                          ConstRawBuffer password,
                                           /* nullable */ StreamBase* key_stream)
     {
         key_type key,
@@ -180,7 +170,7 @@ namespace
     }
 }    // namespace
 DecryptedSecurefsParams decrypt(const LegacySecurefsJsonParams& legacy,
-                                absl::Span<const byte> password,
+                                ConstRawBuffer password,
                                 /* nullable */ StreamBase* key_stream)
 {
 
@@ -278,7 +268,7 @@ DecryptedSecurefsParams decrypt(const LegacySecurefsJsonParams& legacy,
     return result;
 }
 DecryptedSecurefsParams decrypt(const EncryptedSecurefsParams& encparams,
-                                absl::Span<const byte> password,
+                                ConstRawBuffer password,
                                 /* nullable */ StreamBase* key_stream)
 {
     auto wrapping_key = compute_password_derived_key(encparams, password, key_stream);
@@ -310,7 +300,7 @@ DecryptedSecurefsParams decrypt(const EncryptedSecurefsParams& encparams,
 }
 EncryptedSecurefsParams encrypt(const DecryptedSecurefsParams& decparams,
                                 const EncryptedSecurefsParams::Argon2idParams& argon2id_params,
-                                absl::Span<const byte> password,
+                                ConstRawBuffer password,
                                 /* nullable */ StreamBase* key_stream)
 {
     EncryptedSecurefsParams result;
@@ -341,7 +331,7 @@ EncryptedSecurefsParams encrypt(const DecryptedSecurefsParams& decparams,
 }
 
 DecryptedSecurefsParams decrypt(std::string_view content,
-                                absl::Span<const byte> password,
+                                ConstRawBuffer password,
                                 /* nullable */ StreamBase* key_stream)
 {
     EncryptedSecurefsParams encparams;

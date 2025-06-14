@@ -1,9 +1,8 @@
-#include "mystring.h"
+#include "crypto_wrappers.h"
 #include "params.pb.h"
 #include "params_io.h"
 #include "platform.h"
 #include "streams.h"
-#include "tags.h"
 
 #include <absl/strings/match.h>
 #include <absl/strings/str_cat.h>
@@ -77,7 +76,7 @@ namespace
                     try
                     {
                         params.emplace_back(
-                            decrypt(content, as_byte_span(password), key_stream.get()));
+                            decrypt(content, ConstRawBuffer(password), key_stream.get()));
                     }
                     catch (const PasswordOrKeyfileIncorrectException&)
                     {
@@ -93,12 +92,12 @@ namespace
                     ++total_cases;
 
                     auto encparams = encrypt(
-                        params.back(), argon2id_params, as_byte_span(password), key_stream.get());
+                        params.back(), argon2id_params, ConstRawBuffer(password), key_stream.get());
                     auto decrypted_again
-                        = decrypt(encparams, as_byte_span(password), key_stream.get());
+                        = decrypt(encparams, ConstRawBuffer(password), key_stream.get());
                     CHECK(differ->Compare(decrypted_again, params.back()));
 
-                    CHECK_THROWS(decrypt(content, as_byte_span("ABC"), key_stream.get()));
+                    CHECK_THROWS(decrypt(content, ConstRawBuffer("ABC"), key_stream.get()));
                 }
 
                 REQUIRE(params.size() > 1);

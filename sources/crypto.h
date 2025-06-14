@@ -74,13 +74,4 @@ void hkdf(const void* key,
           size_t info_len,
           void* output,
           size_t out_len);
-
-unsigned int pbkdf_hmac_sha256(const void* password,
-                               size_t pass_len,
-                               const void* salt,
-                               size_t salt_len,
-                               unsigned int min_iterations,
-                               double min_seconds,
-                               void* derived,
-                               size_t derive_len);
 }    // namespace securefs

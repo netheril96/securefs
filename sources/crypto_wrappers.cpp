@@ -3,6 +3,7 @@
 #include "myutils.h"
 
 #include <openssl/err.h>
+#include <openssl/evp.h>
 #include <openssl/rand.h>
 
 #include <string>
@@ -45,10 +46,28 @@ public:
 
 void generate_random(MutableRawBuffer output)
 {
-    if (RAND_bytes(output.data(), checked_cast<int>(output.size())) != 1)
+    if (ABSL_PREDICT_FALSE(RAND_bytes(output.data(), checked_cast<int>(output.size())) != 1))
     {
         throw OpenSSLException();
     }
 }
 
+void pbkdf2_hmac_sha256(ConstRawBuffer password,
+                        ConstRawBuffer salt,
+                        unsigned int iterations,
+                        MutableRawBuffer derived)
+{
+    if (ABSL_PREDICT_FALSE(PKCS5_PBKDF2_HMAC(reinterpret_cast<const char*>(password.data()),
+                                             checked_cast<int>(password.size()),
+                                             salt.data(),
+                                             checked_cast<int>(salt.size()),
+                                             iterations,
+                                             EVP_sha256(),
+                                             checked_cast<int>(derived.size()),
+                                             derived.data())
+                           != 1))
+    {
+        throw OpenSSLException();
+    }
+}
 }    // namespace securefs::libcrypto

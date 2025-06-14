@@ -116,6 +116,11 @@ struct Hasher : public Object
 namespace libcrypto
 {
     void generate_random(MutableRawBuffer output);
-}
+    void pbkdf2_hmac_sha256(ConstRawBuffer password,
+                            ConstRawBuffer salt,
+                            unsigned int iterations,
+                            MutableRawBuffer derived);
+
+}    // namespace libcrypto
 
 }    // namespace securefs
