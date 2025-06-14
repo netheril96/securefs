@@ -12,6 +12,7 @@
 #include "tags.h"
 
 #include <absl/strings/escaping.h>
+#include <absl/strings/str_cat.h>
 #include <absl/time/time.h>
 #include <google/protobuf/repeated_ptr_field.h>
 
@@ -295,6 +296,27 @@ int internal_mount(const InternalMountData& mount_data)
                  get_type_name(e).get(),
                  e.what());
     }
+
+    const char* pid_file_path = std::getenv("SECUREFS_PID_FILE");
+    if (ABSL_PREDICT_FALSE(pid_file_path && pid_file_path[0] != '\0'))
+    {
+        try
+        {
+            auto pid_stream = OSService::get_default().open_file_stream(
+                pid_file_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            auto pid_str = absl::StrCat(OSService::get_current_process_id());
+            pid_stream->write(pid_str.data(), 0, pid_str.size());
+            INFO_LOG("Wrote PID %s to %s", pid_str, pid_file_path);
+        }
+        catch (const std::exception& e)
+        {
+            WARN_LOG("Failed to write PID to %s: %s", pid_file_path, e.what());
+        }
+    }
+    DEFER(if (ABSL_PREDICT_FALSE(pid_file_path && pid_file_path[0] != '\0')) {
+        OSService::get_default().remove_file_nothrow(pid_file_path);
+    });
+
     auto os_service = std::make_shared<OSService>(mount_data.data_dir());
     auto fuse_high_level_ops = make_fuse_high_level_ops(
         os_service, mount_data.decrypted_params(), mount_data.mount_options());

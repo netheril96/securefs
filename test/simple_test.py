@@ -17,8 +17,7 @@ import time
 import traceback
 import unittest
 import uuid
-from typing import List, Optional, Sequence
-from typing import Set
+from typing import Any, List, Optional, Sequence, Protocol, Set
 import enum
 import unicodedata
 from collections import namedtuple
@@ -26,6 +25,7 @@ import multiprocessing
 import random
 import secrets
 import io
+
 
 faulthandler.enable()
 
@@ -79,6 +79,43 @@ def is_mount_then_statvfs(mount_point: str) -> bool:
         return False
 
 
+class Waitable(Protocol):
+    def wait(self, timeout: Optional[float] = None) -> Any: ...
+
+
+class PidFileWaitable:
+    def __init__(self, pid_file_name: str):
+        self.pid_file_name = pid_file_name
+
+    def wait(self, timeout: Optional[float] = None) -> int:
+        """
+        Waits for the PID file to not exist.
+
+        Args:
+            timeout: Maximum time in seconds to wait. If None, waits indefinitely.
+
+        Returns:
+            0 if the file exists.
+
+        Raises:
+            TimeoutError: If the timeout is reached before the file exists.
+        """
+        start_time = time.monotonic()
+        polling_interval = 0.032  # 32ms
+
+        while True:
+            if not os.path.exists(self.pid_file_name):
+                return 0
+
+            if timeout is not None:
+                if time.monotonic() - start_time >= timeout:
+                    raise TimeoutError(
+                        f"Timeout waiting for PID file '{self.pid_file_name}' after {timeout:.3f} seconds"
+                    )
+
+            time.sleep(polling_interval)
+
+
 def securefs_mount(
     data_dir: str,
     mount_point: str,
@@ -87,7 +124,9 @@ def securefs_mount(
     config_filename: Optional[str] = None,
     plain_text_names: bool = False,
     background: bool = False,
-) -> subprocess.Popen | None:
+) -> Waitable:
+    env = os.environ.copy()
+    pid_file = None
     command = [
         SECUREFS_BINARY,
         "mount",
@@ -98,6 +137,9 @@ def securefs_mount(
     ]
     if background:
         command.append("-b")
+        pid_fd, pid_file = tempfile.mkstemp(prefix="pidfile", suffix=".pid", dir="tmp")
+        os.close(pid_fd)
+        env["SECUREFS_PID_FILE"] = pid_file
     if password:
         command.append("--pass")
         command.append(password)
@@ -112,14 +154,13 @@ def securefs_mount(
     logging.info("Start mounting, command:\n%s", " ".join(command))
     p = subprocess.Popen(
         command,
-        creationflags=(
-            subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
-        ),
+        env=env,
     )
     if background:
         if p.wait(timeout=10):
             raise subprocess.CalledProcessError(p.returncode, p.args)
-        return None
+        assert pid_file
+        return PidFileWaitable(pid_file_name=pid_file)
 
     try:
         for _ in range(600):
@@ -138,18 +179,16 @@ def securefs_mount(
         raise
 
 
-def securefs_unmount(p: subprocess.Popen | None, mount_point: str):
-    if p is None:
+def securefs_unmount(p: Waitable, mount_point: str):
+    try:
         logging.info("Unmounting %s", mount_point)
         subprocess.check_call([SECUREFS_BINARY, "unmount", mount_point])
-        while ismount(mount_point):
-            time.sleep(0.01)
-        return
-    with p:
-        subprocess.check_call([SECUREFS_BINARY, "unmount", mount_point])
         p.wait(timeout=5)
-        if p.returncode:
+        if isinstance(p, subprocess.Popen) and p.returncode:
             logging.error("securefs exited with non-zero code: %d", p.returncode)
+    except:
+        if isinstance(p, subprocess.Popen):
+            p.terminate()
 
 
 class RepoFormat(enum.Enum):
@@ -376,7 +415,7 @@ def make_test_case(
         password: Optional[str]
         keyfile: Optional[str]
         mount_point: str
-        securefs_process: Optional[subprocess.Popen]
+        securefs_process: Optional[Waitable]
         config_file: Optional[str]
         has_mounted: bool = False
 
@@ -421,6 +460,7 @@ def make_test_case(
         def unmount(cls):
             if not cls.has_mounted:
                 return
+            assert cls.securefs_process
             securefs_unmount(cls.securefs_process, cls.mount_point)
             cls.securefs_process = None
             cls.has_mounted = False
@@ -492,6 +532,7 @@ def make_test_case(
         if xattr is not None:
 
             def test_xattr(self):
+                assert xattr is not None
                 golden_mapping = {
                     "user.abc": b"def",
                     "user.123": b"456",
@@ -1040,6 +1081,7 @@ class RepoLockerTestCase(unittest.TestCase):
         with open(os.path.join(data_dir, ".securefs.lock"), "w") as f:
             f.write(str(2**31 - 1))
         p = securefs_mount(data_dir=data_dir, mount_point=mount_point, password="123")
+        assert isinstance(p, subprocess.Popen)
         assert p
         try:
             with open(os.path.join(data_dir, ".securefs.lock"), "r") as f:
