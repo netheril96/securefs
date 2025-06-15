@@ -64,14 +64,4 @@ bool hmac_sha256_verify(const void* message,
                         const void* mac,
                         size_t mac_len);
 
-// HMAC based key derivation function (https://tools.ietf.org/html/rfc5869)
-// This one is not implemented by Crypto++, so we implement it ourselves
-void hkdf(const void* key,
-          size_t key_len,
-          const void* salt,
-          size_t salt_len,
-          const void* info,
-          size_t info_len,
-          void* output,
-          size_t out_len);
 }    // namespace securefs

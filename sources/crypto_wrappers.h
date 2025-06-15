@@ -116,6 +116,7 @@ struct Hasher : public Object
 namespace libcrypto
 {
     void generate_random(MutableRawBuffer output);
+    void hkdf_expand(ConstRawBuffer key, ConstRawBuffer info, MutableRawBuffer output);
     void pbkdf2_hmac_sha256(ConstRawBuffer password,
                             ConstRawBuffer salt,
                             unsigned int iterations,

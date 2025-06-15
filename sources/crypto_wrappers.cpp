@@ -4,9 +4,10 @@
 
 #include <openssl/err.h>
 #include <openssl/evp.h>
+#include <openssl/kdf.h>
 #include <openssl/rand.h>
 
-#include <string>
+#include <memory>
 #include <vector>
 
 namespace securefs::libcrypto
@@ -66,6 +67,46 @@ void pbkdf2_hmac_sha256(ConstRawBuffer password,
                                              checked_cast<int>(derived.size()),
                                              derived.data())
                            != 1))
+    {
+        throw OpenSSLException();
+    }
+}
+
+void hkdf_expand(ConstRawBuffer key, ConstRawBuffer info, MutableRawBuffer output)
+{
+    std::unique_ptr<EVP_PKEY_CTX, decltype(&EVP_PKEY_CTX_free)> pctx(
+        EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, nullptr), EVP_PKEY_CTX_free);
+    if (!pctx)
+    {
+        throw OpenSSLException();
+    }
+
+    if (EVP_PKEY_derive_init(pctx.get()) <= 0)
+    {
+        throw OpenSSLException();
+    }
+
+    if (EVP_PKEY_CTX_set_hkdf_mode(pctx.get(), EVP_PKEY_HKDEF_MODE_EXPAND_ONLY) <= 0)
+    {
+        throw OpenSSLException();
+    }
+
+    if (EVP_PKEY_CTX_set_hkdf_md(pctx.get(), EVP_sha256()) <= 0)
+    {
+        throw OpenSSLException();
+    }
+
+    if (EVP_PKEY_CTX_set1_hkdf_key(pctx.get(), key.data(), key.size()) <= 0)
+    {
+        throw OpenSSLException();
+    }
+
+    if (EVP_PKEY_CTX_add1_hkdf_info(pctx.get(), info.data(), info.size()) <= 0)
+    {
+        throw OpenSSLException();
+    }
+    size_t derived_key_len = output.size();
+    if (EVP_PKEY_derive(pctx.get(), output.data(), &derived_key_len) <= 0)
     {
         throw OpenSSLException();
     }

@@ -136,14 +136,10 @@ FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
     warn_if_key_not_random(key_, __FILE__, __LINE__);
     key_type data_key, meta_key;
     byte generated_keys[KEY_LENGTH * 4] = {};
-    hkdf(key_.data(),
-         key_.size(),
-         nullptr,
-         0,
-         id_.data(),
-         id_.size(),
-         generated_keys,
-         max_padding_size > 0 ? 4 * KEY_LENGTH : 3 * KEY_LENGTH);
+    libcrypto::hkdf_expand(
+        {key_.data(), key_.size()},
+        {id_.data(), id_.size()},
+        {generated_keys, max_padding_size > 0 ? 4 * KEY_LENGTH : 3 * KEY_LENGTH});
     memcpy(data_key.data(), generated_keys, KEY_LENGTH);
     memcpy(meta_key.data(), generated_keys + KEY_LENGTH, KEY_LENGTH);
     auto crypt = make_cryptstream_aes_gcm(std::static_pointer_cast<StreamBase>(data_stream),
