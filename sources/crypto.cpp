@@ -1,6 +1,5 @@
 #include "crypto.h"
 #include "exceptions.h"
-#include "lock_guard.h"
 
 #include <cryptopp/aes.h>
 #include <cryptopp/gcm.h>
@@ -113,8 +112,6 @@ void AES_SIV::encrypt_and_authenticate(const void* plaintext,
                                        void* ciphertext,
                                        void* siv)
 {
-    LockGuard<Mutex> lg(m_mutex);
-
     s2v(plaintext, text_len, additional_data, additional_len, siv);
     byte modded_iv[AES_SIV::IV_SIZE];
     memcpy(modded_iv, siv, AES_SIV::IV_SIZE);
@@ -135,8 +132,6 @@ bool AES_SIV::decrypt_and_verify(const void* ciphertext,
                                  void* plaintext,
                                  const void* siv)
 {
-    LockGuard<Mutex> lg(m_mutex);
-
     byte temp_iv[AES_SIV::IV_SIZE];
     memcpy(temp_iv, siv, AES_SIV::IV_SIZE);
     // Clear the 31st and 63rd bits in the IV.

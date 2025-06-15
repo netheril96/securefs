@@ -55,8 +55,7 @@ private:
         m_data_stream ABSL_GUARDED_BY(*this){}, m_meta_stream ABSL_GUARDED_BY(*this){};
     CryptoPP::GCM<CryptoPP::AES>::Encryption m_xattr_enc ABSL_GUARDED_BY(*this){};
     CryptoPP::GCM<CryptoPP::AES>::Decryption m_xattr_dec ABSL_GUARDED_BY(*this){};
-    std::optional<AES_SIV>
-        m_xattr_name_cryptor;    // This class has its own mutex for thread safety.
+    std::optional<AES_SIV> m_xattr_name_cryptor ABSL_GUARDED_BY(*this){};
 
     bool m_dirty ABSL_GUARDED_BY(*this){};
     const bool m_check{}, m_store_time{};

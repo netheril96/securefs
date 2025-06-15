@@ -304,11 +304,10 @@ private:
         , name_trans_(std::move(name_trans))
         , xattr_(std::move(xattr))
         , enable_xattr_(enable_xattr)
+        , xattr_name_cryptor_(
+              [xattr_key]()
+              { return std::make_unique<AES_SIV>(xattr_key.data(), xattr_key.size()); })
     {
-        if (!is_apple())
-        {
-            xattr_name_cryptor_.emplace(xattr_key.data(), xattr_key.size());
-        }
     }
 
 public:
@@ -411,7 +410,7 @@ private:
     std::shared_ptr<StreamOpener> opener_;
     std::shared_ptr<NameTranslator> name_trans_;
     std::shared_ptr<XattrCryptor> xattr_;
-    std::optional<AES_SIV> xattr_name_cryptor_;
+    ThreadLocal<AES_SIV> xattr_name_cryptor_;
     bool enable_xattr_;
     bool read_dir_plus_ = false;
 

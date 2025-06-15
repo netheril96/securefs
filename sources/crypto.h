@@ -15,16 +15,15 @@ namespace securefs
 class AES_SIV
 {
 private:
-    Mutex m_mutex;
-    CryptoPP::CMAC<CryptoPP::AES> m_cmac ABSL_GUARDED_BY(m_mutex);
-    CryptoPP::CTR_Mode<CryptoPP::AES>::Encryption m_ctr ABSL_GUARDED_BY(m_mutex);
+    CryptoPP::CMAC<CryptoPP::AES> m_cmac;
+    CryptoPP::CTR_Mode<CryptoPP::AES>::Encryption m_ctr;
 
 private:
     void s2v(const void* plaintext,
              size_t text_len,
              const void* additional_data,
              size_t additional_len,
-             void* iv) ABSL_EXCLUSIVE_LOCKS_REQUIRED(m_mutex);
+             void* iv);
 
 public:
     static constexpr size_t IV_SIZE = 16;

@@ -1072,12 +1072,12 @@ int FuseHighLevelOps::vutimens(const char* path, const fuse_timespec* ts, const 
 int FuseHighLevelOps::vlistxattr(const char* path, char* list, size_t size, const fuse_context* ctx)
 {
     auto encrypted_path = name_trans_->encrypt_full_path(path, nullptr);
-    if (xattr_name_cryptor_)
+    if (!is_apple())
     {
         return generic_xattr::wrapped_listxattr(
             [&](char* buffer, size_t size)
             { return root_->listxattr(encrypted_path.c_str(), buffer, size); },
-            *xattr_name_cryptor_,
+            xattr_name_cryptor_.get(),
             list,
             size);
     }
@@ -1108,9 +1108,7 @@ int FuseHighLevelOps::vgetxattr(const char* path,
             return rc;
         }
     }
-    std::string wrapped_name = xattr_name_cryptor_
-        ? generic_xattr::encrypt_xattr_name(*xattr_name_cryptor_, name)
-        : name;
+    std::string wrapped_name = generic_xattr::encrypt_xattr_name(xattr_name_cryptor_.get(), name);
 
     if (!value)
     {
@@ -1161,9 +1159,7 @@ int FuseHighLevelOps::vsetxattr(const char* path,
         return 0;
     }
 
-    std::string wrapped_name = xattr_name_cryptor_
-        ? generic_xattr::encrypt_xattr_name(*xattr_name_cryptor_, name)
-        : name;
+    std::string wrapped_name = generic_xattr::encrypt_xattr_name(xattr_name_cryptor_.get(), name);
 
     auto data = xattr_->encrypt(value, size);
     return root_->setxattr(name_trans_->encrypt_full_path(path, nullptr).c_str(),
@@ -1183,9 +1179,7 @@ int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fus
         }
     }
 
-    std::string wrapped_name = xattr_name_cryptor_
-        ? generic_xattr::encrypt_xattr_name(*xattr_name_cryptor_, name)
-        : name;
+    std::string wrapped_name = generic_xattr::encrypt_xattr_name(xattr_name_cryptor_.get(), name);
 
     return root_->removexattr(name_trans_->encrypt_full_path(path, nullptr).c_str(),
                               wrapped_name.c_str());
