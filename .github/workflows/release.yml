@@ -59,10 +59,6 @@ jobs:
             release-${{ matrix.os }}-${{ matrix.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
             release-${{ matrix.os }}-${{ matrix.arch }}-
       - name: build-test
-        env:
-          CC: clang-15
-          CXX: clang++-15
-          VCPKG_KEEP_ENV_VARS: "CC;CXX"
         run: |
           source .venv/bin/activate
           python build.py --lto --enable_unit_test --enable_integration_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build
