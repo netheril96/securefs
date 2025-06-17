@@ -1,5 +1,4 @@
 #include "lite_format.h"
-#include "apple_xattr_workaround.h"
 #include "crypto.h"
 #include "exceptions.h"
 #include "lite_long_name_lookup_table.h"
@@ -1072,23 +1071,13 @@ int FuseHighLevelOps::vutimens(const char* path, const fuse_timespec* ts, const 
 int FuseHighLevelOps::vlistxattr(const char* path, char* list, size_t size, const fuse_context* ctx)
 {
     auto encrypted_path = name_trans_->encrypt_full_path(path, nullptr);
-    if (!is_apple())
-    {
-        return generic_xattr::wrapped_listxattr(
-            [&](char* buffer, size_t size)
-            { return root_->listxattr(encrypted_path.c_str(), buffer, size); },
-            xattr_name_cryptor_.get(),
-            list,
-            size);
-    }
 
-    int rc = root_->listxattr(name_trans_->encrypt_full_path(path, nullptr).c_str(), list, size);
-    if (rc < 0)
-    {
-        return rc;
-    }
-    securefs::apple_xattr::transform_listxattr_result(list, size);
-    return rc;
+    return generic_xattr::wrapped_listxattr(
+        [&](char* buffer, size_t size)
+        { return root_->listxattr(encrypted_path.c_str(), buffer, size); },
+        xattr_name_cryptor_.get(),
+        list,
+        size);
 }
 int FuseHighLevelOps::vgetxattr(const char* path,
                                 const char* name,
@@ -1100,13 +1089,6 @@ int FuseHighLevelOps::vgetxattr(const char* path,
     if (position != 0)
     {
         return -EINVAL;
-    }
-    if (is_apple())
-    {
-        if (int rc = securefs::apple_xattr::precheck_getxattr(&name); rc <= 0)
-        {
-            return rc;
-        }
     }
     std::string wrapped_name = generic_xattr::encrypt_xattr_name(xattr_name_cryptor_.get(), name);
 
@@ -1147,13 +1129,6 @@ int FuseHighLevelOps::vsetxattr(const char* path,
     {
         return -EINVAL;
     }
-    if (is_apple())
-    {
-        if (int rc = securefs::apple_xattr::precheck_setxattr(&name, &flags); rc <= 0)
-        {
-            return rc;
-        }
-    }
     if (!value || size == 0)
     {
         return 0;
@@ -1170,15 +1145,6 @@ int FuseHighLevelOps::vsetxattr(const char* path,
 }
 int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fuse_context* ctx)
 {
-    if (is_apple())
-    {
-        int rc = securefs::apple_xattr::precheck_removexattr(&name);
-        if (rc <= 0)
-        {
-            return rc;
-        }
-    }
-
     std::string wrapped_name = generic_xattr::encrypt_xattr_name(xattr_name_cryptor_.get(), name);
 
     return root_->removexattr(name_trans_->encrypt_full_path(path, nullptr).c_str(),

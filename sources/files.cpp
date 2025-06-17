@@ -166,11 +166,8 @@ FileBase::FileBase(std::shared_ptr<FileStream> data_stream,
         generated_keys + 2 * KEY_LENGTH, KEY_LENGTH, null_iv, array_length(null_iv));
     m_xattr_dec.SetKeyWithIV(
         generated_keys + 2 * KEY_LENGTH, KEY_LENGTH, null_iv, array_length(null_iv));
+    m_xattr_name_cryptor.emplace(generated_keys + 2 * KEY_LENGTH, KEY_LENGTH);
 
-    if (!is_apple())
-    {
-        m_xattr_name_cryptor.emplace(generated_keys + 2 * KEY_LENGTH, KEY_LENGTH);
-    }
     if (max_padding_size > 0)
     {
         warn_if_key_not_random(generated_keys, sizeof(generated_keys), __FILE__, __LINE__);
@@ -288,25 +285,20 @@ static const ssize_t XATTR_IV_LENGTH = 16, XATTR_MAC_LENGTH = 16;
 
 ssize_t FileBase::listxattr(char* buffer, size_t size)
 {
-    if (m_xattr_name_cryptor)
-    {
-        return generic_xattr::wrapped_listxattr(
-            [m_data_stream = this->m_data_stream](char* buffer, size_t size)
-            { return m_data_stream->listxattr(buffer, size); },
-            *m_xattr_name_cryptor,
-            buffer,
-            size);
-    }
-    return m_data_stream->listxattr(buffer, size);
+    return generic_xattr::wrapped_listxattr(
+        [m_data_stream = this->m_data_stream](char* buffer, size_t size)
+        { return m_data_stream->listxattr(buffer, size); },
+        m_xattr_name_cryptor.value(),
+        buffer,
+        size);
 }
 
 ssize_t FileBase::getxattr(const char* name, char* value, size_t size)
 {
     if (!name)
         throwVFSException(EFAULT);
-    std::string wrapped_name = m_xattr_name_cryptor
-        ? generic_xattr::encrypt_xattr_name(*m_xattr_name_cryptor, name)
-        : name;
+    std::string wrapped_name
+        = generic_xattr::encrypt_xattr_name(m_xattr_name_cryptor.value(), name);
 
     auto true_size = m_data_stream->getxattr(wrapped_name.c_str(), value, size);
     if (!value)
@@ -370,9 +362,8 @@ void FileBase::setxattr(const char* name, const char* value, size_t size, int fl
     if (!name || !value)
         throwVFSException(EFAULT);
 
-    std::string wrapped_name = m_xattr_name_cryptor
-        ? generic_xattr::encrypt_xattr_name(*m_xattr_name_cryptor, name)
-        : name;
+    std::string wrapped_name
+        = generic_xattr::encrypt_xattr_name(m_xattr_name_cryptor.value(), name);
 
     auto buffer = make_unique_array<byte>(size);
     byte* ciphertext = buffer.get();
@@ -403,9 +394,8 @@ void FileBase::setxattr(const char* name, const char* value, size_t size, int fl
 
 void FileBase::removexattr(const char* name)
 {
-    std::string wrapped_name = m_xattr_name_cryptor
-        ? generic_xattr::encrypt_xattr_name(*m_xattr_name_cryptor, name)
-        : name;
+    std::string wrapped_name
+        = generic_xattr::encrypt_xattr_name(m_xattr_name_cryptor.value(), name);
 
     m_data_stream->removexattr(wrapped_name.c_str());
     m_meta_stream->removexattr(wrapped_name.c_str());

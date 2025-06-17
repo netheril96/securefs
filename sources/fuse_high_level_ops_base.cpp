@@ -1,5 +1,4 @@
 #include "fuse_high_level_ops_base.h"
-#include "apple_xattr_workaround.h"
 #include "exceptions.h"
 #include "fuse2_workaround.h"
 #include "fuse_tracer_v2.h"

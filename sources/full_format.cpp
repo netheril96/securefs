@@ -1,5 +1,4 @@
 #include "full_format.h"
-#include "apple_xattr_workaround.h"
 #include "exceptions.h"
 #include "files.h"
 #include "logger.h"
@@ -15,6 +14,10 @@
 #include <cstdint>
 #include <cstdlib>
 #include <string>
+
+#if __has_include(<sys/xattr.h>)
+#include <sys/xattr.h>
+#endif
 
 namespace securefs::full_format
 {
@@ -398,8 +401,6 @@ int FuseHighLevelOps::vlistxattr(const char* path, char* list, size_t size, cons
         FileLockGuard fg(**opened);
         rc = (**opened).listxattr(list, size);
     }
-    if (is_apple())
-        securefs::apple_xattr::transform_listxattr_result(list, size);
     return rc;
 };
 int FuseHighLevelOps::vgetxattr(const char* path,
@@ -411,11 +412,6 @@ int FuseHighLevelOps::vgetxattr(const char* path,
 {
     if (position != 0)
         return -EINVAL;
-    if (is_apple())
-    {
-        if (int rc = securefs::apple_xattr::precheck_getxattr(&name); rc <= 0)
-            return rc;
-    }
     auto opened = open_all(path);
     if (!opened)
     {
@@ -434,13 +430,11 @@ int FuseHighLevelOps::vsetxattr(const char* path,
 {
     if (position != 0)
         return -EINVAL;
-    if (is_apple())
-    {
-        if (int rc = securefs::apple_xattr::precheck_setxattr(&name, &flags); rc <= 0)
-            return rc;
-    }
 
+#if __has_include(<sys/xattr.h>)
     flags &= XATTR_CREATE | XATTR_REPLACE;
+#endif
+
     auto opened = open_all(path);
     if (!opened)
     {
@@ -452,13 +446,6 @@ int FuseHighLevelOps::vsetxattr(const char* path,
 };
 int FuseHighLevelOps::vremovexattr(const char* path, const char* name, const fuse_context* ctx)
 {
-    if (is_apple())
-    {
-        if (int rc = securefs::apple_xattr::precheck_removexattr(&name); rc <= 0)
-        {
-            return rc;
-        }
-    }
     auto opened = open_all(path);
     if (!opened)
     {
