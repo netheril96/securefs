@@ -152,6 +152,7 @@ def securefs_mount(
     if plain_text_names:
         command.append("--plain-text-names")
     logging.info("Start mounting, command:\n%s", " ".join(command))
+    traceback.print_stack()
     p = subprocess.Popen(
         command,
         env=env,
