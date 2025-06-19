@@ -79,11 +79,16 @@ def is_mount_then_statvfs(mount_point: str) -> bool:
         return False
 
 
-class Waitable(Protocol):
+class Waitable:
     def wait(self, timeout: Optional[float] = None) -> Any: ...
 
+    @property
+    def returncode(self) -> int: ...
 
-class PidFileWaitable:
+    def terminate(self): ...
+
+
+class PidFileWaitable(Waitable):
     def __init__(self, pid_file_name: str):
         self.pid_file_name = pid_file_name
 
@@ -114,6 +119,28 @@ class PidFileWaitable:
                     )
 
             time.sleep(polling_interval)
+
+    @property
+    def returncode(self) -> int:
+        return 0
+
+    def terminate(self):
+        pass
+
+
+class PopenWaitable(Waitable):
+    def __init__(self, p: subprocess.Popen):
+        self.p = p
+
+    def wait(self, timeout: Optional[float] = None) -> Any:
+        return self.p.communicate(timeout=timeout)
+
+    @property
+    def returncode(self) -> int:
+        return self.p.returncode
+
+    def terminate(self):
+        self.p.terminate()
 
 
 def securefs_mount(
@@ -172,11 +199,11 @@ def securefs_mount(
             if p.returncode:
                 raise subprocess.CalledProcessError(p.returncode, p.args)
             if subprocess.call([SECUREFS_BINARY, "ismount", mount_point]) == 0:
-                return p
+                return PopenWaitable(p)
 
         raise TimeoutError(f"Failed to mount {repr(mount_point)} after many attempts")
     except:
-        securefs_unmount(p=p, mount_point=mount_point)
+        securefs_unmount(p=PopenWaitable(p), mount_point=mount_point)
         raise
 
 
@@ -185,11 +212,10 @@ def securefs_unmount(p: Waitable, mount_point: str):
         logging.info("Unmounting %s", mount_point)
         subprocess.check_call([SECUREFS_BINARY, "unmount", mount_point])
         p.wait(timeout=5)
-        if isinstance(p, subprocess.Popen) and p.returncode:
+        if p.returncode:
             logging.error("securefs exited with non-zero code: %d", p.returncode)
     except:
-        if isinstance(p, subprocess.Popen):
-            p.terminate()
+        p.terminate()
 
 
 class RepoFormat(enum.Enum):
@@ -1082,11 +1108,10 @@ class RepoLockerTestCase(unittest.TestCase):
         with open(os.path.join(data_dir, ".securefs.lock"), "w") as f:
             f.write(str(2**31 - 1))
         p = securefs_mount(data_dir=data_dir, mount_point=mount_point, password="123")
-        assert isinstance(p, subprocess.Popen)
-        assert p
+        assert isinstance(p, PopenWaitable)
         try:
             with open(os.path.join(data_dir, ".securefs.lock"), "r") as f:
-                self.assertEqual(f.read(), str(p.pid))
+                self.assertEqual(f.read(), str(p.p.pid))
         finally:
             securefs_unmount(p, mount_point)
 
