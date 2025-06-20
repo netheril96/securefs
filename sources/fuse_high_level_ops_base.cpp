@@ -287,10 +287,17 @@ int FuseHighLevelOpsBase::static_getxattr(
             }
             catch (const ExceptionBase& e)
             {
-#if defined(ENOATTR) && defined(ENODATA)
-                // This happens so frequently that we don't want to log it.
                 auto err = e.error_number();
-                if (err == ENOATTR || err == ENODATA)
+#ifdef ENOATTR
+                // This happens so frequently that we don't want to log it.
+                if (err == ENOATTR)
+                {
+                    return -err;
+                }
+#endif
+#ifdef ENODATA
+                // This happens so frequently that we don't want to log it.
+                if (err == ENODATA)
                 {
                     return -err;
                 }
