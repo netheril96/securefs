@@ -1,6 +1,7 @@
 #include "fuse2_workaround.h"
 #include "is_fuse_t.h"
 
+#include <chrono>
 #include <fuse.h>
 
 #include <csignal>
@@ -112,7 +113,13 @@ void clean_exit_fuse()
 {
     if (is_fuse_t())
     {
-        kill(getpid(), SIGINT);
+        std::thread t(
+            []()
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                kill(getpid(), SIGINT);
+            });
+        t.detach();
     }
     else
     {
