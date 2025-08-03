@@ -49,6 +49,14 @@ First you need to install [vcpkg](https://vcpkg.io). Then run `python3 build.py 
 
 ### Package managers
 
+#### Windows
+
+Use WinGet.
+
+User scoped install: `winget install -e netheril96.securefs`
+
+System wide install: `sudo winget install --scope machine -e netheril96.securefs`
+
 #### macOS
 Use [homebrew](https://brew.sh).
 
