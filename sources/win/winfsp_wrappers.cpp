@@ -4,10 +4,45 @@
 #include "logger.h"
 #include "nt_exception.h"
 
-#include <exception>
+#include <winfsp/winfsp.h>
 
 namespace securefs
 {
+
+void WinFspFileSystem::start()
+{
+    if (m_fileSystem)
+    {
+        return;
+    }
+    FSP_FILE_SYSTEM* fsp = nullptr;
+    FSP_FILE_SYSTEM_INTERFACE fsp_iface = as_fsp_interface();
+    NTSTATUS status = FspFileSystemCreate(
+        const_cast<PWSTR>(L"" FSP_FSCTL_DISK_DEVICE_NAME), &GetVolumeParams(), &fsp_iface, &fsp);
+    if (!NT_SUCCESS(status))
+    {
+        throw NTException(status, "FspFileSystemCreate");
+    }
+    m_fileSystem.reset(fsp);
+    DEFER(if (std::uncaught_exceptions() > 0) { m_fileSystem.reset(); });
+
+    status = FspFileSystemStartDispatcher(fsp, 0);
+    if (!NT_SUCCESS(status))
+    {
+        throw NTException(status, "FspFileSystemStartDispatcher");
+    }
+}
+
+void WinFspFileSystem::stop()
+{
+    if (!m_fileSystem)
+    {
+        return;
+    }
+    FspFileSystemStopDispatcher(m_fileSystem.get());
+    m_fileSystem.reset();
+}
+
 static inline WinFspFileSystem* to_obj(FSP_FILE_SYSTEM* FileSystem)
 {
     return reinterpret_cast<WinFspFileSystem*>(FileSystem->UserContext);
