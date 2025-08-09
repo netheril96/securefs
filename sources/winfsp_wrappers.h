@@ -1,4 +1,6 @@
 #pragma once
+#include <ntstatus.h>
+#ifdef _WIN32
 
 #include "object.h"
 
@@ -9,171 +11,260 @@ namespace securefs
 class WinFspFileSystem : public Object
 {
 public:
-    NTSTATUS vGetVolumeInfo(FSP_FSCTL_VOLUME_INFO* VolumeInfo);
+    FSP_FILE_SYSTEM_INTERFACE as_fsp_interface() const;
+    virtual NTSTATUS vGetVolumeInfo(FSP_FSCTL_VOLUME_INFO* VolumeInfo)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_GetVolumeInfo() const { return false; }
 
-    NTSTATUS vSetVolumeLabel(PWSTR VolumeLabel, FSP_FSCTL_VOLUME_INFO* VolumeInfo);
+    virtual NTSTATUS vSetVolumeLabel(PWSTR VolumeLabel, FSP_FSCTL_VOLUME_INFO* VolumeInfo)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_SetVolumeLabel() const { return false; }
 
-    NTSTATUS vGetSecurityByName(PWSTR FileName,
-                               PUINT32 PFileAttributes,
-                               PSECURITY_DESCRIPTOR SecurityDescriptor,
-                               SIZE_T* PSecurityDescriptorSize);
+    virtual NTSTATUS vGetSecurityByName(PWSTR FileName,
+                                        PUINT32 PFileAttributes,
+                                        PSECURITY_DESCRIPTOR SecurityDescriptor,
+                                        SIZE_T* PSecurityDescriptorSize)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_GetSecurityByName() const { return false; }
 
-    NTSTATUS vCreate(PWSTR FileName,
-                    UINT32 CreateOptions,
-                    UINT32 GrantedAccess,
-                    UINT32 FileAttributes,
-                    PSECURITY_DESCRIPTOR SecurityDescriptor,
-                    UINT64 AllocationSize,
-                    PVOID* PFileContext,
-                    FSP_FSCTL_FILE_INFO* FileInfo);
+    virtual NTSTATUS vCreate(PWSTR FileName,
+                             UINT32 CreateOptions,
+                             UINT32 GrantedAccess,
+                             UINT32 FileAttributes,
+                             PSECURITY_DESCRIPTOR SecurityDescriptor,
+                             UINT64 AllocationSize,
+                             PVOID* PFileContext,
+                             FSP_FSCTL_FILE_INFO* FileInfo)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_Create() const { return false; }
 
-    NTSTATUS vOpen(PWSTR FileName,
-                  UINT32 CreateOptions,
-                  UINT32 GrantedAccess,
-                  PVOID* PFileContext,
-                  FSP_FSCTL_FILE_INFO* FileInfo);
+    virtual NTSTATUS vOpen(PWSTR FileName,
+                           UINT32 CreateOptions,
+                           UINT32 GrantedAccess,
+                           PVOID* PFileContext,
+                           FSP_FSCTL_FILE_INFO* FileInfo)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_Open() const { return false; }
 
-    NTSTATUS vOverwrite(PVOID FileContext,
-                       UINT32 FileAttributes,
-                       BOOLEAN ReplaceFileAttributes,
-                       UINT64 AllocationSize,
-                       FSP_FSCTL_FILE_INFO* FileInfo);
+    virtual NTSTATUS vOverwrite(PVOID FileContext,
+                                UINT32 FileAttributes,
+                                BOOLEAN ReplaceFileAttributes,
+                                UINT64 AllocationSize,
+                                FSP_FSCTL_FILE_INFO* FileInfo)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_Overwrite() const { return false; }
 
-    VOID vCleanup(PVOID FileContext, PWSTR FileName, ULONG Flags);
+    virtual VOID vCleanup(PVOID FileContext, PWSTR FileName, ULONG Flags) {}
     virtual bool has_Cleanup() const { return false; }
 
-    VOID vClose(PVOID FileContext);
+    virtual VOID vClose(PVOID FileContext) {}
     virtual bool has_Close() const { return false; }
 
-    NTSTATUS
-    vRead(PVOID FileContext, PVOID Buffer, UINT64 Offset, ULONG Length, PULONG PBytesTransferred);
+    virtual NTSTATUS
+    vRead(PVOID FileContext, PVOID Buffer, UINT64 Offset, ULONG Length, PULONG PBytesTransferred)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_Read() const { return false; }
 
-    NTSTATUS vWrite(PVOID FileContext,
-                   PVOID Buffer,
-                   UINT64 Offset,
-                   ULONG Length,
-                   BOOLEAN WriteToEndOfFile,
-                   BOOLEAN ConstrainedIo,
-                   PULONG PBytesTransferred,
-                   FSP_FSCTL_FILE_INFO* FileInfo);
+    virtual NTSTATUS vWrite(PVOID FileContext,
+                            PVOID Buffer,
+                            UINT64 Offset,
+                            ULONG Length,
+                            BOOLEAN WriteToEndOfFile,
+                            BOOLEAN ConstrainedIo,
+                            PULONG PBytesTransferred,
+                            FSP_FSCTL_FILE_INFO* FileInfo)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_Write() const { return false; }
 
-    NTSTATUS vFlush(PVOID FileContext, FSP_FSCTL_FILE_INFO* FileInfo);
+    virtual NTSTATUS vFlush(PVOID FileContext, FSP_FSCTL_FILE_INFO* FileInfo)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_Flush() const { return false; }
 
-    NTSTATUS vGetFileInfo(PVOID FileContext, FSP_FSCTL_FILE_INFO* FileInfo);
+    virtual NTSTATUS vGetFileInfo(PVOID FileContext, FSP_FSCTL_FILE_INFO* FileInfo)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_GetFileInfo() const { return false; }
 
-    NTSTATUS vSetBasicInfo(PVOID FileContext,
-                          UINT32 FileAttributes,
-                          UINT64 CreationTime,
-                          UINT64 LastAccessTime,
-                          UINT64 LastWriteTime,
-                          UINT64 ChangeTime,
-                          FSP_FSCTL_FILE_INFO* FileInfo);
+    virtual NTSTATUS vSetBasicInfo(PVOID FileContext,
+                                   UINT32 FileAttributes,
+                                   UINT64 CreationTime,
+                                   UINT64 LastAccessTime,
+                                   UINT64 LastWriteTime,
+                                   UINT64 ChangeTime,
+                                   FSP_FSCTL_FILE_INFO* FileInfo)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_SetBasicInfo() const { return false; }
 
-    NTSTATUS
-    vSetFileSize(PVOID FileContext,
-                UINT64 NewSize,
-                BOOLEAN SetAllocationSize,
-                FSP_FSCTL_FILE_INFO* FileInfo);
+    virtual NTSTATUS vSetFileSize(PVOID FileContext,
+                                  UINT64 NewSize,
+                                  BOOLEAN SetAllocationSize,
+                                  FSP_FSCTL_FILE_INFO* FileInfo)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_SetFileSize() const { return false; }
 
-    NTSTATUS vCanDelete(PVOID FileContext, PWSTR FileName);
+    virtual NTSTATUS vCanDelete(PVOID FileContext, PWSTR FileName)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_CanDelete() const { return false; }
 
-    NTSTATUS vRename(PVOID FileContext, PWSTR FileName, PWSTR NewFileName, BOOLEAN ReplaceIfExists);
+    virtual NTSTATUS
+    vRename(PVOID FileContext, PWSTR FileName, PWSTR NewFileName, BOOLEAN ReplaceIfExists)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_Rename() const { return false; }
 
-    NTSTATUS
-    vGetSecurity(PVOID FileContext,
-                PSECURITY_DESCRIPTOR SecurityDescriptor,
-                SIZE_T* PSecurityDescriptorSize);
+    virtual NTSTATUS vGetSecurity(PVOID FileContext,
+                                  PSECURITY_DESCRIPTOR SecurityDescriptor,
+                                  SIZE_T* PSecurityDescriptorSize)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_GetSecurity() const { return false; }
 
-    NTSTATUS vSetSecurity(PVOID FileContext,
-                         SECURITY_INFORMATION SecurityInformation,
-                         PSECURITY_DESCRIPTOR ModificationDescriptor);
+    virtual NTSTATUS vSetSecurity(PVOID FileContext,
+                                  SECURITY_INFORMATION SecurityInformation,
+                                  PSECURITY_DESCRIPTOR ModificationDescriptor)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_SetSecurity() const { return false; }
 
-    NTSTATUS vReadDirectory(PVOID FileContext,
-                           PWSTR Pattern,
-                           PWSTR Marker,
-                           PVOID Buffer,
-                           ULONG Length,
-                           PULONG PBytesTransferred);
+    virtual NTSTATUS vReadDirectory(PVOID FileContext,
+                                    PWSTR Pattern,
+                                    PWSTR Marker,
+                                    PVOID Buffer,
+                                    ULONG Length,
+                                    PULONG PBytesTransferred)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_ReadDirectory() const { return false; }
 
-    NTSTATUS vGetEa(PVOID FileContext, PVOID Buffer, ULONG Length, PULONG PBytesTransferred);
+    virtual NTSTATUS
+    vGetEa(PVOID FileContext, PFILE_FULL_EA_INFORMATION Ea, ULONG Length, PULONG PBytesTransferred)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_GetEa() const { return false; }
 
-    NTSTATUS
-    vSetEa(PVOID FileContext,
-          PFILE_FULL_EA_INFORMATION Ea,
-          ULONG Length,
-          FSP_FSCTL_FILE_INFO* FileInfo);
+    virtual NTSTATUS vSetEa(PVOID FileContext,
+                            PFILE_FULL_EA_INFORMATION Ea,
+                            ULONG Length,
+                            FSP_FSCTL_FILE_INFO* FileInfo)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_SetEa() const { return false; }
 
-    NTSTATUS vGetStreamInfo(PVOID FileContext, PVOID Buffer, ULONG Length, PULONG PBytesTransferred);
+    virtual NTSTATUS
+    vGetStreamInfo(PVOID FileContext, PVOID Buffer, ULONG Length, PULONG PBytesTransferred)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_GetStreamInfo() const { return false; }
 
-    NTSTATUS vSetStreamInfo(PVOID FileContext, PVOID Buffer, ULONG Length);
+    virtual NTSTATUS vSetStreamInfo(PVOID FileContext, PVOID Buffer, ULONG Length)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_SetStreamInfo() const { return false; }
 
-    NTSTATUS vGetReparsePoint(PVOID FileContext, PVOID Buffer, PULONG PSize);
+    virtual NTSTATUS vGetReparsePoint(PVOID FileContext, PVOID Buffer, PULONG PSize)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_GetReparsePoint() const { return false; }
 
-    NTSTATUS
-    vSetReparsePoint(PVOID FileContext, PVOID Buffer, ULONG Size, FSP_FSCTL_FILE_INFO* FileInfo);
+    virtual NTSTATUS
+    vSetReparsePoint(PVOID FileContext, PVOID Buffer, ULONG Size, FSP_FSCTL_FILE_INFO* FileInfo)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_SetReparsePoint() const { return false; }
 
-    NTSTATUS
-    vDeleteReparsePoint(PVOID FileContext, PVOID Buffer, ULONG Size, FSP_FSCTL_FILE_INFO* FileInfo);
+    virtual NTSTATUS
+    vDeleteReparsePoint(PVOID FileContext, PVOID Buffer, ULONG Size, FSP_FSCTL_FILE_INFO* FileInfo)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_DeleteReparsePoint() const { return false; }
 
-    NTSTATUS
-    vSwitchToAlternateStream(PVOID* PFileContext, PWSTR StreamName, PVOID* PStreamContext);
+    virtual NTSTATUS
+    vSwitchToAlternateStream(PVOID* PFileContext, PWSTR StreamName, PVOID* PStreamContext)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_SwitchToAlternateStream() const { return false; }
 
-    NTSTATUS vSuspend(ULONG Flags);
+    virtual NTSTATUS vSuspend(ULONG Flags) { return STATUS_NOT_IMPLEMENTED; }
     virtual bool has_Suspend() const { return false; }
 
-    NTSTATUS vResume(ULONG Flags);
+    virtual NTSTATUS vResume(ULONG Flags) { return STATUS_NOT_IMPLEMENTED; }
     virtual bool has_Resume() const { return false; }
 
-    NTSTATUS vGetDirInfoByName(PVOID FileContext, PWSTR FileName, FSP_FSCTL_DIR_INFO* DirInfo);
+    virtual NTSTATUS
+    vGetDirInfoByName(PVOID FileContext, PWSTR FileName, FSP_FSCTL_DIR_INFO* DirInfo)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_GetDirInfoByName() const { return false; }
 
-    NTSTATUS vControl(PVOID FileContext,
-                     UINT32 ControlCode,
-                     PVOID InputBuffer,
-                     ULONG InputBufferLength,
-                     PVOID OutputBuffer,
-                     ULONG OutputBufferLength,
-                     PULONG PBytesTransferred);
+    virtual NTSTATUS vControl(PVOID FileContext,
+                              UINT32 ControlCode,
+                              PVOID InputBuffer,
+                              ULONG InputBufferLength,
+                              PVOID OutputBuffer,
+                              ULONG OutputBufferLength,
+                              PULONG PBytesTransferred)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_Control() const { return false; }
 
-    NTSTATUS vSetDelete(PVOID FileContext, PWSTR FileName, BOOLEAN DeleteFile);
+    virtual NTSTATUS vSetDelete(PVOID FileContext, PWSTR FileName, BOOLEAN DeleteFile)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_SetDelete() const { return false; }
 
-    NTSTATUS vOverwriteEx(PVOID FileContext,
-                         UINT32 FileAttributes,
-                         BOOLEAN ReplaceFileAttributes,
-                         UINT64 AllocationSize,
-                         PFILE_FULL_EA_INFORMATION Ea,
-                         ULONG EaLength,
-                         FSP_FSCTL_FILE_INFO* FileInfo);
+    virtual NTSTATUS vOverwriteEx(PVOID FileContext,
+                                  UINT32 FileAttributes,
+                                  BOOLEAN ReplaceFileAttributes,
+                                  UINT64 AllocationSize,
+                                  PFILE_FULL_EA_INFORMATION Ea,
+                                  ULONG EaLength,
+                                  FSP_FSCTL_FILE_INFO* FileInfo)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
     virtual bool has_OverwriteEx() const { return false; }
 
-    VOID vDispatcherStopped(BOOLEAN Normally);
+    virtual VOID vDispatcherStopped(BOOLEAN Normally) {}
     virtual bool has_DispatcherStopped() const { return false; }
 
 private:
@@ -291,7 +382,7 @@ private:
 
     static NTSTATUS WINAPI static_GetEa(FSP_FILE_SYSTEM* FileSystem,
                                         PVOID FileContext,
-                                        PVOID Buffer,
+                                        PFILE_FULL_EA_INFORMATION Buffer,
                                         ULONG Length,
                                         PULONG PBytesTransferred);
 
@@ -369,3 +460,4 @@ private:
     static VOID WINAPI static_DispatcherStopped(FSP_FILE_SYSTEM* FileSystem, BOOLEAN Normally);
 };
 }    // namespace securefs
+#endif

@@ -111,6 +111,10 @@ The lite format is the default as it is much faster and features easier conflict
 
 To request full format, which is no longer the default, run `securefs create --format full`.
 
+## License
+
+Most of the code is licensed under MIT, but a small part of Windows only code is licensed under GPLv3 because it's derived from WinFsp (a GPLv3 project).
+
 ## Design and algorithms
 
 See [here](docs/design.md).
