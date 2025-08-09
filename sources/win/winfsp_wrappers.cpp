@@ -1,5 +1,3 @@
-#ifdef _WIN32
-
 #include "winfsp_wrappers.h"
 
 #include "exceptions.h"
@@ -799,4 +797,3 @@ FSP_FILE_SYSTEM_INTERFACE WinFspFileSystem::as_fsp_interface() const
     return fsp_iface;
 }
 }    // namespace securefs
-#endif

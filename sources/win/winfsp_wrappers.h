@@ -1,6 +1,4 @@
 #pragma once
-#include <ntstatus.h>
-#ifdef _WIN32
 
 #include "object.h"
 
@@ -460,4 +458,3 @@ private:
     static VOID WINAPI static_DispatcherStopped(FSP_FILE_SYSTEM* FileSystem, BOOLEAN Normally);
 };
 }    // namespace securefs
-#endif

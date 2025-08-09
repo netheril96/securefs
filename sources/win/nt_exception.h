@@ -1,5 +1,4 @@
 #pragma once
-#ifdef _WIN32
 
 #include "exceptions.h"
 
@@ -28,4 +27,3 @@ public:
     std::string message() const override;
 };
 }    // namespace securefs
-#endif

@@ -1,6 +1,5 @@
 // This file is licensed under GPLv3 rather than MIT, because it contains derivative of GPL works.
 
-#ifdef _WIN32
 #include "nt_exception.h"
 
 #include <absl/strings/str_format.h>
@@ -218,4 +217,3 @@ std::string NTException::message() const
     return absl::StrFormat("NT error 0x%X: %s", m_status, m_msg);
 }
 }    // namespace securefs
-#endif
