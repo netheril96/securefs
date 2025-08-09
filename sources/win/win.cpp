@@ -1,4 +1,3 @@
-#ifdef _WIN32
 #include "exceptions.h"
 #include "lock_enabled.h"
 #include "logger.h"
@@ -1615,5 +1614,3 @@ OSService::execute_child_process_with_data(absl::Span<const std::string_view> ar
     return result;
 }
 }    // namespace securefs
-
-#endif

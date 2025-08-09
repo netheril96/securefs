@@ -76,6 +76,11 @@ include_directories(BEFORE sources)
 
 file(GLOB SOURCES sources/*.cpp sources/*.h
      ${SECUREFS_GENERATED_DIR}/git-version.cpp)
+if(WIN32)
+    file(GLOB WIN_SOURCES sources/win/*.cpp sources/win/*.h)
+    list(APPEND SOURCES ${WIN_SOURCES})
+endif()
+
 file(GLOB TEST_SOURCES test/*.h test/*.cpp)
 add_library(securefs-static STATIC ${SOURCES})
 
