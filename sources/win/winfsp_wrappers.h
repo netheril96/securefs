@@ -2,6 +2,8 @@
 
 #include "object.h"
 
+#include <memory>
+
 #include <winfsp/winfsp.h>
 
 namespace securefs
@@ -9,6 +11,10 @@ namespace securefs
 class WinFspFileSystem : public Object
 {
 public:
+    virtual const FSP_FSCTL_VOLUME_PARAMS& GetVolumeParams() const = 0;
+    void start();
+    void stop();
+
     FSP_FILE_SYSTEM_INTERFACE as_fsp_interface() const;
     virtual NTSTATUS vGetVolumeInfo(FSP_FSCTL_VOLUME_INFO* VolumeInfo)
     {
@@ -456,5 +462,19 @@ private:
                                               FSP_FSCTL_FILE_INFO* FileInfo);
 
     static VOID WINAPI static_DispatcherStopped(FSP_FILE_SYSTEM* FileSystem, BOOLEAN Normally);
+
+private:
+    struct FspFileSystemDeleter
+    {
+        void operator()(FSP_FILE_SYSTEM* fsp) const
+        {
+            if (fsp)
+            {
+                FspFileSystemDelete(fsp);
+            }
+        }
+    };
+
+    std::unique_ptr<FSP_FILE_SYSTEM, FspFileSystemDeleter> m_fileSystem;
 };
 }    // namespace securefs
