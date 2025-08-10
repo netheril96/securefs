@@ -2,6 +2,7 @@
 #include "lock_enabled.h"
 #include "nt_exception.h"
 #include "platform.h"
+#include "smart_handle.h"
 
 #include <absl/container/inlined_vector.h>
 #include <absl/strings/str_cat.h>
