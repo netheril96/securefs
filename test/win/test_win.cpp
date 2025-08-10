@@ -1,7 +1,6 @@
-#ifdef _WIN32
+#include "../test_common.h"
 #include "myutils.h"
 #include "platform.h"
-#include "test_common.h"
 
 #include <absl/strings/escaping.h>
 #include <absl/strings/str_format.h>
@@ -177,4 +176,3 @@ TEST_CASE("Test win_quote_argv with CommandLineToArgvW")
         CHECK(parsed_args == original_args);
     }
 }
-#endif

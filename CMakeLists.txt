@@ -82,6 +82,11 @@ if(WIN32)
 endif()
 
 file(GLOB TEST_SOURCES test/*.h test/*.cpp)
+if(WIN32)
+    file(GLOB WIN_TEST_SOURCES test/win/*.cpp test/win/*.h)
+    list(APPEND TEST_SOURCES ${WIN_TEST_SOURCES})
+endif()
+
 add_library(securefs-static STATIC ${SOURCES})
 
 # Add generated headers directory for is_fuse_t.h to securefs-static's include
@@ -195,8 +200,9 @@ else()
     set(FUSE_INCLUDE_DIR ${WINFSP_PREFIX}/inc/fuse)
     target_include_directories(securefs-static SYSTEM AFTER
                                PUBLIC ${WINFSP_PREFIX}/inc ${FUSE_INCLUDE_DIR})
-    target_link_libraries(securefs-static
-                          PUBLIC ${WINFSP_PREFIX}/lib/winfsp-${ARCH}.lib)
+    target_link_libraries(
+        securefs-static PUBLIC ntdll.lib
+                               ${WINFSP_PREFIX}/lib/winfsp-${ARCH}.lib)
     target_link_libraries(securefs-static PUBLIC delayimp.lib)
     if(MSVC)
         target_link_libraries(securefs-static

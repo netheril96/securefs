@@ -8,6 +8,7 @@
 #include "platform.h"
 #include "streams.h"
 #include "test_common.h"
+#include "test_streams.h"
 
 #include <algorithm>
 #include <random>
@@ -320,3 +321,8 @@ TEST_CASE("Test streams")
         REQUIRE(memcmp(ciphertext, second_ciphertext, sizeof(ciphertext)) == 0);
     }
 }
+
+namespace securefs
+{
+void test_streams(StreamBase& stream, unsigned times) { test(stream, times); }
+}    // namespace securefs
