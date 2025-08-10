@@ -27,6 +27,9 @@ public:
     ~ExceptionBase() override;
     virtual std::string message() const = 0;
     virtual int error_number() const noexcept { return EPERM; }
+#ifdef _WIN32
+    virtual long ntstatus() const noexcept;
+#endif
     const char* what() const noexcept override;
 };
 

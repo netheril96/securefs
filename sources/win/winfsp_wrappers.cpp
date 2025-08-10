@@ -50,13 +50,9 @@ static inline WinFspFileSystem* to_obj(FSP_FILE_SYSTEM* FileSystem)
 
 static NTSTATUS read_status_from_exception(const std::exception& e)
 {
-    if (auto* p = dynamic_cast<const NTException*>(&e); p)
-    {
-        return p->status();
-    }
     if (auto* p = dynamic_cast<const ExceptionBase*>(&e); p)
     {
-        return errno_to_ntstatus(p->error_number());
+        return p->ntstatus();
     }
     return STATUS_UNSUCCESSFUL;
 }
