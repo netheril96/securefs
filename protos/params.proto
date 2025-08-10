@@ -97,6 +97,14 @@ message MountOptions
     bool plain_text_names = 8;
     bool allow_sensitive_logging = 9;
     int64 max_idle_seconds = 10;
+    WinFspMountOptions winfsp_mount_options = 11;
+
+    message WinFspMountOptions
+    {
+        uint32 attr_timeout_ms = 1;
+        string filesystem_name = 2;
+        bool is_network_mount = 3;
+    }
 }
 
 message InternalMountData

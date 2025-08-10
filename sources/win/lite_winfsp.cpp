@@ -1,1 +1,85 @@
 #include "lite_winfsp.h"
+#include "nt_exception.h"
+#include "ntdecls.h"
+
+namespace securefs::lite_format
+{
+LiteWinFspFileSystem::LiteWinFspFileSystem(UniqueHandle root,
+                                           std::shared_ptr<StreamOpener> opener,
+                                           std::shared_ptr<NameTranslator> name_trans,
+                                           const MountOptions_WinFspMountOptions& opt)
+    : m_root(std::move(root)), opener_(std::move(opener)), name_trans_(std::move(name_trans))
+{
+    init_volume_params(opt);
+}
+
+LiteWinFspFileSystem::~LiteWinFspFileSystem() = default;
+
+void LiteWinFspFileSystem::init_volume_params(const MountOptions_WinFspMountOptions& opt)
+{
+    union
+    {
+        FILE_FS_ATTRIBUTE_INFORMATION V;
+        UINT8 B[FIELD_OFFSET(FILE_FS_ATTRIBUTE_INFORMATION, FileSystemName)
+                + MAX_PATH * sizeof(WCHAR)];
+    } FsAttrInfo;
+    NT_CHECK_CALL(NtQueryVolumeInformationFile(m_root.get(),
+                                               nullptr,
+                                               &FsAttrInfo,
+                                               sizeof(FsAttrInfo),
+                                               /*FileFsAttributeInformation*/
+                                               5));
+
+    FILE_FS_SIZE_INFORMATION FsSizeInfo;
+    NT_CHECK_CALL(NtQueryVolumeInformationFile(m_root.get(),
+                                               nullptr,
+                                               &FsSizeInfo,
+                                               sizeof(FsSizeInfo),
+                                               /*FileFsSizeInformation*/
+                                               3));
+    FILE_ALL_INFORMATION FileAllInfo;
+    NT_CHECK_CALL(
+        NtQueryInformationFile(m_root.get(),
+                               nullptr,
+                               &FileAllInfo,
+                               sizeof(FileAllInfo),
+                               /*FileAllInformation*/ static_cast<FILE_INFORMATION_CLASS>(18)));
+
+    m_params.SectorSize = (UINT16)FsSizeInfo.BytesPerSector;
+    m_params.SectorsPerAllocationUnit = (UINT16)FsSizeInfo.SectorsPerAllocationUnit;
+    m_params.MaxComponentLength = (UINT16)name_trans_->max_virtual_path_component_size(
+        FsAttrInfo.V.MaximumComponentNameLength);
+    m_params.VolumeCreationTime = FileAllInfo.BasicInformation.CreationTime.QuadPart;
+    m_params.VolumeSerialNumber = 0;
+    m_params.FileInfoTimeout = opt.attr_timeout_ms() > 0 ? opt.attr_timeout_ms() : 30000;
+    m_params.CaseSensitiveSearch = 1;
+    m_params.CasePreservedNames = 1;
+    m_params.UnicodeOnDisk = 1;
+    m_params.PersistentAcls = !!(FsAttrInfo.V.FileSystemAttributes & FILE_PERSISTENT_ACLS);
+    m_params.ReparsePoints
+        = 0 && !!(FsAttrInfo.V.FileSystemAttributes & FILE_SUPPORTS_REPARSE_POINTS);
+    m_params.NamedStreams = 0;
+    m_params.ExtendedAttributes
+        = 0 && !!(FsAttrInfo.V.FileSystemAttributes & FILE_SUPPORTS_EXTENDED_ATTRIBUTES);
+    m_params.SupportsPosixUnlinkRename = !!(FsAttrInfo.V.FileSystemAttributes & 0x00000400
+                                            /*FILE_SUPPORTS_POSIX_UNLINK_RENAME*/);
+    m_params.ReadOnlyVolume = !!(FsAttrInfo.V.FileSystemAttributes & FILE_READ_ONLY_VOLUME);
+    m_params.PostCleanupWhenModifiedOnly = 1;
+    m_params.PostDispositionWhenNecessaryOnly = 1;
+    m_params.PassQueryDirectoryPattern = 0;
+    m_params.FlushAndPurgeOnCleanup = 1;
+    m_params.WslFeatures = 0;
+    m_params.AllowOpenInKernelMode = 1;
+    m_params.RejectIrpPriorToTransact0 = 1;
+    m_params.UmFileContextIsUserContext2 = 1;
+
+    m_params.CasePreservedNames = 1;
+    m_params.CaseSensitiveSearch = 1;
+
+    auto wide_fsname = widen_string(opt.filesystem_name());
+    memcpy(m_params.FileSystemName,
+           wide_fsname.data(),
+           std::min(wide_fsname.size() * sizeof(WCHAR), sizeof(m_params.FileSystemName) - 1));
+}
+
+}    // namespace securefs::lite_format
