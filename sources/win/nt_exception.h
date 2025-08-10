@@ -27,6 +27,18 @@ public:
     std::string message() const override;
 };
 
+[[noreturn]] void throw_nt_exception(NTSTATUS status, std::string msg);
+
+#define NT_CHECK_CALL(exp)                                                                         \
+    do                                                                                             \
+    {                                                                                              \
+        NTSTATUS status = (exp);                                                                   \
+        if (!NT_SUCCESS(status))                                                                   \
+        {                                                                                          \
+            throw_nt_exception(status, #exp);                                                      \
+        }                                                                                          \
+    } while (0)
+
 class WindowsException : public SystemException
 {
 private:
@@ -72,7 +84,7 @@ public:
         throw WindowsException(code, exp, path1, path2);                                           \
     } while (0)
 
-#define CHECK_CALL(exp)                                                                            \
+#define WIN_CHECK_CALL(exp)                                                                        \
     if (!(exp))                                                                                    \
         THROW_WINDOWS_EXCEPTION(GetLastError(), L"" #exp);
 }    // namespace securefs

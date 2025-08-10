@@ -17,20 +17,12 @@ void WinFspFileSystem::start()
     }
     FSP_FILE_SYSTEM* fsp = nullptr;
     FSP_FILE_SYSTEM_INTERFACE fsp_iface = as_fsp_interface();
-    NTSTATUS status = FspFileSystemCreate(
-        const_cast<PWSTR>(L"" FSP_FSCTL_DISK_DEVICE_NAME), &GetVolumeParams(), &fsp_iface, &fsp);
-    if (!NT_SUCCESS(status))
-    {
-        throw NTException(status, "FspFileSystemCreate");
-    }
+    NT_CHECK_CALL(FspFileSystemCreate(
+        const_cast<PWSTR>(L"" FSP_FSCTL_DISK_DEVICE_NAME), &GetVolumeParams(), &fsp_iface, &fsp));
     m_fileSystem.reset(fsp);
     DEFER(if (std::uncaught_exceptions() > 0) { m_fileSystem.reset(); });
 
-    status = FspFileSystemStartDispatcher(fsp, 0);
-    if (!NT_SUCCESS(status))
-    {
-        throw NTException(status, "FspFileSystemStartDispatcher");
-    }
+    NT_CHECK_CALL(FspFileSystemStartDispatcher(fsp, 0));
 }
 
 void WinFspFileSystem::stop()

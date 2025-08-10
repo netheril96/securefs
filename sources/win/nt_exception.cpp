@@ -102,6 +102,11 @@ int ntstatus_to_errno(NTSTATUS status)
     return 5;    // EIO
 }
 
+[[noreturn]] void throw_nt_exception(NTSTATUS status, std::string msg)
+{
+    throw NTException(status, std::move(msg));
+}
+
 std::string NTException::message() const
 {
     return absl::StrFormat("NT error 0x%X: %s", m_status, m_msg);

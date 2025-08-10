@@ -86,7 +86,7 @@ static void stat_file_handle(HANDLE hd, fuse_stat* st)
 {
     memset(st, 0, sizeof(*st));
     BY_HANDLE_FILE_INFORMATION info;
-    CHECK_CALL(GetFileInformationByHandle(hd, &info));
+    WIN_CHECK_CALL(GetFileInformationByHandle(hd, &info));
     filetime_to_unix_time(&info.ftLastAccessTime, &st->st_atim);
     filetime_to_unix_time(&info.ftLastWriteTime, &st->st_mtim);
     filetime_to_unix_time(&info.ftCreationTime, &st->st_birthtim);
@@ -152,7 +152,7 @@ private:
         ol.OffsetHigh = static_cast<DWORD>(offset >> 32);
 
         DWORD writelen;
-        CHECK_CALL(WriteFile(m_handle, input, length, &writelen, &ol));
+        WIN_CHECK_CALL(WriteFile(m_handle, input, length, &writelen, &ol));
         if (writelen != length)
             throwVFSException(EIO);
     }
@@ -160,7 +160,7 @@ private:
     void write32(const void* input, DWORD length)
     {
         DWORD writelen;
-        CHECK_CALL(WriteFile(m_handle, input, length, &writelen, nullptr));
+        WIN_CHECK_CALL(WriteFile(m_handle, input, length, &writelen, nullptr));
         if (writelen != length)
             throwVFSException(EIO);
     }
@@ -259,12 +259,12 @@ public:
         }
         OVERLAPPED o;
         memset(&o, 0, sizeof(o));
-        CHECK_CALL(LockFileEx(m_handle,
-                              exclusive ? LOCKFILE_EXCLUSIVE_LOCK : 0,
-                              0,
-                              std::numeric_limits<DWORD>::max(),
-                              std::numeric_limits<DWORD>::max(),
-                              &o));
+        WIN_CHECK_CALL(LockFileEx(m_handle,
+                                  exclusive ? LOCKFILE_EXCLUSIVE_LOCK : 0,
+                                  0,
+                                  std::numeric_limits<DWORD>::max(),
+                                  std::numeric_limits<DWORD>::max(),
+                                  &o));
     }
 
     void unlock() noexcept override
@@ -344,7 +344,7 @@ public:
     length_type size() const override
     {
         _LARGE_INTEGER SIZE;
-        CHECK_CALL(GetFileSizeEx(m_handle, &SIZE));
+        WIN_CHECK_CALL(GetFileSizeEx(m_handle, &SIZE));
         return SIZE.QuadPart;
     }
 
@@ -354,13 +354,13 @@ public:
     {
         LARGE_INTEGER llen;
         llen.QuadPart = len;
-        CHECK_CALL(SetFilePointerEx(m_handle, llen, nullptr, FILE_BEGIN));
-        CHECK_CALL(SetEndOfFile(m_handle));
+        WIN_CHECK_CALL(SetFilePointerEx(m_handle, llen, nullptr, FILE_BEGIN));
+        WIN_CHECK_CALL(SetEndOfFile(m_handle));
     }
 
     length_type optimal_block_size() const noexcept override { return 4096; }
 
-    void fsync() override { CHECK_CALL(FlushFileBuffers(m_handle)); }
+    void fsync() override { WIN_CHECK_CALL(FlushFileBuffers(m_handle)); }
     void utimens(const fuse_timespec ts[2]) override
     {
         FILETIME access_time, mod_time;
@@ -374,7 +374,7 @@ public:
             access_time = unix_time_to_filetime(ts + 0);
             mod_time = unix_time_to_filetime(ts + 1);
         }
-        CHECK_CALL(SetFileTime(m_handle, nullptr, &access_time, &mod_time));
+        WIN_CHECK_CALL(SetFileTime(m_handle, nullptr, &access_time, &mod_time));
     }
     void fstat(fuse_stat* st) const override { stat_file_handle(m_handle, st); }
     bool is_sparse() const noexcept override { return true; }
@@ -478,12 +478,12 @@ OSService::open_file_stream(const std::string& path, int flags, unsigned mode) c
 
 void OSService::remove_file(const std::string& path) const
 {
-    CHECK_CALL(DeleteFileW(norm_path(path).c_str()));
+    WIN_CHECK_CALL(DeleteFileW(norm_path(path).c_str()));
 }
 
 void OSService::remove_directory(const std::string& path) const
 {
-    CHECK_CALL(RemoveDirectoryW(norm_path(path).c_str()));
+    WIN_CHECK_CALL(RemoveDirectoryW(norm_path(path).c_str()));
 }
 
 void OSService::lock() const
@@ -536,9 +536,9 @@ void OSService::statfs(fuse_statvfs* fs_info) const
     memset(fs_info, 0, sizeof(*fs_info));
     ULARGE_INTEGER FreeBytesAvailable, TotalNumberOfBytes, TotalNumberOfFreeBytes;
     DWORD namemax = 0;
-    CHECK_CALL(GetDiskFreeSpaceExW(
+    WIN_CHECK_CALL(GetDiskFreeSpaceExW(
         norm_path(".").c_str(), &FreeBytesAvailable, &TotalNumberOfBytes, &TotalNumberOfFreeBytes));
-    CHECK_CALL(GetVolumeInformationByHandleW(
+    WIN_CHECK_CALL(GetVolumeInformationByHandleW(
         m_root_handle, nullptr, 0, nullptr, &namemax, nullptr, nullptr, 0));
     auto maximum = static_cast<unsigned>(-1);
     fs_info->f_bsize = 4096;
@@ -576,7 +576,7 @@ void OSService::utimens(const std::string& path, const fuse_timespec ts[2]) cons
     if (hd == INVALID_HANDLE_VALUE)
         THROW_WINDOWS_EXCEPTION_WITH_PATH(GetLastError(), L"CreateFileW", npath);
     DEFER(CloseHandle(hd));
-    CHECK_CALL(SetFileTime(hd, nullptr, &atime, &mtime));
+    WIN_CHECK_CALL(SetFileTime(hd, nullptr, &atime, &mtime));
 }
 
 bool OSService::stat(const std::string& path, fuse_stat* stat) const
@@ -988,14 +988,14 @@ bool OSService::query_if_mounted_by_ioctl() const
 }
 void OSService::trigger_unmount_by_ioctl() const
 {
-    CHECK_CALL(DeviceIoControl(m_root_handle,
-                               FSP_FUSE_CTLCODE_FROM_IOCTL(get_cmd_for_trigger_unmount_ioctl()),
-                               nullptr,
-                               0,
-                               nullptr,
-                               0,
-                               nullptr,
-                               nullptr));
+    WIN_CHECK_CALL(DeviceIoControl(m_root_handle,
+                                   FSP_FUSE_CTLCODE_FROM_IOCTL(get_cmd_for_trigger_unmount_ioctl()),
+                                   nullptr,
+                                   0,
+                                   nullptr,
+                                   0,
+                                   nullptr,
+                                   nullptr));
 }
 
 std::string OSService::win_quote_argv(std::string_view arg)

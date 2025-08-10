@@ -44,7 +44,7 @@ void NTStream::write(const void* input, offset_type offset, length_type length)
     LARGE_INTEGER li_offset;
     li_offset.QuadPart = offset;
 
-    NTSTATUS st = NtWriteFile(m_handle.get(),
+    NT_CHECK_CALL(NtWriteFile(m_handle.get(),
                               nullptr,
                               nullptr,
                               nullptr,
@@ -52,12 +52,7 @@ void NTStream::write(const void* input, offset_type offset, length_type length)
                               const_cast<void*>(input),
                               length,
                               &li_offset,
-                              nullptr);
-
-    if (!NT_SUCCESS(st))
-    {
-        throw NTException(st, "NtWriteFile");
-    }
+                              nullptr));
 
     if (io_status_block.Information != length)
         throw_runtime_error("Partial write");
@@ -67,23 +62,19 @@ length_type NTStream::size() const
 {
     IO_STATUS_BLOCK io_status_block;
     FILE_STANDARD_INFORMATION info;
-    NTSTATUS st = NtQueryInformationFile(
+    NT_CHECK_CALL(NtQueryInformationFile(
         m_handle.get(),
         &io_status_block,
         &info,
         sizeof(info),
-        static_cast<FILE_INFORMATION_CLASS>(5) /*FileStandardInformation*/);
-    if (!NT_SUCCESS(st))
-        throw NTException(st, "NtQueryInformationFile");
+        static_cast<FILE_INFORMATION_CLASS>(5) /*FileStandardInformation*/));
     return info.EndOfFile.QuadPart;
 }
 
 void NTStream::flush()
 {
     IO_STATUS_BLOCK io_status_block;
-    NTSTATUS st = NtFlushBuffersFile(m_handle.get(), &io_status_block);
-    if (!NT_SUCCESS(st))
-        throw NTException(st, "NtFlushBuffersFile");
+    NT_CHECK_CALL(NtFlushBuffersFile(m_handle.get(), &io_status_block));
 }
 
 void NTStream::resize(length_type len)
@@ -92,14 +83,12 @@ void NTStream::resize(length_type len)
     FILE_END_OF_FILE_INFORMATION info;
     info.EndOfFile.QuadPart = len;
 
-    NTSTATUS st = NtSetInformationFile(
+    NT_CHECK_CALL(NtSetInformationFile(
         m_handle.get(),
         &io_status_block,
         &info,
         sizeof(info),
-        static_cast<FILE_INFORMATION_CLASS>(20) /*FileEndOfFileInformation*/);
-    if (!NT_SUCCESS(st))
-        throw NTException(st, "NtSetInformationFile");
+        static_cast<FILE_INFORMATION_CLASS>(20) /*FileEndOfFileInformation*/));
 }
 
 bool NTStream::is_sparse() const noexcept { return true; }
