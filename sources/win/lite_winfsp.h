@@ -16,6 +16,12 @@ public:
                          const MountOptions_WinFspMountOptions& opt);
     ~LiteWinFspFileSystem() override;
 
+    NTSTATUS vGetSecurityByName(PWSTR FileName,
+                                PUINT32 PFileAttributes,
+                                PSECURITY_DESCRIPTOR SecurityDescriptor,
+                                SIZE_T* PSecurityDescriptorSize) override;
+    bool has_GetSecurityByName() const override { return true; }
+
     const FSP_FSCTL_VOLUME_PARAMS& GetVolumeParams() const override { return m_params; }
 
 private:
@@ -27,5 +33,6 @@ private:
 
 private:
     void init_volume_params(const MountOptions_WinFspMountOptions& opt);
+    std::wstring translate_name(std::wstring_view filename);
 };
 }    // namespace securefs::lite_format

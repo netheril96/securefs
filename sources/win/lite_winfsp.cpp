@@ -82,4 +82,62 @@ void LiteWinFspFileSystem::init_volume_params(const MountOptions_WinFspMountOpti
            std::min(wide_fsname.size() * sizeof(WCHAR), sizeof(m_params.FileSystemName) - 1));
 }
 
+NTSTATUS LiteWinFspFileSystem::vGetSecurityByName(PWSTR FileName,
+                                                  PUINT32 PFileAttributes,
+                                                  PSECURITY_DESCRIPTOR SecurityDescriptor,
+                                                  SIZE_T* PSecurityDescriptorSize)
+{
+    auto underlying_name = translate_name(FileName);
+    OBJECT_ATTRIBUTES obj_attr;
+    UNICODE_STRING uni_name;
+    InitializeObjectAttributes(&obj_attr, &uni_name, OBJ_CASE_INSENSITIVE, m_root.get(), nullptr);
+
+    // Use the translated name as the file name
+    uni_name.Buffer = underlying_name.data();
+    uni_name.Length = (USHORT)(underlying_name.size() * sizeof(WCHAR));
+    uni_name.MaximumLength = uni_name.Length;
+
+    HANDLE file_handle;
+    IO_STATUS_BLOCK io_status;
+    NT_CHECK_CALL(NtOpenFile(&file_handle,
+                             READ_CONTROL,
+                             &obj_attr,
+                             &io_status,
+                             FILE_SHARE_READ | FILE_SHARE_WRITE,
+                             FILE_OPEN_FOR_BACKUP_INTENT));
+    DEFER(NtClose(file_handle));
+    if (PSecurityDescriptorSize)
+    {
+        // If we successfully opened the file, query its security descriptor
+        DWORD sd_size = 0;
+        NT_CHECK_CALL(NtQuerySecurityObject(file_handle,
+                                            DACL_SECURITY_INFORMATION | OWNER_SECURITY_INFORMATION
+                                                | GROUP_SECURITY_INFORMATION,
+                                            SecurityDescriptor,
+                                            (ULONG)*PSecurityDescriptorSize,
+                                            &sd_size));
+        *PSecurityDescriptorSize = sd_size;
+    }
+    if (PFileAttributes)
+    {
+        FILE_ATTRIBUTE_TAG_INFORMATION AttrInfo;
+        IO_STATUS_BLOCK IoStatusBlock;
+        NT_CHECK_CALL(NtQueryInformationFile(
+            file_handle,
+            &IoStatusBlock,
+            &AttrInfo,
+            sizeof(FILE_ATTRIBUTE_TAG_INFORMATION),
+            static_cast<FILE_INFORMATION_CLASS>(35) /*FileAttributeTagInformation*/));
+        *PFileAttributes = AttrInfo.FileAttributes;
+    }
+
+    return 0;
+}
+
+std::wstring LiteWinFspFileSystem::translate_name(std::wstring_view filename)
+{
+    // Stub for now.
+    return {filename.data(), filename.size()};
+}
+
 }    // namespace securefs::lite_format
