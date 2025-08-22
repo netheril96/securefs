@@ -4,6 +4,66 @@
 
 namespace securefs::lite_format
 {
+
+namespace
+{
+    FSP_FSCTL_FILE_INFO read_file_info_from_handle(HANDLE handle)
+    {
+        constexpr ULONG AllInfoBufferSize = 4000;
+
+        IO_STATUS_BLOCK Iosb;
+        auto AllInfo = static_cast<FILE_ALL_INFORMATION*>(malloc(AllInfoBufferSize));
+        if (!AllInfo)
+        {
+            throw std::bad_alloc();
+        }
+
+        NT_CHECK_CALL(
+            NtQueryInformationFile(handle,
+                                   &Iosb,
+                                   AllInfo,
+                                   AllInfoBufferSize,
+                                   static_cast<FILE_INFORMATION_CLASS>(18) /*FileAllInformation*/));
+
+        FSP_FSCTL_FILE_INFO info;
+        memset(&info, 0, sizeof(info));
+
+        info.FileAttributes = AllInfo->BasicInformation.FileAttributes;
+        info.AllocationSize = AllInfo->StandardInformation.AllocationSize.QuadPart;
+        info.FileSize = AllInfo->StandardInformation.EndOfFile.QuadPart;
+        info.CreationTime = AllInfo->BasicInformation.CreationTime.QuadPart;
+        info.LastAccessTime = AllInfo->BasicInformation.LastAccessTime.QuadPart;
+        info.LastWriteTime = AllInfo->BasicInformation.LastWriteTime.QuadPart;
+        info.ChangeTime = AllInfo->BasicInformation.ChangeTime.QuadPart;
+        info.IndexNumber = AllInfo->InternalInformation.IndexNumber.QuadPart;
+
+        return info;
+    }
+
+    UniqueHandle open_existing_file(ACCESS_MASK DesiredAccess,
+                                    HANDLE RootHandle,
+                                    PCWSTR FileName,
+                                    ULONG OpenOptions)
+    {
+        UNICODE_STRING unicode_file_name;
+        OBJECT_ATTRIBUTES Obja;
+        IO_STATUS_BLOCK Iosb;
+        NTSTATUS Result;
+        HANDLE handle;
+
+        RtlInitUnicodeString(&unicode_file_name, FileName);
+        InitializeObjectAttributes(&Obja, &unicode_file_name, OBJ_CASE_INSENSITIVE, RootHandle, 0);
+
+        NT_CHECK_CALL(NtOpenFile(&handle,
+                                 FILE_READ_ATTRIBUTES | DesiredAccess,
+                                 &Obja,
+                                 &Iosb,
+                                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                 OpenOptions));
+        return UniqueHandle{handle};
+    }
+}    // namespace
+
 LiteWinFspFileSystem::LiteWinFspFileSystem(UniqueHandle root,
                                            std::shared_ptr<StreamOpener> opener,
                                            std::shared_ptr<NameTranslator> name_trans,
@@ -88,29 +148,13 @@ NTSTATUS LiteWinFspFileSystem::vGetSecurityByName(PWSTR FileName,
                                                   SIZE_T* PSecurityDescriptorSize)
 {
     auto underlying_name = translate_name(FileName);
-    OBJECT_ATTRIBUTES obj_attr;
-    UNICODE_STRING uni_name;
-    InitializeObjectAttributes(&obj_attr, &uni_name, OBJ_CASE_INSENSITIVE, m_root.get(), nullptr);
-
-    // Use the translated name as the file name
-    uni_name.Buffer = underlying_name.data();
-    uni_name.Length = (USHORT)(underlying_name.size() * sizeof(WCHAR));
-    uni_name.MaximumLength = uni_name.Length;
-
-    HANDLE file_handle;
-    IO_STATUS_BLOCK io_status;
-    NT_CHECK_CALL(NtOpenFile(&file_handle,
-                             READ_CONTROL,
-                             &obj_attr,
-                             &io_status,
-                             FILE_SHARE_READ | FILE_SHARE_WRITE,
-                             FILE_OPEN_FOR_BACKUP_INTENT));
-    DEFER(NtClose(file_handle));
+    auto file_handle = open_existing_file(
+        READ_CONTROL, m_root.get(), underlying_name.c_str(), FILE_OPEN_FOR_BACKUP_INTENT);
     if (PSecurityDescriptorSize)
     {
         // If we successfully opened the file, query its security descriptor
         DWORD sd_size = 0;
-        NT_CHECK_CALL(NtQuerySecurityObject(file_handle,
+        NT_CHECK_CALL(NtQuerySecurityObject(file_handle.get(),
                                             DACL_SECURITY_INFORMATION | OWNER_SECURITY_INFORMATION
                                                 | GROUP_SECURITY_INFORMATION,
                                             SecurityDescriptor,
@@ -123,7 +167,7 @@ NTSTATUS LiteWinFspFileSystem::vGetSecurityByName(PWSTR FileName,
         FILE_ATTRIBUTE_TAG_INFORMATION AttrInfo;
         IO_STATUS_BLOCK IoStatusBlock;
         NT_CHECK_CALL(NtQueryInformationFile(
-            file_handle,
+            file_handle.get(),
             &IoStatusBlock,
             &AttrInfo,
             sizeof(FILE_ATTRIBUTE_TAG_INFORMATION),
@@ -141,7 +185,17 @@ NTSTATUS LiteWinFspFileSystem::vOpen(PWSTR FileName,
                                      FSP_FSCTL_FILE_INFO* FileInfo)
 {
     CreateOptions &= FILE_DIRECTORY_FILE | FILE_NON_DIRECTORY_FILE | FILE_NO_EA_KNOWLEDGE;
+    auto underlying_name = translate_name(FileName);
+    auto file_handle = open_existing_file(GrantedAccess,
+                                          m_root.get(),
+                                          underlying_name.c_str(),
+                                          FILE_OPEN_FOR_BACKUP_INTENT | CreateOptions);
+    auto under_info = read_file_info_from_handle(file_handle.get());
 
+    std::unique_ptr<LiteNTBase> lite_nt_base;
+    if (under_info.FileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+    {
+    }
     return STATUS_NOT_IMPLEMENTED;
 }
 
