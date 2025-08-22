@@ -1,6 +1,7 @@
 #include "lite_winfsp.h"
 #include "nt_exception.h"
 #include "ntdecls.h"
+#include "nt_directory_iterator.h"
 
 namespace securefs::lite_format
 {
