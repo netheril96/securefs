@@ -18,6 +18,7 @@ namespace securefs
 TEST_CASE("NT directory iterator")
 {
     auto temp_dir = OSService::temp_name("tmp/", ".ntdir");
+    OSService::get_default().mkdir(temp_dir, 0700);
 
     HANDLE h = CreateFileW(widen_string(temp_dir).c_str(),
                            FILE_LIST_DIRECTORY,
@@ -50,7 +51,7 @@ TEST_CASE("NT directory iterator")
 
     SUBCASE("One file")
     {
-        std::string file_path = temp_dir + "\a.txt";
+        std::string file_path = temp_dir + "\\a.txt";
         HANDLE hFile = CreateFileW(
             widen_string(file_path).c_str(), GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL);
         REQUIRE(hFile != INVALID_HANDLE_VALUE);
@@ -83,7 +84,7 @@ TEST_CASE("NT directory iterator")
             REQUIRE(hFile != INVALID_HANDLE_VALUE);
             CloseHandle(hFile);
         }
-        REQUIRE(CreateDirectoryW(widen_string(temp_dir + "\subdir").c_str(), NULL));
+        REQUIRE(CreateDirectoryW(widen_string(temp_dir + "\\subdir").c_str(), NULL));
         names.push_back(L"subdir");
         names.push_back(L".");
         names.push_back(L"..");

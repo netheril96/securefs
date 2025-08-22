@@ -15,11 +15,16 @@ void NTDirectoryIterator::rewind() { restart_scan_ = true; }
 
 const FILE_ID_BOTH_DIR_INFO* NTDirectoryIterator::next()
 {
+    if (restart_scan_)
+    {
+        finished_ = false;
+        current_entry_ = nullptr;
+    }
     if (finished_)
         return nullptr;
 
     // If this is the first call or we've reached the end of current buffer
-    if (current_entry_ == nullptr)
+    if (finished_ || current_entry_ == nullptr)
     {
         IO_STATUS_BLOCK iosb;
         NTSTATUS status = NtQueryDirectoryFile(
@@ -38,6 +43,7 @@ const FILE_ID_BOTH_DIR_INFO* NTDirectoryIterator::next()
 
         if (status == STATUS_NO_MORE_FILES)
         {
+            current_entry_ = nullptr;
             finished_ = true;
             return nullptr;
         }
@@ -60,6 +66,11 @@ const FILE_ID_BOTH_DIR_INFO* NTDirectoryIterator::next()
         // Move to next entry in the linked list
         BYTE* next_entry_ptr
             = reinterpret_cast<BYTE*>(current_entry_) + current_entry_->NextEntryOffset;
+        if (next_entry_ptr >= buffer_.get() + buffer_size_)
+        {
+            throw_nt_exception(STATUS_BUFFER_OVERFLOW,
+                               "NtQueryDirectoryFile returns invalid buffer with overflow");
+        }
 
         current_entry_ = reinterpret_cast<FILE_ID_BOTH_DIR_INFO*>(next_entry_ptr);
     }

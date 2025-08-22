@@ -38,6 +38,33 @@ struct doctest::StringMaker<std::vector<std::string>>
     }
 };
 
+#ifdef _WIN32
+
+template <>
+struct doctest::StringMaker<std::wstring_view>
+{
+    static doctest::String convert(const std::wstring_view& value)
+    {
+        return to_doc_str(securefs::narrow_string(value));
+    }
+};
+
+template <>
+struct doctest::StringMaker<std::vector<std::wstring>>
+{
+    static doctest::String convert(const std::vector<std::wstring>& value)
+    {
+        std::vector<std::string> converted;
+        converted.reserve(value.size());
+        for (auto&& str : value)
+        {
+            converted.emplace_back(securefs::narrow_string(str));
+        }
+        return to_doc_str(absl::StrCat("[", absl::StrJoin(converted, ", "), "]"));
+    }
+};
+#endif
+
 namespace securefs::testing
 {
 
