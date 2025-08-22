@@ -134,6 +134,39 @@ NTSTATUS LiteWinFspFileSystem::vGetSecurityByName(PWSTR FileName,
     return 0;
 }
 
+NTSTATUS LiteWinFspFileSystem::vOpen(PWSTR FileName,
+                                     UINT32 CreateOptions,
+                                     UINT32 GrantedAccess,
+                                     PVOID* PFileContext,
+                                     FSP_FSCTL_FILE_INFO* FileInfo)
+{
+    // Stub implementation
+    return STATUS_NOT_IMPLEMENTED;
+}
+
+VOID LiteWinFspFileSystem::vClose(PVOID FileContext)
+{
+    // Stub implementation
+}
+
+NTSTATUS LiteWinFspFileSystem::vRead(
+    PVOID FileContext, PVOID Buffer, UINT64 Offset, ULONG Length, PULONG PBytesTransferred)
+{
+    // Stub implementation
+    return STATUS_NOT_IMPLEMENTED;
+}
+
+NTSTATUS LiteWinFspFileSystem::vReadDirectory(PVOID FileContext,
+                                              PWSTR Pattern,
+                                              PWSTR Marker,
+                                              PVOID Buffer,
+                                              ULONG Length,
+                                              PULONG PBytesTransferred)
+{
+    // Stub implementation
+    return STATUS_NOT_IMPLEMENTED;
+}
+
 std::wstring LiteWinFspFileSystem::translate_name(std::wstring_view filename)
 {
     // Stub for now.

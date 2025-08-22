@@ -24,6 +24,31 @@ public:
 
     const FSP_FSCTL_VOLUME_PARAMS& GetVolumeParams() const override { return m_params; }
 
+    NTSTATUS vOpen(PWSTR FileName,
+                   UINT32 CreateOptions,
+                   UINT32 GrantedAccess,
+                   PVOID* PFileContext,
+                   FSP_FSCTL_FILE_INFO* FileInfo) override;
+    bool has_Open() const override { return true; }
+
+    VOID vClose(PVOID FileContext) override;
+    bool has_Close() const override { return true; }
+
+    NTSTATUS vRead(PVOID FileContext,
+                   PVOID Buffer,
+                   UINT64 Offset,
+                   ULONG Length,
+                   PULONG PBytesTransferred) override;
+    bool has_Read() const override { return true; }
+
+    NTSTATUS vReadDirectory(PVOID FileContext,
+                            PWSTR Pattern,
+                            PWSTR Marker,
+                            PVOID Buffer,
+                            ULONG Length,
+                            PULONG PBytesTransferred) override;
+    bool has_ReadDirectory() const override { return true; }
+
 private:
     FSP_FSCTL_VOLUME_PARAMS m_params{};
 
