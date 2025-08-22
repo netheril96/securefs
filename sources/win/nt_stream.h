@@ -24,5 +24,9 @@ public:
     void resize(length_type) override;
 
     bool is_sparse() const noexcept override;
+
+    void lock(bool exclusive = true);
+
+    void unlock() noexcept;
 };
 }    // namespace securefs

@@ -223,4 +223,21 @@ extern "C"
                                ULONG Length,
                                PLARGE_INTEGER ByteOffset,
                                PULONG Key);
+
+    NTSTATUS NTAPI NtLockFile(HANDLE FileHandle,
+                              HANDLE Event,
+                              PIO_APC_ROUTINE ApcRoutine,
+                              PVOID ApcContext,
+                              PIO_STATUS_BLOCK IoStatusBlock,
+                              PLARGE_INTEGER ByteOffset,
+                              PLARGE_INTEGER Length,
+                              ULONG Key,
+                              BOOLEAN FailImmediately,
+                              BOOLEAN ExclusiveLock);
+
+    NTSTATUS NTAPI NtUnlockFile(HANDLE FileHandle,
+                                PIO_STATUS_BLOCK IoStatusBlock,
+                                PLARGE_INTEGER ByteOffset,
+                                PLARGE_INTEGER Length,
+                                ULONG Key);
 }

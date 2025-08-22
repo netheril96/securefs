@@ -140,7 +140,8 @@ NTSTATUS LiteWinFspFileSystem::vOpen(PWSTR FileName,
                                      PVOID* PFileContext,
                                      FSP_FSCTL_FILE_INFO* FileInfo)
 {
-    // Stub implementation
+    CreateOptions &= FILE_DIRECTORY_FILE | FILE_NON_DIRECTORY_FILE | FILE_NO_EA_KNOWLEDGE;
+
     return STATUS_NOT_IMPLEMENTED;
 }
 

@@ -98,4 +98,36 @@ void NTStream::resize(length_type len)
 }
 
 bool NTStream::is_sparse() const noexcept { return true; }
+
+void NTStream::lock(bool exclusive)
+{
+    IO_STATUS_BLOCK io_status_block;
+    LARGE_INTEGER li_offset;
+    LARGE_INTEGER li_length;
+    li_offset.QuadPart = 0;
+    li_length.QuadPart = static_cast<LONGLONG>(-1);    // Lock entire file
+
+    NT_CHECK_CALL(NtLockFile(m_handle.get(),
+                             nullptr,
+                             nullptr,
+                             nullptr,
+                             &io_status_block,
+                             &li_offset,
+                             &li_length,
+                             0,
+                             false,
+                             exclusive));
+}
+
+void NTStream::unlock() noexcept
+{
+    IO_STATUS_BLOCK io_status_block;
+    LARGE_INTEGER li_offset;
+    LARGE_INTEGER li_length;
+    li_offset.QuadPart = 0;
+    li_length.QuadPart = static_cast<LONGLONG>(-1);    // Unlock entire file
+
+    // NtUnlockFile doesn't throw exceptions, so we don't need NT_CHECK_CALL
+    NtUnlockFile(m_handle.get(), &io_status_block, &li_offset, &li_length, 0);
+}
 }    // namespace securefs
