@@ -70,7 +70,23 @@ TEST_CASE("NT directory iterator")
 
     SUBCASE("Multiple files and directories")
     {
-        std::vector<std::wstring> names = {L"a", L"b", L"c", L"d", L"e"};
+        std::vector<std::wstring> names = {
+            L"a",
+            L"b",
+            L"c",
+            L"d",
+            L"e",
+            L"fghijk1",
+            L"fghijk2",
+            L"fghijk3",
+            L"fghijk4",
+            L"fghijk5",
+            L"fghijk6",
+            L"fghijk7",
+            L"fghijk8",
+            L"fghijk9",
+            L"fghijk0",
+        };
         for (const auto& name : names)
         {
             HANDLE hFile = CreateFileW(
@@ -90,7 +106,7 @@ TEST_CASE("NT directory iterator")
         names.push_back(L"..");
 
         std::vector<std::wstring> found_names;
-        securefs::NTDirectoryIterator it(h);
+        securefs::NTDirectoryIterator it(h, sizeof(FILE_ID_BOTH_DIR_INFO) + 15 * sizeof(WCHAR));
         while (auto entry = it.next())
         {
             found_names.emplace_back(entry->FileName, entry->FileNameLength / sizeof(wchar_t));
