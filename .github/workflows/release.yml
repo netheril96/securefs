@@ -316,6 +316,8 @@ jobs:
   build-freebsd:
     runs-on: ubuntu-latest
     timeout-minutes: 75
+    env:
+      VCPKG_FORCE_DOWNLOADED_BINARIES: 1
     steps:
       - uses: actions/checkout@v4
       - name: checkout-vcpkg
@@ -323,15 +325,15 @@ jobs:
         with:
           path: ${{ github.workspace }}/vcpkg
           repository: microsoft/vcpkg
-          ref: '2025.01.13'
+          ref: '2025.10.17'
           fetch-depth: 1
       - name: cache-vcpkg
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
-          key: release-freebsd-'2025.01.13'-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
+          key: release-freebsd-'2025.10.17'-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
           restore-keys: |
-            release-freebsd-'2025.01.13'-
+            release-freebsd-'2025.10.17'-
             release-freebsd-
       - name: Test in FreeBSD
         id: freebsd
