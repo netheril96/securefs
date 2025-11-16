@@ -1,3 +1,5 @@
+mod block;
+
 use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
@@ -14,7 +16,7 @@ use std::os::windows::fs::FileExt;
 type OffsetType = u64;
 type LengthType = u64;
 
-trait Stream {
+pub trait Stream {
     fn read(&mut self, buffer: &mut [u8], offset: OffsetType)
     -> Result<LengthType, Box<dyn Error>>;
     fn write(&mut self, buffer: &[u8], offset: OffsetType) -> Result<(), Box<dyn Error>>;
