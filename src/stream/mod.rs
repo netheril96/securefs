@@ -158,7 +158,7 @@ pub mod test {
     use std::env;
     use std::fs;
 
-    fn compare_with_reference(
+    pub fn compare_with_reference(
         to_be_tested: &mut dyn Stream,
         reference: &mut dyn Stream,
         times: u32,
