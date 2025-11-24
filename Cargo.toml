@@ -4,5 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+aes-gcm = "0.10.3"
+ctr = "0.9.2"
+ghash = "0.5.1"
 rand = "0.9.2"
 subcase = "0.4.0"
+subtle = "2.6.1"

@@ -1,4 +1,5 @@
 mod block;
+mod lite;
 
 use std::error::Error;
 use std::fs::{File, OpenOptions};
@@ -16,6 +17,7 @@ use std::os::windows::fs::FileExt;
 type OffsetType = u64;
 type LengthType = u64;
 
+#[allow(unused)]
 pub trait Stream {
     fn read(&mut self, buffer: &mut [u8], offset: OffsetType)
     -> Result<LengthType, Box<dyn Error>>;

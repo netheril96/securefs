@@ -1,3 +1,4 @@
+#![allow(unused)]
 use std::{
     error::Error,
     ops::{Div, Rem},
@@ -5,7 +6,7 @@ use std::{
 
 use crate::stream::{LengthType, OffsetType, Stream};
 
-trait MultipleBlockReaderWriter {
+pub(in crate::stream) trait MultipleBlockReaderWriter {
     fn block_size(&self) -> LengthType;
     fn read_multi_blocks(
         &mut self,
