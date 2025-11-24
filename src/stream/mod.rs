@@ -19,12 +19,11 @@ type LengthType = u64;
 
 #[allow(unused)]
 pub trait Stream {
-    fn read(&mut self, buffer: &mut [u8], offset: OffsetType)
-    -> Result<LengthType, Box<dyn Error>>;
-    fn write(&mut self, buffer: &[u8], offset: OffsetType) -> Result<(), Box<dyn Error>>;
-    fn size(&self) -> Result<LengthType, Box<dyn Error>>;
-    fn flush(&mut self) -> Result<(), Box<dyn Error>>;
-    fn resize(&mut self, size: LengthType) -> Result<(), Box<dyn Error>>;
+    fn read(&mut self, buffer: &mut [u8], offset: OffsetType) -> anyhow::Result<LengthType>;
+    fn write(&mut self, buffer: &[u8], offset: OffsetType) -> anyhow::Result<()>;
+    fn size(&self) -> anyhow::Result<LengthType>;
+    fn flush(&mut self) -> anyhow::Result<()>;
+    fn resize(&mut self, size: LengthType) -> anyhow::Result<()>;
     fn is_sparse(&self) -> bool {
         false
     }
@@ -38,11 +37,7 @@ pub struct MemoryStream {
 }
 
 impl Stream for MemoryStream {
-    fn read(
-        &mut self,
-        buffer: &mut [u8],
-        offset: OffsetType,
-    ) -> Result<LengthType, Box<dyn Error>> {
+    fn read(&mut self, buffer: &mut [u8], offset: OffsetType) -> anyhow::Result<LengthType> {
         if offset >= self.buffer.len().try_into()? {
             return Ok(0);
         }
@@ -53,7 +48,7 @@ impl Stream for MemoryStream {
         Ok(slice.len().try_into()?)
     }
 
-    fn write(&mut self, buffer: &[u8], offset: OffsetType) -> Result<(), Box<dyn Error>> {
+    fn write(&mut self, buffer: &[u8], offset: OffsetType) -> anyhow::Result<()> {
         let end: u64 = offset + TryInto::<u64>::try_into(buffer.len())?;
         if end > self.buffer.len().try_into()? {
             self.buffer.resize(end.try_into()?, 0);
@@ -63,15 +58,15 @@ impl Stream for MemoryStream {
         Ok(())
     }
 
-    fn size(&self) -> Result<LengthType, Box<dyn Error>> {
+    fn size(&self) -> anyhow::Result<LengthType> {
         Ok(self.buffer.len().try_into()?)
     }
 
-    fn flush(&mut self) -> Result<(), Box<dyn Error>> {
+    fn flush(&mut self) -> anyhow::Result<()> {
         Ok(())
     }
 
-    fn resize(&mut self, size: LengthType) -> Result<(), Box<dyn Error>> {
+    fn resize(&mut self, size: LengthType) -> anyhow::Result<()> {
         self.buffer.resize(size.try_into()?, 0);
         Ok(())
     }
@@ -98,31 +93,23 @@ impl StdIoStream {
 
 impl Stream for StdIoStream {
     #[cfg(unix)]
-    fn read(
-        &mut self,
-        buffer: &mut [u8],
-        offset: OffsetType,
-    ) -> Result<LengthType, Box<dyn Error>> {
+    fn read(&mut self, buffer: &mut [u8], offset: OffsetType) -> anyhow::Result<LengthType> {
         Ok(self.file.read_at(buffer, offset)? as LengthType)
     }
 
     #[cfg(windows)]
-    fn read(
-        &mut self,
-        buffer: &mut [u8],
-        offset: OffsetType,
-    ) -> Result<LengthType, Box<dyn Error>> {
+    fn read(&mut self, buffer: &mut [u8], offset: OffsetType) -> anyhow::Result<LengthType> {
         Ok(self.file.seek_read(buffer, offset)? as LengthType)
     }
 
     #[cfg(unix)]
-    fn write(&mut self, buffer: &[u8], offset: OffsetType) -> Result<(), Box<dyn Error>> {
+    fn write(&mut self, buffer: &[u8], offset: OffsetType) -> anyhow::Result<()> {
         self.file.write_all_at(buffer, offset)?;
         Ok(())
     }
 
     #[cfg(windows)]
-    fn write(&mut self, mut buffer: &[u8], mut offset: OffsetType) -> Result<(), Box<dyn Error>> {
+    fn write(&mut self, mut buffer: &[u8], mut offset: OffsetType) -> anyhow::Result<()> {
         while !buffer.is_empty() {
             let bytes_written = self.file.seek_write(buffer, offset)?;
             if bytes_written == 0 {
@@ -137,16 +124,16 @@ impl Stream for StdIoStream {
         Ok(())
     }
 
-    fn size(&self) -> Result<LengthType, Box<dyn Error>> {
+    fn size(&self) -> anyhow::Result<LengthType> {
         Ok(self.file.metadata()?.len())
     }
 
-    fn flush(&mut self) -> Result<(), Box<dyn Error>> {
+    fn flush(&mut self) -> anyhow::Result<()> {
         self.file.flush()?;
         Ok(())
     }
 
-    fn resize(&mut self, size: LengthType) -> Result<(), Box<dyn Error>> {
+    fn resize(&mut self, size: LengthType) -> anyhow::Result<()> {
         self.file.set_len(size)?;
         Ok(())
     }
@@ -164,7 +151,7 @@ pub mod test {
         to_be_tested: &mut dyn Stream,
         reference: &mut dyn Stream,
         times: u32,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> anyhow::Result<()> {
         to_be_tested.resize(0)?;
         reference.resize(0)?;
 
@@ -223,7 +210,7 @@ pub mod test {
     }
 
     #[test]
-    fn test_std_io_stream() -> Result<(), Box<dyn Error>> {
+    fn test_std_io_stream() -> anyhow::Result<()> {
         let mut rng = rand::rng();
         let temp_file_path =
             env::temp_dir().join(format!("test_std_io_stream_{}.tmp", rng.next_u64()));

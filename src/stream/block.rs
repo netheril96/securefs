@@ -13,17 +13,17 @@ pub(in crate::stream) trait MultipleBlockReaderWriter {
         buffer: &mut [u8],
         start_block_num: OffsetType,
         end_block_num: OffsetType,
-    ) -> Result<LengthType, Box<dyn Error>>;
+    ) -> anyhow::Result<LengthType>;
     fn write_multi_blocks(
         &mut self,
         buffer: &[u8],
         start_block_num: OffsetType,
         end_block_num: OffsetType,
         end_residue: OffsetType,
-    ) -> Result<(), Box<dyn Error>>;
-    fn adjust_logical_size(&mut self, length: LengthType) -> Result<(), Box<dyn Error>>;
-    fn size(&self) -> Result<LengthType, Box<dyn Error>>;
-    fn flush(&mut self) -> Result<(), Box<dyn Error>>;
+    ) -> anyhow::Result<()>;
+    fn adjust_logical_size(&mut self, length: LengthType) -> anyhow::Result<()>;
+    fn size(&self) -> anyhow::Result<LengthType>;
+    fn flush(&mut self) -> anyhow::Result<()>;
     fn is_sparse(&self) -> bool {
         false
     }
@@ -34,11 +34,7 @@ fn divmod<T: Div<Output = T> + Rem<Output = T> + Copy>(x: T, y: T) -> (T, T) {
 }
 
 impl<T: MultipleBlockReaderWriter> Stream for T {
-    fn read(
-        &mut self,
-        buffer: &mut [u8],
-        offset: OffsetType,
-    ) -> Result<LengthType, Box<dyn Error>> {
+    fn read(&mut self, buffer: &mut [u8], offset: OffsetType) -> anyhow::Result<LengthType> {
         if buffer.is_empty() {
             return Ok(0);
         }
@@ -76,7 +72,7 @@ impl<T: MultipleBlockReaderWriter> Stream for T {
         Ok(copy_len)
     }
 
-    fn write(&mut self, buffer: &[u8], offset: OffsetType) -> Result<(), Box<dyn Error>> {
+    fn write(&mut self, buffer: &[u8], offset: OffsetType) -> anyhow::Result<()> {
         if buffer.is_empty() {
             return Ok(());
         }
@@ -87,15 +83,15 @@ impl<T: MultipleBlockReaderWriter> Stream for T {
         self.unchecked_write(buffer, offset)
     }
 
-    fn size(&self) -> Result<LengthType, Box<dyn Error>> {
+    fn size(&self) -> anyhow::Result<LengthType> {
         self.size()
     }
 
-    fn flush(&mut self) -> Result<(), Box<dyn Error>> {
+    fn flush(&mut self) -> anyhow::Result<()> {
         self.flush()
     }
 
-    fn resize(&mut self, size: LengthType) -> Result<(), Box<dyn Error>> {
+    fn resize(&mut self, size: LengthType) -> anyhow::Result<()> {
         let current_size = self.size()?;
         if size == current_size {
             return Ok(());
@@ -127,12 +123,12 @@ impl<T: MultipleBlockReaderWriter> Stream for T {
 }
 
 trait UncheckedWriter {
-    fn unchecked_write(&mut self, buffer: &[u8], offset: OffsetType) -> Result<(), Box<dyn Error>>;
-    fn zero_fill(&mut self, offset: OffsetType, size: LengthType) -> Result<(), Box<dyn Error>>;
+    fn unchecked_write(&mut self, buffer: &[u8], offset: OffsetType) -> anyhow::Result<()>;
+    fn zero_fill(&mut self, offset: OffsetType, size: LengthType) -> anyhow::Result<()>;
 }
 
 impl<T: MultipleBlockReaderWriter> UncheckedWriter for T {
-    fn unchecked_write(&mut self, buffer: &[u8], offset: OffsetType) -> Result<(), Box<dyn Error>> {
+    fn unchecked_write(&mut self, buffer: &[u8], offset: OffsetType) -> anyhow::Result<()> {
         if buffer.is_empty() {
             return Ok(());
         }
@@ -180,7 +176,7 @@ impl<T: MultipleBlockReaderWriter> UncheckedWriter for T {
         self.write_multi_blocks(&temp_buffer, start_block, end_block, effective_end_residue)
     }
 
-    fn zero_fill(&mut self, offset: OffsetType, size: LengthType) -> Result<(), Box<dyn Error>> {
+    fn zero_fill(&mut self, offset: OffsetType, size: LengthType) -> anyhow::Result<()> {
         let buffer = vec![0u8; (size - offset).try_into()?];
         self.unchecked_write(&buffer, offset)
     }
@@ -218,7 +214,7 @@ mod test {
             buffer: &mut [u8],
             start_block_num: OffsetType,
             end_block_num: OffsetType,
-        ) -> Result<LengthType, Box<dyn Error>> {
+        ) -> anyhow::Result<LengthType> {
             let mut result: LengthType = 0;
             let mut output_offset: OffsetType = 0;
             for block_num in start_block_num..end_block_num {
@@ -241,7 +237,7 @@ mod test {
             start_block_num: OffsetType,
             end_block_num: OffsetType,
             end_residue: OffsetType,
-        ) -> Result<(), Box<dyn Error>> {
+        ) -> anyhow::Result<()> {
             let block_size: usize = self.block_size.try_into()?;
 
             if self.data.len() < end_block_num.try_into()? {
@@ -272,7 +268,7 @@ mod test {
             Ok(())
         }
 
-        fn adjust_logical_size(&mut self, length: LengthType) -> Result<(), Box<dyn Error>> {
+        fn adjust_logical_size(&mut self, length: LengthType) -> anyhow::Result<()> {
             let block_size: usize = self.block_size.try_into()?;
 
             if length == 0 {
@@ -300,14 +296,14 @@ mod test {
             Ok(())
         }
 
-        fn size(&self) -> Result<LengthType, Box<dyn Error>> {
+        fn size(&self) -> anyhow::Result<LengthType> {
             self.data
                 .iter()
                 .map(|it| TryInto::<LengthType>::try_into(it.len()))
                 .try_fold(0, |acc, item| Ok(acc + item?))
         }
 
-        fn flush(&mut self) -> Result<(), Box<dyn Error>> {
+        fn flush(&mut self) -> anyhow::Result<()> {
             Ok(())
         }
     }
