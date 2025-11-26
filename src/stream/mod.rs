@@ -14,6 +14,8 @@ use std::os::unix::fs::FileExt;
 #[cfg(windows)]
 use std::os::windows::fs::FileExt;
 
+use anyhow::Ok;
+
 type OffsetType = u64;
 type LengthType = u64;
 
@@ -38,7 +40,7 @@ pub struct MemoryStream {
 
 impl Stream for MemoryStream {
     fn read(&mut self, buffer: &mut [u8], offset: OffsetType) -> anyhow::Result<LengthType> {
-        if offset >= self.buffer.len().try_into()? {
+        if buffer.is_empty() || offset >= self.buffer.len().try_into()? {
             return Ok(0);
         }
         let slice = &self.buffer
@@ -49,6 +51,9 @@ impl Stream for MemoryStream {
     }
 
     fn write(&mut self, buffer: &[u8], offset: OffsetType) -> anyhow::Result<()> {
+        if buffer.is_empty() {
+            return Ok(());
+        }
         let end: u64 = offset + TryInto::<u64>::try_into(buffer.len())?;
         if end > self.buffer.len().try_into()? {
             self.buffer.resize(end.try_into()?, 0);
@@ -81,7 +86,7 @@ impl StdIoStream {
         StdIoStream { file }
     }
 
-    pub fn open<P: AsRef<std::path::Path>>(path: P) -> io::Result<StdIoStream> {
+    pub fn open<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<StdIoStream> {
         let file = OpenOptions::new()
             .read(true)
             .write(true)

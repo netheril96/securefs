@@ -143,14 +143,14 @@ where
         ciphertext: &[u8],
         tag: &Tag,
         plaintext: &mut [u8],
-    ) -> Result<(), StreamCipherError> {
+    ) -> Result<bool, StreamCipherError> {
         let (mut ctr, mask) = self.init_ctr(nonce);
         let expected_tag = self.compute_tag(mask, associated_data, ciphertext);
         if expected_tag.ct_eq(tag).into() {
             ctr.apply_keystream_b2b(ciphertext, plaintext)?;
-            Ok(())
+            Ok(true)
         } else {
-            Err(StreamCipherError {})
+            Ok(false)
         }
     }
 
@@ -173,10 +173,10 @@ where
         associated_data: &[u8],
         ciphertext: &[u8],
         tag: &Tag,
-    ) -> Result<Vec<u8>, StreamCipherError> {
+    ) -> Result<(Vec<u8>, bool), StreamCipherError> {
         let mut plaintext: Vec<u8> = vec![0u8; ciphertext.len()];
-        self.decrypt(nonce, associated_data, ciphertext, tag, &mut plaintext)?;
-        Ok(plaintext)
+        let success = self.decrypt(nonce, associated_data, ciphertext, tag, &mut plaintext)?;
+        Ok((plaintext, success))
     }
 }
 
@@ -208,8 +208,9 @@ mod test {
             let cipher = DynamicIvAesGcm::<Aes>::new(&key);
             let (ciphertext, tag) =
                 cipher.encrypt_alloc(self.nonce, self.associated_data, self.plaintext)?;
-            let plaintext =
+            let (plaintext, success) =
                 cipher.decrypt_alloc(self.nonce, self.associated_data, &ciphertext, &tag)?;
+            assert!(success);
             assert_eq!(plaintext, self.plaintext);
             assert_eq!(ciphertext, self.ciphertext);
             assert_eq!(tag.as_slice(), self.tag);
