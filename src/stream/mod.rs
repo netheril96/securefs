@@ -1,9 +1,8 @@
-mod block;
-mod lite;
+pub mod block;
+pub mod lite;
 
-use std::error::Error;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Write};
+use std::io::Write;
 use std::{cmp::min, usize};
 
 // On unix, we can use pread/pwrite
@@ -44,7 +43,7 @@ impl Stream for MemoryStream {
             return Ok(0);
         }
         let slice = &self.buffer
-            [offset.try_into()?..min(offset as usize + buffer.len(), self.buffer.len())];
+            [offset.try_into()?..min(usize::try_from(offset)? + buffer.len(), self.buffer.len())];
         let (to_be_copied, _) = buffer.split_at_mut(slice.len());
         to_be_copied.copy_from_slice(slice);
         Ok(slice.len().try_into()?)

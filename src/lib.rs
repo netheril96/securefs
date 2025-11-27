@@ -1,2 +1,2 @@
-mod aesgcm;
-mod stream;
+pub mod aesgcm;
+pub mod stream;

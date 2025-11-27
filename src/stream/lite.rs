@@ -233,25 +233,7 @@ impl<S: Stream> MultipleBlockReaderWriter for LiteAesGcmCryptStream<S> {
                 .try_into()?;
             self.aux[..size_of::<u32>()].copy_from_slice(&current_block.to_le_bytes());
 
-            let computed_tag: ctr::cipher::generic_array::GenericArray<
-                u8,
-                ctr::cipher::typenum::UInt<
-                    ctr::cipher::typenum::UInt<
-                        ctr::cipher::typenum::UInt<
-                            ctr::cipher::typenum::UInt<
-                                ctr::cipher::typenum::UInt<
-                                    ctr::cipher::typenum::UTerm,
-                                    ctr::cipher::consts::B1,
-                                >,
-                                ctr::cipher::consts::B0,
-                            >,
-                            ctr::cipher::consts::B0,
-                        >,
-                        ctr::cipher::consts::B0,
-                    >,
-                    ctr::cipher::consts::B0,
-                >,
-            > = self
+            let computed_tag = self
                 .aesgcm
                 .encrypt(iv, &self.aux, this_virtual_buffer, ciphertext)
                 .map_err(|_| LiteAesGcmCryptError::StreamCipherError)?;
