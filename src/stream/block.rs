@@ -41,7 +41,7 @@ impl<T: MultipleBlockReaderWriter> Stream for T {
 
         let (start_block, start_residue) = divmod(offset, self.block_size());
         let (end_block, end_residue) = divmod(
-            offset + TryInto::<OffsetType>::try_into(buffer.len())?,
+            offset + OffsetType::try_from(buffer.len())?,
             self.block_size(),
         );
 
@@ -134,7 +134,7 @@ impl<T: MultipleBlockReaderWriter> UncheckedWriter for T {
         }
         let (start_block, start_residue) = divmod(offset, self.block_size());
         let (end_block, end_residue) = divmod(
-            offset + TryInto::<OffsetType>::try_into(buffer.len())?,
+            offset + OffsetType::try_from(buffer.len())?,
             self.block_size(),
         );
 
@@ -221,7 +221,7 @@ mod test {
                 if block_num >= self.data.len().try_into()? {
                     return Ok(result);
                 }
-                let block: &[u8] = &self.data[TryInto::<usize>::try_into(block_num)?];
+                let block: &[u8] = &self.data[usize::try_from(block_num)?];
                 let block_len: OffsetType = block.len().try_into()?;
                 buffer[output_offset.try_into()?..(output_offset + block_len).try_into()?]
                     .copy_from_slice(block);
@@ -247,7 +247,7 @@ mod test {
 
             let mut input_offset = 0;
             for block_num in start_block_num..end_block_num {
-                let block: &mut Vec<u8> = &mut self.data[TryInto::<usize>::try_into(block_num)?];
+                let block: &mut Vec<u8> = &mut self.data[usize::try_from(block_num)?];
                 block.resize(block_size, 0);
                 block.copy_from_slice(&buffer[input_offset..input_offset + block_size]);
                 input_offset += block_size;
@@ -257,12 +257,12 @@ mod test {
                 if self.data.len() <= end_block_num.try_into()? {
                     self.data.push(Vec::new());
                 }
-                let block = &mut self.data[TryInto::<usize>::try_into(end_block_num)?];
+                let block = &mut self.data[usize::try_from(end_block_num)?];
                 if block.len() < end_residue.try_into()? {
                     block.resize(end_residue.try_into()?, 0);
                 }
                 block[..end_residue.try_into()?].copy_from_slice(
-                    &buffer[input_offset..input_offset + TryInto::<usize>::try_into(end_residue)?],
+                    &buffer[input_offset..input_offset + usize::try_from(end_residue)?],
                 );
             }
             Ok(())
@@ -299,7 +299,7 @@ mod test {
         fn size(&self) -> anyhow::Result<LengthType> {
             self.data
                 .iter()
-                .map(|it| TryInto::<LengthType>::try_into(it.len()))
+                .map(|it| LengthType::try_from(it.len()))
                 .try_fold(0, |acc, item| Ok(acc + item?))
         }
 

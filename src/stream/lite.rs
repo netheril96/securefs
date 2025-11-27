@@ -64,10 +64,7 @@ impl<S: Stream> LiteAesGcmCryptStream<S> {
             inner.write(&id, 0)?;
             padding_size = lite_param_calc.compute_padding(&id)?;
             if padding_size > 0 {
-                aux.resize(
-                    TryInto::<usize>::try_into(padding_size)? + size_of::<u32>(),
-                    0,
-                );
+                aux.resize(usize::try_from(padding_size)? + size_of::<u32>(), 0);
                 OsRng {}.try_fill_bytes(&mut aux[size_of::<u32>()..])?;
             } else {
                 aux.resize(size_of::<u32>(), 0);
@@ -75,10 +72,7 @@ impl<S: Stream> LiteAesGcmCryptStream<S> {
             inner.write(&aux, 0)?;
         } else if rc == id.len().try_into()? {
             padding_size = lite_param_calc.compute_padding(&id)?;
-            aux.resize(
-                TryInto::<usize>::try_into(padding_size)? + size_of::<u32>(),
-                0,
-            );
+            aux.resize(usize::try_from(padding_size)? + size_of::<u32>(), 0);
             aux[..id.len()].copy_from_slice(&id);
             if padding_size > 0 && inner.read(&mut aux[size_of::<u32>()..], 0)? != padding_size {
                 return Err(LiteAesGcmCryptError::InvalidHeader.into());
@@ -220,8 +214,8 @@ impl<S: Stream> MultipleBlockReaderWriter for LiteAesGcmCryptStream<S> {
             }
             let this_block_virtual_size =
                 this_block_underlying_size - self.iv_size() - self.tag_size();
-            let this_underlying_buffer = &mut underlying_buffer
-                [i..i + TryInto::<usize>::try_into(this_block_underlying_size)?];
+            let this_underlying_buffer =
+                &mut underlying_buffer[i..i + usize::try_from(this_block_underlying_size)?];
             let (iv, ciphertext) = this_underlying_buffer.split_at_mut(self.iv_size().try_into()?);
             loop {
                 OsRng {}.try_fill_bytes(iv)?;
@@ -234,8 +228,7 @@ impl<S: Stream> MultipleBlockReaderWriter for LiteAesGcmCryptStream<S> {
             let this_virtual_buffer: &[u8] = &buffer[virtual_write_len.try_into()?
                 ..(virtual_write_len + this_block_virtual_size).try_into()?];
 
-            let current_block: u32 = (TryInto::<LengthType>::try_into(i)?
-                / self.underlying_block_size()
+            let current_block: u32 = (LengthType::try_from(i)? / self.underlying_block_size()
                 + start_block_num)
                 .try_into()?;
             self.aux[..size_of::<u32>()].copy_from_slice(&current_block.to_le_bytes());
@@ -268,7 +261,7 @@ impl<S: Stream> MultipleBlockReaderWriter for LiteAesGcmCryptStream<S> {
                 &this_underlying_buffer,
                 self.header_size()
                     + start_block_num * self.underlying_block_size()
-                    + TryInto::<LengthType>::try_into(i)?,
+                    + LengthType::try_from(i)?,
             )?;
             virtual_write_len += this_block_virtual_size;
         }

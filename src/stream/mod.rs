@@ -54,7 +54,7 @@ impl Stream for MemoryStream {
         if buffer.is_empty() {
             return Ok(());
         }
-        let end: u64 = offset + TryInto::<u64>::try_into(buffer.len())?;
+        let end: u64 = offset + u64::try_from(buffer.len())?;
         if end > self.buffer.len().try_into()? {
             self.buffer.resize(end.try_into()?, 0);
         }
@@ -124,7 +124,7 @@ impl Stream for StdIoStream {
                 ))?;
             }
             buffer = &buffer[bytes_written..];
-            offset += TryInto::<LengthType>::try_into(bytes_written)?;
+            offset += LengthType::try_from(bytes_written)?;
         }
         Ok(())
     }
