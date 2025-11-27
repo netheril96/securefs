@@ -95,6 +95,18 @@ impl StdIoStream {
     }
 }
 
+impl From<File> for StdIoStream {
+    fn from(value: File) -> Self {
+        Self { file: value }
+    }
+}
+
+impl AsRef<File> for StdIoStream {
+    fn as_ref(&self) -> &File {
+        &self.file
+    }
+}
+
 impl Stream for StdIoStream {
     #[cfg(unix)]
     fn read(&mut self, buffer: &mut [u8], offset: OffsetType) -> anyhow::Result<LengthType> {

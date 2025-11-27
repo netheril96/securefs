@@ -39,8 +39,6 @@ pub enum LiteAesGcmCryptError {
     TooManyBlocks,
     #[error("IV should not be zero")]
     NullIv,
-    #[error("Stream cipher internal error")]
-    StreamCipherError,
     #[error("Tag mismatch indicating corrupted data")]
     TagMismatch,
     #[error("Written data only partially, causing corrupted data")]
@@ -161,16 +159,13 @@ impl<S: Stream> MultipleBlockReaderWriter for LiteAesGcmCryptStream<S> {
                 }
                 let (ciphertext, tag) = ciphertext.split_at(this_block_virtual_size.try_into()?);
                 self.aux[..size_of::<u32>()].copy_from_slice(&current_block.to_le_bytes());
-                let success = self
-                    .aesgcm
-                    .decrypt(
-                        iv,
-                        &self.aux,
-                        ciphertext,
-                        tag.try_into()?,
-                        this_virtual_buffer,
-                    )
-                    .map_err(|_| LiteAesGcmCryptError::StreamCipherError)?;
+                let success = self.aesgcm.decrypt(
+                    iv,
+                    &self.aux,
+                    ciphertext,
+                    tag.try_into()?,
+                    this_virtual_buffer,
+                )?;
                 if !success && self.verify_mac {
                     return Err(LiteAesGcmCryptError::TagMismatch)
                         .context(format!("reading data at block number {}", current_block));
@@ -233,10 +228,9 @@ impl<S: Stream> MultipleBlockReaderWriter for LiteAesGcmCryptStream<S> {
                 .try_into()?;
             self.aux[..size_of::<u32>()].copy_from_slice(&current_block.to_le_bytes());
 
-            let computed_tag = self
-                .aesgcm
-                .encrypt(iv, &self.aux, this_virtual_buffer, ciphertext)
-                .map_err(|_| LiteAesGcmCryptError::StreamCipherError)?;
+            let computed_tag =
+                self.aesgcm
+                    .encrypt(iv, &self.aux, this_virtual_buffer, ciphertext)?;
             tag.copy_from_slice(computed_tag.as_slice());
 
             self.inner.write(
