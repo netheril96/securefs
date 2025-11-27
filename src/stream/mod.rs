@@ -99,12 +99,12 @@ impl StdIoStream {
 impl Stream for StdIoStream {
     #[cfg(unix)]
     fn read(&mut self, buffer: &mut [u8], offset: OffsetType) -> anyhow::Result<LengthType> {
-        Ok(self.file.read_at(buffer, offset)? as LengthType)
+        Ok(self.file.read_at(buffer, offset)?.try_into()?)
     }
 
     #[cfg(windows)]
     fn read(&mut self, buffer: &mut [u8], offset: OffsetType) -> anyhow::Result<LengthType> {
-        Ok(self.file.seek_read(buffer, offset)? as LengthType)
+        Ok(self.file.seek_read(buffer, offset)?.try_into()?)
     }
 
     #[cfg(unix)]
@@ -118,13 +118,13 @@ impl Stream for StdIoStream {
         while !buffer.is_empty() {
             let bytes_written = self.file.seek_write(buffer, offset)?;
             if bytes_written == 0 {
-                return Err(Box::new(io::Error::new(
+                return Err(io::Error::new(
                     io::ErrorKind::WriteZero,
-                    "failed to write whole buffer",
-                )));
+                    "failed to write any data",
+                ))?;
             }
             buffer = &buffer[bytes_written..];
-            offset += bytes_written as OffsetType;
+            offset += TryInto::<LengthType>::try_into(bytes_written)?;
         }
         Ok(())
     }
