@@ -117,8 +117,8 @@ impl Stream for StdIoStream {
         while !buffer.is_empty() {
             let bytes_written = self.file.seek_write(buffer, offset)?;
             if bytes_written == 0 {
-                return Err(io::Error::new(
-                    io::ErrorKind::WriteZero,
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::WriteZero,
                     "failed to write any data",
                 ))?;
             }
