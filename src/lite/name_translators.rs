@@ -2,6 +2,9 @@ use std::{cell::RefCell, ops::DerefMut};
 
 use aes_gcm::KeyInit;
 use aes_siv::siv::Aes128Siv;
+use anyhow::Ok;
+use blake2::{Blake2bMac, digest::Mac};
+use ctr::cipher::consts::U32;
 use thiserror::Error;
 
 use crate::MasterKeyType;
@@ -149,6 +152,111 @@ impl NameTranslator for LegacyNameTranslator {
     }
 }
 
+pub struct NewStyleNameTranslator {
+    master_key: MasterKeyType,
+    long_name_threshold: usize,
+    long_name_suffix: String,
+    additional_encryption_over_long_name: bool,
+    aes_siv: thread_local::ThreadLocal<RefCell<Aes128Siv>>,
+}
+
+const NEW_STYLE_SYMLINK_ENCRYPTED_COMPONENT_MAX_LENGTH: usize = 60;
+
+impl NewStyleNameTranslator {
+    pub fn new(
+        master_key: MasterKeyType,
+        long_name_threshold: usize,
+        long_name_suffix: String,
+        additional_encryption_over_long_name: bool,
+    ) -> Self {
+        Self {
+            master_key,
+            long_name_threshold,
+            long_name_suffix,
+            additional_encryption_over_long_name,
+            aes_siv: thread_local::ThreadLocal::new(),
+        }
+    }
+
+    fn get_aes_siv(&self) -> &RefCell<Aes128Siv> {
+        self.aes_siv.get_or(|| {
+            let aes_siv = Aes128Siv::new_from_slice(&self.master_key)
+                .expect("AES-SIV initialization shouldn't fail");
+            RefCell::new(aes_siv)
+        })
+    }
+}
+
+impl NameTranslator for NewStyleNameTranslator {
+    fn encode_name(&self, name: &[u8]) -> anyhow::Result<Vec<u8>> {
+        if name.len() <= self.long_name_threshold {
+            return encrypt_filename_component(name, self.get_aes_siv().borrow_mut().deref_mut());
+        }
+        let mut blake = Blake2bMac::<U32>::new_with_salt_and_personal(&self.master_key, &[], &[])?;
+        blake.update(name);
+        let hash = blake.finalize().into_bytes();
+        if !self.additional_encryption_over_long_name {
+            let mut result: Vec<u8> = Vec::with_capacity(hash.len() + self.long_name_suffix.len());
+            result.extend_from_slice(hash.as_slice());
+            result.extend_from_slice(self.long_name_suffix.as_bytes());
+            return Ok(result);
+        }
+        let mut result = encrypt_filename_component(
+            hash.as_slice(),
+            self.get_aes_siv().borrow_mut().deref_mut(),
+        )?;
+        result.extend_from_slice(self.long_name_suffix.as_bytes());
+        Ok(result)
+    }
+
+    fn decode_name(&self, name: &[u8]) -> NameDecodeOutput {
+        if name.ends_with(self.long_name_suffix.as_bytes()) {
+            return NameDecodeOutput::LongName;
+        }
+        match decrypt_filename_component(name, self.get_aes_siv().borrow_mut().deref_mut()) {
+            Some(decoded) => NameDecodeOutput::Decoded(decoded),
+            None => NameDecodeOutput::InvalidName,
+        }
+    }
+
+    fn encode_path_for_symlink(&self, path: &[u8]) -> anyhow::Result<Vec<u8>> {
+        let mut new_path =
+            encrypt_filename_component(path, self.get_aes_siv().borrow_mut().deref_mut())?;
+        if new_path.len() <= NEW_STYLE_SYMLINK_ENCRYPTED_COMPONENT_MAX_LENGTH {
+            return Ok(new_path);
+        }
+        new_path.reserve(
+            new_path.len() + new_path.len() / NEW_STYLE_SYMLINK_ENCRYPTED_COMPONENT_MAX_LENGTH,
+        );
+        for i in (0..new_path.len()).step_by(NEW_STYLE_SYMLINK_ENCRYPTED_COMPONENT_MAX_LENGTH + 1) {
+            new_path.insert(i, '/' as u8);
+        }
+        return Ok(new_path);
+    }
+
+    fn decode_path_for_symlink(&self, path: &[u8]) -> anyhow::Result<Vec<u8>> {
+        let joined_path: Vec<u8> = path
+            .iter()
+            .filter(|b| **b != ('/' as u8))
+            .cloned()
+            .collect();
+        match decrypt_filename_component(&joined_path, self.get_aes_siv().borrow_mut().deref_mut())
+        {
+            Some(decoded) => Ok(decoded),
+            None => Err(NameError::NotPreviousEncodedName {
+                name: String::from_utf8_lossy(path).into_owned(),
+            })?,
+        }
+    }
+
+    fn max_virtual_path_component_size(&self, physical_size: u32) -> u32 {
+        if (physical_size as usize) < (self.long_name_threshold + 16) * 8 / 5 {
+            return physical_size;
+        }
+        65535
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -168,6 +276,7 @@ mod test {
                 NameDecodeOutput::Decoded(bytes) => {
                     assert_eq!(str::from_utf8(bytes.as_slice()).unwrap(), self.decoded)
                 }
+                NameDecodeOutput::LongName => {}
                 _ => panic!("Should decode fine"),
             }
         }
@@ -220,6 +329,36 @@ mod test {
         NameTranscodingReference {
             encoded: "/ZFEHY3W9JM8QRR4GBJ67JRY3KENMEKX2GA/DX8MQEKK8ENI3UUE2J3Q76R5K9RS9JS",
             decoded: "/abCDe/666",
+        }
+        .test_symlink(&nt);
+    }
+
+    #[test]
+    fn test_new_style_name_translator() {
+        let nt = NewStyleNameTranslator::new([255u8; 32], 10, ".long".into(), true);
+        NameTranscodingReference {
+            encoded: "ZFEHY3W9JM8QRR4GBJ67JRY3KENMEKX2GA",
+            decoded: "abCDe",
+        }
+        .test_name_component(&nt);
+        NameTranscodingReference {
+            encoded: "DX8MQEKK8ENI3UUE2J3Q76R5K9RS9JS",
+            decoded: "666",
+        }
+        .test_name_component(&nt);
+        NameTranscodingReference {
+            encoded: "AJRCK9GN87E3XDNGWKY48F6MEG752",
+            decoded: "ß",
+        }
+        .test_name_component(&nt);
+        NameTranscodingReference {
+            encoded: "NRWRI3BSC9FBSNIXYIA8KGS64Z5DRA9DDVSCKBX7XENZVHKV94RIVEIYR6ZIN6MFHGUZXC9S8BWVI.long",
+            decoded: "Be human readable and machine readable.",
+        }
+        .test_name_component(&nt);
+        NameTranscodingReference {
+            encoded: "/Z7P9D6ZA9ZYDP6M98RURCWEGNYRXSHF3YBU5WSZ9IH2MR8G6QFI2FCM4MTDS/W7ACSTAX7M6RI3YPU5G7JBKZDUHXSAPPKMD9BH7XFEXQSHHCXX2WHTE7EDB2/3KJ5E84W6DD8W",
+            decoded: "/ZFEHY3W9JM8QRR4GBJ67JRY3KENMEKX2GA/DX8MQEKK8ENI3UUE2J3Q76R5K9RS9JS",
         }
         .test_symlink(&nt);
     }
