@@ -43,6 +43,24 @@ namespace
         CHECK(NameTranslator::remove_last_component("/cc/abcde") == "/cc/");
     }
 
+    TEST_CASE("legacy name translator")
+    {
+        auto flags = std::make_shared<NameNormalizationFlags>();
+
+        auto t = make_name_translator(*flags, StrongType<key_type, tNameMasterKey>(key_type(-1)));
+        CHECK(t->encrypt_full_path(u8"/abCDe/ß", nullptr)
+              == "ZFEHY3W9JM8QRR4GBJ67JRY3KENMEKX2GA/AJRCK9GN87E3XDNGWKY48F6MEG752");
+        CHECK(t->encrypt_full_path(u8"/abCDe/666", nullptr)
+              == "ZFEHY3W9JM8QRR4GBJ67JRY3KENMEKX2GA/DX8MQEKK8ENI3UUE2J3Q76R5K9RS9JS");
+        CHECK(t->encrypt_full_path(u8"/0/Be human readable and machine readable.", nullptr)
+              == "ZFEHY3W9JM8QRR4GBJ67JRY3KENMEKX2GA/DX8MQEKK8ENI3UUE2J3Q76R5K9RS9JS");
+        CHECK(t->encrypt_path_for_symlink(
+                  u8"/ZFEHY3W9JM8QRR4GBJ67JRY3KENMEKX2GA/DX8MQEKK8ENI3UUE2J3Q76R5K9RS9JS")
+              == "KUPR9899P2FN4HH9A8X4WN3ZQQJS/"
+                 "C5SRCFXE5DS89E45EP6YHSAWW54TRGCHUVKVX3N8YY7A7NE6M99TDDSPF6RN7ANRUYXKVRY9D8CP5GQKM"
+                 "CZETWQC");
+    }
+
     TEST_CASE("case folding name translator")
     {
         auto case_fold_flags = std::make_shared<NameNormalizationFlags>();
