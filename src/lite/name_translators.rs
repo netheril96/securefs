@@ -9,7 +9,7 @@ use thiserror::Error;
 
 use crate::MasterKeyType;
 
-const ENC_DUDE: &'static [u8; 32] = b"ABCDEFGHIJKMNPQRSTUVWXYZ23456789";
+const ENC_DUDE: &[u8; 32] = b"ABCDEFGHIJKMNPQRSTUVWXYZ23456789";
 fast32::make_base32_alpha!(
     DUDE,
     DEC_DUDE,
@@ -23,7 +23,7 @@ pub fn encrypt_filename_component(name: &[u8], aes_siv: &mut Aes128Siv) -> anyho
         return Ok(Vec::new());
     }
     let empty_header: [[u8; 0]; 0] = [];
-    let enc = aes_siv.encrypt(&empty_header, name)?;
+    let enc = aes_siv.encrypt(empty_header, name)?;
     Ok(DUDE.encode(&enc).into_bytes())
 }
 
@@ -33,7 +33,7 @@ pub fn decrypt_filename_component(name: &[u8], aes_siv: &mut Aes128Siv) -> Optio
     }
     let bytes = DUDE.decode(name).ok()?;
     let empty_header: [[u8; 0]; 0] = [];
-    aes_siv.decrypt(&empty_header, &bytes).ok()
+    aes_siv.decrypt(empty_header, &bytes).ok()
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -229,15 +229,15 @@ impl NameTranslator for NewStyleNameTranslator {
             new_path.len() + new_path.len() / NEW_STYLE_SYMLINK_ENCRYPTED_COMPONENT_MAX_LENGTH,
         );
         for i in (0..new_path.len()).step_by(NEW_STYLE_SYMLINK_ENCRYPTED_COMPONENT_MAX_LENGTH + 1) {
-            new_path.insert(i, '/' as u8);
+            new_path.insert(i, b'/');
         }
-        return Ok(new_path);
+        Ok(new_path)
     }
 
     fn decode_path_for_symlink(&self, path: &[u8]) -> anyhow::Result<Vec<u8>> {
         let joined_path: Vec<u8> = path
             .iter()
-            .filter(|b| **b != ('/' as u8))
+            .filter(|b| **b != b'/')
             .cloned()
             .collect();
         match decrypt_filename_component(&joined_path, self.get_aes_siv().borrow_mut().deref_mut())

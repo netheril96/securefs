@@ -131,7 +131,7 @@ where
     ) -> Result<Tag, StreamCipherError> {
         let (mut ctr, mask) = self.init_ctr(nonce);
         ctr.apply_keystream_b2b(plaintext, ciphertext)?;
-        let tag = self.compute_tag(mask, associated_data, &ciphertext);
+        let tag = self.compute_tag(mask, associated_data, ciphertext);
         Ok(tag)
     }
 

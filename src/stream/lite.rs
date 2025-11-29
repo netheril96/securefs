@@ -1,4 +1,4 @@
-use std::mem::size_of;
+use std::mem::{replace, size_of};
 
 use aes_gcm::{Aes128Gcm, Key};
 use anyhow::{Context, Ok};
@@ -16,6 +16,9 @@ const MAX_BLOCKS: u64 = (1u64 << 31) - 1;
 pub trait LiteParamCalculator {
     fn compute_session_key(&self, salt: &[u8; ID_SIZE]) -> anyhow::Result<[u8; ID_SIZE]>;
     fn compute_padding(&self, salt: &[u8; ID_SIZE]) -> anyhow::Result<LengthType>;
+    fn always_zero_padding(&self) -> bool {
+        false
+    }
 }
 
 pub struct LiteAesGcmCryptStream<S: Stream> {
@@ -80,7 +83,7 @@ impl<S: Stream> LiteAesGcmCryptStream<S> {
         }
         let session_key_as_array = lite_param_calc.compute_session_key(&id)?;
         let key = Key::<Aes128Gcm>::from_slice(&session_key_as_array);
-        let aesgcm = DynamicIvAes128Gcm::new(&key);
+        let aesgcm = DynamicIvAes128Gcm::new(key);
 
         Ok(LiteAesGcmCryptStream {
             inner,
@@ -88,7 +91,7 @@ impl<S: Stream> LiteAesGcmCryptStream<S> {
             block_size,
             verify_mac,
             padding_size,
-            aesgcm: aesgcm,
+            aesgcm,
             aux,
         })
     }
@@ -111,6 +114,28 @@ impl<S: Stream> LiteAesGcmCryptStream<S> {
 
     pub fn underlying_block_size(&self) -> LengthType {
         self.block_size + self.iv_size + self.tag_size()
+    }
+
+    pub fn virtual_size_without_padding(
+        underlying_size: LengthType,
+        block_size: LengthType,
+        iv_size: LengthType,
+    ) -> LengthType {
+        if underlying_size <= ID_SIZE as u64 {
+            return 0;
+        }
+        let content_size = underlying_size - ID_SIZE as u64;
+        let num_blocks = content_size / (block_size + iv_size + 16);
+        let residue = content_size % (block_size + iv_size + 16);
+        num_blocks * block_size + residue.saturating_sub(iv_size + 16)
+    }
+
+    pub unsafe fn get_inner(&mut self) -> &mut S {
+        &mut self.inner
+    }
+
+    pub unsafe fn replace_inner(&mut self, inner: S) -> S {
+        replace(&mut self.inner, inner)
     }
 }
 
@@ -234,7 +259,7 @@ impl<S: Stream> MultipleBlockReaderWriter for LiteAesGcmCryptStream<S> {
             tag.copy_from_slice(computed_tag.as_slice());
 
             self.inner.write(
-                &this_underlying_buffer,
+                this_underlying_buffer,
                 self.header_size()
                     + start_block_num * self.underlying_block_size()
                     + LengthType::try_from(i)?,
@@ -308,6 +333,10 @@ mod test {
 
             fn compute_padding(&self, _: &[u8; ID_SIZE]) -> anyhow::Result<LengthType> {
                 Ok(self.padding_size)
+            }
+
+            fn always_zero_padding(&self) -> bool {
+                self.padding_size == 0
             }
         }
         compare_with_reference(

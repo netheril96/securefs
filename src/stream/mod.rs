@@ -15,8 +15,8 @@ use std::os::windows::fs::FileExt;
 
 use anyhow::Ok;
 
-type OffsetType = u64;
-type LengthType = u64;
+pub type OffsetType = u64;
+pub type LengthType = u64;
 
 #[allow(unused)]
 pub trait Stream {

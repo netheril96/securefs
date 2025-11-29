@@ -12,8 +12,12 @@ ctr = { version = "0.9.2", default-features = false, features = ["alloc", "std"]
 fast32 = "1.0.3"
 fuser = { version = "0.16.0", optional = true }
 ghash = { version = "0.5.1", default-features = false, features = ["std"] }
+log = "0.4.28"
+lru = "0.16.2"
+parking_lot = "0.12.5"
 rand = "0.9.2"
 rstest = "0.26.1"
+rustix = { version = "1.1.2", features = ["fs", "stdio", "termios"] }
 subcase = "0.4.0"
 subtle = "2.6.1"
 thiserror = "2.0.17"
