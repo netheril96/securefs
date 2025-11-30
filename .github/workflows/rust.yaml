@@ -72,7 +72,7 @@ jobs:
           sync: sshfs
           release: "15.0"
           prepare: |
-            pkg install -y rust fusefs-libs sudo ninja pkgconf cmake
+            pkg update && pkg upgrade -y && pkg install -y rust fusefs-libs sudo ninja pkgconf cmake
             if ! sudo kldstat -m fusefs > /dev/null 2>&1; then
                 sudo kldload fusefs
             fi
