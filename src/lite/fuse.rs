@@ -47,7 +47,7 @@ impl fuser::Filesystem for Vfs {
                 &enc_name,
                 rustix::fs::AtFlags::SYMLINK_NOFOLLOW,
             )?;
-            if stat.st_dev != *self.device_serial.get_or_init(|| stat.st_dev) {
+            if stat.st_dev as u64 != *self.device_serial.get_or_init(|| stat.st_dev as u64) {
                 log::error!(
                     "The underlying filesystem must be on the same device, or securefs cannot obtain stable inode IDs."
                 );
