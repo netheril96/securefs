@@ -1,5 +1,8 @@
 #include <fcntl.h>
 #include <errno.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <stdint.h>
 
 #if defined(__linux__)
 #include <stdio.h>
@@ -48,8 +51,9 @@ int securefs_get_full_path(int fd, char* path, size_t size)
 int securefs_get_full_path(int fd, char* path, size_t size)
 {
     struct kinfo_file kf;
-    size_t len = sizeof(kf);
-    if (fcntl(fd, F_KINFO, &kf, &len, 0) == -1)
+    memset(&kf, 0, sizeof(kf));
+    kf.kf_structsize = sizeof(kf);
+    if (fcntl(fd, F_KINFO, &kf) == -1)
     {
         return errno;
     }

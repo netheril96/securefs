@@ -37,7 +37,7 @@ impl fuser::Filesystem for Vfs {
             let parent_node = parent_node
                 .inner_repr
                 .try_lock_for(MAX_LOCK_DURATION)
-                .ok_or(Errno::DEADLOCK)?;
+                .ok_or(Errno::DEADLK)?;
             let InnerRepr::Dir(parent_dir) = &*parent_node else {
                 return Err(Errno::NOTDIR)?;
             };
@@ -68,7 +68,7 @@ impl fuser::Filesystem for Vfs {
             let mut child_repr = child_node
                 .inner_repr
                 .try_lock_for(MAX_LOCK_DURATION)
-                .ok_or(Errno::DEADLOCK)?;
+                .ok_or(Errno::DEADLK)?;
 
             if let InnerRepr::Uninit = &*child_repr {
                 match file_type {
@@ -177,7 +177,7 @@ impl fuser::Filesystem for Vfs {
             let mut node = node
                 .inner_repr
                 .try_lock_for(MAX_LOCK_DURATION)
-                .ok_or(Errno::DEADLOCK)?;
+                .ok_or(Errno::DEADLK)?;
 
             let st = match &mut *node {
                 InnerRepr::Uninit => Err(Errno::INPROGRESS)?,
@@ -213,7 +213,7 @@ impl fuser::Filesystem for Vfs {
             let mut inner = node
                 .inner_repr
                 .try_lock_for(MAX_LOCK_DURATION)
-                .ok_or(Errno::DEADLOCK)?;
+                .ok_or(Errno::DEADLK)?;
             let InnerRepr::RegularFile(lite_file) = &mut *inner else {
                 return Err(Errno::NFILE)?;
             };
@@ -273,7 +273,7 @@ impl fuser::Filesystem for Vfs {
                 .inode
                 .inner_repr
                 .try_lock_for(MAX_LOCK_DURATION)
-                .ok_or(Errno::DEADLOCK)?;
+                .ok_or(Errno::DEADLK)?;
             let InnerRepr::RegularFile(lite_file) = &mut *inner else {
                 return Err(Errno::NFILE)?;
             };
@@ -336,7 +336,7 @@ impl fuser::Filesystem for Vfs {
                 .inode
                 .inner_repr
                 .try_lock_for(MAX_LOCK_DURATION)
-                .ok_or(Errno::DEADLOCK)?;
+                .ok_or(Errno::DEADLK)?;
             let InnerRepr::RegularFile(lite_file) = &mut *inner else {
                 return Err(Errno::NFILE)?;
             };
@@ -406,10 +406,10 @@ fn stat_to_fileattr(st: &rustix::fs::Stat) -> anyhow::Result<FileAttr> {
         ino: st.st_ino,
         size: st.st_size.try_into()?,
         blocks: (st.st_size / 512).try_into()?,
-        atime: timespec_to_systemtime(st.st_atime, st.st_atime_nsec),
-        mtime: timespec_to_systemtime(st.st_mtime, st.st_mtime_nsec),
-        ctime: timespec_to_systemtime(st.st_ctime, st.st_ctime_nsec),
-        crtime: timespec_to_systemtime(st.st_ctime, st.st_ctime_nsec),
+        atime: timespec_to_systemtime(st.st_atime, st.st_atime_nsec.try_into()?),
+        mtime: timespec_to_systemtime(st.st_mtime, st.st_mtime_nsec.try_into()?),
+        ctime: timespec_to_systemtime(st.st_ctime, st.st_ctime_nsec.try_into()?),
+        crtime: timespec_to_systemtime(st.st_ctime, st.st_ctime_nsec.try_into()?),
         kind: filetype_from_mode(st.st_mode),
         perm: (st.st_mode & 0o7777) as u16,
         nlink: st.st_nlink.try_into()?,
@@ -421,15 +421,15 @@ fn stat_to_fileattr(st: &rustix::fs::Stat) -> anyhow::Result<FileAttr> {
     })
 }
 
-fn timespec_to_systemtime(tv_sec: i64, tv_nsec: u64) -> SystemTime {
+fn timespec_to_systemtime(tv_sec: i64, tv_nsec: u32) -> SystemTime {
     if tv_sec >= 0 {
-        SystemTime::UNIX_EPOCH + Duration::new(tv_sec as u64, tv_nsec as u32)
+        SystemTime::UNIX_EPOCH + Duration::new(tv_sec as u64, tv_nsec)
     } else {
-        SystemTime::UNIX_EPOCH - Duration::new(-tv_sec as u64, tv_nsec as u32)
+        SystemTime::UNIX_EPOCH - Duration::new(-tv_sec as u64, tv_nsec)
     }
 }
 
-fn filetype_from_mode(mode: u32) -> fuser::FileType {
+fn filetype_from_mode(mode: rustix::fs::RawMode) -> fuser::FileType {
     match rustix::fs::FileType::from_raw_mode(mode) {
         rustix::fs::FileType::Directory => fuser::FileType::Directory,
         rustix::fs::FileType::RegularFile => fuser::FileType::RegularFile,

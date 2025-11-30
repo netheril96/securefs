@@ -260,7 +260,7 @@ mod test {
         file.write_all(data).unwrap();
         file.flush().unwrap();
 
-        let new_fd = reopen_as_writable(file.as_file().as_fd()).unwrap();
+        let new_fd = reopen_as_writable(file.as_fd()).unwrap();
         let mut new_file = std::fs::File::from(new_fd);
         let mut buf = Vec::new();
         new_file.read_to_end(&mut buf).unwrap();
