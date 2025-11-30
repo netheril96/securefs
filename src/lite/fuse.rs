@@ -409,6 +409,9 @@ fn stat_to_fileattr(st: &rustix::fs::Stat) -> anyhow::Result<FileAttr> {
         atime: timespec_to_systemtime(st.st_atime, st.st_atime_nsec.try_into()?),
         mtime: timespec_to_systemtime(st.st_mtime, st.st_mtime_nsec.try_into()?),
         ctime: timespec_to_systemtime(st.st_ctime, st.st_ctime_nsec.try_into()?),
+        #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+        crtime: timespec_to_systemtime(st.st_birthtime, st.st_birthtime_nsec.try_into()?),
+        #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
         crtime: timespec_to_systemtime(st.st_ctime, st.st_ctime_nsec.try_into()?),
         kind: filetype_from_mode(st.st_mode),
         perm: (st.st_mode & 0o7777) as u16,
