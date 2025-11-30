@@ -139,7 +139,7 @@ impl NameTranslator for LegacyNameTranslator {
                 }
                 NameDecodeOutput::Decoded(items) => {
                     result.extend_from_slice(&items);
-                    result.push(std::path::MAIN_SEPARATOR as u8);
+                    result.push('/' as u8);
                 }
             }
         }
