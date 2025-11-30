@@ -34,8 +34,8 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run tests
-        if: runner.os != 'Linux'
-        run: cargo test --release --verbose
+        if: runner.os == 'Windows'
+        run: cargo test --verbose
 
       - name: Install fuse3 on Ubuntu
         if: runner.os == 'Linux'
@@ -43,9 +43,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y fuse3 libfuse3-dev
 
+      - name: Install macFUSE on macOS
+        if: runner.os == 'macOS'
+        run: brew install --cask macfuse
+
       - name: Run tests with FUSE
-        if: runner.os == 'Linux'
-        run: cargo test --release --verbose -F fuse
+        if: runner.os == 'Linux' || runner.os == 'macOS'
+        run: cargo test --verbose -F fuse
+
 
   test-freebsd:
     name: Test on FreeBSD
@@ -74,5 +79,5 @@ jobs:
             mkdir -p ~/.cargo
             mv ~/freebsd-home/.cargo ~/.cargo || true
           run: |
-            cargo test --release --verbose -F fuse
+            cargo test --verbose -F fuse
             mv ~/.cargo ~/freebsd-home/.cargo || true
