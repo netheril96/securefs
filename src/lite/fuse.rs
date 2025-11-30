@@ -1,10 +1,10 @@
 #![cfg(feature = "fuse")]
+#![cfg(not(windows))]
 
 use std::{
-    f32::consts::E,
     ffi::c_int,
     os::{
-        fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd},
+        fd::{AsRawFd, BorrowedFd, OwnedFd},
         unix::ffi::OsStrExt,
     },
     sync::{Arc, atomic::Ordering},
@@ -18,7 +18,7 @@ use rustix::{fs::OFlags, io::Errno};
 use crate::{
     lite::vfs::{
         InnerRepr, LiteDir, LiteFile, LiteINode, LiteOpenedData, LiteOpenedDescriptor, LiteSymlink,
-        MAX_LOCK_DURATION, Vfs,
+        MAX_LOCK_DURATION, Vfs, reopen_as_writable,
     },
     vfs::{GenericHandle, GenericTable},
 };
@@ -277,12 +277,7 @@ impl fuser::Filesystem for Vfs {
             let InnerRepr::RegularFile(lite_file) = &mut *inner else {
                 return Err(Errno::NFILE)?;
             };
-            let LiteOpenedData::OpenedFile {
-                readable,
-                writable,
-                appending,
-            } = desc.data
-            else {
+            let LiteOpenedData::OpenedFile { readable, .. } = desc.data else {
                 return Err(Errno::NFILE)?;
             };
             if !readable {
@@ -346,9 +341,9 @@ impl fuser::Filesystem for Vfs {
                 return Err(Errno::NFILE)?;
             };
             let LiteOpenedData::OpenedFile {
-                readable,
                 writable,
                 appending,
+                ..
             } = desc.data
             else {
                 return Err(Errno::NFILE)?;
@@ -455,44 +450,4 @@ fn extract_errno(e: &anyhow::Error) -> c_int {
         return e.raw_os_error().unwrap_or(Errno::IO.raw_os_error());
     }
     Errno::IO.raw_os_error()
-}
-
-#[cfg(target_os = "linux")]
-fn reopen_as_writable(fd: BorrowedFd<'_>) -> rustix::io::Result<OwnedFd> {
-    // On Linux, we can use the /proc filesystem to reopen a file descriptor.
-
-    let path = format!("/proc/self/fd/{}", fd.as_raw_fd());
-    rustix::fs::open(
-        path.as_str(),
-        rustix::fs::OFlags::RDWR,
-        rustix::fs::Mode::empty(),
-    )
-}
-
-#[cfg(not(target_os = "linux"))]
-fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
-    use crate::lite::fcntl_wrapper;
-
-    let mut path_buf = vec![0; 65535];
-    let result = unsafe {
-        fcntl_wrapper::fcntl(
-            fd.as_raw_fd(),
-            fcntl_wrapper::F_GETPATH,
-            path_buf.as_mut_ptr(),
-        )
-    };
-
-    if result == -1 {
-        return Err(std::io::Error::last_os_error())?;
-    }
-
-    let nul_pos = path_buf
-        .iter()
-        .position(|&c| c == 0)
-        .unwrap_or(path_buf.len());
-    Ok(rustix::fs::open(
-        &path_buf[..nul_pos],
-        rustix::fs::OFlags::RDWR,
-        rustix::fs::Mode::empty(),
-    )?)
 }

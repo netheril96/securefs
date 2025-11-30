@@ -1,5 +1,5 @@
+#![cfg(not(windows))]
 use std::{
-    ffi::OsString,
     os::fd::{AsFd, BorrowedFd, OwnedFd},
     sync::{Arc, OnceLock, atomic::AtomicU64},
     time::Duration,
@@ -207,6 +207,49 @@ pub(super) enum LiteOpenedData {
     OpenedDir {
         dir: rustix::fs::Dir,
     },
+}
+
+#[cfg(target_os = "linux")]
+pub fn reopen_as_writable(fd: BorrowedFd<'_>) -> rustix::io::Result<OwnedFd> {
+    // On Linux, we can use the /proc filesystem to reopen a file descriptor.
+
+    use std::os::fd::AsRawFd;
+
+    let path = format!("/proc/self/fd/{}", fd.as_raw_fd());
+    rustix::fs::open(
+        path.as_str(),
+        rustix::fs::OFlags::RDWR,
+        rustix::fs::Mode::empty(),
+    )
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
+    use crate::lite::fcntl_wrapper;
+    use std::os::fd::AsRawFd;
+
+    let mut path_buf = vec![0; 65535];
+    let result = unsafe {
+        fcntl_wrapper::fcntl(
+            fd.as_raw_fd() as i32,
+            fcntl_wrapper::F_GETPATH,
+            path_buf.as_mut_ptr(),
+        )
+    };
+
+    if result == -1 {
+        return Err(std::io::Error::last_os_error())?;
+    }
+
+    let nul_pos = path_buf
+        .iter()
+        .position(|&c| c == 0)
+        .unwrap_or(path_buf.len());
+    Ok(rustix::fs::open(
+        &path_buf[..nul_pos],
+        rustix::fs::OFlags::RDWR,
+        rustix::fs::Mode::empty(),
+    )?)
 }
 
 pub trait IoWrapperStream: Stream {

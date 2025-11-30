@@ -14,6 +14,7 @@ jobs:
     name: Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
@@ -32,7 +33,18 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run tests
+        if: runner.os != 'Linux'
         run: cargo test --release --verbose
+
+      - name: Install fuse3 on Ubuntu
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fuse3 libfuse3-dev
+
+      - name: Run tests with FUSE
+        if: runner.os == 'Linux'
+        run: cargo test --release --verbose -F fuse
 
   test-freebsd:
     name: Test on FreeBSD
@@ -54,9 +66,12 @@ jobs:
           sync: sshfs
           release: "15.0"
           prepare: |
-            pkg install -y rust
+            pkg install -y rust fusefs-libs sudo ninja
+            if ! sudo kldstat -m fusefs > /dev/null 2>&1; then
+                sudo kldload fusefs
+            fi
             mkdir -p ~/.cargo
             mv ~/freebsd-home/.cargo ~/.cargo || true
           run: |
-            cargo test --release --verbose
+            cargo test --release --verbose -F fuse
             mv ~/.cargo ~/freebsd-home/.cargo || true
