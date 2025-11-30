@@ -52,6 +52,7 @@ jobs:
         with:
           usesh: true
           sync: sshfs
+          release: "15.0"
           prepare: |
             pkg install -y rust
             mkdir -p ~/.cargo

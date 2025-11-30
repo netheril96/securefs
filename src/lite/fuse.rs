@@ -460,6 +460,7 @@ fn extract_errno(e: &anyhow::Error) -> c_int {
 #[cfg(target_os = "linux")]
 fn reopen_as_writable(fd: BorrowedFd<'_>) -> rustix::io::Result<OwnedFd> {
     // On Linux, we can use the /proc filesystem to reopen a file descriptor.
+
     let path = format!("/proc/self/fd/{}", fd.as_raw_fd());
     rustix::fs::open(
         path.as_str(),
@@ -468,32 +469,30 @@ fn reopen_as_writable(fd: BorrowedFd<'_>) -> rustix::io::Result<OwnedFd> {
     )
 }
 
-// //#[cfg(not(target_os = "linux"))]
-// fn reopen_as_writable(fd: BorrowedFd<'_>) -> rustix::io::Result<OwnedFd> {
-//     // On other Unix-like systems (e.g., macOS), we can get the path from the
-//     // file descriptor and reopen it.
-//     // F_GETPATH is a macOS-specific fcntl command.
-//     const F_GETPATH: c_int = 50;
+#[cfg(not(target_os = "linux"))]
+fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
+    use crate::lite::fcntl_wrapper;
 
-//     // We must use an external declaration as rustix does not support F_GETPATH.
-//     unsafe extern "C" {
-//         fn fcntl(fd: c_int, cmd: c_int, ...) -> c_int;
-//     }
+    let mut path_buf = vec![0; 65535];
+    let result = unsafe {
+        fcntl_wrapper::fcntl(
+            fd.as_raw_fd(),
+            fcntl_wrapper::F_GETPATH,
+            path_buf.as_mut_ptr(),
+        )
+    };
 
-//     let mut path_buf = vec![0; 65535];
-//     let result = unsafe { fcntl(fd.as_raw_fd(), F_GETPATH, path_buf.as_mut_ptr()) };
+    if result == -1 {
+        return Err(std::io::Error::last_os_error())?;
+    }
 
-//     if result == -1 {
-//         // return Err(rustix::io::Errno::last());
-//     }
-
-//     let nul_pos = path_buf
-//         .iter()
-//         .position(|&c| c == 0)
-//         .unwrap_or(path_buf.len());
-//     rustix::fs::open(
-//         &path_buf[..nul_pos],
-//         rustix::fs::OFlags::RDWR,
-//         rustix::fs::Mode::empty(),
-//     )
-// }
+    let nul_pos = path_buf
+        .iter()
+        .position(|&c| c == 0)
+        .unwrap_or(path_buf.len());
+    Ok(rustix::fs::open(
+        &path_buf[..nul_pos],
+        rustix::fs::OFlags::RDWR,
+        rustix::fs::Mode::empty(),
+    )?)
+}

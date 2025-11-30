@@ -25,3 +25,6 @@ thread_local = "1.1.9"
 
 [features]
 fuse = ["dep:fuser"]
+
+[build-dependencies]
+bindgen = "0.72.1"
