@@ -1,5 +1,6 @@
 #![cfg(not(windows))]
 use std::{
+    ffi::{CStr, c_int},
     os::fd::{AsFd, BorrowedFd, OwnedFd},
     sync::{Arc, OnceLock, atomic::AtomicU64},
     time::Duration,
@@ -225,31 +226,46 @@ pub fn reopen_as_writable(fd: BorrowedFd<'_>) -> rustix::io::Result<OwnedFd> {
 
 #[cfg(not(target_os = "linux"))]
 pub fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
-    use crate::lite::fcntl_wrapper;
     use std::os::fd::AsRawFd;
 
-    let mut path_buf = vec![0; 65535];
-    let result = unsafe {
-        fcntl_wrapper::fcntl(
-            fd.as_raw_fd() as i32,
-            fcntl_wrapper::F_GETPATH,
-            path_buf.as_mut_ptr(),
-        )
-    };
-
-    if result == -1 {
-        return Err(std::io::Error::last_os_error())?;
+    unsafe extern "C" {
+        fn securefs_get_full_path(fd: c_int, path: *mut u8, path_len: usize) -> c_int;
     }
 
-    let nul_pos = path_buf
-        .iter()
-        .position(|&c| c == 0)
-        .unwrap_or(path_buf.len());
+    let mut path_buf = vec![0; 16380];
+    let result =
+        unsafe { securefs_get_full_path(fd.as_raw_fd(), path_buf.as_mut_ptr(), path_buf.len()) };
+
+    if result > 0 {
+        return Err(rustix::io::Errno::from_raw_os_error(result))?;
+    }
+
     Ok(rustix::fs::open(
-        &path_buf[..nul_pos],
+        CStr::from_bytes_until_nul(&path_buf)?,
         rustix::fs::OFlags::RDWR,
         rustix::fs::Mode::empty(),
     )?)
+}
+
+#[cfg(test)]
+mod test {
+    use std::io::{Read, Write};
+
+    use super::*;
+
+    #[test]
+    fn test_reopen() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        let data = b"hello world";
+        file.write_all(data).unwrap();
+        file.flush().unwrap();
+
+        let new_fd = reopen_as_writable(file.as_file().as_fd()).unwrap();
+        let mut new_file = std::fs::File::from(new_fd);
+        let mut buf = Vec::new();
+        new_file.read_to_end(&mut buf).unwrap();
+        assert_eq!(buf, data);
+    }
 }
 
 pub trait IoWrapperStream: Stream {
