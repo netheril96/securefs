@@ -72,6 +72,7 @@ jobs:
           operating_system: freebsd
           version: "13.3"
           shell: "bash"
+          environment_variables: RUST_BACKTRACE
           run: |
             sudo pkg install -y rust fusefs-libs3  ninja pkgconf cmake
             sudo kldload fusefs || true
