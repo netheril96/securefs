@@ -55,6 +55,8 @@ jobs:
   test-freebsd:
     name: Test on FreeBSD
     runs-on: ubuntu-latest
+    env:
+      RUST_LIBC_UNSTABLE_FREEBSD_VERSION: 13
     steps:
       - name: Checkout sources
         uses: actions/checkout@v5
@@ -72,7 +74,7 @@ jobs:
           sync: sshfs
           release: "13.3"
           prepare: |
-            pkg install -y rust fusefs-libs sudo ninja pkgconf cmake
+            pkg install -y rust fusefs-libs3 sudo ninja pkgconf cmake llvm
             if ! sudo kldstat -m fusefs > /dev/null 2>&1; then
                 sudo kldload fusefs
             fi
