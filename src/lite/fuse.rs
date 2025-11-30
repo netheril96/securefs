@@ -1,29 +1,21 @@
 #![cfg(feature = "fuse")]
 
 use std::{
-    f64::consts::E,
     ffi::c_int,
-    mem::{replace, take},
     os::{
         fd::{AsFd, FromRawFd, OwnedFd},
         unix::ffi::OsStrExt,
     },
-    sync::atomic::{self, Ordering},
-    time::{self, Duration, SystemTime},
+    sync::{Arc, atomic::Ordering},
+    time::{Duration, SystemTime},
 };
 
 use anyhow::anyhow;
 use fuser::FileAttr;
-use rustix::{
-    fs::{Dir, Timespec},
-    io::Errno,
-};
+use rustix::io::Errno;
 
 use crate::{
-    lite::vfs::{
-        InnerRepr, IoWrapperStream, LiteDir, LiteFile, LiteSymlink, MAX_LOCK_DURATION, Vfs,
-    },
-    stream::lite::LiteAesGcmCryptStream,
+    lite::vfs::{InnerRepr, LiteDir, LiteFile, LiteINode, LiteSymlink, MAX_LOCK_DURATION, Vfs},
     vfs::{GenericHandle, GenericTable},
 };
 
@@ -35,6 +27,7 @@ impl fuser::Filesystem for Vfs {
         name: &std::ffi::OsStr,
         reply: fuser::ReplyEntry,
     ) {
+        log::trace!("lookup(_req={_req:?}, parent={parent:?}, name={name:?})");
         let inner = || -> anyhow::Result<(FileAttr, u64)> {
             let parent_node = self.inode_table.lookup(parent).ok_or(Errno::NOENT)?;
             let parent_node = parent_node
@@ -129,31 +122,78 @@ impl fuser::Filesystem for Vfs {
         };
         match inner() {
             Ok((attr, generation)) => {
+                log::trace!(
+                    "lookup(_req={_req:?}, parent={parent:?}, name={name:?}) = (attr={attr:?}, generation={generation})"
+                );
                 reply.entry(&Duration::from_secs(30), &attr, generation);
             }
-            Err(err) => reply.error(extract_errno(&err)),
+            Err(err) => {
+                log::trace!(
+                    "lookup(_req={_req:?}, parent={parent:?}, name={name:?}) results in error {err:?}"
+                );
+                log::warn!("lookup(parent={parent:?}, name={name:?}) results in error {err:?}");
+                reply.error(extract_errno(&err));
+            }
         }
     }
 
-    // fn getattr(
-    //     &mut self,
-    //     _req: &fuser::Request<'_>,
-    //     ino: u64,
-    //     fh: Option<u64>,
-    //     reply: fuser::ReplyAttr,
-    // ) {
-    //     let inner = || -> anyhow::Result<FileAttr> {
+    fn getattr(
+        &mut self,
+        _req: &fuser::Request<'_>,
+        ino: u64,
+        fh: Option<u64>,
+        reply: fuser::ReplyAttr,
+    ) {
+        log::trace!("getattr(_req={_req:?}, ino={ino:?}, fh={fh:?})");
+        let inner = || -> anyhow::Result<FileAttr> {
+            let node: Arc<LiteINode>;
+            if let Some(fh) = fh {
+                node = unsafe { Arc::from_raw(fh as *const LiteINode) };
+            } else {
+                node = self.inode_table.lookup(ino).ok_or(Errno::NOENT)?;
+            }
+            let mut node = node
+                .inner_repr
+                .try_lock_for(MAX_LOCK_DURATION)
+                .ok_or(Errno::DEADLOCK)?;
+
+            let st = match &mut *node {
+                InnerRepr::Uninit => Err(Errno::INPROGRESS)?,
+                InnerRepr::Dir(lite_dir) => lite_dir.stat()?,
+                InnerRepr::RegularFile(lite_file) => lite_file.stat()?,
+                InnerRepr::Symlink(lite_symlink) => {
+                    lite_symlink.stat(self.name_translator.as_ref())?
+                }
+            };
+
+            Ok(stat_to_fileattr(&st)?)
+        };
+
+        match inner() {
+            Ok(attr) => {
+                log::trace!("getattr(_req={_req:?}, ino={ino:?}, fh={fh:?}) = (attr={attr:?})");
+                reply.attr(&Duration::from_secs(30), &attr)
+            }
+            Err(err) => {
+                log::trace!(
+                    "getattr(_req={_req:?}, ino={ino:?}, fh={fh:?}) results in error {err:?}"
+                );
+                log::warn!("getattr(ino={ino:?}, fh={fh:?}) results in error {err:?}");
+                reply.error(extract_errno(&err))
+            }
+        }
+    }
+
+    // fn open(&mut self, _req: &fuser::Request<'_>, ino: u64, flags: i32, reply: fuser::ReplyOpen) {
+    //     log::trace!("open(_req={_req:?}, ino={ino:?}, flags={flags:0x})");
+    //     let inner = || -> anyhow::Result<usize> {
     //         let node = self.inode_table.lookup(ino).ok_or(Errno::NOENT)?;
-    //         let node = node
+    //         let inner = node
     //             .inner_repr
     //             .try_lock_for(MAX_LOCK_DURATION)
     //             .ok_or(Errno::DEADLOCK)?;
-    //     };
 
-    //     match inner() {
-    //         Ok(attr) => reply.attr(&Duration::from_secs(30), &attr),
-    //         Err(err) => reply.error(extract_errno(&err)),
-    //     }
+    //     };
     // }
 }
 

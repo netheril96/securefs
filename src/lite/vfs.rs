@@ -36,6 +36,10 @@ impl LiteDir {
     pub fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
     }
+
+    pub(super) fn stat(&mut self) -> anyhow::Result<rustix::fs::Stat> {
+        Ok(rustix::fs::fstat(self.as_fd())?)
+    }
 }
 
 pub(super) struct LiteFile {
@@ -66,6 +70,12 @@ impl LiteFile {
 
     pub(super) fn get_stream(&mut self) -> &mut dyn IoWrapperStream {
         self.stream.as_mut()
+    }
+
+    pub(super) fn stat(&mut self) -> anyhow::Result<rustix::fs::Stat> {
+        let mut st = rustix::fs::fstat(self.as_fd())?;
+        st.st_size = self.get_stream().size()?.try_into()?;
+        Ok(st)
     }
 }
 
