@@ -1,7 +1,7 @@
 use std::{
     ffi::OsString,
     os::fd::{AsFd, BorrowedFd, OwnedFd},
-    sync::{OnceLock, atomic::AtomicU64},
+    sync::{Arc, OnceLock, atomic::AtomicU64},
     time::Duration,
 };
 
@@ -56,12 +56,16 @@ impl LiteFile {
         self.stream.as_fd()
     }
 
-    pub(super) fn upgrade_to_writable_fd(&mut self, fd: OwnedFd, writable: bool) {
+    pub(super) fn upgrade_to_writable_fd<F>(&mut self, writable: bool, f: F) -> anyhow::Result<()>
+    where
+        F: FnOnce(BorrowedFd<'_>) -> anyhow::Result<OwnedFd>,
+    {
         if !writable {
-            return;
+            return Ok(());
         }
-        self.stream.replace_fd(fd);
+        self.stream.replace_fd(f(self.as_fd())?);
         self.writable = writable;
+        Ok(())
     }
 
     pub(super) fn is_writable(&self) -> bool {
@@ -187,6 +191,22 @@ impl GenericHandle for LiteINode {
     fn is_symlink(&self) -> bool {
         false
     }
+}
+
+pub(super) struct LiteOpenedDescriptor {
+    pub(super) inode: Arc<LiteINode>,
+    pub(super) data: LiteOpenedData,
+}
+
+pub(super) enum LiteOpenedData {
+    OpenedFile {
+        readable: bool,
+        writable: bool,
+        appending: bool,
+    },
+    OpenedDir {
+        dir: rustix::fs::Dir,
+    },
 }
 
 pub trait IoWrapperStream: Stream {

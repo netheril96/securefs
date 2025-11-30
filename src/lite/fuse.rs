@@ -1,9 +1,10 @@
 #![cfg(feature = "fuse")]
 
 use std::{
+    f32::consts::E,
     ffi::c_int,
     os::{
-        fd::{AsFd, FromRawFd, OwnedFd},
+        fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd},
         unix::ffi::OsStrExt,
     },
     sync::{Arc, atomic::Ordering},
@@ -12,10 +13,13 @@ use std::{
 
 use anyhow::anyhow;
 use fuser::FileAttr;
-use rustix::io::Errno;
+use rustix::{fs::OFlags, io::Errno};
 
 use crate::{
-    lite::vfs::{InnerRepr, LiteDir, LiteFile, LiteINode, LiteSymlink, MAX_LOCK_DURATION, Vfs},
+    lite::vfs::{
+        InnerRepr, LiteDir, LiteFile, LiteINode, LiteOpenedData, LiteOpenedDescriptor, LiteSymlink,
+        MAX_LOCK_DURATION, Vfs,
+    },
     vfs::{GenericHandle, GenericTable},
 };
 
@@ -80,14 +84,26 @@ impl fuser::Filesystem for Vfs {
                         })?;
                     }
                     rustix::fs::FileType::RegularFile => {
+                        let writable = if rustix::fs::Mode::from_raw_mode(stat.st_mode)
+                            & rustix::fs::Mode::WUSR
+                            != rustix::fs::Mode::empty()
+                        {
+                            true
+                        } else {
+                            false
+                        };
                         child_repr.ensure_regular_file(|| {
                             let child_fd: OwnedFd = rustix::fs::openat(
                                 parent_dir.as_fd(),
                                 &enc_name,
-                                rustix::fs::OFlags::RDONLY,
+                                if writable {
+                                    rustix::fs::OFlags::RDWR
+                                } else {
+                                    rustix::fs::OFlags::RDONLY
+                                },
                                 rustix::fs::Mode::empty(),
                             )?;
-                            Ok(LiteFile::new(self.wrapper_opener.wrap(child_fd)?, false))
+                            Ok(LiteFile::new(self.wrapper_opener.wrap(child_fd)?, writable))
                         })?;
                     }
                     rustix::fs::FileType::Symlink => {
@@ -148,7 +164,13 @@ impl fuser::Filesystem for Vfs {
         let inner = || -> anyhow::Result<FileAttr> {
             let node: Arc<LiteINode>;
             if let Some(fh) = fh {
-                node = unsafe { Arc::from_raw(fh as *const LiteINode) };
+                node = unsafe {
+                    (fh as *mut LiteOpenedDescriptor)
+                        .as_ref()
+                        .unwrap()
+                        .inode
+                        .clone()
+                };
             } else {
                 node = self.inode_table.lookup(ino).ok_or(Errno::NOENT)?;
             }
@@ -184,17 +206,204 @@ impl fuser::Filesystem for Vfs {
         }
     }
 
-    // fn open(&mut self, _req: &fuser::Request<'_>, ino: u64, flags: i32, reply: fuser::ReplyOpen) {
-    //     log::trace!("open(_req={_req:?}, ino={ino:?}, flags={flags:0x})");
-    //     let inner = || -> anyhow::Result<usize> {
-    //         let node = self.inode_table.lookup(ino).ok_or(Errno::NOENT)?;
-    //         let inner = node
-    //             .inner_repr
-    //             .try_lock_for(MAX_LOCK_DURATION)
-    //             .ok_or(Errno::DEADLOCK)?;
+    fn open(&mut self, _req: &fuser::Request<'_>, ino: u64, flags: i32, reply: fuser::ReplyOpen) {
+        log::trace!("open(_req={_req:?}, ino={ino:?}, flags={flags:0x})");
+        let inner = || -> anyhow::Result<u64> {
+            let node = self.inode_table.lookup(ino).ok_or(Errno::NOENT)?;
+            let mut inner = node
+                .inner_repr
+                .try_lock_for(MAX_LOCK_DURATION)
+                .ok_or(Errno::DEADLOCK)?;
+            let InnerRepr::RegularFile(lite_file) = &mut *inner else {
+                return Err(Errno::NFILE)?;
+            };
+            let flags = rustix::fs::OFlags::from_bits_retain(flags.try_into()?);
+            let readable = flags.contains(OFlags::RDONLY) || flags.contains(OFlags::RDWR);
+            let writable = flags.contains(OFlags::WRONLY) || flags.contains(OFlags::RDWR);
+            let appending = flags.contains(OFlags::APPEND);
 
-    //     };
-    // }
+            lite_file.upgrade_to_writable_fd(writable || appending, |fd: BorrowedFd<'_>| {
+                Ok(reopen_as_writable(fd)?)
+            })?;
+
+            let descriptor: Box<LiteOpenedDescriptor> = Box::new(LiteOpenedDescriptor {
+                inode: node.clone(),
+                data: LiteOpenedData::OpenedFile {
+                    readable: readable,
+                    writable: writable,
+                    appending: appending,
+                },
+            });
+
+            Ok(Box::into_raw(descriptor) as u64)
+        };
+
+        match inner() {
+            Ok(fh) => {
+                log::trace!("open(_req={_req:?}, ino={ino:?}, flags={flags:0x}) = (fh={fh})");
+                reply.opened(fh, flags as u32);
+            }
+            Err(err) => {
+                log::trace!(
+                    "open(_req={_req:?}, ino={ino:?}, flags={flags:0x}) results in error {err:?}"
+                );
+                log::warn!("open(ino={ino:?}, flags={flags:0x}) results in error {err:?}");
+                reply.error(extract_errno(&err));
+            }
+        }
+    }
+
+    fn read(
+        &mut self,
+        _req: &fuser::Request<'_>,
+        ino: u64,
+        fh: u64,
+        offset: i64,
+        size: u32,
+        flags: i32,
+        lock_owner: Option<u64>,
+        reply: fuser::ReplyData,
+    ) {
+        log::trace!(
+            "read(_req={_req:?}, ino={ino:?}, fh={fh:?}, offset={offset:?}, size={size:?}, flags={flags:0x}, lock_owner={lock_owner:?})"
+        );
+        let inner = || -> anyhow::Result<Vec<u8>> {
+            let desc = unsafe { (fh as *mut LiteOpenedDescriptor).as_mut().unwrap() };
+            let mut inner = desc
+                .inode
+                .inner_repr
+                .try_lock_for(MAX_LOCK_DURATION)
+                .ok_or(Errno::DEADLOCK)?;
+            let InnerRepr::RegularFile(lite_file) = &mut *inner else {
+                return Err(Errno::NFILE)?;
+            };
+            let LiteOpenedData::OpenedFile {
+                readable,
+                writable,
+                appending,
+            } = desc.data
+            else {
+                return Err(Errno::NFILE)?;
+            };
+            if !readable {
+                return Err(Errno::PERM)?;
+            }
+
+            let mut result = vec![0u8; size.try_into()?];
+            if lite_file
+                .get_stream()
+                .read(&mut result, offset.try_into()?)?
+                != size.try_into()?
+            {
+                return Err(Errno::IO)?;
+            }
+            Ok(result)
+        };
+
+        match inner() {
+            Ok(data) => {
+                log::trace!(
+                    "read(_req={_req:?}, ino={ino:?}, fh={fh:?}, offset={offset:?}, size={size:?}, flags={flags:0x}, lock_owner={lock_owner:?}) = (data.len={})\nData: {data:?}",
+                    data.len()
+                );
+                reply.data(&data);
+            }
+            Err(err) => {
+                log::trace!(
+                    "read(_req={_req:?}, ino={ino:?}, fh={fh:?}, offset={offset:?}, size={size:?}, flags={flags:0x}, lock_owner={lock_owner:?}) results in error {err:?}"
+                );
+                log::trace!(
+                    "read(ino={ino:?}, fh={fh:?}, offset={offset:?}, size={size:?}, flags={flags:0x}, lock_owner={lock_owner:?}) results in error {err:?}"
+                );
+                reply.error(extract_errno(&err));
+            }
+        }
+    }
+
+    fn write(
+        &mut self,
+        _req: &fuser::Request<'_>,
+        ino: u64,
+        fh: u64,
+        offset: i64,
+        data: &[u8],
+        write_flags: u32,
+        flags: i32,
+        lock_owner: Option<u64>,
+        reply: fuser::ReplyWrite,
+    ) {
+        log::trace!(
+            "write(_req={_req:?}, ino={ino:?}, fh={fh:?}, offset={offset:?}, data={data:?}, write_flags={write_flags:0x}, flags={flags:0x}, lock_owner={lock_owner:?})"
+        );
+        let inner = || -> anyhow::Result<u32> {
+            let desc = unsafe { (fh as *mut LiteOpenedDescriptor).as_mut().unwrap() };
+            let mut inner = desc
+                .inode
+                .inner_repr
+                .try_lock_for(MAX_LOCK_DURATION)
+                .ok_or(Errno::DEADLOCK)?;
+            let InnerRepr::RegularFile(lite_file) = &mut *inner else {
+                return Err(Errno::NFILE)?;
+            };
+            let LiteOpenedData::OpenedFile {
+                readable,
+                writable,
+                appending,
+            } = desc.data
+            else {
+                return Err(Errno::NFILE)?;
+            };
+            if !writable || !appending {
+                return Err(Errno::PERM)?;
+            }
+
+            let stream = lite_file.get_stream();
+            stream.write(
+                data,
+                if appending {
+                    stream.size()?.try_into()?
+                } else {
+                    offset.try_into()?
+                },
+            )?;
+            Ok(data.len().try_into()?)
+        };
+
+        match inner() {
+            Ok(size) => {
+                log::trace!(
+                    "write(_req={_req:?}, ino={ino:?}, fh={fh:?}, offset={offset:?}, data={data:?}, write_flags={write_flags:0x}, flags={flags:0x}, lock_owner={lock_owner:?}) = (size={size})"
+                );
+                reply.written(size);
+            }
+            Err(err) => {
+                log::trace!(
+                    "write(_req={_req:?}, ino={ino:?}, fh={fh:?}, offset={offset:?}, data={data:?}, write_flags={write_flags:0x}, flags={flags:0x}, lock_owner={lock_owner:?}) results in error {err:?}"
+                );
+                log::warn!(
+                    "write(ino={ino:?}, fh={fh:?}, offset={offset:?}, write_flags={write_flags:0x}, flags={flags:0x}, lock_owner={lock_owner:?}) results in error {err:?}"
+                );
+                reply.error(extract_errno(&err));
+            }
+        }
+    }
+
+    fn release(
+        &mut self,
+        _req: &fuser::Request<'_>,
+        ino: u64,
+        fh: u64,
+        flags: i32,
+        lock_owner: Option<u64>,
+        flush: bool,
+        reply: fuser::ReplyEmpty,
+    ) {
+        log::trace!(
+            "release(_req={_req:?}, ino={ino:?}, fh={fh:?}, flags={flags:0x}, lock_owner={lock_owner:?}, flush={flush:?})"
+        );
+        drop(unsafe { Box::from_raw(fh as *mut LiteOpenedDescriptor) });
+        reply.ok();
+    }
 }
 
 fn stat_to_fileattr(st: &rustix::fs::Stat) -> anyhow::Result<FileAttr> {
@@ -247,3 +456,44 @@ fn extract_errno(e: &anyhow::Error) -> c_int {
     }
     Errno::IO.raw_os_error()
 }
+
+#[cfg(target_os = "linux")]
+fn reopen_as_writable(fd: BorrowedFd<'_>) -> rustix::io::Result<OwnedFd> {
+    // On Linux, we can use the /proc filesystem to reopen a file descriptor.
+    let path = format!("/proc/self/fd/{}", fd.as_raw_fd());
+    rustix::fs::open(
+        path.as_str(),
+        rustix::fs::OFlags::RDWR,
+        rustix::fs::Mode::empty(),
+    )
+}
+
+// //#[cfg(not(target_os = "linux"))]
+// fn reopen_as_writable(fd: BorrowedFd<'_>) -> rustix::io::Result<OwnedFd> {
+//     // On other Unix-like systems (e.g., macOS), we can get the path from the
+//     // file descriptor and reopen it.
+//     // F_GETPATH is a macOS-specific fcntl command.
+//     const F_GETPATH: c_int = 50;
+
+//     // We must use an external declaration as rustix does not support F_GETPATH.
+//     unsafe extern "C" {
+//         fn fcntl(fd: c_int, cmd: c_int, ...) -> c_int;
+//     }
+
+//     let mut path_buf = vec![0; 65535];
+//     let result = unsafe { fcntl(fd.as_raw_fd(), F_GETPATH, path_buf.as_mut_ptr()) };
+
+//     if result == -1 {
+//         // return Err(rustix::io::Errno::last());
+//     }
+
+//     let nul_pos = path_buf
+//         .iter()
+//         .position(|&c| c == 0)
+//         .unwrap_or(path_buf.len());
+//     rustix::fs::open(
+//         &path_buf[..nul_pos],
+//         rustix::fs::OFlags::RDWR,
+//         rustix::fs::Mode::empty(),
+//     )
+// }
