@@ -55,31 +55,25 @@ jobs:
   test-freebsd:
     name: Test on FreeBSD
     runs-on: ubuntu-latest
-    env:
-      RUST_LIBC_UNSTABLE_FREEBSD_VERSION: 13
     steps:
       - name: Checkout sources
         uses: actions/checkout@v5
 
       - name: Cache cargo dependencies on FreeBSD
         uses: actions/cache@v4
+        id: cargo-cache-freebsd
         with:
-          path: freebsd-home/.cargo
+          path: .cargo-cache
           key: freebsd-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run tests on FreeBSD
-        uses: vmactions/freebsd-vm@v1
+        uses: cross-platform-actions/action@v0.30.0
         with:
-          usesh: true
-          sync: sshfs
-          release: "13.3"
-          prepare: |
-            pkg install -y rust fusefs-libs3 sudo ninja pkgconf cmake llvm
-            if ! sudo kldstat -m fusefs > /dev/null 2>&1; then
-                sudo kldload fusefs
-            fi
-            mkdir -p ~/.cargo
-            mv ~/freebsd-home/.cargo ~/.cargo || true
+          operating_system: freebsd
+          version: "13.3"
+          shell: "bash"
           run: |
+            sudo pkg install -y rust fusefs-libs3  ninja pkgconf cmake
+            sudo kldload fusefs || true
+            export CARGO_HOME=.cargo-cache
             cargo test --verbose -F fuse
-            mv ~/.cargo ~/freebsd-home/.cargo || true
