@@ -120,9 +120,9 @@ impl NameTranslator for LegacyNameTranslator {
 
     fn encode_path_for_symlink(&self, path: &[u8]) -> anyhow::Result<Vec<u8>> {
         let mut result: Vec<u8> = Vec::new();
-        for part in path.split(|&x| x == std::path::MAIN_SEPARATOR as u8) {
+        for part in path.split(|&x| x == '/' as u8) {
             result.extend_from_slice(&self.encode_name(part)?);
-            result.push(std::path::MAIN_SEPARATOR as u8);
+            result.push('/' as u8);
         }
         result.pop();
         Ok(result)
@@ -130,7 +130,7 @@ impl NameTranslator for LegacyNameTranslator {
 
     fn decode_path_for_symlink(&self, path: &[u8]) -> anyhow::Result<Vec<u8>> {
         let mut result: Vec<u8> = Vec::new();
-        for part in path.split(|&x| x == std::path::MAIN_SEPARATOR as u8) {
+        for part in path.split(|&x| x == '/' as u8) {
             match self.decode_name(part) {
                 NameDecodeOutput::InvalidName | NameDecodeOutput::LongName => {
                     return Err(NameError::NotPreviousEncodedName {
@@ -235,11 +235,7 @@ impl NameTranslator for NewStyleNameTranslator {
     }
 
     fn decode_path_for_symlink(&self, path: &[u8]) -> anyhow::Result<Vec<u8>> {
-        let joined_path: Vec<u8> = path
-            .iter()
-            .filter(|b| **b != b'/')
-            .cloned()
-            .collect();
+        let joined_path: Vec<u8> = path.iter().filter(|b| **b != b'/').cloned().collect();
         match decrypt_filename_component(&joined_path, self.get_aes_siv().borrow_mut().deref_mut())
         {
             Some(decoded) => Ok(decoded),
