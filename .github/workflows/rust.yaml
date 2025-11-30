@@ -15,7 +15,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - name: Checkout sources
         uses: actions/checkout@v5
@@ -33,3 +33,29 @@ jobs:
 
       - name: Run tests
         run: cargo test --release --verbose
+
+  test-freebsd:
+    name: Test on FreeBSD
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v5
+
+      - name: Cache cargo dependencies on FreeBSD
+        uses: actions/cache@v4
+        with:
+          path: freebsd-home/.cargo
+          key: freebsd-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run tests on FreeBSD
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          sync: sshfs
+          prepare: |
+            pkg install -y rust
+            mkdir -p ~/.cargo
+            mv ~/freebsd-home/.cargo ~/.cargo || true
+          run: |
+            cargo test --release --verbose
+            mv ~/.cargo ~/freebsd-home/.cargo || true
