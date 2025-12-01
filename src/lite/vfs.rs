@@ -226,6 +226,7 @@ pub fn reopen_as_writable(fd: BorrowedFd<'_>) -> rustix::io::Result<OwnedFd> {
 
 #[cfg(not(target_os = "linux"))]
 pub fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
+    use anyhow::Context;
     use std::os::fd::AsRawFd;
 
     unsafe extern "C" {
@@ -237,19 +238,29 @@ pub fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
         unsafe { securefs_get_full_path(fd.as_raw_fd(), path_buf.as_mut_ptr(), path_buf.len()) };
 
     if result > 0 {
-        return Err(rustix::io::Errno::from_raw_os_error(result))?;
+        return Err(rustix::io::Errno::from_raw_os_error(result))
+            .with_context(|| format!("Reopen fd {:?}", fd))?;
     }
 
     Ok(rustix::fs::open(
         CStr::from_bytes_until_nul(&path_buf)?,
         rustix::fs::OFlags::RDWR,
         rustix::fs::Mode::empty(),
-    )?)
+    )
+    .with_context(|| {
+        format!(
+            "Reopen fd {:?} at location {:?}",
+            fd,
+            String::from_utf8_lossy(&path_buf)
+        )
+    })?)
 }
 
 #[cfg(test)]
 mod test {
     use std::io::{Read, Write};
+
+    use anyhow::Context;
 
     use super::*;
 
@@ -260,7 +271,9 @@ mod test {
         file.write_all(data).unwrap();
         file.flush().unwrap();
 
-        let new_fd = reopen_as_writable(file.as_fd()).unwrap();
+        let new_fd = reopen_as_writable(file.as_fd())
+            .with_context(|| format!("Reopen file {:?}", file.path()))
+            .unwrap();
         let mut new_file = std::fs::File::from(new_fd);
         let mut buf = Vec::new();
         new_file.read_to_end(&mut buf).unwrap();
