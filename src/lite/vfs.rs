@@ -251,7 +251,7 @@ pub fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
         format!(
             "Reopen fd {:?} at location {:?}",
             fd,
-            String::from_utf8_lossy(&path_buf)
+            CStr::from_bytes_until_nul(&path_buf).unwrap_or(c"<unknown>")
         )
     })?)
 }
