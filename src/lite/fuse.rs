@@ -61,24 +61,36 @@ impl FuseVfs {
         }
     }
 
-    fn metadata_to_fileattr(&self, metadata: &INodeMetadata) -> FileAttr {
-        FileAttr {
-            ino: self.ino_to_fuse(metadata.ino),
-            size: metadata.size,
-            blocks: metadata.blocks,
-            atime: timespec_to_systemtime(metadata.atime.tv_sec, metadata.atime.tv_nsec as u32),
-            mtime: timespec_to_systemtime(metadata.mtime.tv_sec, metadata.mtime.tv_nsec as u32),
-            ctime: timespec_to_systemtime(metadata.ctime.tv_sec, metadata.ctime.tv_nsec as u32),
-            crtime: timespec_to_systemtime(metadata.crtime.tv_sec, metadata.crtime.tv_nsec as u32),
-            kind: mode_to_filetype(metadata.mode),
-            perm: metadata.perm,
-            nlink: metadata.nlink,
-            uid: metadata.uid,
-            gid: metadata.gid,
-            rdev: metadata.rdev,
-            blksize: metadata.blksize,
+    fn metadata_to_fileattr(&self, metadata: &INodeMetadata) -> anyhow::Result<FileAttr> {
+        Ok(FileAttr {
+            ino: self.ino_to_fuse(metadata.ino.try_into()?),
+            size: metadata.size.try_into()?,
+            blocks: metadata.blocks.try_into()?,
+            atime: timespec_to_systemtime(
+                metadata.atime.tv_sec,
+                metadata.atime.tv_nsec.try_into()?,
+            ),
+            mtime: timespec_to_systemtime(
+                metadata.mtime.tv_sec,
+                metadata.mtime.tv_nsec.try_into()?,
+            ),
+            ctime: timespec_to_systemtime(
+                metadata.ctime.tv_sec,
+                metadata.ctime.tv_nsec.try_into()?,
+            ),
+            crtime: timespec_to_systemtime(
+                metadata.crtime.tv_sec,
+                metadata.crtime.tv_nsec.try_into()?,
+            ),
+            kind: mode_to_filetype(metadata.mode.try_into()?),
+            perm: (metadata.mode & 0o777).try_into()?,
+            nlink: metadata.nlink.try_into()?,
+            uid: metadata.uid.try_into()?,
+            gid: metadata.gid.try_into()?,
+            rdev: metadata.rdev.try_into()?,
+            blksize: metadata.blksize.try_into()?,
             flags: 0, // Not available in INodeMetadata
-        }
+        })
     }
 }
 
@@ -179,7 +191,7 @@ impl fuser::Filesystem for FuseVfs {
             let metadata: INodeMetadata = stat.try_into()?;
 
             Ok((
-                self.metadata_to_fileattr(&metadata),
+                self.metadata_to_fileattr(&metadata)?,
                 child_node.get_generation().0,
             ))
         };

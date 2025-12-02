@@ -44,7 +44,6 @@ impl TryFrom<Stat> for INodeMetadata {
             crtime: new_timespec(st.st_birthtime, st.st_birthtime_nsec.try_into()?),
             #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
             crtime: new_timespec(st.st_ctime, st.st_ctime_nsec.try_into()?),
-            perm: st.st_mode.try_into()?,
             nlink: st.st_nlink.try_into()?,
             uid: st.st_uid.try_into()?,
             gid: st.st_gid.try_into()?,

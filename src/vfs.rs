@@ -129,8 +129,6 @@ pub mod unix {
         pub crtime: Timespec,
         /// Mode bits
         pub mode: u32,
-        /// Permissions
-        pub perm: u16,
         /// Number of hard links
         pub nlink: u32,
         /// User id
