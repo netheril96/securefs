@@ -6,7 +6,6 @@ use crate::stream::Stream;
 pub mod fuse;
 pub mod name_translators;
 pub mod unix;
-pub mod vfs;
 
 #[cfg(unix)]
 pub trait IoWrapperStream: Stream {

@@ -101,11 +101,13 @@ pub mod unix {
         sync::atomic::{AtomicI64, AtomicU64},
     };
 
+    use crate::lite::unix::{LiteDirINode, LiteFileINode, LiteINode, LiteSymlinkINode};
+    use enum_dispatch::enum_dispatch;
     use rustix::fs::Timespec;
 
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
     pub struct INodeNumber(pub u64);
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
     pub struct Generation(pub u64);
 
     /// File attributes
@@ -141,10 +143,14 @@ pub mod unix {
         pub blksize: u32,
     }
 
+    #[enum_dispatch]
     pub trait INodeCore: Any {
         fn get_ino(&self) -> INodeNumber;
         fn get_generation(&self) -> Generation;
         fn get_lookup_count(&self) -> &AtomicI64;
+
+        /// Returns the size of the inode if it is different from `stat` calls.
+        fn maybe_size(&self) -> anyhow::Result<Option<u64>>;
 
         fn get_metadata(&self) -> anyhow::Result<INodeMetadata>;
         fn set_metadata(

@@ -1,18 +1,19 @@
 #![cfg(unix)]
 
 use std::{
-    ffi::OsString,
-    os::fd::{AsFd, OwnedFd},
+    ffi::{CString, OsString},
+    os::fd::{AsFd, BorrowedFd, OwnedFd},
     sync::{Arc, atomic::AtomicI64},
 };
 
+use enum_dispatch::enum_dispatch;
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
-use rustix::fs::{Stat, Timespec};
+use rustix::fs::{OFlags, Stat, Timespec};
 
 use crate::{
     lite::{
-        IoWrapperStream,
+        IoWrapperFactory, IoWrapperStream,
         name_translators::{NameDecodeOutput, NameTranslator},
     },
     vfs::unix::{
@@ -54,27 +55,58 @@ impl TryFrom<Stat> for INodeMetadata {
     }
 }
 
-struct LiteINodeHeader {
-    ino: INodeNumber,
-    generation: Generation,
-    lookup_count: AtomicI64,
-    name_translator: Arc<dyn NameTranslator>,
+pub struct LiteINodeHeader {
+    pub ino: INodeNumber,
+    pub generation: Generation,
+    pub lookup_count: AtomicI64,
+    pub name_translator: Arc<dyn NameTranslator>,
 }
 
 struct LiteFileNodeInner {
     stream: Box<dyn IoWrapperStream>,
+    writable: bool,
 }
-pub(super) struct LiteFileINode {
+pub struct LiteFileINode {
     header: LiteINodeHeader,
     inner: Mutex<LiteFileNodeInner>,
 }
 
 impl LiteFileINode {
-    pub(super) fn new(header: LiteINodeHeader, s: Box<dyn IoWrapperStream>) -> Self {
+    pub fn new(header: LiteINodeHeader, s: Box<dyn IoWrapperStream>, writable: bool) -> Self {
         Self {
             header: header,
-            inner: Mutex::new(LiteFileNodeInner { stream: s }),
+            inner: Mutex::new(LiteFileNodeInner {
+                stream: s,
+                writable,
+            }),
         }
+    }
+
+    pub fn open(
+        header: LiteINodeHeader,
+        parent: BorrowedFd<'_>,
+        encoded_name: &[u8],
+        writable: bool,
+        wrapper_factory: &dyn IoWrapperFactory,
+    ) -> anyhow::Result<Self> {
+        let fd = rustix::fs::openat(
+            parent,
+            encoded_name,
+            if writable {
+                rustix::fs::OFlags::RDWR
+            } else {
+                rustix::fs::OFlags::RDONLY
+            },
+            rustix::fs::Mode::empty(),
+        )?;
+
+        Ok(Self {
+            header: header,
+            inner: Mutex::new(LiteFileNodeInner {
+                stream: wrapper_factory.wrap(fd)?,
+                writable,
+            }),
+        })
     }
 }
 
@@ -128,6 +160,10 @@ impl INodeCore for LiteFileINode {
     fn list_extended_attrs(&self) -> anyhow::Result<Vec<Vec<u8>>> {
         todo!()
     }
+
+    fn maybe_size(&self) -> anyhow::Result<Option<u64>> {
+        Ok(Some(self.size()?))
+    }
 }
 
 impl FileINodeExt for LiteFileINode {
@@ -152,19 +188,44 @@ struct LiteDirNodeLongNameDb {
     db_fd: OwnedFd,
     db: rusqlite::Connection,
 }
-pub(super) struct LiteDirINode {
+pub struct LiteDirINode {
     header: LiteINodeHeader,
     fd: OwnedFd,
     db: OnceCell<LiteDirNodeLongNameDb>,
 }
 
 impl LiteDirINode {
-    pub(super) fn new(header: LiteINodeHeader, fd: OwnedFd) -> Self {
+    pub fn new(header: LiteINodeHeader, fd: OwnedFd) -> Self {
         Self {
             header: header,
             fd: fd,
             db: OnceCell::new(),
         }
+    }
+
+    pub fn open(
+        header: LiteINodeHeader,
+        parent: BorrowedFd<'_>,
+        encoded_name: &[u8],
+    ) -> anyhow::Result<Self> {
+        let fd = rustix::fs::openat(
+            parent,
+            encoded_name,
+            rustix::fs::OFlags::RDONLY,
+            rustix::fs::Mode::empty(),
+        )?;
+
+        Ok(Self {
+            header: header,
+            fd: fd,
+            db: OnceCell::new(),
+        })
+    }
+}
+
+impl AsFd for LiteDirINode {
+    fn as_fd(&self) -> std::os::unix::prelude::BorrowedFd<'_> {
+        self.fd.as_fd()
     }
 }
 
@@ -215,6 +276,10 @@ impl INodeCore for LiteDirINode {
 
     fn list_extended_attrs(&self) -> anyhow::Result<Vec<Vec<u8>>> {
         todo!()
+    }
+
+    fn maybe_size(&self) -> anyhow::Result<Option<u64>> {
+        Ok(None)
     }
 }
 
@@ -281,19 +346,37 @@ impl DirReader for LiteDirReader {
     }
 }
 
-struct LiteSymlinkINode {
+pub struct LiteSymlinkINode {
     header: LiteINodeHeader,
     fd: OwnedFd,
-    path: OsString,
+    path: Vec<u8>,
 }
 
 impl LiteSymlinkINode {
-    fn new(header: LiteINodeHeader, fd: OwnedFd, path: OsString) -> Self {
+    fn new(header: LiteINodeHeader, fd: OwnedFd, path: Vec<u8>) -> Self {
         Self {
             header: header,
             fd: fd,
             path: path,
         }
+    }
+
+    pub fn open(
+        header: LiteINodeHeader,
+        parent: BorrowedFd<'_>,
+        encoded_name: &[u8],
+    ) -> anyhow::Result<Self> {
+        let fd = rustix::fs::openat(
+            parent,
+            encoded_name,
+            OFlags::PATH,
+            rustix::fs::Mode::empty(),
+        )?;
+        Ok(Self {
+            header,
+            fd: fd,
+            path: Default::default(),
+        })
     }
 }
 
@@ -343,10 +426,21 @@ impl INodeCore for LiteSymlinkINode {
     fn list_extended_attrs(&self) -> anyhow::Result<Vec<Vec<u8>>> {
         todo!()
     }
+
+    fn maybe_size(&self) -> anyhow::Result<Option<u64>> {
+        todo!()
+    }
 }
 
 impl SymlinkINodeExt for LiteSymlinkINode {
     fn readlink(&self) -> anyhow::Result<Vec<u8>> {
         todo!()
     }
+}
+
+#[enum_dispatch(INodeCore)]
+pub enum LiteINode {
+    LiteDirINode,
+    LiteFileINode,
+    LiteSymlinkINode,
 }

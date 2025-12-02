@@ -1,29 +1,105 @@
 #![cfg(feature = "fuse")]
 #![cfg(not(windows))]
-
+use fuser::FileType;
 use std::{
+    any::Any,
     ffi::c_int,
     os::{
-        fd::{AsRawFd, BorrowedFd, OwnedFd},
+        fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
         unix::ffi::OsStrExt,
     },
-    sync::{Arc, atomic::Ordering},
+    sync::{
+        Arc,
+        atomic::{AtomicI64, AtomicU64, Ordering},
+    },
     time::{Duration, SystemTime},
 };
 
-use anyhow::anyhow;
-use fuser::FileAttr;
+use fuser::{FUSE_ROOT_ID, FileAttr};
+use once_cell::sync::OnceCell;
 use rustix::{fs::OFlags, io::Errno};
 
 use crate::{
-    lite::vfs::{
-        InnerRepr, LiteDir, LiteFile, LiteINode, LiteOpenedData, LiteOpenedDescriptor, LiteSymlink,
-        MAX_LOCK_DURATION, Vfs, reopen_as_writable,
+    lite::{
+        IoWrapperFactory,
+        name_translators::NameTranslator,
+        unix::{LiteDirINode, LiteFileINode, LiteINode, LiteINodeHeader, LiteSymlinkINode},
     },
-    vfs::{GenericHandle, GenericTable},
+    vfs::{
+        GenericTable,
+        unix::{Generation, INodeCore, INodeMetadata, INodeNumber},
+    },
 };
 
-impl fuser::Filesystem for Vfs {
+pub struct FuseVfs {
+    root_ino: INodeNumber,
+    inode_table: dashmap::DashMap<INodeNumber, Arc<OnceCell<LiteINode>>>,
+    name_translator: Arc<dyn NameTranslator>,
+    wrapper_factory: Box<dyn IoWrapperFactory>,
+    generation: AtomicU64,
+    device_serial: OnceCell<u64>,
+}
+
+impl FuseVfs {
+    fn ino_from_fuse(&self, ino: u64) -> INodeNumber {
+        if ino == FUSE_ROOT_ID {
+            self.root_ino
+        } else if ino == self.root_ino.0 {
+            INodeNumber(FUSE_ROOT_ID)
+        } else {
+            INodeNumber(ino)
+        }
+    }
+
+    fn ino_to_fuse(&self, ino: INodeNumber) -> u64 {
+        if ino == self.root_ino {
+            FUSE_ROOT_ID
+        } else if ino.0 == FUSE_ROOT_ID {
+            self.root_ino.0
+        } else {
+            ino.0
+        }
+    }
+
+    fn metadata_to_fileattr(&self, metadata: &INodeMetadata) -> FileAttr {
+        FileAttr {
+            ino: self.ino_to_fuse(metadata.ino),
+            size: metadata.size,
+            blocks: metadata.blocks,
+            atime: timespec_to_systemtime(metadata.atime.tv_sec, metadata.atime.tv_nsec as u32),
+            mtime: timespec_to_systemtime(metadata.mtime.tv_sec, metadata.mtime.tv_nsec as u32),
+            ctime: timespec_to_systemtime(metadata.ctime.tv_sec, metadata.ctime.tv_nsec as u32),
+            crtime: timespec_to_systemtime(metadata.crtime.tv_sec, metadata.crtime.tv_nsec as u32),
+            kind: mode_to_filetype(metadata.mode),
+            perm: metadata.perm,
+            nlink: metadata.nlink,
+            uid: metadata.uid,
+            gid: metadata.gid,
+            rdev: metadata.rdev,
+            blksize: metadata.blksize,
+            flags: 0, // Not available in INodeMetadata
+        }
+    }
+}
+
+fn mode_to_filetype(mode: u32) -> FileType {
+    match mode & libc::S_IFMT {
+        libc::S_IFDIR => FileType::Directory,
+        libc::S_IFREG => FileType::RegularFile,
+        libc::S_IFLNK => FileType::Symlink,
+        libc::S_IFBLK => FileType::BlockDevice,
+        libc::S_IFCHR => FileType::CharDevice,
+        libc::S_IFIFO => FileType::NamedPipe,
+        libc::S_IFSOCK => FileType::Socket,
+        _ => {
+            // This should not happen
+            log::warn!("Unknown file type with mode {mode:o}");
+            FileType::RegularFile
+        }
+    }
+}
+
+impl fuser::Filesystem for FuseVfs {
     fn lookup(
         &mut self,
         _req: &fuser::Request<'_>,
@@ -33,14 +109,17 @@ impl fuser::Filesystem for Vfs {
     ) {
         log::trace!("lookup(_req={_req:?}, parent={parent:?}, name={name:?})");
         let inner = || -> anyhow::Result<(FileAttr, u64)> {
-            let parent_node = self.inode_table.lookup(parent).ok_or(Errno::NOENT)?;
-            let parent_node = parent_node
-                .inner_repr
-                .try_lock_for(MAX_LOCK_DURATION)
-                .ok_or(Errno::DEADLK)?;
-            let InnerRepr::Dir(parent_dir) = &*parent_node else {
+            let parent_node = self
+                .inode_table
+                .get(&self.ino_from_fuse(parent))
+                .ok_or(Errno::NOENT)?
+                .value()
+                .clone();
+            let parent_node = parent_node.get().ok_or(Errno::NOENT)?;
+            let LiteINode::LiteDirINode(parent_dir) = parent_node else {
                 return Err(Errno::NOTDIR)?;
             };
+
             let enc_name = self.name_translator.encode_name(name.as_bytes())?;
             let mut stat = rustix::fs::statat(
                 parent_dir.as_fd(),
@@ -55,85 +134,53 @@ impl fuser::Filesystem for Vfs {
             }
 
             let file_type = rustix::fs::FileType::from_raw_mode(stat.st_mode);
+            match file_type {
+                rustix::fs::FileType::Directory
+                | rustix::fs::FileType::RegularFile
+                | rustix::fs::FileType::Symlink => {}
+                _ => return Err(Errno::NOENT)?,
+            }
 
-            let child_node = self.inode_table.lookup_or_init(stat.st_ino);
-            let _ = child_node.generation.compare_exchange(
-                0,
-                self.generation.load(Ordering::SeqCst),
-                Ordering::SeqCst,
-                Ordering::SeqCst,
+            let child_node = Arc::clone(
+                self.inode_table
+                    .entry(INodeNumber(stat.st_ino))
+                    .or_insert_with(|| Arc::new(OnceCell::new()))
+                    .value(),
             );
-            child_node.increment_lookup_count();
-
-            let mut child_repr = child_node
-                .inner_repr
-                .try_lock_for(MAX_LOCK_DURATION)
-                .ok_or(Errno::DEADLK)?;
-
-            if let InnerRepr::Uninit = &*child_repr {
-                match file_type {
+            // We need a separate statement to ensure `entry` call is dropped as soon as possible to reduce locking on the inode table.
+            let child_node = child_node.get_or_try_init(|| -> anyhow::Result<LiteINode> {
+                let header = LiteINodeHeader {
+                    ino: INodeNumber(stat.st_ino),
+                    generation: Generation(self.generation.load(Ordering::SeqCst)),
+                    lookup_count: AtomicI64::new(0),
+                    name_translator: self.name_translator.clone(),
+                };
+                Ok(match file_type {
                     rustix::fs::FileType::Directory => {
-                        child_repr.ensure_dir(|| {
-                            let child_fd: OwnedFd = rustix::fs::openat(
-                                parent_dir.as_fd(),
-                                &enc_name,
-                                rustix::fs::OFlags::RDONLY,
-                                rustix::fs::Mode::empty(),
-                            )?;
-                            Ok(LiteDir::new(child_fd))
-                        })?;
+                        LiteDirINode::open(header, parent_dir.as_fd(), &enc_name)?.into()
                     }
-                    rustix::fs::FileType::RegularFile => {
-                        let writable = if rustix::fs::Mode::from_raw_mode(stat.st_mode)
-                            & rustix::fs::Mode::WUSR
-                            != rustix::fs::Mode::empty()
-                        {
-                            true
-                        } else {
-                            false
-                        };
-                        child_repr.ensure_regular_file(|| {
-                            let child_fd: OwnedFd = rustix::fs::openat(
-                                parent_dir.as_fd(),
-                                &enc_name,
-                                if writable {
-                                    rustix::fs::OFlags::RDWR
-                                } else {
-                                    rustix::fs::OFlags::RDONLY
-                                },
-                                rustix::fs::Mode::empty(),
-                            )?;
-                            Ok(LiteFile::new(self.wrapper_opener.wrap(child_fd)?, writable))
-                        })?;
-                    }
+                    rustix::fs::FileType::RegularFile => LiteFileINode::open(
+                        header,
+                        parent_dir.as_fd(),
+                        &enc_name,
+                        true,
+                        self.wrapper_factory.as_ref(),
+                    )?
+                    .into(),
                     rustix::fs::FileType::Symlink => {
-                        child_repr.ensure_symlink(|| {
-                            Ok(LiteSymlink::new(
-                                rustix::io::dup(parent_dir.as_fd())?,
-                                enc_name,
-                            ))
-                        })?;
+                        LiteSymlinkINode::open(header, parent_dir.as_fd(), &enc_name)?.into()
                     }
-                    _ => Err(anyhow!("Unrecognized file type"))?,
-                }
+                    _ => unreachable!(),
+                })
+            })?;
+            if let Some(sz) = child_node.maybe_size()? {
+                stat.st_size = sz.try_into()?;
             }
-
-            match &mut *child_repr {
-                InnerRepr::RegularFile(lite_file) => {
-                    stat.st_size = lite_file.get_stream().size()?.try_into()?;
-                }
-                InnerRepr::Symlink(lite_symlink) => {
-                    stat.st_size = lite_symlink
-                        .readlink(self.name_translator.as_ref())?
-                        .len()
-                        .try_into()?
-                }
-                _ => {}
-            }
+            let metadata: INodeMetadata = stat.try_into()?;
 
             Ok((
-                stat_to_fileattr(&stat)?,
-                child_node.generation.load(Ordering::SeqCst),
+                self.metadata_to_fileattr(&metadata),
+                child_node.get_generation().0,
             ))
         };
         match inner() {
@@ -153,275 +200,224 @@ impl fuser::Filesystem for Vfs {
         }
     }
 
-    fn getattr(
-        &mut self,
-        _req: &fuser::Request<'_>,
-        ino: u64,
-        fh: Option<u64>,
-        reply: fuser::ReplyAttr,
-    ) {
-        log::trace!("getattr(_req={_req:?}, ino={ino:?}, fh={fh:?})");
-        let inner = || -> anyhow::Result<FileAttr> {
-            let node: Arc<LiteINode>;
-            if let Some(fh) = fh {
-                node = unsafe {
-                    (fh as *mut LiteOpenedDescriptor)
-                        .as_ref()
-                        .unwrap()
-                        .inode
-                        .clone()
-                };
-            } else {
-                node = self.inode_table.lookup(ino).ok_or(Errno::NOENT)?;
-            }
-            let mut node = node
-                .inner_repr
-                .try_lock_for(MAX_LOCK_DURATION)
-                .ok_or(Errno::DEADLK)?;
+    // fn getattr(
+    //     &mut self,
+    //     _req: &fuser::Request<'_>,
+    //     ino: u64,
+    //     fh: Option<u64>,
+    //     reply: fuser::ReplyAttr,
+    // ) {
+    //     log::trace!("getattr(_req={_req:?}, ino={ino:?}, fh={fh:?})");
+    //     let inner = || -> anyhow::Result<FileAttr> { Ok(Default::default()) };
 
-            let st = match &mut *node {
-                InnerRepr::Uninit => Err(Errno::INPROGRESS)?,
-                InnerRepr::Dir(lite_dir) => lite_dir.stat()?,
-                InnerRepr::RegularFile(lite_file) => lite_file.stat()?,
-                InnerRepr::Symlink(lite_symlink) => {
-                    lite_symlink.stat(self.name_translator.as_ref())?
-                }
-            };
+    //     match inner() {
+    //         Ok(attr) => {
+    //             log::trace!("getattr(_req={_req:?}, ino={ino:?}, fh={fh:?}) = (attr={attr:?})");
+    //             reply.attr(&Duration::from_secs(30), &attr)
+    //         }
+    //         Err(err) => {
+    //             log::trace!(
+    //                 "getattr(_req={_req:?}, ino={ino:?}, fh={fh:?}) results in error {err:?}"
+    //             );
+    //             log::warn!("getattr(ino={ino:?}, fh={fh:?}) results in error {err:?}");
+    //             reply.error(extract_errno(&err))
+    //         }
+    //     }
+    // }
 
-            Ok(stat_to_fileattr(&st)?)
-        };
+    // fn open(&mut self, _req: &fuser::Request<'_>, ino: u64, flags: i32, reply: fuser::ReplyOpen) {
+    //     log::trace!("open(_req={_req:?}, ino={ino:?}, flags={flags:0x})");
+    //     let inner = || -> anyhow::Result<u64> {
+    //         let node = self.inode_table.lookup(ino).ok_or(Errno::NOENT)?;
+    //         let mut inner = node
+    //             .inner_repr
+    //             .try_lock_for(MAX_LOCK_DURATION)
+    //             .ok_or(Errno::DEADLK)?;
+    //         let InnerRepr::RegularFile(lite_file) = &mut *inner else {
+    //             return Err(Errno::NFILE)?;
+    //         };
+    //         let flags = rustix::fs::OFlags::from_bits_retain(flags.try_into()?);
+    //         let readable = flags.contains(OFlags::RDONLY) || flags.contains(OFlags::RDWR);
+    //         let writable = flags.contains(OFlags::WRONLY) || flags.contains(OFlags::RDWR);
+    //         let appending = flags.contains(OFlags::APPEND);
 
-        match inner() {
-            Ok(attr) => {
-                log::trace!("getattr(_req={_req:?}, ino={ino:?}, fh={fh:?}) = (attr={attr:?})");
-                reply.attr(&Duration::from_secs(30), &attr)
-            }
-            Err(err) => {
-                log::trace!(
-                    "getattr(_req={_req:?}, ino={ino:?}, fh={fh:?}) results in error {err:?}"
-                );
-                log::warn!("getattr(ino={ino:?}, fh={fh:?}) results in error {err:?}");
-                reply.error(extract_errno(&err))
-            }
-        }
-    }
+    //         lite_file.upgrade_to_writable_fd(writable || appending, |fd: BorrowedFd<'_>| {
+    //             Ok(reopen_as_writable(fd)?)
+    //         })?;
 
-    fn open(&mut self, _req: &fuser::Request<'_>, ino: u64, flags: i32, reply: fuser::ReplyOpen) {
-        log::trace!("open(_req={_req:?}, ino={ino:?}, flags={flags:0x})");
-        let inner = || -> anyhow::Result<u64> {
-            let node = self.inode_table.lookup(ino).ok_or(Errno::NOENT)?;
-            let mut inner = node
-                .inner_repr
-                .try_lock_for(MAX_LOCK_DURATION)
-                .ok_or(Errno::DEADLK)?;
-            let InnerRepr::RegularFile(lite_file) = &mut *inner else {
-                return Err(Errno::NFILE)?;
-            };
-            let flags = rustix::fs::OFlags::from_bits_retain(flags.try_into()?);
-            let readable = flags.contains(OFlags::RDONLY) || flags.contains(OFlags::RDWR);
-            let writable = flags.contains(OFlags::WRONLY) || flags.contains(OFlags::RDWR);
-            let appending = flags.contains(OFlags::APPEND);
+    //         let descriptor: Box<LiteOpenedDescriptor> = Box::new(LiteOpenedDescriptor {
+    //             inode: node.clone(),
+    //             data: LiteOpenedData::OpenedFile {
+    //                 readable: readable,
+    //                 writable: writable,
+    //                 appending: appending,
+    //             },
+    //         });
 
-            lite_file.upgrade_to_writable_fd(writable || appending, |fd: BorrowedFd<'_>| {
-                Ok(reopen_as_writable(fd)?)
-            })?;
+    //         Ok(Box::into_raw(descriptor) as u64)
+    //     };
 
-            let descriptor: Box<LiteOpenedDescriptor> = Box::new(LiteOpenedDescriptor {
-                inode: node.clone(),
-                data: LiteOpenedData::OpenedFile {
-                    readable: readable,
-                    writable: writable,
-                    appending: appending,
-                },
-            });
+    //     match inner() {
+    //         Ok(fh) => {
+    //             log::trace!("open(_req={_req:?}, ino={ino:?}, flags={flags:0x}) = (fh={fh})");
+    //             reply.opened(fh, flags as u32);
+    //         }
+    //         Err(err) => {
+    //             log::trace!(
+    //                 "open(_req={_req:?}, ino={ino:?}, flags={flags:0x}) results in error {err:?}"
+    //             );
+    //             log::warn!("open(ino={ino:?}, flags={flags:0x}) results in error {err:?}");
+    //             reply.error(extract_errno(&err));
+    //         }
+    //     }
+    // }
 
-            Ok(Box::into_raw(descriptor) as u64)
-        };
+    // fn read(
+    //     &mut self,
+    //     _req: &fuser::Request<'_>,
+    //     ino: u64,
+    //     fh: u64,
+    //     offset: i64,
+    //     size: u32,
+    //     flags: i32,
+    //     lock_owner: Option<u64>,
+    //     reply: fuser::ReplyData,
+    // ) {
+    //     log::trace!(
+    //         "read(_req={_req:?}, ino={ino:?}, fh={fh:?}, offset={offset:?}, size={size:?}, flags={flags:0x}, lock_owner={lock_owner:?})"
+    //     );
+    //     let inner = || -> anyhow::Result<Vec<u8>> {
+    //         let desc = unsafe { (fh as *mut LiteOpenedDescriptor).as_mut().unwrap() };
+    //         let mut inner = desc
+    //             .inode
+    //             .inner_repr
+    //             .try_lock_for(MAX_LOCK_DURATION)
+    //             .ok_or(Errno::DEADLK)?;
+    //         let InnerRepr::RegularFile(lite_file) = &mut *inner else {
+    //             return Err(Errno::NFILE)?;
+    //         };
+    //         let LiteOpenedData::OpenedFile { readable, .. } = desc.data else {
+    //             return Err(Errno::NFILE)?;
+    //         };
+    //         if !readable {
+    //             return Err(Errno::PERM)?;
+    //         }
 
-        match inner() {
-            Ok(fh) => {
-                log::trace!("open(_req={_req:?}, ino={ino:?}, flags={flags:0x}) = (fh={fh})");
-                reply.opened(fh, flags as u32);
-            }
-            Err(err) => {
-                log::trace!(
-                    "open(_req={_req:?}, ino={ino:?}, flags={flags:0x}) results in error {err:?}"
-                );
-                log::warn!("open(ino={ino:?}, flags={flags:0x}) results in error {err:?}");
-                reply.error(extract_errno(&err));
-            }
-        }
-    }
+    //         let mut result = vec![0u8; size.try_into()?];
+    //         if lite_file
+    //             .get_stream()
+    //             .read(&mut result, offset.try_into()?)?
+    //             != size.try_into()?
+    //         {
+    //             return Err(Errno::IO)?;
+    //         }
+    //         Ok(result)
+    //     };
 
-    fn read(
-        &mut self,
-        _req: &fuser::Request<'_>,
-        ino: u64,
-        fh: u64,
-        offset: i64,
-        size: u32,
-        flags: i32,
-        lock_owner: Option<u64>,
-        reply: fuser::ReplyData,
-    ) {
-        log::trace!(
-            "read(_req={_req:?}, ino={ino:?}, fh={fh:?}, offset={offset:?}, size={size:?}, flags={flags:0x}, lock_owner={lock_owner:?})"
-        );
-        let inner = || -> anyhow::Result<Vec<u8>> {
-            let desc = unsafe { (fh as *mut LiteOpenedDescriptor).as_mut().unwrap() };
-            let mut inner = desc
-                .inode
-                .inner_repr
-                .try_lock_for(MAX_LOCK_DURATION)
-                .ok_or(Errno::DEADLK)?;
-            let InnerRepr::RegularFile(lite_file) = &mut *inner else {
-                return Err(Errno::NFILE)?;
-            };
-            let LiteOpenedData::OpenedFile { readable, .. } = desc.data else {
-                return Err(Errno::NFILE)?;
-            };
-            if !readable {
-                return Err(Errno::PERM)?;
-            }
+    //     match inner() {
+    //         Ok(data) => {
+    //             log::trace!(
+    //                 "read(_req={_req:?}, ino={ino:?}, fh={fh:?}, offset={offset:?}, size={size:?}, flags={flags:0x}, lock_owner={lock_owner:?}) = (data.len={})\nData: {data:?}",
+    //                 data.len()
+    //             );
+    //             reply.data(&data);
+    //         }
+    //         Err(err) => {
+    //             log::trace!(
+    //                 "read(_req={_req:?}, ino={ino:?}, fh={fh:?}, offset={offset:?}, size={size:?}, flags={flags:0x}, lock_owner={lock_owner:?}) results in error {err:?}"
+    //             );
+    //             log::trace!(
+    //                 "read(ino={ino:?}, fh={fh:?}, offset={offset:?}, size={size:?}, flags={flags:0x}, lock_owner={lock_owner:?}) results in error {err:?}"
+    //             );
+    //             reply.error(extract_errno(&err));
+    //         }
+    //     }
+    // }
 
-            let mut result = vec![0u8; size.try_into()?];
-            if lite_file
-                .get_stream()
-                .read(&mut result, offset.try_into()?)?
-                != size.try_into()?
-            {
-                return Err(Errno::IO)?;
-            }
-            Ok(result)
-        };
+    // fn write(
+    //     &mut self,
+    //     _req: &fuser::Request<'_>,
+    //     ino: u64,
+    //     fh: u64,
+    //     offset: i64,
+    //     data: &[u8],
+    //     write_flags: u32,
+    //     flags: i32,
+    //     lock_owner: Option<u64>,
+    //     reply: fuser::ReplyWrite,
+    // ) {
+    //     log::trace!(
+    //         "write(_req={_req:?}, ino={ino:?}, fh={fh:?}, offset={offset:?}, data={data:?}, write_flags={write_flags:0x}, flags={flags:0x}, lock_owner={lock_owner:?})"
+    //     );
+    //     let inner = || -> anyhow::Result<u32> {
+    //         let desc = unsafe { (fh as *mut LiteOpenedDescriptor).as_mut().unwrap() };
+    //         let mut inner = desc
+    //             .inode
+    //             .inner_repr
+    //             .try_lock_for(MAX_LOCK_DURATION)
+    //             .ok_or(Errno::DEADLK)?;
+    //         let InnerRepr::RegularFile(lite_file) = &mut *inner else {
+    //             return Err(Errno::NFILE)?;
+    //         };
+    //         let LiteOpenedData::OpenedFile {
+    //             writable,
+    //             appending,
+    //             ..
+    //         } = desc.data
+    //         else {
+    //             return Err(Errno::NFILE)?;
+    //         };
+    //         if !writable || !appending {
+    //             return Err(Errno::PERM)?;
+    //         }
 
-        match inner() {
-            Ok(data) => {
-                log::trace!(
-                    "read(_req={_req:?}, ino={ino:?}, fh={fh:?}, offset={offset:?}, size={size:?}, flags={flags:0x}, lock_owner={lock_owner:?}) = (data.len={})\nData: {data:?}",
-                    data.len()
-                );
-                reply.data(&data);
-            }
-            Err(err) => {
-                log::trace!(
-                    "read(_req={_req:?}, ino={ino:?}, fh={fh:?}, offset={offset:?}, size={size:?}, flags={flags:0x}, lock_owner={lock_owner:?}) results in error {err:?}"
-                );
-                log::trace!(
-                    "read(ino={ino:?}, fh={fh:?}, offset={offset:?}, size={size:?}, flags={flags:0x}, lock_owner={lock_owner:?}) results in error {err:?}"
-                );
-                reply.error(extract_errno(&err));
-            }
-        }
-    }
+    //         let stream = lite_file.get_stream();
+    //         stream.write(
+    //             data,
+    //             if appending {
+    //                 stream.size()?.try_into()?
+    //             } else {
+    //                 offset.try_into()?
+    //             },
+    //         )?;
+    //         Ok(data.len().try_into()?)
+    //     };
 
-    fn write(
-        &mut self,
-        _req: &fuser::Request<'_>,
-        ino: u64,
-        fh: u64,
-        offset: i64,
-        data: &[u8],
-        write_flags: u32,
-        flags: i32,
-        lock_owner: Option<u64>,
-        reply: fuser::ReplyWrite,
-    ) {
-        log::trace!(
-            "write(_req={_req:?}, ino={ino:?}, fh={fh:?}, offset={offset:?}, data={data:?}, write_flags={write_flags:0x}, flags={flags:0x}, lock_owner={lock_owner:?})"
-        );
-        let inner = || -> anyhow::Result<u32> {
-            let desc = unsafe { (fh as *mut LiteOpenedDescriptor).as_mut().unwrap() };
-            let mut inner = desc
-                .inode
-                .inner_repr
-                .try_lock_for(MAX_LOCK_DURATION)
-                .ok_or(Errno::DEADLK)?;
-            let InnerRepr::RegularFile(lite_file) = &mut *inner else {
-                return Err(Errno::NFILE)?;
-            };
-            let LiteOpenedData::OpenedFile {
-                writable,
-                appending,
-                ..
-            } = desc.data
-            else {
-                return Err(Errno::NFILE)?;
-            };
-            if !writable || !appending {
-                return Err(Errno::PERM)?;
-            }
+    //     match inner() {
+    //         Ok(size) => {
+    //             log::trace!(
+    //                 "write(_req={_req:?}, ino={ino:?}, fh={fh:?}, offset={offset:?}, data={data:?}, write_flags={write_flags:0x}, flags={flags:0x}, lock_owner={lock_owner:?}) = (size={size})"
+    //             );
+    //             reply.written(size);
+    //         }
+    //         Err(err) => {
+    //             log::trace!(
+    //                 "write(_req={_req:?}, ino={ino:?}, fh={fh:?}, offset={offset:?}, data={data:?}, write_flags={write_flags:0x}, flags={flags:0x}, lock_owner={lock_owner:?}) results in error {err:?}"
+    //             );
+    //             log::warn!(
+    //                 "write(ino={ino:?}, fh={fh:?}, offset={offset:?}, write_flags={write_flags:0x}, flags={flags:0x}, lock_owner={lock_owner:?}) results in error {err:?}"
+    //             );
+    //             reply.error(extract_errno(&err));
+    //         }
+    //     }
+    // }
 
-            let stream = lite_file.get_stream();
-            stream.write(
-                data,
-                if appending {
-                    stream.size()?.try_into()?
-                } else {
-                    offset.try_into()?
-                },
-            )?;
-            Ok(data.len().try_into()?)
-        };
-
-        match inner() {
-            Ok(size) => {
-                log::trace!(
-                    "write(_req={_req:?}, ino={ino:?}, fh={fh:?}, offset={offset:?}, data={data:?}, write_flags={write_flags:0x}, flags={flags:0x}, lock_owner={lock_owner:?}) = (size={size})"
-                );
-                reply.written(size);
-            }
-            Err(err) => {
-                log::trace!(
-                    "write(_req={_req:?}, ino={ino:?}, fh={fh:?}, offset={offset:?}, data={data:?}, write_flags={write_flags:0x}, flags={flags:0x}, lock_owner={lock_owner:?}) results in error {err:?}"
-                );
-                log::warn!(
-                    "write(ino={ino:?}, fh={fh:?}, offset={offset:?}, write_flags={write_flags:0x}, flags={flags:0x}, lock_owner={lock_owner:?}) results in error {err:?}"
-                );
-                reply.error(extract_errno(&err));
-            }
-        }
-    }
-
-    fn release(
-        &mut self,
-        _req: &fuser::Request<'_>,
-        ino: u64,
-        fh: u64,
-        flags: i32,
-        lock_owner: Option<u64>,
-        flush: bool,
-        reply: fuser::ReplyEmpty,
-    ) {
-        log::trace!(
-            "release(_req={_req:?}, ino={ino:?}, fh={fh:?}, flags={flags:0x}, lock_owner={lock_owner:?}, flush={flush:?})"
-        );
-        drop(unsafe { Box::from_raw(fh as *mut LiteOpenedDescriptor) });
-        reply.ok();
-    }
-}
-
-fn stat_to_fileattr(st: &rustix::fs::Stat) -> anyhow::Result<FileAttr> {
-    Ok(FileAttr {
-        ino: st.st_ino,
-        size: st.st_size.try_into()?,
-        blocks: (st.st_size / 512).try_into()?,
-        atime: timespec_to_systemtime(st.st_atime, st.st_atime_nsec.try_into()?),
-        mtime: timespec_to_systemtime(st.st_mtime, st.st_mtime_nsec.try_into()?),
-        ctime: timespec_to_systemtime(st.st_ctime, st.st_ctime_nsec.try_into()?),
-        #[cfg(any(target_os = "macos", target_os = "freebsd"))]
-        crtime: timespec_to_systemtime(st.st_birthtime, st.st_birthtime_nsec.try_into()?),
-        #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
-        crtime: timespec_to_systemtime(st.st_ctime, st.st_ctime_nsec.try_into()?),
-        kind: filetype_from_mode(st.st_mode),
-        perm: (st.st_mode & 0o7777) as u16,
-        nlink: st.st_nlink.try_into()?,
-        uid: st.st_uid,
-        gid: st.st_gid,
-        rdev: st.st_rdev.try_into()?,
-        blksize: st.st_blksize.try_into()?,
-        flags: 0,
-    })
+    // fn release(
+    //     &mut self,
+    //     _req: &fuser::Request<'_>,
+    //     ino: u64,
+    //     fh: u64,
+    //     flags: i32,
+    //     lock_owner: Option<u64>,
+    //     flush: bool,
+    //     reply: fuser::ReplyEmpty,
+    // ) {
+    //     log::trace!(
+    //         "release(_req={_req:?}, ino={ino:?}, fh={fh:?}, flags={flags:0x}, lock_owner={lock_owner:?}, flush={flush:?})"
+    //     );
+    //     // drop(unsafe { Box::from_raw(fh as *mut LiteOpenedDescriptor) });
+    //     reply.ok();
+    // }
 }
 
 fn timespec_to_systemtime(tv_sec: i64, tv_nsec: u32) -> SystemTime {
@@ -429,19 +425,6 @@ fn timespec_to_systemtime(tv_sec: i64, tv_nsec: u32) -> SystemTime {
         SystemTime::UNIX_EPOCH + Duration::new(tv_sec as u64, tv_nsec)
     } else {
         SystemTime::UNIX_EPOCH - Duration::new(-tv_sec as u64, tv_nsec)
-    }
-}
-
-fn filetype_from_mode(mode: rustix::fs::RawMode) -> fuser::FileType {
-    match rustix::fs::FileType::from_raw_mode(mode) {
-        rustix::fs::FileType::Directory => fuser::FileType::Directory,
-        rustix::fs::FileType::RegularFile => fuser::FileType::RegularFile,
-        rustix::fs::FileType::Symlink => fuser::FileType::Symlink,
-        rustix::fs::FileType::BlockDevice => fuser::FileType::BlockDevice,
-        rustix::fs::FileType::CharacterDevice => fuser::FileType::CharDevice,
-        rustix::fs::FileType::Fifo => fuser::FileType::NamedPipe,
-        rustix::fs::FileType::Socket => fuser::FileType::Socket,
-        rustix::fs::FileType::Unknown => fuser::FileType::BlockDevice,
     }
 }
 
