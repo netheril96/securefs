@@ -218,24 +218,10 @@ pub mod test {
 
     #[test]
     fn test_std_io_stream() -> anyhow::Result<()> {
-        let mut rng = rand::rng();
-        let temp_file_path =
-            env::temp_dir().join(format!("test_std_io_stream_{}.tmp", rng.next_u64()));
-        println!("temp_file_path={:?}", temp_file_path);
-
-        struct FileGuard<'a>(&'a std::path::Path);
-        impl<'a> Drop for FileGuard<'a> {
-            fn drop(&mut self) {
-                let _ = fs::remove_file(self.0);
-            }
-        }
-        let _guard = FileGuard(&temp_file_path);
-
-        let mut stdio_stream = StdIoStream::open(&temp_file_path)?;
+        let file = tempfile::NamedTempFile::new()?;
+        let mut stdio_stream = StdIoStream::new(file.into_file());
         let mut memory_stream = MemoryStream { buffer: Vec::new() };
-
         compare_with_reference(&mut stdio_stream, &mut memory_stream, 500)?;
-
         Ok(())
     }
 }
