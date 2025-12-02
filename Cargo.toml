@@ -20,7 +20,7 @@ lru = "0.16.2"
 once_cell = { version = "1.21.3", features = ["parking_lot"] }
 parking_lot = "0.12.5"
 rand = "0.9.2"
-rusqlite = "0.37.0"
+rusqlite = { version = "0.37.0", features = ["bundled"] }
 rustix = { version = "1.1.2", features = ["fs", "stdio", "termios"] }
 subtle = "2.6.1"
 thiserror = "2.0.17"
