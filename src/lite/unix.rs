@@ -181,7 +181,14 @@ impl FileINodeExt for LiteFileINode {
     }
 
     fn upgrade_to_writable(&self) -> anyhow::Result<()> {
-        todo!()
+        let mut guard = self.inner.lock();
+        if guard.writable {
+            return Ok(());
+        }
+        let newfd = reopen_as_writable(guard.stream.as_fd())?;
+        guard.stream.replace_fd(newfd);
+        guard.writable = true;
+        Ok(())
     }
 
     fn append(&self, data: &[u8]) -> anyhow::Result<()> {
