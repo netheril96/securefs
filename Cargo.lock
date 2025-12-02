@@ -784,7 +784,6 @@ dependencies = [
  "aes-siv",
  "anyhow",
  "blake2",
- "cc",
  "ctr",
  "dashmap",
  "enum_dispatch",
