@@ -117,8 +117,8 @@ impl FuseVfs {
     }
 }
 
-fn mode_to_filetype(mode: u32) -> FileType {
-    match mode & u32::from(libc::S_IFMT) {
+fn mode_to_filetype(mode: libc::mode_t) -> FileType {
+    match mode & libc::S_IFMT {
         libc::S_IFDIR => FileType::Directory,
         libc::S_IFREG => FileType::RegularFile,
         libc::S_IFLNK => FileType::Symlink,
@@ -293,7 +293,7 @@ impl fuser::Filesystem for FuseVfs {
                 parent_dir.as_fd(),
                 &enc_name,
                 OFlags::RDWR | OFlags::EXCL | OFlags::CREATE,
-                Mode::from_raw_mode(mode & !umask),
+                Mode::from_raw_mode((u32::from(mode) & !umask) as libc::mode_t),
             )?;
             let stat = rustix::fs::fstat(created_fd.as_fd())?;
 
@@ -402,7 +402,7 @@ impl fuser::Filesystem for FuseVfs {
         );
         let inner = || -> anyhow::Result<Vec<u8>> {
             let desc = unsafe { (fh as *mut OpenedDescriptor).as_mut().unwrap() };
-            let LiteINode::LiteFileINode(file) = desc.inode.get().ok_or(Errno::BADFD)? else {
+            let LiteINode::LiteFileINode(file) = desc.inode.get().ok_or(Errno::BADF)? else {
                 return Err(Errno::NFILE)?;
             };
 

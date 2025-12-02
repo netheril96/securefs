@@ -13,6 +13,7 @@ pub trait IoWrapperStream: Stream {
     fn replace_fd(&mut self, fd: OwnedFd);
 }
 
+#[cfg(unix)]
 pub trait IoWrapperFactory {
     fn compute_virtual_size(&self, underlying_size: u64) -> Option<u64>;
     fn wrap(&self, fd: OwnedFd) -> anyhow::Result<Box<dyn IoWrapperStream>>;

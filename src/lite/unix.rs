@@ -348,9 +348,9 @@ impl DirReader for LiteDirReader {
                                 ino: INodeNumber(entry.ino()),
                                 filetype,
                                 name: n,
-                                #[cfg(target_os = "freebsd")]
+                                #[cfg(not(target_os = "linux"))]
                                 offset: 0,
-                                #[cfg(not(target_os = "freebsd"))]
+                                #[cfg(target_os = "linux")]
                                 offset: entry.offset(),
                             }));
                         }
@@ -383,6 +383,9 @@ impl LiteSymlinkINode {
         let fd = rustix::fs::openat(
             parent,
             encoded_name,
+            #[cfg(target_os = "macos")]
+            OFlags::from_bits_retain(libc::O_SYMLINK),
+            #[cfg(not(target_os = "macos"))]
             OFlags::PATH,
             rustix::fs::Mode::empty(),
         )?;
