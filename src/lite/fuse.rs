@@ -245,13 +245,13 @@ impl fuser::Filesystem for FuseVfs {
                 Some(fh) => {
                     let desc = unsafe { (fh as *mut OpenedDescriptor).as_mut().unwrap() };
                     let meta = desc.inode.get().ok_or(Errno::NOENT)?.get_metadata()?;
-                    return self.metadata_to_fileattr(&meta);
+                    self.metadata_to_fileattr(&meta)
                 }
                 None => {
                     let inode = self.query_inode(ino)?;
                     let inode = inode.get().ok_or(Errno::NOENT)?;
                     let meta = inode.get_metadata()?;
-                    return self.metadata_to_fileattr(&meta);
+                    self.metadata_to_fileattr(&meta)
                 }
             }
         };
@@ -307,7 +307,7 @@ impl fuser::Filesystem for FuseVfs {
             let _ = child_node.get_or_try_init(|| -> anyhow::Result<LiteINode> {
                 let header = LiteINodeHeader {
                     ino: INodeNumber(stat.st_ino),
-                    generation: generation,
+                    generation,
                     lookup_count: AtomicI64::new(1),
                     name_translator: self.name_translator.clone(),
                 };
@@ -523,10 +523,10 @@ impl fuser::Filesystem for FuseVfs {
                 let Some(node) = v.get() else {
                     return true;
                 };
-                return node
+                node
                     .get_lookup_count()
                     .fetch_sub(_nlookup as i64, Ordering::SeqCst)
-                    <= _nlookup as i64;
+                    <= _nlookup as i64
             });
     }
 }
