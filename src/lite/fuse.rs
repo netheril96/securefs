@@ -118,7 +118,7 @@ impl FuseVfs {
 }
 
 fn mode_to_filetype(mode: u32) -> FileType {
-    match mode & libc::S_IFMT {
+    match mode & u32::from(libc::S_IFMT) {
         libc::S_IFDIR => FileType::Directory,
         libc::S_IFREG => FileType::RegularFile,
         libc::S_IFLNK => FileType::Symlink,
@@ -457,7 +457,7 @@ impl fuser::Filesystem for FuseVfs {
         );
         let inner = || -> anyhow::Result<u32> {
             let desc = unsafe { (fh as *mut OpenedDescriptor).as_mut().unwrap() };
-            let LiteINode::LiteFileINode(file) = desc.inode.get().ok_or(Errno::BADFD)? else {
+            let LiteINode::LiteFileINode(file) = desc.inode.get().ok_or(Errno::BADF)? else {
                 return Err(Errno::NFILE)?;
             };
 
@@ -523,8 +523,7 @@ impl fuser::Filesystem for FuseVfs {
                 let Some(node) = v.get() else {
                     return true;
                 };
-                node
-                    .get_lookup_count()
+                node.get_lookup_count()
                     .fetch_sub(_nlookup as i64, Ordering::SeqCst)
                     <= _nlookup as i64
             });

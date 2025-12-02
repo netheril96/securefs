@@ -1,5 +1,8 @@
 #![cfg(unix)]
 
+use std::os::fd::AsRawFd;
+use std::os::fd::RawFd;
+
 use std::{
     os::fd::{AsFd, BorrowedFd, OwnedFd},
     sync::{Arc, atomic::AtomicI64},
@@ -338,6 +341,9 @@ impl DirReader for LiteDirReader {
                                 ino: INodeNumber(entry.ino()),
                                 filetype,
                                 name: n,
+                                #[cfg(target_os = "freebsd")]
+                                offset: 0,
+                                #[cfg(not(target_os = "freebsd"))]
                                 offset: entry.offset(),
                             }));
                         }
@@ -444,4 +450,91 @@ pub enum LiteINode {
     LiteDirINode,
     LiteFileINode,
     LiteSymlinkINode,
+}
+
+#[cfg(target_os = "linux")]
+fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
+    use rustix::fs::Mode;
+    Ok(rustix::fs::open(
+        format!("/proc/self/fd/{}", fd.as_raw_fd()),
+        OFlags::RDWR,
+        Mode::empty(),
+    )?)
+}
+
+#[cfg(target_os = "macos")]
+fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
+    use anyhow::Context;
+    use rustix::fs::{Mode, OFlags};
+    use std::ffi::CStr;
+
+    let mut path_buffer = vec![0u8; (libc::PATH_MAX + 1) as usize];
+    let ret = unsafe {
+        libc::fcntl(
+            fd.as_raw_fd(),
+            libc::F_GETPATH,
+            path_buffer.as_mut_ptr() as *mut libc::c_void,
+        )
+    };
+
+    if ret < 0 {
+        return Err(std::io::Error::last_os_error())
+            .with_context(|| format!("fcntl(F_GETPATH) failed for fd {}", fd.as_raw_fd()));
+    }
+
+    let path = unsafe { CStr::from_ptr(path_buffer.as_ptr() as *const libc::c_char) };
+    Ok(rustix::fs::open(path, OFlags::RDWR, Mode::empty())?)
+}
+
+#[cfg(target_os = "freebsd")]
+fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
+    use anyhow::Context;
+    use std::os::fd::FromRawFd;
+
+    let opath_fd = unsafe {
+        libc::openat(
+            fd.as_raw_fd(),
+            c"".as_ptr(),
+            libc::O_PATH | libc::O_EMPTY_PATH,
+        )
+    };
+    if opath_fd < 0 {
+        return Err(std::io::Error::last_os_error())
+            .with_context(|| format!("failed to reopen fd {} in O_PATH mode", fd.as_raw_fd()));
+    }
+    let new_fd = unsafe { libc::openat(opath_fd, c"".as_ptr(), libc::O_RDWR | libc::O_EMPTY_PATH) };
+    if new_fd < 0 {
+        return Err(std::io::Error::last_os_error())
+            .with_context(|| format!("failed to reopen opath_fd {} in O_RDWR mode", opath_fd));
+    }
+    Ok(unsafe { OwnedFd::from_raw_fd(new_fd) })
+}
+
+#[cfg(test)]
+mod test {
+    use std::{
+        fs::File,
+        io::{Read, Write},
+    };
+
+    use super::*;
+
+    #[test]
+    fn reopen() -> anyhow::Result<()> {
+        let file = tempfile::NamedTempFile::new()?;
+        file.as_file().write_all("Hello".as_bytes())?;
+
+        let mut rofile = File::open(file.path())?;
+        assert!(rofile.write_all("World".as_bytes()).is_err());
+
+        let new_fd = reopen_as_writable(rofile.as_fd())?;
+        let mut wfile = File::from(new_fd);
+
+        let mut string = String::new();
+        wfile.read_to_string(&mut string)?;
+        assert_eq!(string, "Hello");
+
+        wfile.write_all("World".as_bytes())?;
+        Ok(())
+    }
 }
