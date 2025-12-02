@@ -93,10 +93,7 @@ impl<INode: GenericHandle + Default> GenericTable<INode> for INodeTable<INode> {
 #[cfg(unix)]
 pub mod unix {
 
-    use std::{
-        any::Any,
-        sync::atomic::AtomicI64,
-    };
+    use std::{any::Any, sync::atomic::AtomicI64};
 
     use crate::lite::unix::{LiteDirINode, LiteFileINode, LiteINode, LiteSymlinkINode};
     use enum_dispatch::enum_dispatch;
@@ -191,6 +188,7 @@ pub mod unix {
     pub trait FileINodeExt {
         fn read(&self, data: &mut [u8], offset: u64) -> anyhow::Result<usize>;
         fn write(&self, data: &[u8], offset: u64) -> anyhow::Result<()>;
+        fn append(&self, data: &[u8]) -> anyhow::Result<()>;
         fn size(&self) -> anyhow::Result<u64>;
         fn upgrade_to_writable(&self) -> anyhow::Result<()>;
     }

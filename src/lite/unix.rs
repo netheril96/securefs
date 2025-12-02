@@ -180,6 +180,13 @@ impl FileINodeExt for LiteFileINode {
     fn upgrade_to_writable(&self) -> anyhow::Result<()> {
         todo!()
     }
+
+    fn append(&self, data: &[u8]) -> anyhow::Result<()> {
+        let mut g = self.inner.lock();
+        let size = g.stream.size()?;
+        g.stream.write(data, size)?;
+        Ok(())
+    }
 }
 
 struct LiteDirNodeLongNameDb {
@@ -352,11 +359,7 @@ pub struct LiteSymlinkINode {
 
 impl LiteSymlinkINode {
     fn new(header: LiteINodeHeader, fd: OwnedFd, path: Vec<u8>) -> Self {
-        Self {
-            header,
-            fd,
-            path,
-        }
+        Self { header, fd, path }
     }
 
     pub fn open(
