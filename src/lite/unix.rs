@@ -2,25 +2,22 @@
 
 use std::{
     ffi::OsString,
-    os::fd::{AsFd, BorrowedFd, OwnedFd},
-    sync::Arc,
+    os::fd::{AsFd, OwnedFd},
+    sync::{Arc, atomic::AtomicI64},
 };
 
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
-use rustix::{
-    fs::{Stat, Timespec},
-    path::Arg,
-};
+use rustix::fs::{Stat, Timespec};
 
 use crate::{
     lite::{
         IoWrapperStream,
-        name_translators::{self, NameDecodeOutput, NameTranslator},
+        name_translators::{NameDecodeOutput, NameTranslator},
     },
     vfs::unix::{
-        DirEntry, DirINode, DirReader, FileINode, Generation, INodeCore, INodeMetadata,
-        INodeNumber, SymlinkINode,
+        DirEntry, DirINodeExt, DirReader, FileINodeExt, Generation, INodeCore, INodeMetadata,
+        INodeNumber, SymlinkINodeExt,
     },
 };
 
@@ -57,22 +54,41 @@ impl TryFrom<Stat> for INodeMetadata {
     }
 }
 
+struct LiteINodeHeader {
+    ino: INodeNumber,
+    generation: Generation,
+    lookup_count: AtomicI64,
+    name_translator: Arc<dyn NameTranslator>,
+}
+
 struct LiteFileNodeInner {
     stream: Box<dyn IoWrapperStream>,
 }
 pub(super) struct LiteFileINode {
-    ino: INodeNumber,
-    generation: Generation,
+    header: LiteINodeHeader,
     inner: Mutex<LiteFileNodeInner>,
+}
+
+impl LiteFileINode {
+    pub(super) fn new(header: LiteINodeHeader, s: Box<dyn IoWrapperStream>) -> Self {
+        Self {
+            header: header,
+            inner: Mutex::new(LiteFileNodeInner { stream: s }),
+        }
+    }
 }
 
 impl INodeCore for LiteFileINode {
     fn get_ino(&self) -> INodeNumber {
-        self.ino
+        self.header.ino
     }
 
-    fn get_generation(&self) -> crate::vfs::unix::Generation {
-        self.generation
+    fn get_generation(&self) -> Generation {
+        self.header.generation
+    }
+
+    fn get_lookup_count(&self) -> &AtomicI64 {
+        &self.header.lookup_count
     }
 
     fn get_metadata(&self) -> anyhow::Result<INodeMetadata> {
@@ -114,7 +130,7 @@ impl INodeCore for LiteFileINode {
     }
 }
 
-impl FileINode for LiteFileINode {
+impl FileINodeExt for LiteFileINode {
     fn read(&self, data: &mut [u8], offset: u64) -> anyhow::Result<usize> {
         Ok(self.inner.lock().stream.read(data, offset)?.try_into()?)
     }
@@ -137,20 +153,32 @@ struct LiteDirNodeLongNameDb {
     db: rusqlite::Connection,
 }
 pub(super) struct LiteDirINode {
-    ino: INodeNumber,
-    generation: Generation,
+    header: LiteINodeHeader,
     fd: OwnedFd,
-    name_translator: Arc<dyn NameTranslator>,
     db: OnceCell<LiteDirNodeLongNameDb>,
+}
+
+impl LiteDirINode {
+    pub(super) fn new(header: LiteINodeHeader, fd: OwnedFd) -> Self {
+        Self {
+            header: header,
+            fd: fd,
+            db: OnceCell::new(),
+        }
+    }
 }
 
 impl INodeCore for LiteDirINode {
     fn get_ino(&self) -> INodeNumber {
-        self.ino
+        self.header.ino
     }
 
-    fn get_generation(&self) -> crate::vfs::unix::Generation {
-        self.generation
+    fn get_generation(&self) -> Generation {
+        self.header.generation
+    }
+
+    fn get_lookup_count(&self) -> &AtomicI64 {
+        &self.header.lookup_count
     }
 
     fn get_metadata(&self) -> anyhow::Result<INodeMetadata> {
@@ -190,11 +218,11 @@ impl INodeCore for LiteDirINode {
     }
 }
 
-impl DirINode for LiteDirINode {
+impl DirINodeExt for LiteDirINode {
     fn create_dir_reader(&self) -> anyhow::Result<Box<dyn DirReader>> {
         Ok(Box::new(LiteDirReader {
             dir: rustix::fs::Dir::read_from(self.fd.as_fd())?,
-            name_translator: self.name_translator.clone(),
+            name_translator: self.header.name_translator.clone(),
         }))
     }
 }
@@ -254,19 +282,32 @@ impl DirReader for LiteDirReader {
 }
 
 struct LiteSymlinkINode {
-    ino: INodeNumber,
-    generation: Generation,
+    header: LiteINodeHeader,
     fd: OwnedFd,
     path: OsString,
 }
 
+impl LiteSymlinkINode {
+    fn new(header: LiteINodeHeader, fd: OwnedFd, path: OsString) -> Self {
+        Self {
+            header: header,
+            fd: fd,
+            path: path,
+        }
+    }
+}
+
 impl INodeCore for LiteSymlinkINode {
     fn get_ino(&self) -> INodeNumber {
-        self.ino
+        self.header.ino
     }
 
-    fn get_generation(&self) -> crate::vfs::unix::Generation {
-        self.generation
+    fn get_generation(&self) -> Generation {
+        self.header.generation
+    }
+
+    fn get_lookup_count(&self) -> &AtomicI64 {
+        &self.header.lookup_count
     }
 
     fn get_metadata(&self) -> anyhow::Result<INodeMetadata> {
@@ -304,7 +345,7 @@ impl INodeCore for LiteSymlinkINode {
     }
 }
 
-impl SymlinkINode for LiteSymlinkINode {
+impl SymlinkINodeExt for LiteSymlinkINode {
     fn readlink(&self) -> anyhow::Result<Vec<u8>> {
         todo!()
     }

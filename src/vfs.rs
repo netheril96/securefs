@@ -95,7 +95,11 @@ impl<INode: GenericHandle + Default> GenericTable<INode> for INodeTable<INode> {
 #[cfg(unix)]
 pub mod unix {
 
-    use std::ffi::CString;
+    use std::{
+        any::Any,
+        ffi::CString,
+        sync::atomic::{AtomicI64, AtomicU64},
+    };
 
     use rustix::fs::Timespec;
 
@@ -137,9 +141,11 @@ pub mod unix {
         pub blksize: u32,
     }
 
-    pub trait INodeCore {
+    pub trait INodeCore: Any {
         fn get_ino(&self) -> INodeNumber;
         fn get_generation(&self) -> Generation;
+        fn get_lookup_count(&self) -> &AtomicI64;
+
         fn get_metadata(&self) -> anyhow::Result<INodeMetadata>;
         fn set_metadata(
             &self,
@@ -177,18 +183,18 @@ pub mod unix {
         fn next(&mut self) -> anyhow::Result<Option<DirEntry>>;
     }
 
-    pub trait DirINode: INodeCore {
+    pub trait DirINodeExt {
         fn create_dir_reader(&self) -> anyhow::Result<Box<dyn DirReader>>;
     }
 
-    pub trait FileINode: INodeCore {
+    pub trait FileINodeExt {
         fn read(&self, data: &mut [u8], offset: u64) -> anyhow::Result<usize>;
         fn write(&self, data: &[u8], offset: u64) -> anyhow::Result<()>;
         fn size(&self) -> anyhow::Result<u64>;
         fn upgrade_to_writable(&self) -> anyhow::Result<()>;
     }
 
-    pub trait SymlinkINode: INodeCore {
+    pub trait SymlinkINodeExt {
         fn readlink(&self) -> anyhow::Result<Vec<u8>>;
     }
 }
