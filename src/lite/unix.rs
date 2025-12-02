@@ -1,7 +1,6 @@
 #![cfg(unix)]
 
 use std::{
-    ffi::{CString, OsString},
     os::fd::{AsFd, BorrowedFd, OwnedFd},
     sync::{Arc, atomic::AtomicI64},
 };
@@ -73,7 +72,7 @@ pub struct LiteFileINode {
 impl LiteFileINode {
     pub fn new(header: LiteINodeHeader, s: Box<dyn IoWrapperStream>, writable: bool) -> Self {
         Self {
-            header: header,
+            header,
             inner: Mutex::new(LiteFileNodeInner {
                 stream: s,
                 writable,
@@ -100,7 +99,7 @@ impl LiteFileINode {
         )?;
 
         Ok(Self {
-            header: header,
+            header,
             inner: Mutex::new(LiteFileNodeInner {
                 stream: wrapper_factory.wrap(fd)?,
                 writable,
@@ -196,8 +195,8 @@ pub struct LiteDirINode {
 impl LiteDirINode {
     pub fn new(header: LiteINodeHeader, fd: OwnedFd) -> Self {
         Self {
-            header: header,
-            fd: fd,
+            header,
+            fd,
             db: OnceCell::new(),
         }
     }
@@ -215,8 +214,8 @@ impl LiteDirINode {
         )?;
 
         Ok(Self {
-            header: header,
-            fd: fd,
+            header,
+            fd,
             db: OnceCell::new(),
         })
     }
@@ -330,7 +329,7 @@ impl DirReader for LiteDirReader {
                         NameDecodeOutput::Decoded(n) => {
                             break Ok(Some(DirEntry {
                                 ino: INodeNumber(entry.ino()),
-                                filetype: filetype,
+                                filetype,
                                 name: n,
                                 offset: entry.offset(),
                             }));
@@ -354,9 +353,9 @@ pub struct LiteSymlinkINode {
 impl LiteSymlinkINode {
     fn new(header: LiteINodeHeader, fd: OwnedFd, path: Vec<u8>) -> Self {
         Self {
-            header: header,
-            fd: fd,
-            path: path,
+            header,
+            fd,
+            path,
         }
     }
 
@@ -373,7 +372,7 @@ impl LiteSymlinkINode {
         )?;
         Ok(Self {
             header,
-            fd: fd,
+            fd,
             path: Default::default(),
         })
     }

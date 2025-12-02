@@ -1,7 +1,7 @@
 pub mod block;
 pub mod lite;
 
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::Write;
 use std::{cmp::min, usize};
 
@@ -83,15 +83,6 @@ pub struct StdIoStream {
 impl StdIoStream {
     pub fn new(file: File) -> StdIoStream {
         StdIoStream { file }
-    }
-
-    pub fn open<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<StdIoStream> {
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(path)?;
-        Ok(StdIoStream::new(file))
     }
 }
 

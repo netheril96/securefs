@@ -120,9 +120,9 @@ impl NameTranslator for LegacyNameTranslator {
 
     fn encode_path_for_symlink(&self, path: &[u8]) -> anyhow::Result<Vec<u8>> {
         let mut result: Vec<u8> = Vec::new();
-        for part in path.split(|&x| x == '/' as u8) {
+        for part in path.split(|&x| x == b'/') {
             result.extend_from_slice(&self.encode_name(part)?);
-            result.push('/' as u8);
+            result.push(b'/');
         }
         result.pop();
         Ok(result)
@@ -130,7 +130,7 @@ impl NameTranslator for LegacyNameTranslator {
 
     fn decode_path_for_symlink(&self, path: &[u8]) -> anyhow::Result<Vec<u8>> {
         let mut result: Vec<u8> = Vec::new();
-        for part in path.split(|&x| x == '/' as u8) {
+        for part in path.split(|&x| x == b'/') {
             match self.decode_name(part) {
                 NameDecodeOutput::InvalidName | NameDecodeOutput::LongName => {
                     return Err(NameError::NotPreviousEncodedName {
@@ -139,7 +139,7 @@ impl NameTranslator for LegacyNameTranslator {
                 }
                 NameDecodeOutput::Decoded(items) => {
                     result.extend_from_slice(&items);
-                    result.push('/' as u8);
+                    result.push(b'/');
                 }
             }
         }

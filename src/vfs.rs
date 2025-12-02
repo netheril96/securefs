@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-#[cfg(unix)]
-use rustix::fs::Timespec;
 
 pub trait GenericHandle {
     fn get_lookup_count(&self) -> u64;
@@ -97,8 +95,7 @@ pub mod unix {
 
     use std::{
         any::Any,
-        ffi::CString,
-        sync::atomic::{AtomicI64, AtomicU64},
+        sync::atomic::AtomicI64,
     };
 
     use crate::lite::unix::{LiteDirINode, LiteFileINode, LiteINode, LiteSymlinkINode};

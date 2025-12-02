@@ -2,12 +2,8 @@
 #![cfg(not(windows))]
 use fuser::FileType;
 use std::{
-    any::Any,
     ffi::c_int,
-    os::{
-        fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
-        unix::ffi::OsStrExt,
-    },
+    os::{fd::AsFd, unix::ffi::OsStrExt},
     sync::{
         Arc,
         atomic::{AtomicI64, AtomicU64, Ordering},
@@ -17,7 +13,7 @@ use std::{
 
 use fuser::{FUSE_ROOT_ID, FileAttr};
 use once_cell::sync::OnceCell;
-use rustix::{fs::OFlags, io::Errno};
+use rustix::io::Errno;
 
 use crate::{
     lite::{
@@ -25,10 +21,7 @@ use crate::{
         name_translators::NameTranslator,
         unix::{LiteDirINode, LiteFileINode, LiteINode, LiteINodeHeader, LiteSymlinkINode},
     },
-    vfs::{
-        GenericTable,
-        unix::{Generation, INodeCore, INodeMetadata, INodeNumber},
-    },
+    vfs::unix::{Generation, INodeCore, INodeMetadata, INodeNumber},
 };
 
 pub struct FuseVfs {
