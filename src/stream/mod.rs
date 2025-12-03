@@ -151,8 +151,6 @@ pub mod test {
     use super::*;
     use rand::rng;
     use rand::{Rng, distr::Uniform, prelude::*};
-    use std::env;
-    use std::fs;
 
     pub fn compare_with_reference(
         to_be_tested: &mut dyn Stream,

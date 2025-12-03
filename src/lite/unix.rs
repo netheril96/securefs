@@ -298,17 +298,22 @@ impl INodeCore for LiteDirINode {
 }
 
 impl DirINodeExt for LiteDirINode {
-    fn create_dir_reader(&self) -> anyhow::Result<Box<dyn DirReader>> {
-        Ok(Box::new(LiteDirReader {
+    type DirReader = LiteDirReader;
+    fn create_dir_reader(&self) -> anyhow::Result<Self::DirReader> {
+        Ok(LiteDirReader {
             dir: rustix::fs::Dir::read_from(self.fd.as_fd())?,
             name_translator: self.header.name_translator.clone(),
-        }))
+            current_offset: 0,
+            current_entry: None,
+        })
     }
 }
 
-struct LiteDirReader {
+pub struct LiteDirReader {
     dir: rustix::fs::Dir,
     name_translator: Arc<dyn NameTranslator>,
+    current_offset: i64,
+    current_entry: Option<DirEntry>,
 }
 
 impl DirReader for LiteDirReader {
@@ -317,15 +322,21 @@ impl DirReader for LiteDirReader {
         Ok(())
     }
 
-    fn seek(&mut self, offset: i64) -> anyhow::Result<()> {
-        self.dir.seek(offset)?;
-        Ok(())
+    fn current_position(&self) -> i64 {
+        self.current_offset
     }
 
-    fn next(&mut self) -> anyhow::Result<Option<DirEntry>> {
+    fn current(&self) -> Option<&DirEntry> {
+        self.current_entry.as_ref()
+    }
+
+    fn move_next(&mut self) -> anyhow::Result<bool> {
         loop {
             match self.dir.read() {
-                None => break Ok(None),
+                None => {
+                    self.current_entry = None;
+                    return Ok(false);
+                }
                 Some(Ok(entry)) => {
                     let filetype = match entry.file_type() {
                         rustix::fs::FileType::Directory => crate::vfs::unix::FileType::DIRECTORY,
@@ -343,21 +354,23 @@ impl DirReader for LiteDirReader {
                     };
                     match name {
                         NameDecodeOutput::Decoded(n) => {
-                            break Ok(Some(DirEntry {
+                            self.current_entry = Some(DirEntry {
                                 ino: INodeNumber(entry.ino()),
                                 filetype,
                                 name: n,
-                                #[cfg(not(target_os = "linux"))]
-                                offset: 0,
-                                #[cfg(target_os = "linux")]
-                                offset: entry.offset(),
-                            }));
+                                offset: self.current_offset + 1,
+                            });
+                            self.current_offset += 1;
+                            return Ok(true);
                         }
                         NameDecodeOutput::InvalidName => continue,
                         NameDecodeOutput::LongName => todo!(),
                     }
                 }
-                Some(Err(err)) => break Err(err.into()),
+                Some(Err(err)) => {
+                    self.current_entry = None;
+                    return Err(err)?;
+                }
             }
         }
     }
@@ -498,17 +511,17 @@ fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
 #[cfg(target_os = "freebsd")]
 fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
     let opath_fd = rustix::fs::openat(
-            fd,
-            c"",
-            OFlags::from_bits_retain((libc::O_PATH | libc::O_EMPTY_PATH) as libc::c_uint),
-            rustix::fs::Mode::empty(),
-        )?;
+        fd,
+        c"",
+        OFlags::from_bits_retain((libc::O_PATH | libc::O_EMPTY_PATH) as libc::c_uint),
+        rustix::fs::Mode::empty(),
+    )?;
     Ok(rustix::fs::openat(
-            opath_fd,
-            c"",
-            OFlags::from_bits_retain((libc::O_RDWR | libc::O_EMPTY_PATH) as libc::c_uint),
-            rustix::fs::Mode::empty(),
-        )?)    
+        opath_fd,
+        c"",
+        OFlags::from_bits_retain((libc::O_RDWR | libc::O_EMPTY_PATH) as libc::c_uint),
+        rustix::fs::Mode::empty(),
+    )?)
 }
 
 #[cfg(test)]

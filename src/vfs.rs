@@ -177,12 +177,14 @@ pub mod unix {
 
     pub trait DirReader {
         fn rewind(&mut self) -> anyhow::Result<()>;
-        fn seek(&mut self, offset: i64) -> anyhow::Result<()>;
-        fn next(&mut self) -> anyhow::Result<Option<DirEntry>>;
+        fn current_position(&self) -> i64;
+        fn current(&self) -> Option<&DirEntry>;
+        fn move_next(&mut self) -> anyhow::Result<bool>;
     }
 
     pub trait DirINodeExt {
-        fn create_dir_reader(&self) -> anyhow::Result<Box<dyn DirReader>>;
+        type DirReader: DirReader;
+        fn create_dir_reader(&self) -> anyhow::Result<Self::DirReader>;
     }
 
     pub trait FileINodeExt {
