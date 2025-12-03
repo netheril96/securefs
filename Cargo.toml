@@ -33,3 +33,6 @@ fuse = ["dep:fuser"]
 tempfile = "3.23.0"
 rstest = "0.26.1"
 subcase = "0.4.0"
+
+[build-dependencies]
+bindgen = "0.72.1"
