@@ -384,7 +384,7 @@ impl LiteSymlinkINode {
             parent,
             encoded_name,
             #[cfg(target_os = "macos")]
-            OFlags::from_bits_retain(libc::O_SYMLINK),
+            OFlags::from_bits_retain(libc::O_SYMLINK as libc::c_uint),
             #[cfg(not(target_os = "macos"))]
             OFlags::PATH,
             rustix::fs::Mode::empty(),
@@ -498,26 +498,18 @@ fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
 
 #[cfg(target_os = "freebsd")]
 fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
-    use anyhow::Context;
-    use std::os::fd::FromRawFd;
-
-    let opath_fd = unsafe {
-        libc::openat(
-            fd.as_raw_fd(),
-            c"".as_ptr(),
-            libc::O_PATH | libc::O_EMPTY_PATH,
-        )
-    };
-    if opath_fd < 0 {
-        return Err(std::io::Error::last_os_error())
-            .with_context(|| format!("failed to reopen fd {} in O_PATH mode", fd.as_raw_fd()));
-    }
-    let new_fd = unsafe { libc::openat(opath_fd, c"".as_ptr(), libc::O_RDWR | libc::O_EMPTY_PATH) };
-    if new_fd < 0 {
-        return Err(std::io::Error::last_os_error())
-            .with_context(|| format!("failed to reopen opath_fd {} in O_RDWR mode", opath_fd));
-    }
-    Ok(unsafe { OwnedFd::from_raw_fd(new_fd) })
+    let opath_fd = rustix::fs::openat(
+            fd,
+            c"",
+            OFlags::from_bits_retain((libc::O_PATH | libc::O_EMPTY_PATH) as libc::c_uint),
+            rustix::fs::Mode::empty(),
+        )?;
+    Ok(rustix::fs::openat(
+            opath_fd,
+            c"",
+            OFlags::from_bits_retain((libc::O_RDWR | libc::O_EMPTY_PATH) as libc::c_uint),
+            rustix::fs::Mode::empty(),
+        )?)    
 }
 
 #[cfg(test)]
