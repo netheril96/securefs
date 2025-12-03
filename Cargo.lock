@@ -897,6 +897,7 @@ dependencies = [
  "rstest",
  "rusqlite",
  "rustix",
+ "scopeguard",
  "subcase",
  "subtle",
  "tempfile",

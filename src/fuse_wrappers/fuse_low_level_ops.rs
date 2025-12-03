@@ -853,20 +853,28 @@ extern "C" fn rs_ioctl(
 extern "C" fn rs_forget_multi(req: fuse_req_t, count: usize, forgets: *mut fuse_forget_data) {
     let forgets = unsafe { std::slice::from_raw_parts(forgets, count) };
     match get_user_data(&req).forget_multi(forgets) {
-        Ok(()) => unsafe { fuse_reply_none(req) },
-        Err(e) => unsafe { fuse_reply_err(req, extract_errno(&e)) },
+        Ok(()) => unsafe {
+            fuse_reply_none(req);
+        },
+        Err(e) => unsafe {
+            fuse_reply_err(req, extract_errno(&e));
+        },
     }
 }
 
 extern "C" fn rs_flock(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info, op: c_int) {
     match get_user_data(&req).flock(ino, unsafe { fi.as_mut().unwrap() }, op) {
-        Ok(()) => unsafe { fuse_reply_err(req, 0) },
-        Err(e) => unsafe { fuse_reply_err(req, extract_errno(&e)) },
+        Ok(()) => unsafe {
+            fuse_reply_err(req, 0);
+        },
+        Err(e) => unsafe {
+            fuse_reply_err(req, extract_errno(&e));
+        },
     }
 }
 
 pub fn generate_libfuse_low_level_ops(
-    ops: Box<Box<dyn FuseLowLevelOps>>,
+    ops: &mut Box<Box<dyn FuseLowLevelOps>>,
 ) -> bindings::fuse_lowlevel_ops {
     let mut fuse_ops: bindings::fuse_lowlevel_ops = unsafe { std::mem::zeroed() };
     fuse_ops.init = Some(rs_init);
