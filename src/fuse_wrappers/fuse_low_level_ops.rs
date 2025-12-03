@@ -1,15 +1,16 @@
 use std::{
     ffi::{CStr, CString},
-    os::raw::{c_char, c_int, c_uint, c_void},
+    os::raw::{c_char, c_int, c_uint, c_ulong, c_void},
 };
 
 use rustix::io::Errno;
 
 use crate::fuse_wrappers::bindings::{
-    self, fuse_bufvec, fuse_conn_info, fuse_file_info, fuse_ino_t, fuse_pollhandle,
-    fuse_reply_attr, fuse_reply_bmap, fuse_reply_buf, fuse_reply_create, fuse_reply_entry,
-    fuse_reply_err, fuse_reply_lock, fuse_reply_lseek, fuse_reply_none, fuse_reply_open,
-    fuse_reply_readlink, fuse_reply_statfs, fuse_reply_write, fuse_req_t, fuse_req_userdata,
+    self, fuse_bufvec, fuse_conn_info, fuse_file_info, fuse_forget_data, fuse_ino_t,
+    fuse_pollhandle, fuse_reply_attr, fuse_reply_bmap, fuse_reply_buf, fuse_reply_create,
+    fuse_reply_entry, fuse_reply_err, fuse_reply_ioctl, fuse_reply_lock, fuse_reply_lseek,
+    fuse_reply_none, fuse_reply_open, fuse_reply_readlink, fuse_reply_statfs, fuse_reply_write,
+    fuse_reply_xattr, fuse_req_t, fuse_req_userdata, stat, statvfs,
 };
 
 pub trait FuseLowLevelOps {
@@ -175,6 +176,168 @@ pub trait FuseLowLevelOps {
         datasync: i32,
         fi: &mut bindings::fuse_file_info,
     ) -> anyhow::Result<()> {
+        unimplemented!()
+    }
+    fn can_opendir(&self) -> bool {
+        false
+    }
+    fn opendir(&self, ino: u64, fi: &mut bindings::fuse_file_info) -> anyhow::Result<()> {
+        unimplemented!()
+    }
+    fn can_readdir(&self) -> bool {
+        false
+    }
+    fn readdir(
+        &self,
+        ino: u64,
+        size: usize,
+        off: i64,
+        fi: &mut bindings::fuse_file_info,
+    ) -> anyhow::Result<Vec<u8>> {
+        unimplemented!()
+    }
+    fn can_releasedir(&self) -> bool {
+        false
+    }
+    fn releasedir(&self, ino: u64, fi: &mut bindings::fuse_file_info) -> anyhow::Result<()> {
+        unimplemented!()
+    }
+    fn can_fsyncdir(&self) -> bool {
+        false
+    }
+    fn fsyncdir(
+        &self,
+        ino: u64,
+        datasync: i32,
+        fi: &mut bindings::fuse_file_info,
+    ) -> anyhow::Result<()> {
+        unimplemented!()
+    }
+    fn can_statfs(&self) -> bool {
+        false
+    }
+    fn statfs(&self, ino: u64) -> anyhow::Result<statvfs> {
+        unimplemented!()
+    }
+    fn can_setxattr(&self) -> bool {
+        false
+    }
+    fn setxattr(&self, ino: u64, name: &CStr, value: &[u8], flags: i32) -> anyhow::Result<()> {
+        unimplemented!()
+    }
+    fn can_getxattr(&self) -> bool {
+        false
+    }
+    fn getxattr(&self, ino: u64, name: &CStr, size: usize) -> anyhow::Result<Vec<u8>> {
+        unimplemented!()
+    }
+    fn can_listxattr(&self) -> bool {
+        false
+    }
+    fn listxattr(&self, ino: u64, size: usize) -> anyhow::Result<Vec<u8>> {
+        unimplemented!()
+    }
+    fn can_removexattr(&self) -> bool {
+        false
+    }
+    fn removexattr(&self, ino: u64, name: &CStr) -> anyhow::Result<()> {
+        unimplemented!()
+    }
+    fn can_access(&self) -> bool {
+        false
+    }
+    fn access(&self, ino: u64, mask: i32) -> anyhow::Result<()> {
+        unimplemented!()
+    }
+    fn can_create(&self) -> bool {
+        false
+    }
+    fn create(
+        &self,
+        parent: u64,
+        name: &CStr,
+        mode: u32,
+        fi: &mut bindings::fuse_file_info,
+    ) -> anyhow::Result<(bindings::fuse_entry_param, bindings::fuse_file_info)> {
+        unimplemented!()
+    }
+    fn can_getlk(&self) -> bool {
+        false
+    }
+    fn getlk(
+        &self,
+        ino: u64,
+        fi: &mut bindings::fuse_file_info,
+        lock: &mut bindings::flock,
+    ) -> anyhow::Result<bindings::flock> {
+        unimplemented!()
+    }
+    fn can_setlk(&self) -> bool {
+        false
+    }
+    fn setlk(
+        &self,
+        ino: u64,
+        fi: &mut bindings::fuse_file_info,
+        lock: &mut bindings::flock,
+        sleep: i32,
+    ) -> anyhow::Result<()> {
+        unimplemented!()
+    }
+    fn can_bmap(&self) -> bool {
+        false
+    }
+    fn bmap(&self, ino: u64, blocksize: usize, idx: u64) -> anyhow::Result<u64> {
+        unimplemented!()
+    }
+    fn can_ioctl(&self) -> bool {
+        false
+    }
+    fn ioctl(
+        &self,
+        ino: u64,
+        cmd: u32,
+        arg: *mut c_void,
+        fi: &mut bindings::fuse_file_info,
+        flags: u32,
+        in_buf: &[u8],
+        out_bufsz: usize,
+    ) -> anyhow::Result<(i32, Vec<u8>)> {
+        unimplemented!()
+    }
+    fn can_poll(&self) -> bool {
+        false
+    }
+    fn poll(
+        &self,
+        ino: u64,
+        fi: &mut bindings::fuse_file_info,
+        ph: &mut bindings::fuse_pollhandle,
+    ) -> anyhow::Result<u32> {
+        unimplemented!()
+    }
+    fn can_write_buf(&self) -> bool {
+        false
+    }
+    fn write_buf(
+        &self,
+        ino: u64,
+        bufv: &mut bindings::fuse_bufvec,
+        off: i64,
+        fi: &mut bindings::fuse_file_info,
+    ) -> anyhow::Result<usize> {
+        unimplemented!()
+    }
+    fn can_forget_multi(&self) -> bool {
+        false
+    }
+    fn forget_multi(&self, forgets: &[fuse_forget_data]) -> anyhow::Result<()> {
+        unimplemented!()
+    }
+    fn can_flock(&self) -> bool {
+        false
+    }
+    fn flock(&self, ino: u64, fi: &mut bindings::fuse_file_info, op: i32) -> anyhow::Result<()> {
         unimplemented!()
     }
 }
@@ -448,6 +611,260 @@ extern "C" fn rs_fsync(req: fuse_req_t, ino: fuse_ino_t, datasync: c_int, fi: *m
     }
 }
 
+extern "C" fn rs_opendir(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info) {
+    match get_user_data(&req).opendir(ino, unsafe { fi.as_mut().unwrap() }) {
+        Ok(()) => unsafe {
+            fuse_reply_open(req, fi);
+        },
+        Err(e) => unsafe {
+            fuse_reply_err(req, extract_errno(&e));
+        },
+    }
+}
+
+extern "C" fn rs_readdir(
+    req: fuse_req_t,
+    ino: fuse_ino_t,
+    size: usize,
+    off: i64,
+    fi: *mut fuse_file_info,
+) {
+    match get_user_data(&req).readdir(ino, size, off, unsafe { fi.as_mut().unwrap() }) {
+        Ok(data) => unsafe {
+            fuse_reply_buf(req, data.as_ptr() as *const c_char, data.len());
+        },
+        Err(e) => unsafe {
+            fuse_reply_err(req, extract_errno(&e));
+        },
+    }
+}
+
+extern "C" fn rs_releasedir(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info) {
+    match get_user_data(&req).releasedir(ino, unsafe { fi.as_mut().unwrap() }) {
+        Ok(()) => unsafe {
+            fuse_reply_err(req, 0);
+        },
+        Err(e) => unsafe {
+            fuse_reply_err(req, extract_errno(&e));
+        },
+    }
+}
+
+extern "C" fn rs_fsyncdir(
+    req: fuse_req_t,
+    ino: fuse_ino_t,
+    datasync: c_int,
+    fi: *mut fuse_file_info,
+) {
+    match get_user_data(&req).fsyncdir(ino, datasync, unsafe { fi.as_mut().unwrap() }) {
+        Ok(()) => unsafe {
+            fuse_reply_err(req, 0);
+        },
+        Err(e) => unsafe {
+            fuse_reply_err(req, extract_errno(&e));
+        },
+    }
+}
+
+extern "C" fn rs_statfs(req: fuse_req_t, ino: fuse_ino_t) {
+    match get_user_data(&req).statfs(ino) {
+        Ok(stbuf) => unsafe {
+            fuse_reply_statfs(req, &stbuf);
+        },
+        Err(e) => unsafe {
+            fuse_reply_err(req, extract_errno(&e));
+        },
+    }
+}
+
+extern "C" fn rs_setxattr(
+    req: fuse_req_t,
+    ino: fuse_ino_t,
+    name: *const c_char,
+    value: *const c_char,
+    size: usize,
+    flags: c_int,
+) {
+    let name = unsafe { CStr::from_ptr(name) };
+    let value = unsafe { std::slice::from_raw_parts(value as *const u8, size) };
+    match get_user_data(&req).setxattr(ino, name, value, flags) {
+        Ok(()) => unsafe {
+            fuse_reply_err(req, 0);
+        },
+        Err(e) => unsafe {
+            fuse_reply_err(req, extract_errno(&e));
+        },
+    }
+}
+
+extern "C" fn rs_getxattr(req: fuse_req_t, ino: fuse_ino_t, name: *const c_char, size: usize) {
+    let name = unsafe { CStr::from_ptr(name) };
+    match get_user_data(&req).getxattr(ino, name, size) {
+        Ok(data) => {
+            if size == 0 {
+                unsafe { fuse_reply_xattr(req, data.len()) };
+            } else {
+                unsafe { fuse_reply_buf(req, data.as_ptr() as *const c_char, data.len()) };
+            }
+        }
+        Err(e) => unsafe {
+            fuse_reply_err(req, extract_errno(&e));
+        },
+    }
+}
+
+extern "C" fn rs_listxattr(req: fuse_req_t, ino: fuse_ino_t, size: usize) {
+    match get_user_data(&req).listxattr(ino, size) {
+        Ok(data) => {
+            if size == 0 {
+                unsafe { fuse_reply_xattr(req, data.len()) };
+            } else {
+                unsafe { fuse_reply_buf(req, data.as_ptr() as *const c_char, data.len()) };
+            }
+        }
+        Err(e) => unsafe {
+            fuse_reply_err(req, extract_errno(&e));
+        },
+    }
+}
+
+extern "C" fn rs_removexattr(req: fuse_req_t, ino: fuse_ino_t, name: *const c_char) {
+    let name = unsafe { CStr::from_ptr(name) };
+    match get_user_data(&req).removexattr(ino, name) {
+        Ok(()) => unsafe {
+            fuse_reply_err(req, 0);
+        },
+        Err(e) => unsafe {
+            fuse_reply_err(req, extract_errno(&e));
+        },
+    }
+}
+
+extern "C" fn rs_access(req: fuse_req_t, ino: fuse_ino_t, mask: c_int) {
+    match get_user_data(&req).access(ino, mask) {
+        Ok(()) => unsafe {
+            fuse_reply_err(req, 0);
+        },
+        Err(e) => unsafe {
+            fuse_reply_err(req, extract_errno(&e));
+        },
+    }
+}
+
+extern "C" fn rs_create(
+    req: fuse_req_t,
+    parent: fuse_ino_t,
+    name: *const c_char,
+    mode: u32,
+    fi: *mut fuse_file_info,
+) {
+    let name = unsafe { CStr::from_ptr(name) };
+    match get_user_data(&req).create(parent, name, mode, unsafe { fi.as_mut().unwrap() }) {
+        Ok((entry, fi)) => unsafe {
+            fuse_reply_create(req, &entry, &fi);
+        },
+        Err(e) => unsafe {
+            fuse_reply_err(req, extract_errno(&e));
+        },
+    }
+}
+
+extern "C" fn rs_getlk(
+    req: fuse_req_t,
+    ino: fuse_ino_t,
+    fi: *mut fuse_file_info,
+    lock: *mut bindings::flock,
+) {
+    match get_user_data(&req).getlk(ino, unsafe { fi.as_mut().unwrap() }, unsafe {
+        lock.as_mut().unwrap()
+    }) {
+        Ok(lock) => unsafe {
+            fuse_reply_lock(req, &lock);
+        },
+        Err(e) => unsafe {
+            fuse_reply_err(req, extract_errno(&e));
+        },
+    }
+}
+
+extern "C" fn rs_setlk(
+    req: fuse_req_t,
+    ino: fuse_ino_t,
+    fi: *mut fuse_file_info,
+    lock: *mut bindings::flock,
+    sleep: c_int,
+) {
+    match get_user_data(&req).setlk(
+        ino,
+        unsafe { fi.as_mut().unwrap() },
+        unsafe { lock.as_mut().unwrap() },
+        sleep,
+    ) {
+        Ok(()) => unsafe {
+            fuse_reply_err(req, 0);
+        },
+        Err(e) => unsafe {
+            fuse_reply_err(req, extract_errno(&e));
+        },
+    }
+}
+
+extern "C" fn rs_bmap(req: fuse_req_t, ino: fuse_ino_t, blocksize: usize, idx: u64) {
+    match get_user_data(&req).bmap(ino, blocksize, idx) {
+        Ok(idx) => unsafe {
+            fuse_reply_bmap(req, idx);
+        },
+        Err(e) => unsafe {
+            fuse_reply_err(req, extract_errno(&e));
+        },
+    }
+}
+
+extern "C" fn rs_ioctl(
+    req: fuse_req_t,
+    ino: fuse_ino_t,
+    cmd: c_uint,
+    arg: *mut c_void,
+    fi: *mut fuse_file_info,
+    flags: c_uint,
+    in_buf: *const c_void,
+    in_bufsz: usize,
+    out_bufsz: usize,
+) {
+    let in_slice = unsafe { std::slice::from_raw_parts(in_buf as *const u8, in_bufsz) };
+    match get_user_data(&req).ioctl(
+        ino,
+        cmd,
+        arg,
+        unsafe { fi.as_mut().unwrap() },
+        flags,
+        in_slice,
+        out_bufsz,
+    ) {
+        Ok((result, data)) => unsafe {
+            fuse_reply_ioctl(req, result, data.as_ptr() as *const c_void, data.len());
+        },
+        Err(e) => unsafe {
+            fuse_reply_err(req, extract_errno(&e));
+        },
+    }
+}
+
+extern "C" fn rs_forget_multi(req: fuse_req_t, count: usize, forgets: *mut fuse_forget_data) {
+    let forgets = unsafe { std::slice::from_raw_parts(forgets, count) };
+    match get_user_data(&req).forget_multi(forgets) {
+        Ok(()) => unsafe { fuse_reply_none(req) },
+        Err(e) => unsafe { fuse_reply_err(req, extract_errno(&e)) },
+    }
+}
+
+extern "C" fn rs_flock(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info, op: c_int) {
+    match get_user_data(&req).flock(ino, unsafe { fi.as_mut().unwrap() }, op) {
+        Ok(()) => unsafe { fuse_reply_err(req, 0) },
+        Err(e) => unsafe { fuse_reply_err(req, extract_errno(&e)) },
+    }
+}
+
 pub fn generate_libfuse_low_level_ops(
     ops: Box<Box<dyn FuseLowLevelOps>>,
 ) -> bindings::fuse_lowlevel_ops {
@@ -498,6 +915,66 @@ pub fn generate_libfuse_low_level_ops(
     }
     if ops.can_write() {
         fuse_ops.write = Some(rs_write);
+    }
+    if ops.can_flush() {
+        fuse_ops.flush = Some(rs_flush);
+    }
+    if ops.can_release() {
+        fuse_ops.release = Some(rs_release);
+    }
+    if ops.can_fsync() {
+        fuse_ops.fsync = Some(rs_fsync);
+    }
+    if ops.can_opendir() {
+        fuse_ops.opendir = Some(rs_opendir);
+    }
+    if ops.can_readdir() {
+        fuse_ops.readdir = Some(rs_readdir);
+    }
+    if ops.can_releasedir() {
+        fuse_ops.releasedir = Some(rs_releasedir);
+    }
+    if ops.can_fsyncdir() {
+        fuse_ops.fsyncdir = Some(rs_fsyncdir);
+    }
+    if ops.can_statfs() {
+        fuse_ops.statfs = Some(rs_statfs);
+    }
+    if ops.can_setxattr() {
+        fuse_ops.setxattr = Some(rs_setxattr);
+    }
+    if ops.can_getxattr() {
+        fuse_ops.getxattr = Some(rs_getxattr);
+    }
+    if ops.can_listxattr() {
+        fuse_ops.listxattr = Some(rs_listxattr);
+    }
+    if ops.can_removexattr() {
+        fuse_ops.removexattr = Some(rs_removexattr);
+    }
+    if ops.can_access() {
+        fuse_ops.access = Some(rs_access);
+    }
+    if ops.can_create() {
+        fuse_ops.create = Some(rs_create);
+    }
+    if ops.can_getlk() {
+        fuse_ops.getlk = Some(rs_getlk);
+    }
+    if ops.can_setlk() {
+        fuse_ops.setlk = Some(rs_setlk);
+    }
+    if ops.can_bmap() {
+        fuse_ops.bmap = Some(rs_bmap);
+    }
+    if ops.can_ioctl() {
+        fuse_ops.ioctl = Some(rs_ioctl);
+    }
+    if ops.can_forget_multi() {
+        fuse_ops.forget_multi = Some(rs_forget_multi);
+    }
+    if ops.can_flock() {
+        fuse_ops.flock = Some(rs_flock);
     }
     fuse_ops
 }
