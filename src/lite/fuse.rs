@@ -293,7 +293,7 @@ impl fuser::Filesystem for FuseVfs {
                 parent_dir.as_fd(),
                 &enc_name,
                 OFlags::RDWR | OFlags::EXCL | OFlags::CREATE,
-                Mode::from_raw_mode((u32::from(mode) & !umask) as libc::mode_t),
+                Mode::from_raw_mode((mode & !umask) as libc::mode_t),
             )?;
             let stat = rustix::fs::fstat(created_fd.as_fd())?;
 

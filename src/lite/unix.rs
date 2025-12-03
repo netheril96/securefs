@@ -1,7 +1,6 @@
 #![cfg(unix)]
 
 use std::os::fd::AsRawFd;
-use std::os::fd::RawFd;
 
 use std::{
     os::fd::{AsFd, BorrowedFd, OwnedFd},

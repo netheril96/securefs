@@ -1,3 +1,6 @@
+#![allow(dead_code)] // Disables the linting until everything is wired together
+#![allow(unused_variables)]
+
 pub mod aesgcm;
 pub mod error;
 pub mod lite;
