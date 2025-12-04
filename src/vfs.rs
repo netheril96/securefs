@@ -1,95 +1,185 @@
-use std::sync::Arc;
+use std::{hash::BuildHasher, num::NonZeroUsize, sync::Arc};
 
+use ahash::AHashMap;
+use lru::LruCache;
+use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
+use thiserror::Error;
 
-pub trait GenericHandle {
-    fn get_lookup_count(&self) -> u64;
-    fn increment_lookup_count(&self) -> u64;
-    fn decrement_lookup_count(&self) -> u64;
-
-    fn is_dir(&self) -> bool;
-    fn is_regular_file(&self) -> bool;
-    fn is_symlink(&self) -> bool;
+#[derive(Debug, Error)]
+pub enum INodeNotFoundError {
+    #[error("inode not found")]
+    INodeNotInTable,
+    #[error("inode not initialized")]
+    INodeNotInitialized,
 }
 
-pub trait GenericTable<H: GenericHandle> {
-    fn lookup(&self, number: u64) -> Option<Arc<H>>;
-    fn lookup_or_init(&self, number: u64) -> Arc<H>;
-    fn notify_no_more_reference(&self, number: u64);
-    fn cleanup(&self);
+pub struct MaybeExistingINode<T>(Option<Arc<OnceCell<T>>>);
+
+impl<T> MaybeExistingINode<T> {
+    pub fn unwrap(&self) -> anyhow::Result<&T> {
+        Ok(self
+            .0
+            .as_ref()
+            .ok_or(INodeNotFoundError::INodeNotInTable)?
+            .get()
+            .ok_or(INodeNotFoundError::INodeNotInitialized)?)
+    }
 }
 
-pub struct INodeTable<INode: GenericHandle + Default> {
-    root_ino: u64,
-    root: Arc<INode>,
-    seed: u64,
-    shards: Vec<Mutex<lru::LruCache<u64, Arc<INode>>>>,
+pub struct MaybeInitializedINode<T>(Arc<OnceCell<T>>);
+
+impl<T> MaybeInitializedINode<T> {
+    pub fn get_or_create(&self, creator: impl FnOnce() -> anyhow::Result<T>) -> anyhow::Result<&T> {
+        self.0.get_or_try_init(creator)
+    }
 }
 
-impl<INode: GenericHandle + Default> INodeTable<INode> {
-    pub fn new(root_ino: u64, seed: u64, num_shards: usize, root: Arc<INode>) -> Self {
-        let mut v = Self {
-            root_ino,
-            seed,
-            shards: Vec::with_capacity(num_shards),
-            root,
-        };
-        for _ in 0..num_shards {
-            v.shards.push(lru::LruCache::unbounded().into());
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub struct INodeNumber(pub u64);
+pub trait GenericINodeTable<T> {
+    fn root_ino(&self) -> INodeNumber;
+    fn get(&self, ino: INodeNumber) -> MaybeExistingINode<T>;
+    fn get_or_insert_default(&self, ino: INodeNumber) -> MaybeInitializedINode<T>;
+    fn clean_up_if(&self, ino: INodeNumber, predicate: impl FnOnce(&T) -> bool);
+}
+
+pub struct ShardedMapINodeTable<T> {
+    root_ino: INodeNumber,
+    root_node: Arc<OnceCell<T>>,
+    table: Vec<Mutex<AHashMap<INodeNumber, Arc<OnceCell<T>>>>>,
+    distributor: ahash::RandomState,
+}
+
+impl<T> ShardedMapINodeTable<T> {
+    pub fn new(root_ino: INodeNumber, root_node: T, shard_count: usize) -> Self {
+        Self {
+            root_ino: root_ino,
+            root_node: Arc::new(OnceCell::with_value(root_node)),
+            table: (0..shard_count)
+                .map(|_| Mutex::new(AHashMap::new()))
+                .collect(),
+            distributor: ahash::RandomState::new(),
         }
-        v
     }
 
-    fn get_shard(&self, number: u64) -> &Mutex<lru::LruCache<u64, Arc<INode>>> {
-        &self.shards[((number ^ self.seed) % self.shards.len() as u64) as usize]
+    fn get_index(&self, ino: INodeNumber) -> usize {
+        self.distributor.hash_one(ino) as usize % self.table.len()
     }
 }
 
-impl<INode: GenericHandle + Default> GenericTable<INode> for INodeTable<INode> {
-    fn lookup(&self, number: u64) -> Option<Arc<INode>> {
-        if number == self.root_ino {
-            self.root.clone().into()
+impl<T> GenericINodeTable<T> for ShardedMapINodeTable<T> {
+    fn root_ino(&self) -> INodeNumber {
+        self.root_ino
+    }
+
+    fn get(&self, ino: INodeNumber) -> MaybeExistingINode<T> {
+        if ino == self.root_ino {
+            MaybeExistingINode(Some(self.root_node.clone()))
         } else {
-            self.get_shard(number).lock().get(&number).cloned()
+            MaybeExistingINode(self.table[self.get_index(ino)].lock().get(&ino).cloned())
         }
     }
 
-    fn lookup_or_init(&self, number: u64) -> Arc<INode> {
-        if number == self.root_ino {
-            self.root.clone()
+    fn get_or_insert_default(&self, ino: INodeNumber) -> MaybeInitializedINode<T> {
+        if ino == self.root_ino {
+            MaybeInitializedINode(self.root_node.clone())
         } else {
-            self.get_shard(number)
-                .lock()
-                .get_or_insert(number, Default::default)
-                .clone()
+            MaybeInitializedINode(
+                self.table[self.get_index(ino)]
+                    .lock()
+                    .entry(ino)
+                    .or_default()
+                    .clone(),
+            )
         }
     }
 
-    fn notify_no_more_reference(&self, number: u64) {
-        if number == self.root_ino {
+    fn clean_up_if(&self, ino: INodeNumber, predicate: impl FnOnce(&T) -> bool) {
+        if ino == self.root_ino {
             return;
         }
-        self.get_shard(number).lock().demote(&number);
-    }
-
-    fn cleanup(&self) {
-        for shard in &self.shards {
-            if let Some(mut shard) = shard.try_lock() {
-                for _ in 0..100 {
-                    if let Some((k, v)) = shard.peek_lru().map(|(k, v)| (*k, v.clone())) {
-                        if v.get_lookup_count() == 0 {
-                            shard.pop_lru();
-                            break;
-                        } else {
-                            shard.promote(&k);
-                        }
-                    }
-                }
-            }
+        let mut table = self.table[self.get_index(ino)].lock();
+        let node = table.get(&ino);
+        if node.is_some_and(|v| v.get().is_some_and(|t| predicate(t))) {
+            table.remove(&ino);
         }
     }
 }
 
+pub struct ShardedLruINodeTable<T> {
+    root_ino: INodeNumber,
+    root_node: Arc<OnceCell<T>>,
+    table: Vec<Mutex<LruCache<INodeNumber, Arc<OnceCell<T>>, ahash::RandomState>>>,
+    distributor: ahash::RandomState,
+}
+
+impl<T> ShardedLruINodeTable<T> {
+    pub fn new(
+        root_ino: INodeNumber,
+        root_node: T,
+        shard_count: usize,
+        capacity_per_shard: NonZeroUsize,
+    ) -> Self {
+        Self {
+            root_ino: root_ino,
+            root_node: Arc::new(OnceCell::with_value(root_node)),
+            table: (0..shard_count)
+                .map(|_| {
+                    Mutex::new(
+                        LruCache::<INodeNumber, Arc<OnceCell<T>>, ahash::RandomState>::with_hasher(
+                            capacity_per_shard,
+                            ahash::RandomState::new(),
+                        ),
+                    )
+                })
+                .collect(),
+            distributor: ahash::RandomState::new(),
+        }
+    }
+
+    fn get_index(&self, ino: INodeNumber) -> usize {
+        self.distributor.hash_one(ino) as usize % self.table.len()
+    }
+}
+
+impl<T> GenericINodeTable<T> for ShardedLruINodeTable<T> {
+    fn root_ino(&self) -> INodeNumber {
+        self.root_ino
+    }
+
+    fn get(&self, ino: INodeNumber) -> MaybeExistingINode<T> {
+        if ino == self.root_ino {
+            MaybeExistingINode(Some(self.root_node.clone()))
+        } else {
+            MaybeExistingINode(self.table[self.get_index(ino)].lock().get(&ino).cloned())
+        }
+    }
+
+    fn get_or_insert_default(&self, ino: INodeNumber) -> MaybeInitializedINode<T> {
+        if ino == self.root_ino {
+            MaybeInitializedINode(self.root_node.clone())
+        } else {
+            MaybeInitializedINode(
+                self.table[self.get_index(ino)]
+                    .lock()
+                    .get_or_insert(ino, || Default::default())
+                    .clone(),
+            )
+        }
+    }
+
+    fn clean_up_if(&self, ino: INodeNumber, predicate: impl FnOnce(&T) -> bool) {
+        if ino == self.root_ino {
+            return;
+        }
+        let mut table = self.table[self.get_index(ino)].lock();
+        let node = table.get(&ino);
+        if node.is_some_and(|v| v.get().is_some_and(|t| predicate(t))) {
+            table.demote(&ino);
+        }
+    }
+}
 #[cfg(unix)]
 pub mod unix {
 
@@ -99,8 +189,8 @@ pub mod unix {
     use enum_dispatch::enum_dispatch;
     use rustix::fs::Timespec;
 
-    #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-    pub struct INodeNumber(pub u64);
+    pub use super::INodeNumber;
+
     #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
     pub struct Generation(pub u64);
 
