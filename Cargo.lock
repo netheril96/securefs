@@ -893,6 +893,7 @@ dependencies = [
  "lru",
  "once_cell",
  "parking_lot",
+ "pkg-config",
  "rand",
  "rstest",
  "rusqlite",

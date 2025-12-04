@@ -5,12 +5,22 @@ fn main() {
         // Tell Cargo to re-run this build script if src/fuse_wrappers/all.h changes.
         println!("cargo:rerun-if-changed=src/fuse_wrappers/all.h");
 
+        let fuse3 = pkg_config::probe_library("fuse3")
+            .expect("libfuse3 is required to build with feature 'fuse'");
+
         // The bindgen::Builder is the main entry point
         // to bindgen, and lets you build up options for
         // the resulting bindings.
         let bindings = bindgen::Builder::default()
             // The input header we would like to generate bindings for.
             .header("src/fuse_wrappers/all.h")
+            // Add the include paths from pkg-config
+            .clang_args(
+                fuse3
+                    .include_paths
+                    .iter()
+                    .map(|path| format!("-I{}", path.display())),
+            )
             // Tell Cargo to invalidate the built crate whenever any of the
             // included header files changed.
             .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))

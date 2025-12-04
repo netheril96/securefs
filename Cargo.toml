@@ -28,12 +28,13 @@ thiserror = "2.0.17"
 thread_local = "1.1.9"
 
 [features]
-fuse = ["dep:fuser"]
+fuse = ["dep:fuser", "dep:bindgen", "dep:pkg-config"]
 
 [dev-dependencies]
 tempfile = "3.23.0"
 rstest = "0.26.1"
 subcase = "0.4.0"
 
-[build-dependencies]
-bindgen = "0.72.1"
+[target.'cfg(not(windows))'.build-dependencies]
+bindgen = { version = "0.72.1", optional = true }
+pkg-config = { version = "0.3.32", optional = true }

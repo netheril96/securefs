@@ -72,7 +72,7 @@ jobs:
           usesh: true
           envs: 'RUST_BACKTRACE'
           prepare: |
-            pkg install -y rust fusefs-libs3 sudo ninja pkgconf cmake
+            pkg install -y rust fusefs-libs3 sudo ninja pkgconf cmake llvm
             if ! sudo kldstat -m fusefs > /dev/null 2>&1; then
                 sudo kldload fusefs
             fi
