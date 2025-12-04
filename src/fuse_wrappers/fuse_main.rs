@@ -27,25 +27,30 @@ pub fn run_fuse_main(
 ) -> anyhow::Result<()> {
     let mut c_args: Vec<*mut std::os::raw::c_char> =
         fuse_args.iter().map(|s| s.as_ptr().cast_mut()).collect();
-    let mut cmdline_opts: fuse_cmdline_opts = unsafe { std::mem::zeroed() };
-    let mut fuse_args = fuse_args {
-        argc: c_args.len() as i32,
-        argv: c_args.as_mut_ptr(),
-        allocated: 0,
-    };
-    if unsafe { fuse_parse_cmdline(&mut fuse_args, &mut cmdline_opts) } < 0 {
+    let mut cmdline_opts = scopeguard::guard(
+        unsafe { std::mem::zeroed::<fuse_cmdline_opts>() },
+        |opt| unsafe {
+            libc::free(opt.mountpoint as *mut c_void);
+        },
+    );
+    let mut fuse_args = scopeguard::guard(
+        fuse_args {
+            argc: c_args.len() as i32,
+            argv: c_args.as_mut_ptr(),
+            allocated: 0,
+        },
+        |mut a| unsafe {
+            fuse_opt_free_args(&mut a);
+        },
+    );
+    if unsafe { fuse_parse_cmdline(&mut *fuse_args, &mut *cmdline_opts) } < 0 {
         Err(FuseInitError {})?;
     }
-    let fuse_args_ptr = &raw mut fuse_args;
-    defer!(unsafe {
-        libc::free(cmdline_opts.mountpoint as *mut c_void);
-        fuse_opt_free_args(fuse_args_ptr);
-    });
     let fuse_ops = generate_libfuse_low_level_ops(ops);
     let session = scopeguard::guard(
         unsafe {
             fuse_session_new(
-                &mut fuse_args,
+                &mut *fuse_args,
                 &fuse_ops,
                 size_of::<bindings::fuse_lowlevel_ops>(),
                 &raw mut *ops as *mut c_void,
