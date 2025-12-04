@@ -1,16 +1,15 @@
 use std::{
     ffi::{CStr, CString},
-    os::raw::{c_char, c_int, c_uint, c_ulong, c_void},
+    os::raw::{c_char, c_int, c_uint, c_void},
 };
 
 use rustix::io::Errno;
 
 use crate::fuse_wrappers::bindings::{
-    self, fuse_bufvec, fuse_conn_info, fuse_file_info, fuse_forget_data, fuse_ino_t,
-    fuse_pollhandle, fuse_reply_attr, fuse_reply_bmap, fuse_reply_buf, fuse_reply_create,
-    fuse_reply_entry, fuse_reply_err, fuse_reply_ioctl, fuse_reply_lock, fuse_reply_lseek,
+    self, dev_t, fuse_conn_info, fuse_file_info, fuse_forget_data, fuse_ino_t, fuse_reply_attr, fuse_reply_bmap, fuse_reply_buf, fuse_reply_create,
+    fuse_reply_entry, fuse_reply_err, fuse_reply_ioctl, fuse_reply_lock,
     fuse_reply_none, fuse_reply_open, fuse_reply_readlink, fuse_reply_statfs, fuse_reply_write,
-    fuse_reply_xattr, fuse_req_t, fuse_req_userdata, stat, statvfs,
+    fuse_reply_xattr, fuse_req_t, fuse_req_userdata, mode_t, off_t, statvfs,
 };
 
 pub trait FuseLowLevelOps {
@@ -18,13 +17,17 @@ pub trait FuseLowLevelOps {
     fn can_lookup(&self) -> bool {
         false
     }
-    fn lookup(&self, parent: u64, name: &CStr) -> anyhow::Result<bindings::fuse_entry_param> {
+    fn lookup(
+        &self,
+        parent: fuse_ino_t,
+        name: &CStr,
+    ) -> anyhow::Result<bindings::fuse_entry_param> {
         unimplemented!()
     }
     fn can_forget(&self) -> bool {
         false
     }
-    fn forget(&self, ino: u64, nlookup: u64) -> anyhow::Result<()> {
+    fn forget(&self, ino: fuse_ino_t, nlookup: u64) -> anyhow::Result<()> {
         unimplemented!()
     }
     fn can_geattr(&self) -> bool {
@@ -32,7 +35,7 @@ pub trait FuseLowLevelOps {
     }
     fn getattr(
         &self,
-        ino: u64,
+        ino: fuse_ino_t,
         fi: &mut bindings::fuse_file_info,
     ) -> anyhow::Result<(bindings::stat, f64)> {
         unimplemented!()
@@ -42,7 +45,7 @@ pub trait FuseLowLevelOps {
     }
     fn setattr(
         &self,
-        ino: u64,
+        ino: fuse_ino_t,
         attr: &mut bindings::stat,
         to_set: i32,
         fi: &mut bindings::fuse_file_info,
@@ -52,7 +55,7 @@ pub trait FuseLowLevelOps {
     fn can_readlink(&self) -> bool {
         false
     }
-    fn readlink(&self, ino: u64) -> anyhow::Result<CString> {
+    fn readlink(&self, ino: fuse_ino_t) -> anyhow::Result<CString> {
         unimplemented!()
     }
     fn can_mknod(&self) -> bool {
@@ -60,10 +63,10 @@ pub trait FuseLowLevelOps {
     }
     fn mknod(
         &self,
-        parent: u64,
+        parent: fuse_ino_t,
         name: &CStr,
-        mode: u32,
-        rdev: u64,
+        mode: mode_t,
+        rdev: dev_t,
     ) -> anyhow::Result<bindings::fuse_entry_param> {
         unimplemented!()
     }
@@ -72,22 +75,22 @@ pub trait FuseLowLevelOps {
     }
     fn mkdir(
         &self,
-        parent: u64,
+        parent: fuse_ino_t,
         name: &CStr,
-        mode: u32,
+        mode: mode_t,
     ) -> anyhow::Result<bindings::fuse_entry_param> {
         unimplemented!()
     }
     fn can_unlink(&self) -> bool {
         false
     }
-    fn unlink(&self, parent: u64, name: &CStr) -> anyhow::Result<()> {
+    fn unlink(&self, parent: fuse_ino_t, name: &CStr) -> anyhow::Result<()> {
         unimplemented!()
     }
     fn can_rmdir(&self) -> bool {
         false
     }
-    fn rmdir(&self, parent: u64, name: &CStr) -> anyhow::Result<()> {
+    fn rmdir(&self, parent: fuse_ino_t, name: &CStr) -> anyhow::Result<()> {
         unimplemented!()
     }
     fn can_symlink(&self) -> bool {
@@ -96,7 +99,7 @@ pub trait FuseLowLevelOps {
     fn symlink(
         &self,
         link: &CStr,
-        parent: u64,
+        parent: fuse_ino_t,
         name: &CStr,
     ) -> anyhow::Result<bindings::fuse_entry_param> {
         unimplemented!()
@@ -106,9 +109,9 @@ pub trait FuseLowLevelOps {
     }
     fn rename(
         &self,
-        parent: u64,
+        parent: fuse_ino_t,
         name: &CStr,
-        newparent: u64,
+        newparent: fuse_ino_t,
         newname: &CStr,
         flags: u32,
     ) -> anyhow::Result<()> {
@@ -119,8 +122,8 @@ pub trait FuseLowLevelOps {
     }
     fn link(
         &self,
-        ino: u64,
-        newparent: u64,
+        ino: fuse_ino_t,
+        newparent: fuse_ino_t,
         newname: &CStr,
     ) -> anyhow::Result<bindings::fuse_entry_param> {
         unimplemented!()
@@ -128,7 +131,7 @@ pub trait FuseLowLevelOps {
     fn can_open(&self) -> bool {
         false
     }
-    fn open(&self, ino: u64, fi: &mut bindings::fuse_file_info) -> anyhow::Result<()> {
+    fn open(&self, ino: fuse_ino_t, fi: &mut bindings::fuse_file_info) -> anyhow::Result<()> {
         unimplemented!()
     }
     fn can_read(&self) -> bool {
@@ -136,9 +139,9 @@ pub trait FuseLowLevelOps {
     }
     fn read(
         &self,
-        ino: u64,
+        ino: fuse_ino_t,
         size: usize,
-        off: i64,
+        off: off_t,
         fi: &mut bindings::fuse_file_info,
     ) -> anyhow::Result<&[u8]> {
         unimplemented!()
@@ -148,9 +151,9 @@ pub trait FuseLowLevelOps {
     }
     fn write(
         &self,
-        ino: u64,
+        ino: fuse_ino_t,
         buf: &[u8],
-        off: i64,
+        off: off_t,
         fi: &mut bindings::fuse_file_info,
     ) -> anyhow::Result<usize> {
         unimplemented!()
@@ -158,13 +161,13 @@ pub trait FuseLowLevelOps {
     fn can_flush(&self) -> bool {
         false
     }
-    fn flush(&self, ino: u64, fi: &mut bindings::fuse_file_info) -> anyhow::Result<()> {
+    fn flush(&self, ino: fuse_ino_t, fi: &mut bindings::fuse_file_info) -> anyhow::Result<()> {
         unimplemented!()
     }
     fn can_release(&self) -> bool {
         false
     }
-    fn release(&self, ino: u64, fi: &mut bindings::fuse_file_info) -> anyhow::Result<()> {
+    fn release(&self, ino: fuse_ino_t, fi: &mut bindings::fuse_file_info) -> anyhow::Result<()> {
         unimplemented!()
     }
     fn can_fsync(&self) -> bool {
@@ -172,7 +175,7 @@ pub trait FuseLowLevelOps {
     }
     fn fsync(
         &self,
-        ino: u64,
+        ino: fuse_ino_t,
         datasync: i32,
         fi: &mut bindings::fuse_file_info,
     ) -> anyhow::Result<()> {
@@ -181,7 +184,7 @@ pub trait FuseLowLevelOps {
     fn can_opendir(&self) -> bool {
         false
     }
-    fn opendir(&self, ino: u64, fi: &mut bindings::fuse_file_info) -> anyhow::Result<()> {
+    fn opendir(&self, ino: fuse_ino_t, fi: &mut bindings::fuse_file_info) -> anyhow::Result<()> {
         unimplemented!()
     }
     fn can_readdir(&self) -> bool {
@@ -189,9 +192,9 @@ pub trait FuseLowLevelOps {
     }
     fn readdir(
         &self,
-        ino: u64,
+        ino: fuse_ino_t,
         size: usize,
-        off: i64,
+        off: off_t,
         fi: &mut bindings::fuse_file_info,
     ) -> anyhow::Result<Vec<u8>> {
         unimplemented!()
@@ -199,7 +202,7 @@ pub trait FuseLowLevelOps {
     fn can_releasedir(&self) -> bool {
         false
     }
-    fn releasedir(&self, ino: u64, fi: &mut bindings::fuse_file_info) -> anyhow::Result<()> {
+    fn releasedir(&self, ino: fuse_ino_t, fi: &mut bindings::fuse_file_info) -> anyhow::Result<()> {
         unimplemented!()
     }
     fn can_fsyncdir(&self) -> bool {
@@ -207,7 +210,7 @@ pub trait FuseLowLevelOps {
     }
     fn fsyncdir(
         &self,
-        ino: u64,
+        ino: fuse_ino_t,
         datasync: i32,
         fi: &mut bindings::fuse_file_info,
     ) -> anyhow::Result<()> {
@@ -216,37 +219,43 @@ pub trait FuseLowLevelOps {
     fn can_statfs(&self) -> bool {
         false
     }
-    fn statfs(&self, ino: u64) -> anyhow::Result<statvfs> {
+    fn statfs(&self, ino: fuse_ino_t) -> anyhow::Result<statvfs> {
         unimplemented!()
     }
     fn can_setxattr(&self) -> bool {
         false
     }
-    fn setxattr(&self, ino: u64, name: &CStr, value: &[u8], flags: i32) -> anyhow::Result<()> {
+    fn setxattr(
+        &self,
+        ino: fuse_ino_t,
+        name: &CStr,
+        value: &[u8],
+        flags: i32,
+    ) -> anyhow::Result<()> {
         unimplemented!()
     }
     fn can_getxattr(&self) -> bool {
         false
     }
-    fn getxattr(&self, ino: u64, name: &CStr, size: usize) -> anyhow::Result<Vec<u8>> {
+    fn getxattr(&self, ino: fuse_ino_t, name: &CStr, size: usize) -> anyhow::Result<Vec<u8>> {
         unimplemented!()
     }
     fn can_listxattr(&self) -> bool {
         false
     }
-    fn listxattr(&self, ino: u64, size: usize) -> anyhow::Result<Vec<u8>> {
+    fn listxattr(&self, ino: fuse_ino_t, size: usize) -> anyhow::Result<Vec<u8>> {
         unimplemented!()
     }
     fn can_removexattr(&self) -> bool {
         false
     }
-    fn removexattr(&self, ino: u64, name: &CStr) -> anyhow::Result<()> {
+    fn removexattr(&self, ino: fuse_ino_t, name: &CStr) -> anyhow::Result<()> {
         unimplemented!()
     }
     fn can_access(&self) -> bool {
         false
     }
-    fn access(&self, ino: u64, mask: i32) -> anyhow::Result<()> {
+    fn access(&self, ino: fuse_ino_t, mask: i32) -> anyhow::Result<()> {
         unimplemented!()
     }
     fn can_create(&self) -> bool {
@@ -254,9 +263,9 @@ pub trait FuseLowLevelOps {
     }
     fn create(
         &self,
-        parent: u64,
+        parent: fuse_ino_t,
         name: &CStr,
-        mode: u32,
+        mode: mode_t,
         fi: &mut bindings::fuse_file_info,
     ) -> anyhow::Result<(bindings::fuse_entry_param, bindings::fuse_file_info)> {
         unimplemented!()
@@ -266,7 +275,7 @@ pub trait FuseLowLevelOps {
     }
     fn getlk(
         &self,
-        ino: u64,
+        ino: fuse_ino_t,
         fi: &mut bindings::fuse_file_info,
         lock: &mut bindings::flock,
     ) -> anyhow::Result<bindings::flock> {
@@ -277,7 +286,7 @@ pub trait FuseLowLevelOps {
     }
     fn setlk(
         &self,
-        ino: u64,
+        ino: fuse_ino_t,
         fi: &mut bindings::fuse_file_info,
         lock: &mut bindings::flock,
         sleep: i32,
@@ -287,7 +296,7 @@ pub trait FuseLowLevelOps {
     fn can_bmap(&self) -> bool {
         false
     }
-    fn bmap(&self, ino: u64, blocksize: usize, idx: u64) -> anyhow::Result<u64> {
+    fn bmap(&self, ino: fuse_ino_t, blocksize: usize, idx: u64) -> anyhow::Result<u64> {
         unimplemented!()
     }
     fn can_ioctl(&self) -> bool {
@@ -295,7 +304,7 @@ pub trait FuseLowLevelOps {
     }
     fn ioctl(
         &self,
-        ino: u64,
+        ino: fuse_ino_t,
         cmd: u32,
         arg: *mut c_void,
         fi: &mut bindings::fuse_file_info,
@@ -310,7 +319,7 @@ pub trait FuseLowLevelOps {
     }
     fn poll(
         &self,
-        ino: u64,
+        ino: fuse_ino_t,
         fi: &mut bindings::fuse_file_info,
         ph: &mut bindings::fuse_pollhandle,
     ) -> anyhow::Result<u32> {
@@ -321,9 +330,9 @@ pub trait FuseLowLevelOps {
     }
     fn write_buf(
         &self,
-        ino: u64,
+        ino: fuse_ino_t,
         bufv: &mut bindings::fuse_bufvec,
-        off: i64,
+        off: off_t,
         fi: &mut bindings::fuse_file_info,
     ) -> anyhow::Result<usize> {
         unimplemented!()
@@ -337,7 +346,12 @@ pub trait FuseLowLevelOps {
     fn can_flock(&self) -> bool {
         false
     }
-    fn flock(&self, ino: u64, fi: &mut bindings::fuse_file_info, op: i32) -> anyhow::Result<()> {
+    fn flock(
+        &self,
+        ino: fuse_ino_t,
+        fi: &mut bindings::fuse_file_info,
+        op: i32,
+    ) -> anyhow::Result<()> {
         unimplemented!()
     }
 }
@@ -426,8 +440,8 @@ extern "C" fn rs_mknod(
     req: fuse_req_t,
     parent: fuse_ino_t,
     name: *const c_char,
-    mode: u32,
-    rdev: u64,
+    mode: mode_t,
+    rdev: dev_t,
 ) {
     let name = unsafe { CStr::from_ptr(name) };
     match get_user_data(&req).mknod(parent, name, mode, rdev) {
@@ -440,7 +454,7 @@ extern "C" fn rs_mknod(
     }
 }
 
-extern "C" fn rs_mkdir(req: fuse_req_t, parent: fuse_ino_t, name: *const c_char, mode: u32) {
+extern "C" fn rs_mkdir(req: fuse_req_t, parent: fuse_ino_t, name: *const c_char, mode: mode_t) {
     let name = unsafe { CStr::from_ptr(name) };
     match get_user_data(&req).mkdir(parent, name, mode) {
         Ok(entry) => unsafe {
@@ -500,7 +514,7 @@ extern "C" fn rs_rename(
     name: *const c_char,
     newparent: fuse_ino_t,
     newname: *const c_char,
-    flags: c_uint,
+    flags: u32,
 ) {
     let name = unsafe { CStr::from_ptr(name) };
     let newname = unsafe { CStr::from_ptr(newname) };
@@ -546,7 +560,7 @@ extern "C" fn rs_read(
     req: fuse_req_t,
     ino: fuse_ino_t,
     size: usize,
-    off: i64,
+    off: off_t,
     fi: *mut fuse_file_info,
 ) {
     match get_user_data(&req).read(ino, size, off, unsafe { fi.as_mut().unwrap() }) {
@@ -564,7 +578,7 @@ extern "C" fn rs_write(
     ino: fuse_ino_t,
     buf: *const c_char,
     size: usize,
-    off: i64,
+    off: off_t,
     fi: *mut fuse_file_info,
 ) {
     let slice = unsafe { std::slice::from_raw_parts(buf as *const u8, size) };
@@ -626,7 +640,7 @@ extern "C" fn rs_readdir(
     req: fuse_req_t,
     ino: fuse_ino_t,
     size: usize,
-    off: i64,
+    off: off_t,
     fi: *mut fuse_file_info,
 ) {
     match get_user_data(&req).readdir(ino, size, off, unsafe { fi.as_mut().unwrap() }) {
@@ -755,7 +769,7 @@ extern "C" fn rs_create(
     req: fuse_req_t,
     parent: fuse_ino_t,
     name: *const c_char,
-    mode: u32,
+    mode: mode_t,
     fi: *mut fuse_file_info,
 ) {
     let name = unsafe { CStr::from_ptr(name) };

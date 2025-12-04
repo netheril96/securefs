@@ -34,7 +34,7 @@ pub fn run_fuse_main(
         allocated: 0,
     };
     if unsafe { fuse_parse_cmdline(&mut fuse_args, &mut cmdline_opts) } < 0 {
-        return Err(FuseInitError {})?;
+        Err(FuseInitError {})?;
     }
     let fuse_args_ptr = &raw mut fuse_args;
     defer!(unsafe {
@@ -59,16 +59,16 @@ pub fn run_fuse_main(
         },
     );
     if session.is_null() {
-        return Err(FuseInitError {})?;
+        Err(FuseInitError {})?;
     }
     if unsafe { fuse_set_signal_handlers(*session) } != 0 {
-        return Err(FuseInitError {})?;
+        Err(FuseInitError {})?;
     }
     defer!(unsafe {
         fuse_remove_signal_handlers(*session);
     });
     if unsafe { fuse_session_mount(*session, cmdline_opts.mountpoint) } != 0 {
-        return Err(FuseInitError {})?;
+        Err(FuseInitError {})?;
     }
     defer!(unsafe { fuse_session_unmount(*session) });
 
