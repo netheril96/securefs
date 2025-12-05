@@ -34,7 +34,7 @@ pub trait FuseLowLevelOps {
     fn forget(&self, ino: fuse_ino_t, nlookup: u64) -> anyhow::Result<()> {
         unimplemented!()
     }
-    fn can_geattr(&self) -> bool {
+    fn can_getattr(&self) -> bool {
         false
     }
     fn getattr(
@@ -903,7 +903,7 @@ pub fn generate_libfuse_low_level_ops(
     if ops.can_forget() {
         fuse_ops.forget = Some(rs_forget);
     }
-    if ops.can_geattr() {
+    if ops.can_getattr() {
         fuse_ops.getattr = Some(rs_getattr);
     }
     if ops.can_setattr() {

@@ -22,8 +22,8 @@ use crate::{
         name_translators::{NameDecodeOutput, NameTranslator},
     },
     vfs::unix::{
-        DirEntry, DirINodeExt, DirReader, FileINodeExt, Generation, INodeCore,
-        INodeNumber, SymlinkINodeExt,
+        DirEntry, DirINodeExt, DirReader, FileINodeExt, Generation, INodeCore, INodeNumber,
+        SymlinkINodeExt,
     },
 };
 
@@ -661,7 +661,7 @@ fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
     )?)
 }
 
-pub struct FuseVfs<Table: GenericINodeTable<LiteINode>> {
+pub struct LiteVfs<Table: GenericINodeTable<LiteINode>> {
     pub(super) inode_table: Table,
     pub(super) name_translator: Arc<dyn NameTranslator>,
     pub(super) wrapper_factory: Box<dyn IoWrapperFactory>,

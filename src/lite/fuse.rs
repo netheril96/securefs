@@ -28,11 +28,11 @@ use crate::{
     lite::{
         name_translators::NameTranslator,
         unix::{
-            FuseVfs, LiteDirINode, LiteFileINode, LiteINode, LiteINodeHeader, LiteSymlinkINode,
+            LiteDirINode, LiteFileINode, LiteINode, LiteINodeHeader, LiteSymlinkINode, LiteVfs,
         },
     },
     vfs::{
-        GenericINodeTable,
+        GenericINodeTable, INodeNotFoundError,
         unix::{DirReader, Generation, INodeCore, INodeNumber},
     },
 };
@@ -53,7 +53,7 @@ struct OpenedDescriptor {
     data: OpenedData,
 }
 
-impl<Table: GenericINodeTable<LiteINode>> FuseVfs<Table> {
+impl<Table: GenericINodeTable<LiteINode>> LiteVfs<Table> {
     fn ino_from_fuse(&self, ino: u64) -> INodeNumber {
         if ino == FUSE_ROOT_ID {
             self.inode_table.root_ino()
@@ -96,7 +96,7 @@ fn mode_to_filetype(mode: libc::mode_t) -> FileType {
     }
 }
 
-impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for FuseVfs<Table> {
+impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
     fn init(&mut self, conn: &mut crate::fuse_wrappers::bindings::fuse_conn_info) {
         conn.max_readahead = 1 << 24;
         conn.max_background = 32;
@@ -169,6 +169,40 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for FuseVfs<Table> {
             attr_timeout: self.attr_cache_duration.as_secs_f64(),
             entry_timeout: self.attr_cache_duration.as_secs_f64(),
         })
+    }
+
+    fn can_getattr(&self) -> bool {
+        true
+    }
+
+    fn getattr(
+        &self,
+        ino: crate::fuse_wrappers::bindings::fuse_ino_t,
+        fi: &mut crate::fuse_wrappers::bindings::fuse_file_info,
+    ) -> anyhow::Result<(crate::fuse_wrappers::bindings::stat, f64)> {
+        let common =
+            |node: &LiteINode| -> anyhow::Result<(crate::fuse_wrappers::bindings::stat, f64)> {
+                let mut st = node.get_metadata()?;
+                self.readjust_stat(&mut st);
+                Ok((
+                    unsafe { std::mem::transmute(st) },
+                    self.attr_cache_duration.as_secs_f64(),
+                ))
+            };
+
+        if fi.fh != 0 {
+            let desc = unsafe { (fi.fh as *mut OpenedDescriptor).as_mut().unwrap() };
+            let node = desc
+                .inode
+                .get()
+                .ok_or(INodeNotFoundError::INodeNotInitialized)?;
+            common(node)
+        } else {
+            let ino = self.ino_from_fuse(ino);
+            let node = self.inode_table.get(ino);
+            let node = node.unwrap()?;
+            common(node)
+        }
     }
 }
 
