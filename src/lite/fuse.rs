@@ -73,6 +73,10 @@ impl<Table: GenericINodeTable<LiteINode>> FuseVfs<Table> {
             ino.0
         }
     }
+
+    fn readjust_stat(&self, st: &mut rustix::fs::Stat) {
+        st.st_ino = self.ino_to_fuse(INodeNumber(st.st_ino));
+    }
 }
 
 fn mode_to_filetype(mode: libc::mode_t) -> FileType {
@@ -150,13 +154,13 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for FuseVfs<Table> {
                     Ok(LiteSymlinkINode::open(header, parent.as_fd(), encoded_cname)?.into())
                 }
                 _ => {
-                    Err(Errno::PERM)
-                        .with_context(|| format!("Unsupported st_mode {}", st.st_mode))
+                    Err(Errno::PERM).with_context(|| format!("Unsupported st_mode {}", st.st_mode))
                 }
             }
         })?;
         child.get_lookup_count().fetch_add(1, Ordering::SeqCst);
         child.readjust_stat(&mut st)?;
+        self.readjust_stat(&mut st);
 
         Ok(fuse_entry_param {
             ino: self.ino_to_fuse(child.get_ino()),
