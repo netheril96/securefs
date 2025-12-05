@@ -13,14 +13,14 @@ use crate::fuse_wrappers::{
 };
 
 #[derive(Debug)]
-pub struct FuseInitError;
+pub struct FuseLoopError;
 
-impl Display for FuseInitError {
+impl Display for FuseLoopError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("fuse init failed")
+        f.write_str("fuse loop failed")
     }
 }
-impl std::error::Error for FuseInitError {}
+impl std::error::Error for FuseLoopError {}
 
 // Redeclare this instead of relying on bindgen.
 // This is because on newer libfuse (e.g. 3.17) the symbol is not declared in the header file.
@@ -58,7 +58,7 @@ pub fn run_fuse_main(
         },
     );
     if unsafe { fuse_parse_cmdline(&mut *fuse_args, &mut *cmdline_opts) } < 0 {
-        Err(FuseInitError {})?;
+        Err(FuseLoopError {})?;
     }
     let fuse_ops = generate_libfuse_low_level_ops(ops);
     let userdata = &raw mut **ops;
@@ -80,22 +80,22 @@ pub fn run_fuse_main(
         },
     );
     if session.is_null() {
-        Err(FuseInitError {})?;
+        Err(FuseLoopError {})?;
     }
     if unsafe { fuse_set_signal_handlers(*session) } != 0 {
-        Err(FuseInitError {})?;
+        Err(FuseLoopError {})?;
     }
     defer!(unsafe {
         fuse_remove_signal_handlers(*session);
     });
     if unsafe { fuse_session_mount(*session, cmdline_opts.mountpoint) } != 0 {
-        Err(FuseInitError {})?;
+        Err(FuseLoopError {})?;
     }
     defer!(unsafe { fuse_session_unmount(*session) });
 
     let ret = unsafe { fuse_session_loop_mt(*session, std::ptr::null_mut()) };
     if ret != 0 {
-        return Err(FuseInitError).with_context(|| format!("fuse_session_loop_mt returns {ret}"));
+        return Err(FuseLoopError).with_context(|| format!("fuse_session_loop_mt returns {ret}"));
     }
     log::info!("fuse_session_loop_mt returned {ret}");
     Ok(())

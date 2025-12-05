@@ -145,7 +145,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
                     header,
                     parent.as_fd(),
                     encoded_cname.as_bytes(),
-                    (st.st_mode & libc::S_IWUSR) != 0,
+                    !self.readonly && (st.st_mode & libc::S_IWUSR) != 0,
                     self.wrapper_factory.as_ref(),
                 )?
                 .into()),
@@ -178,7 +178,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         &self,
         _req: FuseReq,
         ino: crate::fuse_wrappers::bindings::fuse_ino_t,
-        fi: &crate::fuse_wrappers::bindings::fuse_file_info,
+        fi: Option<&crate::fuse_wrappers::bindings::fuse_file_info>,
     ) -> anyhow::Result<(crate::fuse_wrappers::bindings::stat, f64)> {
         let common =
             |node: &LiteINode| -> anyhow::Result<(crate::fuse_wrappers::bindings::stat, f64)> {
@@ -190,7 +190,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
                 ))
             };
 
-        if fi.fh != 0 {
+        if let Some(fi) = fi.filter(|fi| fi.fh != 0) {
             let desc = unsafe { (fi.fh as *mut OpenedDescriptor).as_mut().unwrap() };
             let node = desc
                 .inode
@@ -215,7 +215,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         parent: crate::fuse_wrappers::bindings::fuse_ino_t,
         name: &std::ffi::CStr,
         mode: crate::fuse_wrappers::bindings::mode_t,
-        fi: &crate::fuse_wrappers::bindings::fuse_file_info,
+        fi: Option<&crate::fuse_wrappers::bindings::fuse_file_info>,
     ) -> anyhow::Result<(
         crate::fuse_wrappers::bindings::fuse_entry_param,
         crate::fuse_wrappers::bindings::fuse_file_info,
@@ -267,7 +267,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
             attr_timeout: self.attr_cache_duration.as_secs_f64(),
             entry_timeout: self.attr_cache_duration.as_secs_f64(),
         };
-        let mut new_fi = *fi;
+        let mut new_fi = fi.copied().unwrap_or_else(|| unsafe { std::mem::zeroed() });
         new_fi.fh = Box::into_raw(fh) as u64;
         Ok((entry, new_fi))
     }
@@ -280,13 +280,14 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         &self,
         _req: FuseReq,
         ino: crate::fuse_wrappers::bindings::fuse_ino_t,
-        fi: &crate::fuse_wrappers::bindings::fuse_file_info,
+        fi: Option<&crate::fuse_wrappers::bindings::fuse_file_info>,
     ) -> anyhow::Result<crate::fuse_wrappers::bindings::fuse_file_info> {
         let node = self.inode_table.get(self.ino_from_fuse(ino));
         let opened_data = {
             let n = node.unwrap()?;
             match n {
                 LiteINode::LiteFileINode(_) => {
+                    let fi = fi.ok_or(Errno::INVAL)?;
                     let flags = rustix::fs::OFlags::from_bits_retain(fi.flags as _);
                     let readable = flags.contains(rustix::fs::OFlags::RDONLY)
                         || flags.contains(rustix::fs::OFlags::RDWR);
@@ -308,7 +309,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
             inode: node.0.expect("already checked"),
             data: opened_data,
         });
-        let mut new_fi = *fi;
+        let mut new_fi = fi.copied().unwrap_or_else(|| unsafe { std::mem::zeroed() });
         new_fi.fh = Box::into_raw(descriptor) as u64;
         Ok(new_fi)
     }
@@ -323,8 +324,9 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         _ino: crate::fuse_wrappers::bindings::fuse_ino_t,
         size: usize,
         off: crate::fuse_wrappers::bindings::off_t,
-        fi: &crate::fuse_wrappers::bindings::fuse_file_info,
+        fi: Option<&crate::fuse_wrappers::bindings::fuse_file_info>,
     ) -> anyhow::Result<Vec<u8>> {
+        let fi = fi.ok_or(Errno::BADF)?;
         let desc = unsafe { (fi.fh as *mut OpenedDescriptor).as_mut().unwrap() };
         let LiteINode::LiteFileINode(file) = desc.inode.get().ok_or(Errno::BADF)? else {
             return Err(Errno::INVAL)?;
@@ -353,8 +355,9 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         _ino: crate::fuse_wrappers::bindings::fuse_ino_t,
         buf: &[u8],
         off: crate::fuse_wrappers::bindings::off_t,
-        fi: &crate::fuse_wrappers::bindings::fuse_file_info,
+        fi: Option<&crate::fuse_wrappers::bindings::fuse_file_info>,
     ) -> anyhow::Result<usize> {
+        let fi = fi.ok_or(Errno::BADF)?;
         let desc = unsafe { (fi.fh as *mut OpenedDescriptor).as_mut().unwrap() };
         let LiteINode::LiteFileINode(file) = desc.inode.get().ok_or(Errno::BADF)? else {
             return Err(Errno::INVAL)?;
@@ -371,6 +374,8 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         if !writable && !appending {
             return Err(Errno::PERM)?;
         }
+
+        file.upgrade_to_writable()?;
 
         if appending {
             file.append(buf)?;
@@ -389,8 +394,9 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         &self,
         _req: FuseReq,
         _ino: crate::fuse_wrappers::bindings::fuse_ino_t,
-        fi: &crate::fuse_wrappers::bindings::fuse_file_info,
+        fi: Option<&crate::fuse_wrappers::bindings::fuse_file_info>,
     ) -> anyhow::Result<()> {
+        let fi = fi.ok_or(Errno::BADF)?;
         if fi.fh != 0 {
             drop(unsafe { Box::from_raw(fi.fh as *mut OpenedDescriptor) });
         }
@@ -405,7 +411,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         &self,
         _req: FuseReq,
         ino: crate::fuse_wrappers::bindings::fuse_ino_t,
-        fi: &crate::fuse_wrappers::bindings::fuse_file_info,
+        fi: Option<&crate::fuse_wrappers::bindings::fuse_file_info>,
     ) -> anyhow::Result<crate::fuse_wrappers::bindings::fuse_file_info> {
         let node = self.inode_table.get(self.ino_from_fuse(ino));
         let opened_data = {
@@ -422,7 +428,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
             inode: node.0.expect("already checked"),
             data: opened_data,
         });
-        let mut new_fi = *fi;
+        let mut new_fi = fi.copied().unwrap_or_else(|| unsafe { std::mem::zeroed() });
         new_fi.fh = Box::into_raw(descriptor) as u64;
         Ok(new_fi)
     }
@@ -437,8 +443,9 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         _ino: crate::fuse_wrappers::bindings::fuse_ino_t,
         size: usize,
         off: crate::fuse_wrappers::bindings::off_t,
-        fi: &crate::fuse_wrappers::bindings::fuse_file_info,
+        fi: Option<&crate::fuse_wrappers::bindings::fuse_file_info>,
     ) -> anyhow::Result<Vec<u8>> {
+        let fi = fi.ok_or(Errno::BADF)?;
         if fi.fh == 0 {
             return Err(Errno::BADF)?;
         }
@@ -503,7 +510,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         &self,
         req: FuseReq,
         ino: crate::fuse_wrappers::bindings::fuse_ino_t,
-        fi: &crate::fuse_wrappers::bindings::fuse_file_info,
+        fi: Option<&crate::fuse_wrappers::bindings::fuse_file_info>,
     ) -> anyhow::Result<()> {
         return self.release(req, ino, fi);
     }
