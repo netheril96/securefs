@@ -11,10 +11,9 @@ use std::{
 };
 
 use anyhow::Context;
-use enum_dispatch::enum_dispatch;
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
-use rustix::fs::{OFlags, Stat, Timespec};
+use rustix::fs::{AtFlags, OFlags, Timespec};
 
 use crate::vfs::GenericINodeTable;
 use crate::{
@@ -23,7 +22,7 @@ use crate::{
         name_translators::{NameDecodeOutput, NameTranslator},
     },
     vfs::unix::{
-        DirEntry, DirINodeExt, DirReader, FileINodeExt, Generation, INodeCore, INodeMetadata,
+        DirEntry, DirINodeExt, DirReader, FileINodeExt, Generation, INodeCore,
         INodeNumber, SymlinkINodeExt,
     },
 };
@@ -120,9 +119,16 @@ impl LiteFileINode {
             }),
         })
     }
+
+    fn readjust_stat(&self, st: &mut rustix::fs::Stat) -> anyhow::Result<()> {
+        let inner = self.inner.lock();
+        st.st_size = inner.stream.size()?.try_into()?;
+        st.st_blksize = inner.stream.optimal_block_size().try_into()?;
+        Ok(())
+    }
 }
 
-impl INodeCore<libc::stat> for LiteFileINode {
+impl INodeCore<rustix::fs::Stat> for LiteFileINode {
     fn get_ino(&self) -> INodeNumber {
         self.header.ino
     }
@@ -135,10 +141,11 @@ impl INodeCore<libc::stat> for LiteFileINode {
         &self.header.lookup_count
     }
 
-    fn get_metadata(&self) -> anyhow::Result<libc::stat> {
+    fn get_metadata(&self) -> anyhow::Result<rustix::fs::Stat> {
         let inner = self.inner.lock();
-        let mut stat = fstat(inner.stream.as_fd())?;
+        let mut stat = rustix::fs::fstat(inner.stream.as_fd())?;
         stat.st_size = inner.stream.size()?.try_into()?;
+        stat.st_blksize = inner.stream.optimal_block_size().try_into()?;
         Ok(stat)
     }
 
@@ -170,10 +177,6 @@ impl INodeCore<libc::stat> for LiteFileINode {
 
     fn list_extended_attrs(&self) -> anyhow::Result<Vec<Vec<u8>>> {
         todo!()
-    }
-
-    fn maybe_size(&self) -> anyhow::Result<Option<u64>> {
-        Ok(Some(self.size()?))
     }
 }
 
@@ -246,6 +249,10 @@ impl LiteDirINode {
             db: OnceCell::new(),
         })
     }
+
+    fn readjust_stat(&self, st: &mut rustix::fs::Stat) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 impl AsFd for LiteDirINode {
@@ -254,7 +261,7 @@ impl AsFd for LiteDirINode {
     }
 }
 
-impl INodeCore<libc::stat> for LiteDirINode {
+impl INodeCore<rustix::fs::Stat> for LiteDirINode {
     fn get_ino(&self) -> INodeNumber {
         self.header.ino
     }
@@ -267,8 +274,8 @@ impl INodeCore<libc::stat> for LiteDirINode {
         &self.header.lookup_count
     }
 
-    fn get_metadata(&self) -> anyhow::Result<libc::stat> {
-        fstat(self.fd.as_fd())
+    fn get_metadata(&self) -> anyhow::Result<rustix::fs::Stat> {
+        Ok(rustix::fs::fstat(self.as_fd())?)
     }
 
     fn set_metadata(
@@ -299,10 +306,6 @@ impl INodeCore<libc::stat> for LiteDirINode {
 
     fn list_extended_attrs(&self) -> anyhow::Result<Vec<Vec<u8>>> {
         todo!()
-    }
-
-    fn maybe_size(&self) -> anyhow::Result<Option<u64>> {
-        Ok(None)
     }
 }
 
@@ -416,9 +419,14 @@ impl LiteSymlinkINode {
             path: Default::default(),
         })
     }
+
+    fn readjust_stat(&self, st: &mut rustix::fs::Stat) -> anyhow::Result<()> {
+        st.st_size = self.readlink()?.len().try_into()?;
+        Ok(())
+    }
 }
 
-impl INodeCore<libc::stat> for LiteSymlinkINode {
+impl INodeCore<rustix::fs::Stat> for LiteSymlinkINode {
     fn get_ino(&self) -> INodeNumber {
         self.header.ino
     }
@@ -431,10 +439,14 @@ impl INodeCore<libc::stat> for LiteSymlinkINode {
         &self.header.lookup_count
     }
 
-    fn get_metadata(&self) -> anyhow::Result<libc::stat> {
+    fn get_metadata(&self) -> anyhow::Result<rustix::fs::Stat> {
         match &self.path {
-            Some(path) => fstatat(self.fd.as_fd(), path.as_c_str()),
-            None => fstat(self.fd.as_fd()),
+            Some(path) => Ok(rustix::fs::statat(
+                self.fd.as_fd(),
+                path,
+                AtFlags::SYMLINK_NOFOLLOW,
+            )?),
+            None => Ok(rustix::fs::fstat(self.fd.as_fd())?),
         }
     }
 
@@ -467,10 +479,6 @@ impl INodeCore<libc::stat> for LiteSymlinkINode {
     fn list_extended_attrs(&self) -> anyhow::Result<Vec<Vec<u8>>> {
         todo!()
     }
-
-    fn maybe_size(&self) -> anyhow::Result<Option<u64>> {
-        todo!()
-    }
 }
 
 impl SymlinkINodeExt for LiteSymlinkINode {
@@ -479,13 +487,128 @@ impl SymlinkINodeExt for LiteSymlinkINode {
     }
 }
 
-type libc_stat = libc::stat;
-
-#[enum_dispatch(INodeCore<libc_stat>)]
 pub enum LiteINode {
-    LiteDirINode,
-    LiteFileINode,
-    LiteSymlinkINode,
+    LiteDirINode(LiteDirINode),
+    LiteFileINode(LiteFileINode),
+    LiteSymlinkINode(LiteSymlinkINode),
+}
+
+impl LiteINode {
+    pub(super) fn readjust_stat(&self, st: &mut rustix::fs::Stat) -> anyhow::Result<()> {
+        match self {
+            LiteINode::LiteDirINode(inode) => inode.readjust_stat(st),
+            LiteINode::LiteFileINode(inode) => inode.readjust_stat(st),
+            LiteINode::LiteSymlinkINode(inode) => inode.readjust_stat(st),
+        }
+    }
+}
+
+impl From<LiteDirINode> for LiteINode {
+    fn from(value: LiteDirINode) -> Self {
+        Self::LiteDirINode(value)
+    }
+}
+
+impl From<LiteFileINode> for LiteINode {
+    fn from(value: LiteFileINode) -> Self {
+        Self::LiteFileINode(value)
+    }
+}
+
+impl From<LiteSymlinkINode> for LiteINode {
+    fn from(value: LiteSymlinkINode) -> Self {
+        Self::LiteSymlinkINode(value)
+    }
+}
+
+impl INodeCore<rustix::fs::Stat> for LiteINode {
+    fn get_ino(&self) -> INodeNumber {
+        match self {
+            LiteINode::LiteDirINode(inode) => inode.get_ino(),
+            LiteINode::LiteFileINode(inode) => inode.get_ino(),
+            LiteINode::LiteSymlinkINode(inode) => inode.get_ino(),
+        }
+    }
+
+    fn get_generation(&self) -> Generation {
+        match self {
+            LiteINode::LiteDirINode(inode) => inode.get_generation(),
+            LiteINode::LiteFileINode(inode) => inode.get_generation(),
+            LiteINode::LiteSymlinkINode(inode) => inode.get_generation(),
+        }
+    }
+
+    fn get_lookup_count(&self) -> &AtomicI64 {
+        match self {
+            LiteINode::LiteDirINode(inode) => inode.get_lookup_count(),
+            LiteINode::LiteFileINode(inode) => inode.get_lookup_count(),
+            LiteINode::LiteSymlinkINode(inode) => inode.get_lookup_count(),
+        }
+    }
+
+    fn get_metadata(&self) -> anyhow::Result<rustix::fs::Stat> {
+        match self {
+            LiteINode::LiteDirINode(inode) => inode.get_metadata(),
+            LiteINode::LiteFileINode(inode) => inode.get_metadata(),
+            LiteINode::LiteSymlinkINode(inode) => inode.get_metadata(),
+        }
+    }
+
+    fn set_metadata(
+        &self,
+        mode: Option<u32>,
+        uid: Option<u32>,
+        gid: Option<u32>,
+        size: Option<u64>,
+        atime: Option<Timespec>,
+        mtime: Option<Timespec>,
+        ctime: Option<Timespec>,
+        crtime: Option<Timespec>,
+    ) -> anyhow::Result<()> {
+        match self {
+            LiteINode::LiteDirINode(inode) => {
+                inode.set_metadata(mode, uid, gid, size, atime, mtime, ctime, crtime)
+            }
+            LiteINode::LiteFileINode(inode) => {
+                inode.set_metadata(mode, uid, gid, size, atime, mtime, ctime, crtime)
+            }
+            LiteINode::LiteSymlinkINode(inode) => {
+                inode.set_metadata(mode, uid, gid, size, atime, mtime, ctime, crtime)
+            }
+        }
+    }
+
+    fn get_extended_attr(&self, name: &[u8]) -> anyhow::Result<Vec<u8>> {
+        match self {
+            LiteINode::LiteDirINode(inode) => inode.get_extended_attr(name),
+            LiteINode::LiteFileINode(inode) => inode.get_extended_attr(name),
+            LiteINode::LiteSymlinkINode(inode) => inode.get_extended_attr(name),
+        }
+    }
+
+    fn set_extended_attr(&self, name: &[u8], value: &[u8]) -> anyhow::Result<()> {
+        match self {
+            LiteINode::LiteDirINode(inode) => inode.set_extended_attr(name, value),
+            LiteINode::LiteFileINode(inode) => inode.set_extended_attr(name, value),
+            LiteINode::LiteSymlinkINode(inode) => inode.set_extended_attr(name, value),
+        }
+    }
+
+    fn remove_extended_attr(&self, name: &[u8]) -> anyhow::Result<()> {
+        match self {
+            LiteINode::LiteDirINode(inode) => inode.remove_extended_attr(name),
+            LiteINode::LiteFileINode(inode) => inode.remove_extended_attr(name),
+            LiteINode::LiteSymlinkINode(inode) => inode.remove_extended_attr(name),
+        }
+    }
+
+    fn list_extended_attrs(&self) -> anyhow::Result<Vec<Vec<u8>>> {
+        match self {
+            LiteINode::LiteDirINode(inode) => inode.list_extended_attrs(),
+            LiteINode::LiteFileINode(inode) => inode.list_extended_attrs(),
+            LiteINode::LiteSymlinkINode(inode) => inode.list_extended_attrs(),
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]

@@ -3,44 +3,37 @@
 use anyhow::Context;
 use fuser::FileType;
 use parking_lot::Mutex;
-use static_assertions::const_assert_eq;
 use std::{
-    ffi::{CString, c_int},
-    num::ParseIntError,
+    ffi::CString,
     os::{fd::AsFd, unix::ffi::OsStrExt},
     sync::{
         Arc,
-        atomic::{AtomicI64, AtomicU64, Ordering},
+        atomic::{AtomicI64, Ordering},
     },
     time::{Duration, SystemTime},
 };
 
-use fuser::{FUSE_ROOT_ID, FileAttr};
+use fuser::FUSE_ROOT_ID;
 use once_cell::sync::OnceCell;
-use rustix::{
-    fs::{Mode, OFlags},
-    io::Errno,
-};
+use rustix::io::Errno;
 
 use crate::{
     fuse_wrappers::{
         bindings::{
-            self, FUSE_CAP_HANDLE_KILLPRIV, FUSE_CAP_PARALLEL_DIROPS, FUSE_CAP_WRITEBACK_CACHE,
+            FUSE_CAP_HANDLE_KILLPRIV, FUSE_CAP_PARALLEL_DIROPS, FUSE_CAP_WRITEBACK_CACHE,
             fuse_entry_param,
         },
         fuse_low_level_ops::FuseLowLevelOps,
     },
     lite::{
-        IoWrapperFactory,
         name_translators::NameTranslator,
         unix::{
             FuseVfs, LiteDirINode, LiteFileINode, LiteINode, LiteINodeHeader, LiteSymlinkINode,
-            fstatat,
         },
     },
     vfs::{
         GenericINodeTable,
-        unix::{DirReader, FileINodeExt, Generation, INodeCore, INodeMetadata, INodeNumber},
+        unix::{DirReader, Generation, INodeCore, INodeNumber},
     },
 };
 
@@ -79,38 +72,6 @@ impl<Table: GenericINodeTable<LiteINode>> FuseVfs<Table> {
         } else {
             ino.0
         }
-    }
-
-    fn metadata_to_fileattr(&self, metadata: &INodeMetadata) -> anyhow::Result<FileAttr> {
-        Ok(FileAttr {
-            ino: self.ino_to_fuse(metadata.ino.try_into()?),
-            size: metadata.size.try_into()?,
-            blocks: metadata.blocks.try_into()?,
-            atime: timespec_to_systemtime(
-                metadata.atime.tv_sec,
-                metadata.atime.tv_nsec.try_into()?,
-            ),
-            mtime: timespec_to_systemtime(
-                metadata.mtime.tv_sec,
-                metadata.mtime.tv_nsec.try_into()?,
-            ),
-            ctime: timespec_to_systemtime(
-                metadata.ctime.tv_sec,
-                metadata.ctime.tv_nsec.try_into()?,
-            ),
-            crtime: timespec_to_systemtime(
-                metadata.crtime.tv_sec,
-                metadata.crtime.tv_nsec.try_into()?,
-            ),
-            kind: mode_to_filetype(metadata.mode.try_into()?),
-            perm: (metadata.mode & 0o777).try_into()?,
-            nlink: metadata.nlink.try_into()?,
-            uid: metadata.uid.try_into()?,
-            gid: metadata.gid.try_into()?,
-            rdev: metadata.rdev.try_into()?,
-            blksize: metadata.blksize.try_into()?,
-            flags: 0, // Not available in INodeMetadata
-        })
     }
 }
 
@@ -154,7 +115,11 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for FuseVfs<Table> {
             return Err(Errno::NOTDIR)?;
         };
         let encoded_cname = CString::new(self.name_translator.encode_name(name.to_bytes())?)?;
-        let mut st = fstatat(parent.as_fd(), &encoded_cname)?;
+        let mut st = rustix::fs::statat(
+            parent.as_fd(),
+            &encoded_cname,
+            rustix::fs::AtFlags::SYMLINK_NOFOLLOW,
+        )?;
         let child = self
             .inode_table
             .get_or_insert_default(INodeNumber(st.st_ino));
@@ -185,16 +150,13 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for FuseVfs<Table> {
                     Ok(LiteSymlinkINode::open(header, parent.as_fd(), encoded_cname)?.into())
                 }
                 _ => {
-                    return Err(Errno::PERM)
-                        .with_context(|| format!("Unsupported st_mode {}", st.st_mode));
+                    Err(Errno::PERM)
+                        .with_context(|| format!("Unsupported st_mode {}", st.st_mode))
                 }
             }
         })?;
         child.get_lookup_count().fetch_add(1, Ordering::SeqCst);
-        if let Some(sz) = child.maybe_size()? {
-            st.st_size = sz.try_into()?;
-            st.st_blocks = st.st_size / 512;
-        }
+        child.readjust_stat(&mut st)?;
 
         Ok(fuse_entry_param {
             ino: self.ino_to_fuse(child.get_ino()),

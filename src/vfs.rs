@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::BuildHasher, num::NonZeroUsize, sync::Arc};
+use std::{hash::BuildHasher, num::NonZeroUsize, sync::Arc};
 
 use ahash::AHashMap;
 use lru::LruCache;
@@ -54,7 +54,7 @@ pub struct ShardedMapINodeTable<T> {
 impl<T> ShardedMapINodeTable<T> {
     pub fn new(root_ino: INodeNumber, root_node: T, shard_count: usize) -> Self {
         Self {
-            root_ino: root_ino,
+            root_ino,
             root_node: Arc::new(OnceCell::with_value(root_node)),
             table: (0..shard_count)
                 .map(|_| Mutex::new(AHashMap::new()))
@@ -101,7 +101,7 @@ impl<T> GenericINodeTable<T> for ShardedMapINodeTable<T> {
         }
         let mut table = self.table[self.get_index(ino)].lock();
         let node = table.get(&ino);
-        if node.is_some_and(|v| v.get().is_some_and(|t| predicate(t))) {
+        if node.is_some_and(|v| v.get().is_some_and(predicate)) {
             table.remove(&ino);
         }
     }
@@ -122,7 +122,7 @@ impl<T> ShardedLruINodeTable<T> {
         capacity_per_shard: NonZeroUsize,
     ) -> Self {
         Self {
-            root_ino: root_ino,
+            root_ino,
             root_node: Arc::new(OnceCell::with_value(root_node)),
             table: (0..shard_count)
                 .map(|_| {
@@ -163,7 +163,7 @@ impl<T> GenericINodeTable<T> for ShardedLruINodeTable<T> {
             MaybeInitializedINode(
                 self.table[self.get_index(ino)]
                     .lock()
-                    .get_or_insert(ino, || Default::default())
+                    .get_or_insert(ino, Default::default)
                     .clone(),
             )
         }
@@ -175,7 +175,7 @@ impl<T> GenericINodeTable<T> for ShardedLruINodeTable<T> {
         }
         let mut table = self.table[self.get_index(ino)].lock();
         let node = table.get(&ino);
-        if node.is_some_and(|v| v.get().is_some_and(|t| predicate(t))) {
+        if node.is_some_and(|v| v.get().is_some_and(predicate)) {
             table.demote(&ino);
         }
     }
@@ -183,11 +183,8 @@ impl<T> GenericINodeTable<T> for ShardedLruINodeTable<T> {
 #[cfg(unix)]
 pub mod unix {
 
-    use std::{any::Any, sync::atomic::AtomicI64};
-
-    use crate::lite::unix::{LiteDirINode, LiteFileINode, LiteINode, LiteSymlinkINode};
-    use enum_dispatch::enum_dispatch;
     use rustix::fs::Timespec;
+    use std::sync::atomic::AtomicI64;
 
     pub use super::INodeNumber;
 
@@ -224,16 +221,10 @@ pub mod unix {
         /// Block size
         pub blksize: u32,
     }
-
-    #[enum_dispatch]
     pub trait INodeCore<StatType> {
         fn get_ino(&self) -> INodeNumber;
         fn get_generation(&self) -> Generation;
         fn get_lookup_count(&self) -> &AtomicI64;
-
-        /// Returns the size of the inode if it is different from `stat` calls.
-        fn maybe_size(&self) -> anyhow::Result<Option<u64>>;
-
         fn get_metadata(&self) -> anyhow::Result<StatType>;
         fn set_metadata(
             &self,

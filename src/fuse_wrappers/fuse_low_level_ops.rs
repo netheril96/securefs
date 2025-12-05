@@ -1012,7 +1012,7 @@ fn extract_errno(e: &anyhow::Error) -> c_int {
     if let Some(e) = e.downcast_ref::<std::io::Error>() {
         return e.raw_os_error().unwrap_or(Errno::IO.raw_os_error());
     }
-    if let Some(_) = e.downcast_ref::<INodeNotFoundError>() {
+    if e.downcast_ref::<INodeNotFoundError>().is_some() {
         return Errno::NOENT.raw_os_error();
     }
     Errno::IO.raw_os_error()
