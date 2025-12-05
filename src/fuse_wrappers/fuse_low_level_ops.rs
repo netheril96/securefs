@@ -7,8 +7,8 @@ use rustix::io::Errno;
 
 use crate::{
     fuse_wrappers::bindings::{
-        self, dev_t, fuse_add_direntry, fuse_conn_info, fuse_context, fuse_ctx, fuse_file_info,
-        fuse_forget_data, fuse_get_context, fuse_ino_t, fuse_reply_attr, fuse_reply_bmap,
+        self, dev_t, fuse_add_direntry, fuse_conn_info, fuse_ctx, fuse_file_info,
+        fuse_forget_data, fuse_ino_t, fuse_reply_attr, fuse_reply_bmap,
         fuse_reply_buf, fuse_reply_create, fuse_reply_entry, fuse_reply_err, fuse_reply_ioctl,
         fuse_reply_lock, fuse_reply_none, fuse_reply_open, fuse_reply_readlink, fuse_reply_statfs,
         fuse_reply_write, fuse_reply_xattr, fuse_req_ctx, fuse_req_t, fuse_req_userdata, mode_t,
@@ -17,6 +17,7 @@ use crate::{
     vfs::INodeNotFoundError,
 };
 
+#[derive(Debug)]
 pub struct FuseReq {
     req: fuse_req_t,
 }

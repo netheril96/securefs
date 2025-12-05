@@ -1,40 +1,42 @@
 #![cfg(feature = "fuse")]
 #![cfg(not(windows))]
 use anyhow::Context;
-use fuser::FileType;
 use parking_lot::Mutex;
 use std::{
-    ffi::{CStr, CString},
-    fs::DirEntry,
-    os::{fd::AsFd, unix::ffi::OsStrExt},
+    ffi::CString,
+    os::fd::AsFd,
     sync::{
         Arc,
-        atomic::{AtomicI64, Ordering},
+        atomic::{AtomicI64, AtomicU64, Ordering},
     },
     time::{Duration, SystemTime},
 };
 
-use fuser::FUSE_ROOT_ID;
 use once_cell::sync::OnceCell;
-use rustix::io::Errno;
+use rustix::{
+    fs::{Mode, OFlags},
+    io::Errno,
+};
 
 use crate::{
     fuse_wrappers::{
         bindings::{
             FUSE_CAP_HANDLE_KILLPRIV, FUSE_CAP_PARALLEL_DIROPS, FUSE_CAP_WRITEBACK_CACHE,
-            fuse_add_direntry, fuse_entry_param,
+            FUSE_ROOT_ID, fuse_entry_param,
         },
         fuse_low_level_ops::{FuseLowLevelOps, FuseReq},
     },
     lite::{
-        name_translators::NameTranslator,
+        IoWrapperStream,
+        name_translators::LegacyNameTranslator,
         unix::{
             LiteDirINode, LiteDirReader, LiteFileINode, LiteINode, LiteINodeHeader,
             LiteSymlinkINode, LiteVfs,
         },
     },
+    stream::{StdIoStream, lite::LiteAesGcmCryptStream},
     vfs::{
-        GenericINodeTable, INodeNotFoundError,
+        GenericINodeTable, INodeNotFoundError, ShardedMapINodeTable,
         unix::{DirINodeExt, DirReader, FileINodeExt, Generation, INodeCore, INodeNumber},
     },
 };
@@ -57,10 +59,10 @@ struct OpenedDescriptor {
 
 impl<Table: GenericINodeTable<LiteINode>> LiteVfs<Table> {
     fn ino_from_fuse(&self, ino: u64) -> INodeNumber {
-        if ino == FUSE_ROOT_ID {
+        if ino == FUSE_ROOT_ID.into() {
             self.inode_table.root_ino()
         } else if ino == self.inode_table.root_ino().0 {
-            INodeNumber(FUSE_ROOT_ID)
+            INodeNumber(FUSE_ROOT_ID.into())
         } else {
             INodeNumber(ino)
         }
@@ -68,8 +70,8 @@ impl<Table: GenericINodeTable<LiteINode>> LiteVfs<Table> {
 
     fn ino_to_fuse(&self, ino: INodeNumber) -> u64 {
         if ino == self.inode_table.root_ino() {
-            FUSE_ROOT_ID
-        } else if ino.0 == FUSE_ROOT_ID {
+            FUSE_ROOT_ID.into()
+        } else if ino.0 == FUSE_ROOT_ID.into() {
             self.inode_table.root_ino().0
         } else {
             ino.0
@@ -81,29 +83,23 @@ impl<Table: GenericINodeTable<LiteINode>> LiteVfs<Table> {
     }
 }
 
-fn mode_to_filetype(mode: libc::mode_t) -> FileType {
-    match mode & libc::S_IFMT {
-        libc::S_IFDIR => FileType::Directory,
-        libc::S_IFREG => FileType::RegularFile,
-        libc::S_IFLNK => FileType::Symlink,
-        libc::S_IFBLK => FileType::BlockDevice,
-        libc::S_IFCHR => FileType::CharDevice,
-        libc::S_IFIFO => FileType::NamedPipe,
-        libc::S_IFSOCK => FileType::Socket,
-        _ => {
-            // This should not happen
-            log::warn!("Unknown file type with mode {mode:o}");
-            FileType::RegularFile
-        }
-    }
-}
+trace::init_depth_var!();
 
+#[trace::trace]
 impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
     fn init(&mut self, conn: &mut crate::fuse_wrappers::bindings::fuse_conn_info) {
-        conn.max_readahead = 1 << 24;
-        conn.max_background = 32;
-        conn.max_write = 1 << 24;
-        conn.want |= FUSE_CAP_WRITEBACK_CACHE | FUSE_CAP_HANDLE_KILLPRIV | FUSE_CAP_PARALLEL_DIROPS;
+        // conn.max_readahead = 1 << 24;
+        // conn.max_background = 32;
+        // conn.max_write = 1 << 24;
+        if conn.capable & FUSE_CAP_WRITEBACK_CACHE != 0 {
+            conn.want |= FUSE_CAP_WRITEBACK_CACHE
+        }
+        if conn.capable & FUSE_CAP_HANDLE_KILLPRIV != 0 {
+            conn.want |= FUSE_CAP_HANDLE_KILLPRIV
+        }
+        if conn.capable & FUSE_CAP_PARALLEL_DIROPS != 0 {
+            conn.want |= FUSE_CAP_PARALLEL_DIROPS
+        }
     }
 
     fn can_lookup(&self) -> bool {
@@ -518,5 +514,113 @@ fn timespec_to_systemtime(tv_sec: i64, tv_nsec: u32) -> SystemTime {
         SystemTime::UNIX_EPOCH + Duration::new(tv_sec as u64, tv_nsec)
     } else {
         SystemTime::UNIX_EPOCH - Duration::new(-tv_sec as u64, tv_nsec)
+    }
+}
+
+pub mod testing {
+    use anyhow::Ok;
+
+    use crate::{
+        fuse_wrappers::fuse_main::run_fuse_main,
+        lite::IoWrapperFactory,
+        stream::{
+            LengthType,
+            lite::{ID_SIZE, LiteParamCalculator},
+        },
+    };
+
+    use super::*;
+
+    impl IoWrapperStream for LiteAesGcmCryptStream<StdIoStream> {
+        fn as_fd(&self) -> std::os::unix::prelude::BorrowedFd<'_> {
+            unsafe { self.get_inner().as_ref().as_fd() }
+        }
+
+        fn replace_fd(&mut self, fd: std::os::unix::prelude::OwnedFd) {
+            unsafe { self.replace_inner(StdIoStream::new(fd.into())) };
+        }
+    }
+
+    struct ParamCalc {
+        padding_size: LengthType,
+    }
+
+    impl LiteParamCalculator for ParamCalc {
+        fn compute_session_key(&self, salt: &[u8; ID_SIZE]) -> anyhow::Result<[u8; ID_SIZE]> {
+            let mut key = [0u8; ID_SIZE];
+            for i in 0..ID_SIZE {
+                key[i] = salt[i] ^ 0xff;
+            }
+            Ok(key)
+        }
+
+        fn compute_padding(&self, _: &[u8; ID_SIZE]) -> anyhow::Result<LengthType> {
+            Ok(self.padding_size)
+        }
+
+        fn always_zero_padding(&self) -> bool {
+            self.padding_size == 0
+        }
+    }
+
+    struct Factory {}
+
+    impl IoWrapperFactory for Factory {
+        fn compute_virtual_size(&self, underlying_size: u64) -> Option<u64> {
+            None
+        }
+
+        fn wrap(
+            &self,
+            fd: std::os::unix::prelude::OwnedFd,
+        ) -> anyhow::Result<Box<dyn IoWrapperStream>> {
+            Ok(Box::new(LiteAesGcmCryptStream::new(
+                StdIoStream::new(fd.into()),
+                &ParamCalc { padding_size: 32 },
+                12,
+                256,
+                true,
+            )?))
+        }
+    }
+
+    pub fn simple_test_fuse_main() -> anyhow::Result<()> {
+        let name_translator = Arc::new(LegacyNameTranslator::new([42u8; 32]));
+
+        let mut root_tmp_dir = tempfile::TempDir::new()?;
+        root_tmp_dir.disable_cleanup(true);
+        log::info!("Root tmp dir: {:?}", root_tmp_dir.path());
+        let root_stat = rustix::fs::stat(root_tmp_dir.path())?;
+
+        let root_ino = INodeNumber(root_stat.st_ino);
+        let root_node = LiteDirINode::new(
+            LiteINodeHeader {
+                ino: root_ino,
+                generation: Generation(0),
+                lookup_count: AtomicI64::new(0),
+                name_translator: name_translator.clone(),
+            },
+            rustix::fs::open(root_tmp_dir.path(), OFlags::RDONLY, Mode::empty())?,
+        );
+
+        let mut vfs: Box<Box<dyn FuseLowLevelOps>> = Box::new(Box::new(LiteVfs {
+            inode_table: ShardedMapINodeTable::new(root_ino, root_node.into(), 32),
+            name_translator: name_translator,
+            wrapper_factory: Box::new(Factory {}),
+            generation: AtomicU64::new(100),
+            device_serial: Default::default(),
+            attr_cache_duration: Duration::from_secs(30),
+            readonly: false,
+        }));
+
+        run_fuse_main(
+            &[
+                c"securefs",
+                c"-o",
+                c"default_permissions",
+                c"/tmp/nonprod_mount",
+            ],
+            &mut vfs,
+        )
     }
 }

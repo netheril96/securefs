@@ -1,12 +1,13 @@
 use std::{ffi::CStr, fmt::Display, os::raw::c_void};
 
+use anyhow::Context;
 use scopeguard::defer;
 
 use crate::fuse_wrappers::{
     bindings::{
         self, fuse_args, fuse_cmdline_opts, fuse_lowlevel_ops, fuse_opt_free_args,
         fuse_parse_cmdline, fuse_remove_signal_handlers, fuse_session, fuse_session_destroy,
-        fuse_session_mount, fuse_session_unmount, fuse_set_signal_handlers,
+        fuse_session_loop_mt, fuse_session_mount, fuse_session_unmount, fuse_set_signal_handlers,
     },
     fuse_low_level_ops::{FuseLowLevelOps, generate_libfuse_low_level_ops},
 };
@@ -60,13 +61,15 @@ pub fn run_fuse_main(
         Err(FuseInitError {})?;
     }
     let fuse_ops = generate_libfuse_low_level_ops(ops);
+    let userdata = &raw mut **ops;
+    log::trace!("user data at {}", userdata as usize);
     let session = scopeguard::guard(
         unsafe {
             fuse_session_new(
                 &mut *fuse_args,
                 &fuse_ops,
                 size_of::<bindings::fuse_lowlevel_ops>(),
-                &raw mut *ops as *mut c_void,
+                userdata as usize as _,
             )
         },
         |s| unsafe {
@@ -90,5 +93,10 @@ pub fn run_fuse_main(
     }
     defer!(unsafe { fuse_session_unmount(*session) });
 
+    let ret = unsafe { fuse_session_loop_mt(*session, std::ptr::null_mut()) };
+    if ret != 0 {
+        return Err(FuseInitError).with_context(|| format!("fuse_session_loop_mt returns {ret}"));
+    }
+    log::info!("fuse_session_loop_mt returned {ret}");
     Ok(())
 }

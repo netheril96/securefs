@@ -10,8 +10,8 @@ use crate::{
     stream::{LengthType, Stream, block::MultipleBlockReaderWriter},
 };
 
-const ID_SIZE: usize = 16;
-const MAX_BLOCKS: u64 = (1u64 << 31) - 1;
+pub const ID_SIZE: usize = 16;
+pub const MAX_BLOCKS: u64 = (1u64 << 31) - 1;
 
 pub trait LiteParamCalculator {
     fn compute_session_key(&self, salt: &[u8; ID_SIZE]) -> anyhow::Result<[u8; ID_SIZE]>;
@@ -130,8 +130,8 @@ impl<S: Stream> LiteAesGcmCryptStream<S> {
         num_blocks * block_size + residue.saturating_sub(iv_size + 16)
     }
 
-    pub unsafe fn get_inner(&mut self) -> &mut S {
-        &mut self.inner
+    pub unsafe fn get_inner(&self) -> &S {
+        &self.inner
     }
 
     pub unsafe fn replace_inner(&mut self, inner: S) -> S {

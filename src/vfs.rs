@@ -1,4 +1,4 @@
-use std::{hash::BuildHasher, num::NonZeroUsize, sync::Arc};
+use std::{num::NonZeroUsize, sync::Arc};
 
 use ahash::AHashMap;
 use lru::LruCache;
