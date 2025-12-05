@@ -5,6 +5,7 @@ use fuser::FileType;
 use parking_lot::Mutex;
 use std::{
     ffi::CString,
+    fs::DirEntry,
     os::{fd::AsFd, unix::ffi::OsStrExt},
     sync::{
         Arc,
@@ -21,14 +22,15 @@ use crate::{
     fuse_wrappers::{
         bindings::{
             FUSE_CAP_HANDLE_KILLPRIV, FUSE_CAP_PARALLEL_DIROPS, FUSE_CAP_WRITEBACK_CACHE,
-            fuse_entry_param,
+            fuse_add_direntry, fuse_entry_param,
         },
-        fuse_low_level_ops::FuseLowLevelOps,
+        fuse_low_level_ops::{FuseLowLevelOps, FuseReq},
     },
     lite::{
         name_translators::NameTranslator,
         unix::{
-            LiteDirINode, LiteFileINode, LiteINode, LiteINodeHeader, LiteSymlinkINode, LiteVfs,
+            LiteDirINode, LiteDirReader, LiteFileINode, LiteINode, LiteINodeHeader,
+            LiteSymlinkINode, LiteVfs,
         },
     },
     vfs::{
@@ -44,7 +46,7 @@ enum OpenedData {
         appending: bool,
     },
     OpenedDir {
-        reader: Mutex<Box<dyn DirReader>>,
+        reader: Mutex<LiteDirReader>,
     },
 }
 
@@ -110,6 +112,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
 
     fn lookup(
         &self,
+        _req: FuseReq,
         parent: crate::fuse_wrappers::bindings::fuse_ino_t,
         name: &std::ffi::CStr,
     ) -> anyhow::Result<crate::fuse_wrappers::bindings::fuse_entry_param> {
@@ -177,6 +180,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
 
     fn getattr(
         &self,
+        _req: FuseReq,
         ino: crate::fuse_wrappers::bindings::fuse_ino_t,
         fi: &crate::fuse_wrappers::bindings::fuse_file_info,
     ) -> anyhow::Result<(crate::fuse_wrappers::bindings::stat, f64)> {
@@ -211,6 +215,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
 
     fn create(
         &self,
+        _req: FuseReq,
         parent: crate::fuse_wrappers::bindings::fuse_ino_t,
         name: &std::ffi::CStr,
         mode: crate::fuse_wrappers::bindings::mode_t,
@@ -277,12 +282,11 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
 
     fn open(
         &self,
+        _req: FuseReq,
         ino: crate::fuse_wrappers::bindings::fuse_ino_t,
         fi: &crate::fuse_wrappers::bindings::fuse_file_info,
     ) -> anyhow::Result<crate::fuse_wrappers::bindings::fuse_file_info> {
-        let node = self
-            .inode_table
-            .get_or_insert_default(self.ino_from_fuse(ino));
+        let node = self.inode_table.get(self.ino_from_fuse(ino));
         let opened_data = {
             let n = node.unwrap()?;
             match n {
@@ -305,7 +309,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         };
 
         let descriptor = Box::new(OpenedDescriptor {
-            inode: node.0,
+            inode: node.0.expect("already checked"),
             data: opened_data,
         });
         let mut new_fi = *fi;
@@ -319,7 +323,8 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
 
     fn read(
         &self,
-        ino: crate::fuse_wrappers::bindings::fuse_ino_t,
+        _req: FuseReq,
+        _ino: crate::fuse_wrappers::bindings::fuse_ino_t,
         size: usize,
         off: crate::fuse_wrappers::bindings::off_t,
         fi: &crate::fuse_wrappers::bindings::fuse_file_info,
@@ -348,7 +353,8 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
 
     fn write(
         &self,
-        ino: crate::fuse_wrappers::bindings::fuse_ino_t,
+        _req: FuseReq,
+        _ino: crate::fuse_wrappers::bindings::fuse_ino_t,
         buf: &[u8],
         off: crate::fuse_wrappers::bindings::off_t,
         fi: &crate::fuse_wrappers::bindings::fuse_file_info,
@@ -385,13 +391,105 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
 
     fn release(
         &self,
-        ino: crate::fuse_wrappers::bindings::fuse_ino_t,
+        _req: FuseReq,
+        _ino: crate::fuse_wrappers::bindings::fuse_ino_t,
         fi: &crate::fuse_wrappers::bindings::fuse_file_info,
     ) -> anyhow::Result<()> {
         if fi.fh != 0 {
             drop(unsafe { Box::from_raw(fi.fh as *mut OpenedDescriptor) });
         }
         Ok(())
+    }
+
+    fn can_opendir(&self) -> bool {
+        true
+    }
+
+    fn opendir(
+        &self,
+        _req: FuseReq,
+        ino: crate::fuse_wrappers::bindings::fuse_ino_t,
+        fi: &crate::fuse_wrappers::bindings::fuse_file_info,
+    ) -> anyhow::Result<crate::fuse_wrappers::bindings::fuse_file_info> {
+        let node = self.inode_table.get(self.ino_from_fuse(ino));
+        let opened_data = {
+            let n = node.unwrap()?;
+            match n {
+                LiteINode::LiteDirINode(dir) => OpenedData::OpenedDir {
+                    reader: Mutex::new(dir.create_dir_reader()?),
+                },
+                _ => return Err(Errno::INVAL)?,
+            }
+        };
+
+        let descriptor = Box::new(OpenedDescriptor {
+            inode: node.0.expect("already checked"),
+            data: opened_data,
+        });
+        let mut new_fi = *fi;
+        new_fi.fh = Box::into_raw(descriptor) as u64;
+        Ok(new_fi)
+    }
+
+    fn can_readdir(&self) -> bool {
+        true
+    }
+
+    fn readdir(
+        &self,
+        mut req: FuseReq,
+        _ino: crate::fuse_wrappers::bindings::fuse_ino_t,
+        size: usize,
+        off: crate::fuse_wrappers::bindings::off_t,
+        fi: &crate::fuse_wrappers::bindings::fuse_file_info,
+    ) -> anyhow::Result<Vec<u8>> {
+        if fi.fh == 0 {
+            return Err(Errno::BADF)?;
+        }
+
+        let mut buffer = vec![0u8; size];
+
+        let desc = unsafe { (fi.fh as *mut OpenedDescriptor).as_mut().unwrap() };
+        let OpenedData::OpenedDir { reader } = &mut desc.data else {
+            return Err(Errno::NOTDIR)?;
+        };
+
+        let mut reader = reader.lock();
+        if off == 0 && reader.current_position() != 0 {
+            reader.rewind()?;
+        } else if off != reader.current_position() {
+            return Err(Errno::INVAL).with_context(
+                || format!("expecting a pagination request for readdir at offset {}, got arbitrary seek at offset {}",
+                     reader.current_position(), off));
+        }
+
+        loop {
+            if !reader.move_next()? {
+                break;
+            }
+            let entry = reader.current().unwrap();
+            let name = CString::new(entry.name.clone())?;
+            let mut st: crate::fuse_wrappers::bindings::stat = unsafe { std::mem::zeroed() };
+            st.st_ino = self.ino_to_fuse(entry.ino);
+            //st.st_mode = (entry.filetype.to_s_if() | 0o555) as _;
+            if !req.add_dir_entry(&mut buffer, &name, &st, entry.offset) {
+                break;
+            }
+        }
+        Ok(buffer)
+    }
+
+    fn can_releasedir(&self) -> bool {
+        true
+    }
+
+    fn releasedir(
+        &self,
+        req: FuseReq,
+        ino: crate::fuse_wrappers::bindings::fuse_ino_t,
+        fi: &crate::fuse_wrappers::bindings::fuse_file_info,
+    ) -> anyhow::Result<()> {
+        return self.release(req, ino, fi);
     }
 }
 
