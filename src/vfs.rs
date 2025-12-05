@@ -14,7 +14,7 @@ pub enum INodeNotFoundError {
     INodeNotInitialized,
 }
 
-pub struct MaybeExistingINode<T>(Option<Arc<OnceCell<T>>>);
+pub struct MaybeExistingINode<T>(pub Option<Arc<OnceCell<T>>>);
 
 impl<T> MaybeExistingINode<T> {
     pub fn unwrap(&self) -> anyhow::Result<&T> {
@@ -27,11 +27,18 @@ impl<T> MaybeExistingINode<T> {
     }
 }
 
-pub struct MaybeInitializedINode<T>(Arc<OnceCell<T>>);
+pub struct MaybeInitializedINode<T>(pub Arc<OnceCell<T>>);
 
 impl<T> MaybeInitializedINode<T> {
     pub fn get_or_create(&self, creator: impl FnOnce() -> anyhow::Result<T>) -> anyhow::Result<&T> {
         self.0.get_or_try_init(creator)
+    }
+
+    pub fn unwrap(&self) -> anyhow::Result<&T> {
+        Ok(self
+            .0
+            .get()
+            .ok_or(INodeNotFoundError::INodeNotInitialized)?)
     }
 }
 

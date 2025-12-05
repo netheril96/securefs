@@ -40,7 +40,7 @@ pub trait FuseLowLevelOps {
     fn getattr(
         &self,
         ino: fuse_ino_t,
-        fi: &mut bindings::fuse_file_info,
+        fi: &bindings::fuse_file_info,
     ) -> anyhow::Result<(bindings::stat, f64)> {
         unimplemented!()
     }
@@ -52,7 +52,7 @@ pub trait FuseLowLevelOps {
         ino: fuse_ino_t,
         attr: &mut bindings::stat,
         to_set: i32,
-        fi: &mut bindings::fuse_file_info,
+        fi: &bindings::fuse_file_info,
     ) -> anyhow::Result<(bindings::stat, f64)> {
         unimplemented!()
     }
@@ -135,7 +135,11 @@ pub trait FuseLowLevelOps {
     fn can_open(&self) -> bool {
         false
     }
-    fn open(&self, ino: fuse_ino_t, fi: &mut bindings::fuse_file_info) -> anyhow::Result<()> {
+    fn open(
+        &self,
+        ino: fuse_ino_t,
+        fi: &bindings::fuse_file_info,
+    ) -> anyhow::Result<bindings::fuse_file_info> {
         unimplemented!()
     }
     fn can_read(&self) -> bool {
@@ -146,8 +150,8 @@ pub trait FuseLowLevelOps {
         ino: fuse_ino_t,
         size: usize,
         off: off_t,
-        fi: &mut bindings::fuse_file_info,
-    ) -> anyhow::Result<&[u8]> {
+        fi: &bindings::fuse_file_info,
+    ) -> anyhow::Result<Vec<u8>> {
         unimplemented!()
     }
     fn can_write(&self) -> bool {
@@ -158,20 +162,20 @@ pub trait FuseLowLevelOps {
         ino: fuse_ino_t,
         buf: &[u8],
         off: off_t,
-        fi: &mut bindings::fuse_file_info,
+        fi: &bindings::fuse_file_info,
     ) -> anyhow::Result<usize> {
         unimplemented!()
     }
     fn can_flush(&self) -> bool {
         false
     }
-    fn flush(&self, ino: fuse_ino_t, fi: &mut bindings::fuse_file_info) -> anyhow::Result<()> {
+    fn flush(&self, ino: fuse_ino_t, fi: &bindings::fuse_file_info) -> anyhow::Result<()> {
         unimplemented!()
     }
     fn can_release(&self) -> bool {
         false
     }
-    fn release(&self, ino: fuse_ino_t, fi: &mut bindings::fuse_file_info) -> anyhow::Result<()> {
+    fn release(&self, ino: fuse_ino_t, fi: &bindings::fuse_file_info) -> anyhow::Result<()> {
         unimplemented!()
     }
     fn can_fsync(&self) -> bool {
@@ -181,14 +185,14 @@ pub trait FuseLowLevelOps {
         &self,
         ino: fuse_ino_t,
         datasync: i32,
-        fi: &mut bindings::fuse_file_info,
+        fi: &bindings::fuse_file_info,
     ) -> anyhow::Result<()> {
         unimplemented!()
     }
     fn can_opendir(&self) -> bool {
         false
     }
-    fn opendir(&self, ino: fuse_ino_t, fi: &mut bindings::fuse_file_info) -> anyhow::Result<()> {
+    fn opendir(&self, ino: fuse_ino_t, fi: &bindings::fuse_file_info) -> anyhow::Result<()> {
         unimplemented!()
     }
     fn can_readdir(&self) -> bool {
@@ -199,14 +203,14 @@ pub trait FuseLowLevelOps {
         ino: fuse_ino_t,
         size: usize,
         off: off_t,
-        fi: &mut bindings::fuse_file_info,
+        fi: &bindings::fuse_file_info,
     ) -> anyhow::Result<Vec<u8>> {
         unimplemented!()
     }
     fn can_releasedir(&self) -> bool {
         false
     }
-    fn releasedir(&self, ino: fuse_ino_t, fi: &mut bindings::fuse_file_info) -> anyhow::Result<()> {
+    fn releasedir(&self, ino: fuse_ino_t, fi: &bindings::fuse_file_info) -> anyhow::Result<()> {
         unimplemented!()
     }
     fn can_fsyncdir(&self) -> bool {
@@ -216,7 +220,7 @@ pub trait FuseLowLevelOps {
         &self,
         ino: fuse_ino_t,
         datasync: i32,
-        fi: &mut bindings::fuse_file_info,
+        fi: &bindings::fuse_file_info,
     ) -> anyhow::Result<()> {
         unimplemented!()
     }
@@ -270,7 +274,7 @@ pub trait FuseLowLevelOps {
         parent: fuse_ino_t,
         name: &CStr,
         mode: mode_t,
-        fi: &mut bindings::fuse_file_info,
+        fi: &bindings::fuse_file_info,
     ) -> anyhow::Result<(bindings::fuse_entry_param, bindings::fuse_file_info)> {
         unimplemented!()
     }
@@ -280,7 +284,7 @@ pub trait FuseLowLevelOps {
     fn getlk(
         &self,
         ino: fuse_ino_t,
-        fi: &mut bindings::fuse_file_info,
+        fi: &bindings::fuse_file_info,
         lock: &mut bindings::flock,
     ) -> anyhow::Result<bindings::flock> {
         unimplemented!()
@@ -291,7 +295,7 @@ pub trait FuseLowLevelOps {
     fn setlk(
         &self,
         ino: fuse_ino_t,
-        fi: &mut bindings::fuse_file_info,
+        fi: &bindings::fuse_file_info,
         lock: &mut bindings::flock,
         sleep: i32,
     ) -> anyhow::Result<()> {
@@ -311,7 +315,7 @@ pub trait FuseLowLevelOps {
         ino: fuse_ino_t,
         cmd: u32,
         arg: *mut c_void,
-        fi: &mut bindings::fuse_file_info,
+        fi: &bindings::fuse_file_info,
         flags: u32,
         in_buf: &[u8],
         out_bufsz: usize,
@@ -324,7 +328,7 @@ pub trait FuseLowLevelOps {
     fn poll(
         &self,
         ino: fuse_ino_t,
-        fi: &mut bindings::fuse_file_info,
+        fi: &bindings::fuse_file_info,
         ph: &mut bindings::fuse_pollhandle,
     ) -> anyhow::Result<u32> {
         unimplemented!()
@@ -337,7 +341,7 @@ pub trait FuseLowLevelOps {
         ino: fuse_ino_t,
         bufv: &mut bindings::fuse_bufvec,
         off: off_t,
-        fi: &mut bindings::fuse_file_info,
+        fi: &bindings::fuse_file_info,
     ) -> anyhow::Result<usize> {
         unimplemented!()
     }
@@ -350,12 +354,7 @@ pub trait FuseLowLevelOps {
     fn can_flock(&self) -> bool {
         false
     }
-    fn flock(
-        &self,
-        ino: fuse_ino_t,
-        fi: &mut bindings::fuse_file_info,
-        op: i32,
-    ) -> anyhow::Result<()> {
+    fn flock(&self, ino: fuse_ino_t, fi: &bindings::fuse_file_info, op: i32) -> anyhow::Result<()> {
         unimplemented!()
     }
 }
@@ -400,7 +399,7 @@ extern "C" fn rs_forget(req: fuse_req_t, ino: fuse_ino_t, nlookup: u64) {
 }
 
 extern "C" fn rs_getattr(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info) {
-    match get_user_data(&req).getattr(ino, unsafe { fi.as_mut().unwrap() }) {
+    match get_user_data(&req).getattr(ino, unsafe { fi.as_ref().unwrap() }) {
         Ok((stat, timeout)) => unsafe {
             fuse_reply_attr(req, &stat, timeout);
         },
@@ -418,7 +417,7 @@ extern "C" fn rs_setattr(
     fi: *mut fuse_file_info,
 ) {
     match get_user_data(&req).setattr(ino, unsafe { attr.as_mut().unwrap() }, to_set, unsafe {
-        fi.as_mut().unwrap()
+        fi.as_ref().unwrap()
     }) {
         Ok((stat, timeout)) => unsafe {
             fuse_reply_attr(req, &stat, timeout);
@@ -550,9 +549,9 @@ extern "C" fn rs_link(
 }
 
 extern "C" fn rs_open(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info) {
-    match get_user_data(&req).open(ino, unsafe { fi.as_mut().unwrap() }) {
-        Ok(()) => unsafe {
-            fuse_reply_open(req, fi);
+    match get_user_data(&req).open(ino, unsafe { fi.as_ref().unwrap() }) {
+        Ok(new_fi) => unsafe {
+            fuse_reply_open(req, &new_fi);
         },
         Err(e) => unsafe {
             fuse_reply_err(req, extract_errno(&e));
@@ -567,7 +566,7 @@ extern "C" fn rs_read(
     off: off_t,
     fi: *mut fuse_file_info,
 ) {
-    match get_user_data(&req).read(ino, size, off, unsafe { fi.as_mut().unwrap() }) {
+    match get_user_data(&req).read(ino, size, off, unsafe { fi.as_ref().unwrap() }) {
         Ok(data) => unsafe {
             fuse_reply_buf(req, data.as_ptr() as *const c_char, data.len());
         },
@@ -586,7 +585,7 @@ extern "C" fn rs_write(
     fi: *mut fuse_file_info,
 ) {
     let slice = unsafe { std::slice::from_raw_parts(buf as *const u8, size) };
-    match get_user_data(&req).write(ino, slice, off, unsafe { fi.as_mut().unwrap() }) {
+    match get_user_data(&req).write(ino, slice, off, unsafe { fi.as_ref().unwrap() }) {
         Ok(written) => unsafe {
             fuse_reply_write(req, written);
         },
@@ -597,7 +596,7 @@ extern "C" fn rs_write(
 }
 
 extern "C" fn rs_flush(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info) {
-    match get_user_data(&req).flush(ino, unsafe { fi.as_mut().unwrap() }) {
+    match get_user_data(&req).flush(ino, unsafe { fi.as_ref().unwrap() }) {
         Ok(()) => unsafe {
             fuse_reply_err(req, 0);
         },
@@ -608,7 +607,7 @@ extern "C" fn rs_flush(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info
 }
 
 extern "C" fn rs_release(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info) {
-    match get_user_data(&req).release(ino, unsafe { fi.as_mut().unwrap() }) {
+    match get_user_data(&req).release(ino, unsafe { fi.as_ref().unwrap() }) {
         Ok(()) => unsafe {
             fuse_reply_err(req, 0);
         },
@@ -619,7 +618,7 @@ extern "C" fn rs_release(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_in
 }
 
 extern "C" fn rs_fsync(req: fuse_req_t, ino: fuse_ino_t, datasync: c_int, fi: *mut fuse_file_info) {
-    match get_user_data(&req).fsync(ino, datasync, unsafe { fi.as_mut().unwrap() }) {
+    match get_user_data(&req).fsync(ino, datasync, unsafe { fi.as_ref().unwrap() }) {
         Ok(()) => unsafe {
             fuse_reply_err(req, 0);
         },
@@ -630,7 +629,7 @@ extern "C" fn rs_fsync(req: fuse_req_t, ino: fuse_ino_t, datasync: c_int, fi: *m
 }
 
 extern "C" fn rs_opendir(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info) {
-    match get_user_data(&req).opendir(ino, unsafe { fi.as_mut().unwrap() }) {
+    match get_user_data(&req).opendir(ino, unsafe { fi.as_ref().unwrap() }) {
         Ok(()) => unsafe {
             fuse_reply_open(req, fi);
         },
@@ -647,7 +646,7 @@ extern "C" fn rs_readdir(
     off: off_t,
     fi: *mut fuse_file_info,
 ) {
-    match get_user_data(&req).readdir(ino, size, off, unsafe { fi.as_mut().unwrap() }) {
+    match get_user_data(&req).readdir(ino, size, off, unsafe { fi.as_ref().unwrap() }) {
         Ok(data) => unsafe {
             fuse_reply_buf(req, data.as_ptr() as *const c_char, data.len());
         },
@@ -658,7 +657,7 @@ extern "C" fn rs_readdir(
 }
 
 extern "C" fn rs_releasedir(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info) {
-    match get_user_data(&req).releasedir(ino, unsafe { fi.as_mut().unwrap() }) {
+    match get_user_data(&req).releasedir(ino, unsafe { fi.as_ref().unwrap() }) {
         Ok(()) => unsafe {
             fuse_reply_err(req, 0);
         },
@@ -674,7 +673,7 @@ extern "C" fn rs_fsyncdir(
     datasync: c_int,
     fi: *mut fuse_file_info,
 ) {
-    match get_user_data(&req).fsyncdir(ino, datasync, unsafe { fi.as_mut().unwrap() }) {
+    match get_user_data(&req).fsyncdir(ino, datasync, unsafe { fi.as_ref().unwrap() }) {
         Ok(()) => unsafe {
             fuse_reply_err(req, 0);
         },
@@ -777,7 +776,7 @@ extern "C" fn rs_create(
     fi: *mut fuse_file_info,
 ) {
     let name = unsafe { CStr::from_ptr(name) };
-    match get_user_data(&req).create(parent, name, mode, unsafe { fi.as_mut().unwrap() }) {
+    match get_user_data(&req).create(parent, name, mode, unsafe { fi.as_ref().unwrap() }) {
         Ok((entry, fi)) => unsafe {
             fuse_reply_create(req, &entry, &fi);
         },
@@ -793,7 +792,7 @@ extern "C" fn rs_getlk(
     fi: *mut fuse_file_info,
     lock: *mut bindings::flock,
 ) {
-    match get_user_data(&req).getlk(ino, unsafe { fi.as_mut().unwrap() }, unsafe {
+    match get_user_data(&req).getlk(ino, unsafe { fi.as_ref().unwrap() }, unsafe {
         lock.as_mut().unwrap()
     }) {
         Ok(lock) => unsafe {
@@ -814,7 +813,7 @@ extern "C" fn rs_setlk(
 ) {
     match get_user_data(&req).setlk(
         ino,
-        unsafe { fi.as_mut().unwrap() },
+        unsafe { fi.as_ref().unwrap() },
         unsafe { lock.as_mut().unwrap() },
         sleep,
     ) {
@@ -854,7 +853,7 @@ extern "C" fn rs_ioctl(
         ino,
         cmd,
         arg,
-        unsafe { fi.as_mut().unwrap() },
+        unsafe { fi.as_ref().unwrap() },
         flags,
         in_slice,
         out_bufsz,
@@ -881,7 +880,7 @@ extern "C" fn rs_forget_multi(req: fuse_req_t, count: usize, forgets: *mut fuse_
 }
 
 extern "C" fn rs_flock(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info, op: c_int) {
-    match get_user_data(&req).flock(ino, unsafe { fi.as_mut().unwrap() }, op) {
+    match get_user_data(&req).flock(ino, unsafe { fi.as_ref().unwrap() }, op) {
         Ok(()) => unsafe {
             fuse_reply_err(req, 0);
         },
