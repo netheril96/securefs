@@ -1,9 +1,12 @@
 #![cfg(feature = "fuse")]
 #![cfg(not(windows))]
+use anyhow::Context;
 use fuser::FileType;
 use parking_lot::Mutex;
+use static_assertions::const_assert_eq;
 use std::{
-    ffi::c_int,
+    ffi::{CString, c_int},
+    num::ParseIntError,
     os::{fd::AsFd, unix::ffi::OsStrExt},
     sync::{
         Arc,
@@ -20,11 +23,19 @@ use rustix::{
 };
 
 use crate::{
+    fuse_wrappers::{
+        bindings::{
+            self, FUSE_CAP_HANDLE_KILLPRIV, FUSE_CAP_PARALLEL_DIROPS, FUSE_CAP_WRITEBACK_CACHE,
+            fuse_entry_param,
+        },
+        fuse_low_level_ops::FuseLowLevelOps,
+    },
     lite::{
         IoWrapperFactory,
         name_translators::NameTranslator,
         unix::{
             FuseVfs, LiteDirINode, LiteFileINode, LiteINode, LiteINodeHeader, LiteSymlinkINode,
+            fstatat,
         },
     },
     vfs::{
@@ -117,6 +128,81 @@ fn mode_to_filetype(mode: libc::mode_t) -> FileType {
             log::warn!("Unknown file type with mode {mode:o}");
             FileType::RegularFile
         }
+    }
+}
+
+impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for FuseVfs<Table> {
+    fn init(&mut self, conn: &mut crate::fuse_wrappers::bindings::fuse_conn_info) {
+        conn.max_readahead = 1 << 24;
+        conn.max_background = 32;
+        conn.max_write = 1 << 24;
+        conn.want |= FUSE_CAP_WRITEBACK_CACHE | FUSE_CAP_HANDLE_KILLPRIV | FUSE_CAP_PARALLEL_DIROPS;
+    }
+
+    fn can_lookup(&self) -> bool {
+        true
+    }
+
+    fn lookup(
+        &self,
+        parent: crate::fuse_wrappers::bindings::fuse_ino_t,
+        name: &std::ffi::CStr,
+    ) -> anyhow::Result<crate::fuse_wrappers::bindings::fuse_entry_param> {
+        let parent = self.inode_table.get(self.ino_from_fuse(parent));
+        let parent = parent.unwrap()?;
+        let LiteINode::LiteDirINode(parent) = parent else {
+            return Err(Errno::NOTDIR)?;
+        };
+        let encoded_cname = CString::new(self.name_translator.encode_name(name.to_bytes())?)?;
+        let mut st = fstatat(parent.as_fd(), &encoded_cname)?;
+        let child = self
+            .inode_table
+            .get_or_insert_default(INodeNumber(st.st_ino));
+        let child = child.get_or_create(|| {
+            let header = LiteINodeHeader {
+                ino: INodeNumber(st.st_ino),
+                generation: Generation(self.generation.load(Ordering::SeqCst)),
+                lookup_count: AtomicI64::new(0),
+                name_translator: self.name_translator.clone(),
+            };
+            match st.st_mode & libc::S_IFMT {
+                libc::S_IFDIR => {
+                    Ok(
+                        LiteDirINode::open(header, parent.as_fd(), encoded_cname.as_bytes())?
+                            .into(),
+                    )
+                }
+
+                libc::S_IFREG => Ok(LiteFileINode::open(
+                    header,
+                    parent.as_fd(),
+                    encoded_cname.as_bytes(),
+                    (st.st_mode & libc::S_IWUSR) != 0,
+                    self.wrapper_factory.as_ref(),
+                )?
+                .into()),
+                libc::S_IFLNK => {
+                    Ok(LiteSymlinkINode::open(header, parent.as_fd(), encoded_cname)?.into())
+                }
+                _ => {
+                    return Err(Errno::PERM)
+                        .with_context(|| format!("Unsupported st_mode {}", st.st_mode));
+                }
+            }
+        })?;
+        child.get_lookup_count().fetch_add(1, Ordering::SeqCst);
+        if let Some(sz) = child.maybe_size()? {
+            st.st_size = sz.try_into()?;
+            st.st_blocks = st.st_size / 512;
+        }
+
+        Ok(fuse_entry_param {
+            ino: self.ino_to_fuse(child.get_ino()),
+            generation: child.get_generation().0,
+            attr: unsafe { std::mem::transmute(st) },
+            attr_timeout: self.attr_cache_duration.as_secs_f64(),
+            entry_timeout: self.attr_cache_duration.as_secs_f64(),
+        })
     }
 }
 

@@ -399,7 +399,7 @@ impl LiteSymlinkINode {
     pub fn open(
         header: LiteINodeHeader,
         parent: BorrowedFd<'_>,
-        encoded_name: &[u8],
+        encoded_name: CString,
     ) -> anyhow::Result<Self> {
         let fd = rustix::fs::openat(
             parent,
@@ -479,7 +479,9 @@ impl SymlinkINodeExt for LiteSymlinkINode {
     }
 }
 
-#[enum_dispatch(INodeCore)]
+type libc_stat = libc::stat;
+
+#[enum_dispatch(INodeCore<libc_stat>)]
 pub enum LiteINode {
     LiteDirINode,
     LiteFileINode,

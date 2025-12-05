@@ -49,6 +49,11 @@ pub trait NameTranslator {
     }
     fn encode_name(&self, name: &[u8]) -> anyhow::Result<Vec<u8>>;
     fn decode_name(&self, name: &[u8]) -> NameDecodeOutput;
+    fn encrypt_name(&self, name: &[u8]) -> anyhow::Result<Vec<u8>>;
+    fn decrypt_name(&self, name: &[u8]) -> Option<Vec<u8>>;
+    fn is_long_name(&self, encoded: &[u8]) -> bool {
+        false
+    }
     fn encode_path_for_symlink(&self, path: &[u8]) -> anyhow::Result<Vec<u8>>;
     fn decode_path_for_symlink(&self, path: &[u8]) -> anyhow::Result<Vec<u8>>;
     fn max_virtual_path_component_size(&self, physical_size: u32) -> u32;
@@ -75,6 +80,14 @@ impl NameTranslator for NoOpNameTranslator {
 
     fn max_virtual_path_component_size(&self, physical_size: u32) -> u32 {
         physical_size
+    }
+
+    fn encrypt_name(&self, name: &[u8]) -> anyhow::Result<Vec<u8>> {
+        Ok(name.into())
+    }
+
+    fn decrypt_name(&self, name: &[u8]) -> Option<Vec<u8>> {
+        Some(name.into())
     }
 }
 
@@ -150,6 +163,18 @@ impl NameTranslator for LegacyNameTranslator {
     fn max_virtual_path_component_size(&self, physical_size: u32) -> u32 {
         (physical_size * 5 / 8).saturating_sub(16)
     }
+
+    fn encrypt_name(&self, name: &[u8]) -> anyhow::Result<Vec<u8>> {
+        self.encode_name(name)
+    }
+
+    fn decrypt_name(&self, name: &[u8]) -> Option<Vec<u8>> {
+        match self.decode_name(name) {
+            NameDecodeOutput::InvalidName => None,
+            NameDecodeOutput::LongName => None,
+            NameDecodeOutput::Decoded(items) => Some(items),
+        }
+    }
 }
 
 pub struct NewStyleNameTranslator {
@@ -190,7 +215,7 @@ impl NewStyleNameTranslator {
 impl NameTranslator for NewStyleNameTranslator {
     fn encode_name(&self, name: &[u8]) -> anyhow::Result<Vec<u8>> {
         if name.len() <= self.long_name_threshold {
-            return encrypt_filename_component(name, self.get_aes_siv().borrow_mut().deref_mut());
+            return self.encrypt_name(name);
         }
         let mut blake = Blake2bMac::<U32>::new_with_salt_and_personal(&self.master_key, &[], &[])?;
         blake.update(name);
@@ -201,10 +226,7 @@ impl NameTranslator for NewStyleNameTranslator {
             result.extend_from_slice(self.long_name_suffix.as_bytes());
             return Ok(result);
         }
-        let mut result = encrypt_filename_component(
-            hash.as_slice(),
-            self.get_aes_siv().borrow_mut().deref_mut(),
-        )?;
+        let mut result = self.encrypt_name(&hash)?;
         result.extend_from_slice(self.long_name_suffix.as_bytes());
         Ok(result)
     }
@@ -213,15 +235,14 @@ impl NameTranslator for NewStyleNameTranslator {
         if name.ends_with(self.long_name_suffix.as_bytes()) {
             return NameDecodeOutput::LongName;
         }
-        match decrypt_filename_component(name, self.get_aes_siv().borrow_mut().deref_mut()) {
+        match self.decrypt_name(name) {
             Some(decoded) => NameDecodeOutput::Decoded(decoded),
             None => NameDecodeOutput::InvalidName,
         }
     }
 
     fn encode_path_for_symlink(&self, path: &[u8]) -> anyhow::Result<Vec<u8>> {
-        let mut new_path =
-            encrypt_filename_component(path, self.get_aes_siv().borrow_mut().deref_mut())?;
+        let mut new_path = self.encrypt_name(path)?;
         if new_path.len() <= NEW_STYLE_SYMLINK_ENCRYPTED_COMPONENT_MAX_LENGTH {
             return Ok(new_path);
         }
@@ -236,8 +257,7 @@ impl NameTranslator for NewStyleNameTranslator {
 
     fn decode_path_for_symlink(&self, path: &[u8]) -> anyhow::Result<Vec<u8>> {
         let joined_path: Vec<u8> = path.iter().filter(|b| **b != b'/').cloned().collect();
-        match decrypt_filename_component(&joined_path, self.get_aes_siv().borrow_mut().deref_mut())
-        {
+        match self.decrypt_name(&joined_path) {
             Some(decoded) => Ok(decoded),
             None => Err(NameError::NotPreviousEncodedName {
                 name: String::from_utf8_lossy(path).into_owned(),
@@ -250,6 +270,14 @@ impl NameTranslator for NewStyleNameTranslator {
             return physical_size;
         }
         65535
+    }
+
+    fn encrypt_name(&self, name: &[u8]) -> anyhow::Result<Vec<u8>> {
+        encrypt_filename_component(name, self.get_aes_siv().borrow_mut().deref_mut())
+    }
+
+    fn decrypt_name(&self, name: &[u8]) -> Option<Vec<u8>> {
+        decrypt_filename_component(name, self.get_aes_siv().borrow_mut().deref_mut())
     }
 }
 

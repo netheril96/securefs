@@ -17,7 +17,7 @@ use crate::{
 };
 
 pub trait FuseLowLevelOps {
-    fn init(&mut self, conn: &fuse_conn_info);
+    fn init(&mut self, conn: &mut fuse_conn_info);
     fn can_lookup(&self) -> bool {
         false
     }
