@@ -1,4 +1,4 @@
-use std::{hash::BuildHasher, num::NonZeroUsize, sync::Arc};
+use std::{collections::HashMap, hash::BuildHasher, num::NonZeroUsize, sync::Arc};
 
 use ahash::AHashMap;
 use lru::LruCache;
@@ -226,7 +226,7 @@ pub mod unix {
     }
 
     #[enum_dispatch]
-    pub trait INodeCore: Any {
+    pub trait INodeCore<StatType> {
         fn get_ino(&self) -> INodeNumber;
         fn get_generation(&self) -> Generation;
         fn get_lookup_count(&self) -> &AtomicI64;
@@ -234,7 +234,7 @@ pub mod unix {
         /// Returns the size of the inode if it is different from `stat` calls.
         fn maybe_size(&self) -> anyhow::Result<Option<u64>>;
 
-        fn get_metadata(&self) -> anyhow::Result<INodeMetadata>;
+        fn get_metadata(&self) -> anyhow::Result<StatType>;
         fn set_metadata(
             &self,
             mode: Option<u32>,

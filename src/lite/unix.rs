@@ -1,17 +1,22 @@
 #![cfg(unix)]
 
+use std::ffi::{CStr, CString};
 use std::os::fd::AsRawFd;
 
+use std::sync::atomic::AtomicU64;
+use std::time::Duration;
 use std::{
     os::fd::{AsFd, BorrowedFd, OwnedFd},
     sync::{Arc, atomic::AtomicI64},
 };
 
+use anyhow::Context;
 use enum_dispatch::enum_dispatch;
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use rustix::fs::{OFlags, Stat, Timespec};
 
+use crate::vfs::GenericINodeTable;
 use crate::{
     lite::{
         IoWrapperFactory, IoWrapperStream,
@@ -30,29 +35,36 @@ fn new_timespec(sec: i64, nsec: i64) -> Timespec {
     }
 }
 
-impl TryFrom<Stat> for INodeMetadata {
-    type Error = anyhow::Error;
-
-    fn try_from(st: Stat) -> Result<Self, Self::Error> {
-        Ok(Self {
-            ino: INodeNumber(st.st_ino.try_into()?),
-            size: st.st_size.try_into()?,
-            blocks: (st.st_size / 512).try_into()?,
-            atime: new_timespec(st.st_atime, st.st_atime_nsec.try_into()?),
-            mtime: new_timespec(st.st_mtime, st.st_mtime_nsec.try_into()?),
-            ctime: new_timespec(st.st_ctime, st.st_ctime_nsec.try_into()?),
-            #[cfg(any(target_os = "macos", target_os = "freebsd"))]
-            crtime: new_timespec(st.st_birthtime, st.st_birthtime_nsec.try_into()?),
-            #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
-            crtime: new_timespec(st.st_ctime, st.st_ctime_nsec.try_into()?),
-            nlink: st.st_nlink.try_into()?,
-            uid: st.st_uid.try_into()?,
-            gid: st.st_gid.try_into()?,
-            rdev: st.st_rdev.try_into()?,
-            blksize: st.st_blksize.try_into()?,
-            mode: st.st_mode.try_into()?,
-        })
+// Safe wrapper around libc::stat.
+// We are not calling rustix here to avoid format conversion between rustix stat and libc stat,
+//  and the latter is expected by libfuse.
+pub(super) fn fstat(fd: BorrowedFd<'_>) -> anyhow::Result<libc::stat> {
+    let mut result: libc::stat = unsafe { std::mem::zeroed() };
+    if (unsafe { libc::fstat(fd.as_raw_fd(), &mut result) }) != 0 {
+        return Err(std::io::Error::last_os_error())
+            .with_context(|| format!("Calling fstat on fd {}", fd.as_raw_fd()));
     }
+    Ok(result)
+}
+
+// Safe wrapper around libc::stat.
+// We are not calling rustix here to avoid format conversion between rustix stat and libc stat,
+//  and the latter is expected by libfuse.
+pub(super) fn fstatat(fd: BorrowedFd<'_>, path: &CStr) -> anyhow::Result<libc::stat> {
+    let mut result: libc::stat = unsafe { std::mem::zeroed() };
+    if (unsafe {
+        libc::fstatat(
+            fd.as_raw_fd(),
+            path.as_ptr(),
+            &mut result,
+            libc::AT_SYMLINK_NOFOLLOW,
+        )
+    }) != 0
+    {
+        return Err(std::io::Error::last_os_error())
+            .with_context(|| format!("Calling fstatat on fd={} path={:?}", fd.as_raw_fd(), path));
+    }
+    Ok(result)
 }
 
 pub struct LiteINodeHeader {
@@ -110,7 +122,7 @@ impl LiteFileINode {
     }
 }
 
-impl INodeCore for LiteFileINode {
+impl INodeCore<libc::stat> for LiteFileINode {
     fn get_ino(&self) -> INodeNumber {
         self.header.ino
     }
@@ -123,12 +135,11 @@ impl INodeCore for LiteFileINode {
         &self.header.lookup_count
     }
 
-    fn get_metadata(&self) -> anyhow::Result<INodeMetadata> {
+    fn get_metadata(&self) -> anyhow::Result<libc::stat> {
         let inner = self.inner.lock();
-        let mut stat = rustix::fs::fstat(inner.stream.as_fd())?;
+        let mut stat = fstat(inner.stream.as_fd())?;
         stat.st_size = inner.stream.size()?.try_into()?;
-        let m: INodeMetadata = stat.try_into()?;
-        Ok(m)
+        Ok(stat)
     }
 
     fn set_metadata(
@@ -243,7 +254,7 @@ impl AsFd for LiteDirINode {
     }
 }
 
-impl INodeCore for LiteDirINode {
+impl INodeCore<libc::stat> for LiteDirINode {
     fn get_ino(&self) -> INodeNumber {
         self.header.ino
     }
@@ -256,10 +267,8 @@ impl INodeCore for LiteDirINode {
         &self.header.lookup_count
     }
 
-    fn get_metadata(&self) -> anyhow::Result<INodeMetadata> {
-        let stat = rustix::fs::fstat(self.fd.as_fd())?;
-        let m: INodeMetadata = stat.try_into()?;
-        Ok(m)
+    fn get_metadata(&self) -> anyhow::Result<libc::stat> {
+        fstat(self.fd.as_fd())
     }
 
     fn set_metadata(
@@ -379,11 +388,11 @@ impl DirReader for LiteDirReader {
 pub struct LiteSymlinkINode {
     header: LiteINodeHeader,
     fd: OwnedFd,
-    path: Vec<u8>,
+    path: Option<CString>,
 }
 
 impl LiteSymlinkINode {
-    fn new(header: LiteINodeHeader, fd: OwnedFd, path: Vec<u8>) -> Self {
+    fn new(header: LiteINodeHeader, fd: OwnedFd, path: Option<CString>) -> Self {
         Self { header, fd, path }
     }
 
@@ -409,7 +418,7 @@ impl LiteSymlinkINode {
     }
 }
 
-impl INodeCore for LiteSymlinkINode {
+impl INodeCore<libc::stat> for LiteSymlinkINode {
     fn get_ino(&self) -> INodeNumber {
         self.header.ino
     }
@@ -422,8 +431,11 @@ impl INodeCore for LiteSymlinkINode {
         &self.header.lookup_count
     }
 
-    fn get_metadata(&self) -> anyhow::Result<INodeMetadata> {
-        todo!()
+    fn get_metadata(&self) -> anyhow::Result<libc::stat> {
+        match &self.path {
+            Some(path) => fstatat(self.fd.as_fd(), path.as_c_str()),
+            None => fstat(self.fd.as_fd()),
+        }
     }
 
     fn set_metadata(
@@ -522,6 +534,15 @@ fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
         OFlags::from_bits_retain((libc::O_RDWR | libc::O_EMPTY_PATH) as libc::c_uint),
         rustix::fs::Mode::empty(),
     )?)
+}
+
+pub struct FuseVfs<Table: GenericINodeTable<LiteINode>> {
+    pub(super) inode_table: Table,
+    pub(super) name_translator: Arc<dyn NameTranslator>,
+    pub(super) wrapper_factory: Box<dyn IoWrapperFactory>,
+    pub(super) generation: AtomicU64,
+    pub(super) device_serial: OnceCell<u64>,
+    pub(super) attr_cache_duration: Duration,
 }
 
 #[cfg(test)]
