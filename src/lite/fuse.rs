@@ -4,7 +4,7 @@ use anyhow::Context;
 use fuser::FileType;
 use parking_lot::Mutex;
 use std::{
-    ffi::CString,
+    ffi::{CStr, CString},
     fs::DirEntry,
     os::{fd::AsFd, unix::ffi::OsStrExt},
     sync::{
@@ -463,16 +463,36 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
                      reader.current_position(), off));
         }
 
-        loop {
+        if off == 0 {
             if !reader.move_next()? {
-                break;
+                return Ok(Vec::new());
             }
-            let entry = reader.current().unwrap();
-            let name = CString::new(entry.name.clone())?;
+        }
+
+        if reader.current().is_none() {
+            return Ok(Vec::new());
+        }
+
+        let mut written_size: usize = 0;
+
+        loop {
             let mut st: crate::fuse_wrappers::bindings::stat = unsafe { std::mem::zeroed() };
-            st.st_ino = self.ino_to_fuse(entry.ino);
-            //st.st_mode = (entry.filetype.to_s_if() | 0o555) as _;
-            if !req.add_dir_entry(&mut buffer, &name, &st, entry.offset) {
+
+            if let Some(entry) = reader.current() {
+                let name = CString::new(entry.name.as_slice())?;
+                st.st_ino = self.ino_to_fuse(entry.ino);
+                st.st_mode = match entry.filetype {
+                    crate::vfs::unix::FileType::DIRECTORY => libc::S_IFDIR,
+                    crate::vfs::unix::FileType::FILE => libc::S_IFREG,
+                    crate::vfs::unix::FileType::SYMLINK => libc::S_IFLNK,
+                };
+                written_size +=
+                    req.add_dir_entry(&mut buffer[written_size..], &name, &st, entry.offset);
+                if written_size >= buffer.len() {
+                    break;
+                }
+                let _ = reader.move_next()?;
+            } else {
                 break;
             }
         }

@@ -32,8 +32,8 @@ impl FuseReq {
         name: &CStr,
         st: &bindings::stat,
         off: off_t,
-    ) -> bool {
-        (unsafe {
+    ) -> usize {
+        unsafe {
             fuse_add_direntry(
                 self.req,
                 buffer.as_ptr().cast_mut() as _,
@@ -42,7 +42,7 @@ impl FuseReq {
                 st,
                 off,
             )
-        }) <= buffer.len()
+        }
     }
 }
 
