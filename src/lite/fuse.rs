@@ -608,7 +608,7 @@ pub mod testing {
             rustix::fs::open(root_tmp_dir.path(), OFlags::RDONLY, Mode::empty())?,
         );
 
-        let mut vfs: Box<Box<dyn FuseLowLevelOps>> = Box::new(Box::new(LiteVfs {
+        let mut vfs = Box::new(LiteVfs {
             inode_table: ShardedMapINodeTable::new(root_ino, root_node.into(), 32),
             name_translator: name_translator,
             wrapper_factory: Box::new(Factory {}),
@@ -616,7 +616,7 @@ pub mod testing {
             device_serial: Default::default(),
             attr_cache_duration: Duration::from_secs(30),
             readonly: false,
-        }));
+        });
 
         run_fuse_main(
             &[

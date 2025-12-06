@@ -35,9 +35,9 @@ unsafe extern "C" {
     ) -> *mut fuse_session;
 }
 
-pub fn run_fuse_main(
+pub fn run_fuse_main<T: FuseLowLevelOps>(
     fuse_args: &[&CStr],
-    ops: &mut Box<Box<dyn FuseLowLevelOps>>,
+    ops: &mut Box<T>,
 ) -> anyhow::Result<()> {
     let mut c_args: Vec<*mut std::os::raw::c_char> =
         fuse_args.iter().map(|s| s.as_ptr().cast_mut()).collect();
@@ -60,16 +60,15 @@ pub fn run_fuse_main(
     if unsafe { fuse_parse_cmdline(&mut *fuse_args, &mut *cmdline_opts) } < 0 {
         Err(FuseLoopError {})?;
     }
-    let fuse_ops = generate_libfuse_low_level_ops(ops);
-    let userdata = &raw mut **ops;
-    log::trace!("user data at {}", userdata as usize);
+    let fuse_ops = generate_libfuse_low_level_ops(&mut **ops);
+    let userdata: *mut T = &raw mut **ops;
     let session = scopeguard::guard(
         unsafe {
             fuse_session_new(
                 &mut *fuse_args,
                 &fuse_ops,
                 size_of::<bindings::fuse_lowlevel_ops>(),
-                userdata as usize as _,
+                userdata as _,
             )
         },
         |s| unsafe {

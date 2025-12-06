@@ -448,25 +448,27 @@ pub trait FuseLowLevelOps {
     }
 }
 
-fn get_user_data(req: &fuse_req_t) -> &Box<dyn FuseLowLevelOps> {
+fn get_ops<T: FuseLowLevelOps>(req: &fuse_req_t) -> &T {
+    unsafe { { fuse_req_userdata(*req) as *const T }.as_ref().unwrap() }
+}
+
+extern "C" fn rs_init<T: FuseLowLevelOps>(
+    userdata: *mut ::std::os::raw::c_void,
+    conn: *mut fuse_conn_info,
+) {
     unsafe {
-        { fuse_req_userdata(*req) as usize as *const Box<dyn FuseLowLevelOps> }
-            .as_ref()
-            .unwrap()
+        let userdata = userdata as *mut T;
+        (*userdata).init(conn.as_mut().unwrap());
     }
 }
 
-extern "C" fn rs_init(userdata: *mut ::std::os::raw::c_void, conn: *mut fuse_conn_info) {
-    unsafe {
-        let userdata = userdata as usize as *mut Box<dyn FuseLowLevelOps>;
-        let userdata = userdata.as_mut().unwrap();
-        userdata.init(conn.as_mut().unwrap());
-    }
-}
-
-extern "C" fn rs_lookup(req: fuse_req_t, parent: fuse_ino_t, name: *const ::std::os::raw::c_char) {
+extern "C" fn rs_lookup<T: FuseLowLevelOps>(
+    req: fuse_req_t,
+    parent: fuse_ino_t,
+    name: *const ::std::os::raw::c_char,
+) {
     let name = unsafe { CStr::from_ptr(name) };
-    match get_user_data(&req).lookup(FuseReq { req }, parent, name) {
+    match get_ops::<T>(&req).lookup(FuseReq { req }, parent, name) {
         Ok(entry) => unsafe {
             fuse_reply_entry(req, &entry);
         },
@@ -476,8 +478,8 @@ extern "C" fn rs_lookup(req: fuse_req_t, parent: fuse_ino_t, name: *const ::std:
     }
 }
 
-extern "C" fn rs_forget(req: fuse_req_t, ino: fuse_ino_t, nlookup: u64) {
-    match get_user_data(&req).forget(FuseReq { req }, ino, nlookup) {
+extern "C" fn rs_forget<T: FuseLowLevelOps>(req: fuse_req_t, ino: fuse_ino_t, nlookup: u64) {
+    match get_ops::<T>(&req).forget(FuseReq { req }, ino, nlookup) {
         Ok(_) => unsafe {
             fuse_reply_none(req);
         },
@@ -487,8 +489,12 @@ extern "C" fn rs_forget(req: fuse_req_t, ino: fuse_ino_t, nlookup: u64) {
     }
 }
 
-extern "C" fn rs_getattr(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info) {
-    match get_user_data(&req).getattr(FuseReq { req }, ino, unsafe { fi.as_ref() }) {
+extern "C" fn rs_getattr<T: FuseLowLevelOps>(
+    req: fuse_req_t,
+    ino: fuse_ino_t,
+    fi: *mut fuse_file_info,
+) {
+    match get_ops::<T>(&req).getattr(FuseReq { req }, ino, unsafe { fi.as_ref() }) {
         Ok((stat, timeout)) => unsafe {
             fuse_reply_attr(req, &stat, timeout);
         },
@@ -498,14 +504,14 @@ extern "C" fn rs_getattr(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_in
     }
 }
 
-extern "C" fn rs_setattr(
+extern "C" fn rs_setattr<T: FuseLowLevelOps>(
     req: fuse_req_t,
     ino: fuse_ino_t,
     attr: *mut bindings::stat,
     to_set: c_int,
     fi: *mut fuse_file_info,
 ) {
-    match get_user_data(&req).setattr(
+    match get_ops::<T>(&req).setattr(
         FuseReq { req },
         ino,
         unsafe { attr.as_mut().unwrap() },
@@ -521,8 +527,8 @@ extern "C" fn rs_setattr(
     }
 }
 
-extern "C" fn rs_readlink(req: fuse_req_t, ino: fuse_ino_t) {
-    match get_user_data(&req).readlink(FuseReq { req }, ino) {
+extern "C" fn rs_readlink<T: FuseLowLevelOps>(req: fuse_req_t, ino: fuse_ino_t) {
+    match get_ops::<T>(&req).readlink(FuseReq { req }, ino) {
         Ok(link) => unsafe {
             fuse_reply_readlink(req, link.as_ptr());
         },
@@ -532,7 +538,7 @@ extern "C" fn rs_readlink(req: fuse_req_t, ino: fuse_ino_t) {
     }
 }
 
-extern "C" fn rs_mknod(
+extern "C" fn rs_mknod<T: FuseLowLevelOps>(
     req: fuse_req_t,
     parent: fuse_ino_t,
     name: *const c_char,
@@ -540,7 +546,7 @@ extern "C" fn rs_mknod(
     rdev: dev_t,
 ) {
     let name = unsafe { CStr::from_ptr(name) };
-    match get_user_data(&req).mknod(FuseReq { req }, parent, name, mode, rdev) {
+    match get_ops::<T>(&req).mknod(FuseReq { req }, parent, name, mode, rdev) {
         Ok(entry) => unsafe {
             fuse_reply_entry(req, &entry);
         },
@@ -550,9 +556,14 @@ extern "C" fn rs_mknod(
     }
 }
 
-extern "C" fn rs_mkdir(req: fuse_req_t, parent: fuse_ino_t, name: *const c_char, mode: mode_t) {
+extern "C" fn rs_mkdir<T: FuseLowLevelOps>(
+    req: fuse_req_t,
+    parent: fuse_ino_t,
+    name: *const c_char,
+    mode: mode_t,
+) {
     let name = unsafe { CStr::from_ptr(name) };
-    match get_user_data(&req).mkdir(FuseReq { req }, parent, name, mode) {
+    match get_ops::<T>(&req).mkdir(FuseReq { req }, parent, name, mode) {
         Ok(entry) => unsafe {
             fuse_reply_entry(req, &entry);
         },
@@ -562,9 +573,13 @@ extern "C" fn rs_mkdir(req: fuse_req_t, parent: fuse_ino_t, name: *const c_char,
     }
 }
 
-extern "C" fn rs_unlink(req: fuse_req_t, parent: fuse_ino_t, name: *const c_char) {
+extern "C" fn rs_unlink<T: FuseLowLevelOps>(
+    req: fuse_req_t,
+    parent: fuse_ino_t,
+    name: *const c_char,
+) {
     let name = unsafe { CStr::from_ptr(name) };
-    match get_user_data(&req).unlink(FuseReq { req }, parent, name) {
+    match get_ops::<T>(&req).unlink(FuseReq { req }, parent, name) {
         Ok(()) => unsafe {
             fuse_reply_err(req, 0);
         },
@@ -574,9 +589,13 @@ extern "C" fn rs_unlink(req: fuse_req_t, parent: fuse_ino_t, name: *const c_char
     }
 }
 
-extern "C" fn rs_rmdir(req: fuse_req_t, parent: fuse_ino_t, name: *const c_char) {
+extern "C" fn rs_rmdir<T: FuseLowLevelOps>(
+    req: fuse_req_t,
+    parent: fuse_ino_t,
+    name: *const c_char,
+) {
     let name = unsafe { CStr::from_ptr(name) };
-    match get_user_data(&req).rmdir(FuseReq { req }, parent, name) {
+    match get_ops::<T>(&req).rmdir(FuseReq { req }, parent, name) {
         Ok(()) => unsafe {
             fuse_reply_err(req, 0);
         },
@@ -586,7 +605,7 @@ extern "C" fn rs_rmdir(req: fuse_req_t, parent: fuse_ino_t, name: *const c_char)
     }
 }
 
-extern "C" fn rs_symlink(
+extern "C" fn rs_symlink<T: FuseLowLevelOps>(
     req: fuse_req_t,
     link: *const c_char,
     parent: fuse_ino_t,
@@ -594,7 +613,7 @@ extern "C" fn rs_symlink(
 ) {
     let link = unsafe { CStr::from_ptr(link) };
     let name = unsafe { CStr::from_ptr(name) };
-    match get_user_data(&req).symlink(FuseReq { req }, link, parent, name) {
+    match get_ops::<T>(&req).symlink(FuseReq { req }, link, parent, name) {
         Ok(entry) => unsafe {
             fuse_reply_entry(req, &entry);
         },
@@ -604,7 +623,7 @@ extern "C" fn rs_symlink(
     }
 }
 
-extern "C" fn rs_rename(
+extern "C" fn rs_rename<T: FuseLowLevelOps>(
     req: fuse_req_t,
     parent: fuse_ino_t,
     name: *const c_char,
@@ -614,7 +633,7 @@ extern "C" fn rs_rename(
 ) {
     let name = unsafe { CStr::from_ptr(name) };
     let newname = unsafe { CStr::from_ptr(newname) };
-    match get_user_data(&req).rename(FuseReq { req }, parent, name, newparent, newname, flags) {
+    match get_ops::<T>(&req).rename(FuseReq { req }, parent, name, newparent, newname, flags) {
         Ok(()) => unsafe {
             fuse_reply_err(req, 0);
         },
@@ -624,14 +643,14 @@ extern "C" fn rs_rename(
     }
 }
 
-extern "C" fn rs_link(
+extern "C" fn rs_link<T: FuseLowLevelOps>(
     req: fuse_req_t,
     ino: fuse_ino_t,
     newparent: fuse_ino_t,
     newname: *const c_char,
 ) {
     let newname = unsafe { CStr::from_ptr(newname) };
-    match get_user_data(&req).link(FuseReq { req }, ino, newparent, newname) {
+    match get_ops::<T>(&req).link(FuseReq { req }, ino, newparent, newname) {
         Ok(entry) => unsafe {
             fuse_reply_entry(req, &entry);
         },
@@ -641,8 +660,12 @@ extern "C" fn rs_link(
     }
 }
 
-extern "C" fn rs_open(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info) {
-    match get_user_data(&req).open(FuseReq { req }, ino, unsafe { fi.as_ref() }) {
+extern "C" fn rs_open<T: FuseLowLevelOps>(
+    req: fuse_req_t,
+    ino: fuse_ino_t,
+    fi: *mut fuse_file_info,
+) {
+    match get_ops::<T>(&req).open(FuseReq { req }, ino, unsafe { fi.as_ref() }) {
         Ok(new_fi) => unsafe {
             fuse_reply_open(req, &new_fi);
         },
@@ -652,14 +675,14 @@ extern "C" fn rs_open(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info)
     }
 }
 
-extern "C" fn rs_read(
+extern "C" fn rs_read<T: FuseLowLevelOps>(
     req: fuse_req_t,
     ino: fuse_ino_t,
     size: usize,
     off: off_t,
     fi: *mut fuse_file_info,
 ) {
-    match get_user_data(&req).read(FuseReq { req }, ino, size, off, unsafe { fi.as_ref() }) {
+    match get_ops::<T>(&req).read(FuseReq { req }, ino, size, off, unsafe { fi.as_ref() }) {
         Ok(data) => unsafe {
             fuse_reply_buf(req, data.as_ptr() as *const c_char, data.len());
         },
@@ -669,7 +692,7 @@ extern "C" fn rs_read(
     }
 }
 
-extern "C" fn rs_write(
+extern "C" fn rs_write<T: FuseLowLevelOps>(
     req: fuse_req_t,
     ino: fuse_ino_t,
     buf: *const c_char,
@@ -678,7 +701,7 @@ extern "C" fn rs_write(
     fi: *mut fuse_file_info,
 ) {
     let slice = unsafe { std::slice::from_raw_parts(buf as *const u8, size) };
-    match get_user_data(&req).write(FuseReq { req }, ino, slice, off, unsafe { fi.as_ref() }) {
+    match get_ops::<T>(&req).write(FuseReq { req }, ino, slice, off, unsafe { fi.as_ref() }) {
         Ok(written) => unsafe {
             fuse_reply_write(req, written);
         },
@@ -688,8 +711,12 @@ extern "C" fn rs_write(
     }
 }
 
-extern "C" fn rs_flush(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info) {
-    match get_user_data(&req).flush(FuseReq { req }, ino, unsafe { fi.as_ref() }) {
+extern "C" fn rs_flush<T: FuseLowLevelOps>(
+    req: fuse_req_t,
+    ino: fuse_ino_t,
+    fi: *mut fuse_file_info,
+) {
+    match get_ops::<T>(&req).flush(FuseReq { req }, ino, unsafe { fi.as_ref() }) {
         Ok(()) => unsafe {
             fuse_reply_err(req, 0);
         },
@@ -699,8 +726,12 @@ extern "C" fn rs_flush(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info
     }
 }
 
-extern "C" fn rs_release(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info) {
-    match get_user_data(&req).release(FuseReq { req }, ino, unsafe { fi.as_ref() }) {
+extern "C" fn rs_release<T: FuseLowLevelOps>(
+    req: fuse_req_t,
+    ino: fuse_ino_t,
+    fi: *mut fuse_file_info,
+) {
+    match get_ops::<T>(&req).release(FuseReq { req }, ino, unsafe { fi.as_ref() }) {
         Ok(()) => unsafe {
             fuse_reply_err(req, 0);
         },
@@ -710,8 +741,13 @@ extern "C" fn rs_release(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_in
     }
 }
 
-extern "C" fn rs_fsync(req: fuse_req_t, ino: fuse_ino_t, datasync: c_int, fi: *mut fuse_file_info) {
-    match get_user_data(&req).fsync(FuseReq { req }, ino, datasync, unsafe { fi.as_ref() }) {
+extern "C" fn rs_fsync<T: FuseLowLevelOps>(
+    req: fuse_req_t,
+    ino: fuse_ino_t,
+    datasync: c_int,
+    fi: *mut fuse_file_info,
+) {
+    match get_ops::<T>(&req).fsync(FuseReq { req }, ino, datasync, unsafe { fi.as_ref() }) {
         Ok(()) => unsafe {
             fuse_reply_err(req, 0);
         },
@@ -721,8 +757,12 @@ extern "C" fn rs_fsync(req: fuse_req_t, ino: fuse_ino_t, datasync: c_int, fi: *m
     }
 }
 
-extern "C" fn rs_opendir(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info) {
-    match get_user_data(&req).opendir(FuseReq { req }, ino, unsafe { fi.as_ref() }) {
+extern "C" fn rs_opendir<T: FuseLowLevelOps>(
+    req: fuse_req_t,
+    ino: fuse_ino_t,
+    fi: *mut fuse_file_info,
+) {
+    match get_ops::<T>(&req).opendir(FuseReq { req }, ino, unsafe { fi.as_ref() }) {
         Ok(fi) => unsafe {
             fuse_reply_open(req, &fi);
         },
@@ -732,14 +772,14 @@ extern "C" fn rs_opendir(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_in
     }
 }
 
-extern "C" fn rs_readdir(
+extern "C" fn rs_readdir<T: FuseLowLevelOps>(
     req: fuse_req_t,
     ino: fuse_ino_t,
     size: usize,
     off: off_t,
     fi: *mut fuse_file_info,
 ) {
-    match get_user_data(&req).readdir(FuseReq { req }, ino, size, off, unsafe { fi.as_ref() }) {
+    match get_ops::<T>(&req).readdir(FuseReq { req }, ino, size, off, unsafe { fi.as_ref() }) {
         Ok(data) => unsafe {
             fuse_reply_buf(req, data.as_ptr() as *const c_char, data.len());
         },
@@ -749,8 +789,12 @@ extern "C" fn rs_readdir(
     }
 }
 
-extern "C" fn rs_releasedir(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info) {
-    match get_user_data(&req).releasedir(FuseReq { req }, ino, unsafe { fi.as_ref() }) {
+extern "C" fn rs_releasedir<T: FuseLowLevelOps>(
+    req: fuse_req_t,
+    ino: fuse_ino_t,
+    fi: *mut fuse_file_info,
+) {
+    match get_ops::<T>(&req).releasedir(FuseReq { req }, ino, unsafe { fi.as_ref() }) {
         Ok(()) => unsafe {
             fuse_reply_err(req, 0);
         },
@@ -760,13 +804,13 @@ extern "C" fn rs_releasedir(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file
     }
 }
 
-extern "C" fn rs_fsyncdir(
+extern "C" fn rs_fsyncdir<T: FuseLowLevelOps>(
     req: fuse_req_t,
     ino: fuse_ino_t,
     datasync: c_int,
     fi: *mut fuse_file_info,
 ) {
-    match get_user_data(&req).fsyncdir(FuseReq { req }, ino, datasync, unsafe { fi.as_ref() }) {
+    match get_ops::<T>(&req).fsyncdir(FuseReq { req }, ino, datasync, unsafe { fi.as_ref() }) {
         Ok(()) => unsafe {
             fuse_reply_err(req, 0);
         },
@@ -776,8 +820,8 @@ extern "C" fn rs_fsyncdir(
     }
 }
 
-extern "C" fn rs_statfs(req: fuse_req_t, ino: fuse_ino_t) {
-    match get_user_data(&req).statfs(FuseReq { req }, ino) {
+extern "C" fn rs_statfs<T: FuseLowLevelOps>(req: fuse_req_t, ino: fuse_ino_t) {
+    match get_ops::<T>(&req).statfs(FuseReq { req }, ino) {
         Ok(stbuf) => unsafe {
             fuse_reply_statfs(req, &stbuf);
         },
@@ -787,7 +831,7 @@ extern "C" fn rs_statfs(req: fuse_req_t, ino: fuse_ino_t) {
     }
 }
 
-extern "C" fn rs_setxattr(
+extern "C" fn rs_setxattr<T: FuseLowLevelOps>(
     req: fuse_req_t,
     ino: fuse_ino_t,
     name: *const c_char,
@@ -797,7 +841,7 @@ extern "C" fn rs_setxattr(
 ) {
     let name = unsafe { CStr::from_ptr(name) };
     let value = unsafe { std::slice::from_raw_parts(value as *const u8, size) };
-    match get_user_data(&req).setxattr(FuseReq { req }, ino, name, value, flags) {
+    match get_ops::<T>(&req).setxattr(FuseReq { req }, ino, name, value, flags) {
         Ok(()) => unsafe {
             fuse_reply_err(req, 0);
         },
@@ -807,9 +851,14 @@ extern "C" fn rs_setxattr(
     }
 }
 
-extern "C" fn rs_getxattr(req: fuse_req_t, ino: fuse_ino_t, name: *const c_char, size: usize) {
+extern "C" fn rs_getxattr<T: FuseLowLevelOps>(
+    req: fuse_req_t,
+    ino: fuse_ino_t,
+    name: *const c_char,
+    size: usize,
+) {
     let name = unsafe { CStr::from_ptr(name) };
-    match get_user_data(&req).getxattr(FuseReq { req }, ino, name, size) {
+    match get_ops::<T>(&req).getxattr(FuseReq { req }, ino, name, size) {
         Ok(data) => {
             if size == 0 {
                 unsafe { fuse_reply_xattr(req, data.len()) };
@@ -823,8 +872,8 @@ extern "C" fn rs_getxattr(req: fuse_req_t, ino: fuse_ino_t, name: *const c_char,
     }
 }
 
-extern "C" fn rs_listxattr(req: fuse_req_t, ino: fuse_ino_t, size: usize) {
-    match get_user_data(&req).listxattr(FuseReq { req }, ino, size) {
+extern "C" fn rs_listxattr<T: FuseLowLevelOps>(req: fuse_req_t, ino: fuse_ino_t, size: usize) {
+    match get_ops::<T>(&req).listxattr(FuseReq { req }, ino, size) {
         Ok(data) => {
             if size == 0 {
                 unsafe { fuse_reply_xattr(req, data.len()) };
@@ -838,9 +887,13 @@ extern "C" fn rs_listxattr(req: fuse_req_t, ino: fuse_ino_t, size: usize) {
     }
 }
 
-extern "C" fn rs_removexattr(req: fuse_req_t, ino: fuse_ino_t, name: *const c_char) {
+extern "C" fn rs_removexattr<T: FuseLowLevelOps>(
+    req: fuse_req_t,
+    ino: fuse_ino_t,
+    name: *const c_char,
+) {
     let name = unsafe { CStr::from_ptr(name) };
-    match get_user_data(&req).removexattr(FuseReq { req }, ino, name) {
+    match get_ops::<T>(&req).removexattr(FuseReq { req }, ino, name) {
         Ok(()) => unsafe {
             fuse_reply_err(req, 0);
         },
@@ -850,8 +903,8 @@ extern "C" fn rs_removexattr(req: fuse_req_t, ino: fuse_ino_t, name: *const c_ch
     }
 }
 
-extern "C" fn rs_access(req: fuse_req_t, ino: fuse_ino_t, mask: c_int) {
-    match get_user_data(&req).access(ino, mask) {
+extern "C" fn rs_access<T: FuseLowLevelOps>(req: fuse_req_t, ino: fuse_ino_t, mask: c_int) {
+    match get_ops::<T>(&req).access(ino, mask) {
         Ok(()) => unsafe {
             fuse_reply_err(req, 0);
         },
@@ -861,7 +914,7 @@ extern "C" fn rs_access(req: fuse_req_t, ino: fuse_ino_t, mask: c_int) {
     }
 }
 
-extern "C" fn rs_create(
+extern "C" fn rs_create<T: FuseLowLevelOps>(
     req: fuse_req_t,
     parent: fuse_ino_t,
     name: *const c_char,
@@ -869,7 +922,7 @@ extern "C" fn rs_create(
     fi: *mut fuse_file_info,
 ) {
     let name = unsafe { CStr::from_ptr(name) };
-    match get_user_data(&req).create(FuseReq { req }, parent, name, mode, unsafe { fi.as_ref() }) {
+    match get_ops::<T>(&req).create(FuseReq { req }, parent, name, mode, unsafe { fi.as_ref() }) {
         Ok((entry, fi)) => unsafe {
             fuse_reply_create(req, &entry, &fi);
         },
@@ -879,13 +932,13 @@ extern "C" fn rs_create(
     }
 }
 
-extern "C" fn rs_getlk(
+extern "C" fn rs_getlk<T: FuseLowLevelOps>(
     req: fuse_req_t,
     ino: fuse_ino_t,
     fi: *mut fuse_file_info,
     lock: *mut bindings::flock,
 ) {
-    match get_user_data(&req).getlk(
+    match get_ops::<T>(&req).getlk(
         FuseReq { req },
         ino,
         unsafe { fi.as_ref() },
@@ -900,14 +953,14 @@ extern "C" fn rs_getlk(
     }
 }
 
-extern "C" fn rs_setlk(
+extern "C" fn rs_setlk<T: FuseLowLevelOps>(
     req: fuse_req_t,
     ino: fuse_ino_t,
     fi: *mut fuse_file_info,
     lock: *mut bindings::flock,
     sleep: c_int,
 ) {
-    match get_user_data(&req).setlk(
+    match get_ops::<T>(&req).setlk(
         FuseReq { req },
         ino,
         unsafe { fi.as_ref() },
@@ -923,8 +976,13 @@ extern "C" fn rs_setlk(
     }
 }
 
-extern "C" fn rs_bmap(req: fuse_req_t, ino: fuse_ino_t, blocksize: usize, idx: u64) {
-    match get_user_data(&req).bmap(FuseReq { req }, ino, blocksize, idx) {
+extern "C" fn rs_bmap<T: FuseLowLevelOps>(
+    req: fuse_req_t,
+    ino: fuse_ino_t,
+    blocksize: usize,
+    idx: u64,
+) {
+    match get_ops::<T>(&req).bmap(FuseReq { req }, ino, blocksize, idx) {
         Ok(idx) => unsafe {
             fuse_reply_bmap(req, idx);
         },
@@ -934,7 +992,7 @@ extern "C" fn rs_bmap(req: fuse_req_t, ino: fuse_ino_t, blocksize: usize, idx: u
     }
 }
 
-extern "C" fn rs_ioctl(
+extern "C" fn rs_ioctl<T: FuseLowLevelOps>(
     req: fuse_req_t,
     ino: fuse_ino_t,
     cmd: c_uint,
@@ -946,7 +1004,7 @@ extern "C" fn rs_ioctl(
     out_bufsz: usize,
 ) {
     let in_slice = unsafe { std::slice::from_raw_parts(in_buf as *const u8, in_bufsz) };
-    match get_user_data(&req).ioctl(
+    match get_ops::<T>(&req).ioctl(
         FuseReq { req },
         ino,
         cmd,
@@ -965,9 +1023,13 @@ extern "C" fn rs_ioctl(
     }
 }
 
-extern "C" fn rs_forget_multi(req: fuse_req_t, count: usize, forgets: *mut fuse_forget_data) {
+extern "C" fn rs_forget_multi<T: FuseLowLevelOps>(
+    req: fuse_req_t,
+    count: usize,
+    forgets: *mut fuse_forget_data,
+) {
     let forgets = unsafe { std::slice::from_raw_parts(forgets, count) };
-    match get_user_data(&req).forget_multi(FuseReq { req }, forgets) {
+    match get_ops::<T>(&req).forget_multi(FuseReq { req }, forgets) {
         Ok(()) => unsafe {
             fuse_reply_none(req);
         },
@@ -977,8 +1039,13 @@ extern "C" fn rs_forget_multi(req: fuse_req_t, count: usize, forgets: *mut fuse_
     }
 }
 
-extern "C" fn rs_flock(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info, op: c_int) {
-    match get_user_data(&req).flock(FuseReq { req }, ino, unsafe { fi.as_ref() }, op) {
+extern "C" fn rs_flock<T: FuseLowLevelOps>(
+    req: fuse_req_t,
+    ino: fuse_ino_t,
+    fi: *mut fuse_file_info,
+    op: c_int,
+) {
+    match get_ops::<T>(&req).flock(FuseReq { req }, ino, unsafe { fi.as_ref() }, op) {
         Ok(()) => unsafe {
             fuse_reply_err(req, 0);
         },
@@ -988,116 +1055,114 @@ extern "C" fn rs_flock(req: fuse_req_t, ino: fuse_ino_t, fi: *mut fuse_file_info
     }
 }
 
-pub fn generate_libfuse_low_level_ops(
-    ops: &mut Box<Box<dyn FuseLowLevelOps>>,
-) -> bindings::fuse_lowlevel_ops {
+pub fn generate_libfuse_low_level_ops<T: FuseLowLevelOps>(ops: &T) -> bindings::fuse_lowlevel_ops {
     let mut fuse_ops: bindings::fuse_lowlevel_ops = unsafe { std::mem::zeroed() };
-    fuse_ops.init = Some(rs_init);
+    fuse_ops.init = Some(rs_init::<T>);
 
     if ops.can_lookup() {
-        fuse_ops.lookup = Some(rs_lookup);
+        fuse_ops.lookup = Some(rs_lookup::<T>);
     }
     if ops.can_forget() {
-        fuse_ops.forget = Some(rs_forget);
+        fuse_ops.forget = Some(rs_forget::<T>);
     }
     if ops.can_getattr() {
-        fuse_ops.getattr = Some(rs_getattr);
+        fuse_ops.getattr = Some(rs_getattr::<T>);
     }
     if ops.can_setattr() {
-        fuse_ops.setattr = Some(rs_setattr);
+        fuse_ops.setattr = Some(rs_setattr::<T>);
     }
     if ops.can_readlink() {
-        fuse_ops.readlink = Some(rs_readlink);
+        fuse_ops.readlink = Some(rs_readlink::<T>);
     }
     if ops.can_mknod() {
-        fuse_ops.mknod = Some(rs_mknod);
+        fuse_ops.mknod = Some(rs_mknod::<T>);
     }
     if ops.can_mkdir() {
-        fuse_ops.mkdir = Some(rs_mkdir);
+        fuse_ops.mkdir = Some(rs_mkdir::<T>);
     }
     if ops.can_unlink() {
-        fuse_ops.unlink = Some(rs_unlink);
+        fuse_ops.unlink = Some(rs_unlink::<T>);
     }
     if ops.can_rmdir() {
-        fuse_ops.rmdir = Some(rs_rmdir);
+        fuse_ops.rmdir = Some(rs_rmdir::<T>);
     }
     if ops.can_symlink() {
-        fuse_ops.symlink = Some(rs_symlink);
+        fuse_ops.symlink = Some(rs_symlink::<T>);
     }
     if ops.can_rename() {
-        fuse_ops.rename = Some(rs_rename);
+        fuse_ops.rename = Some(rs_rename::<T>);
     }
     if ops.can_link() {
-        fuse_ops.link = Some(rs_link);
+        fuse_ops.link = Some(rs_link::<T>);
     }
     if ops.can_open() {
-        fuse_ops.open = Some(rs_open);
+        fuse_ops.open = Some(rs_open::<T>);
     }
     if ops.can_read() {
-        fuse_ops.read = Some(rs_read);
+        fuse_ops.read = Some(rs_read::<T>);
     }
     if ops.can_write() {
-        fuse_ops.write = Some(rs_write);
+        fuse_ops.write = Some(rs_write::<T>);
     }
     if ops.can_flush() {
-        fuse_ops.flush = Some(rs_flush);
+        fuse_ops.flush = Some(rs_flush::<T>);
     }
     if ops.can_release() {
-        fuse_ops.release = Some(rs_release);
+        fuse_ops.release = Some(rs_release::<T>);
     }
     if ops.can_fsync() {
-        fuse_ops.fsync = Some(rs_fsync);
+        fuse_ops.fsync = Some(rs_fsync::<T>);
     }
     if ops.can_opendir() {
-        fuse_ops.opendir = Some(rs_opendir);
+        fuse_ops.opendir = Some(rs_opendir::<T>);
     }
     if ops.can_readdir() {
-        fuse_ops.readdir = Some(rs_readdir);
+        fuse_ops.readdir = Some(rs_readdir::<T>);
     }
     if ops.can_releasedir() {
-        fuse_ops.releasedir = Some(rs_releasedir);
+        fuse_ops.releasedir = Some(rs_releasedir::<T>);
     }
     if ops.can_fsyncdir() {
-        fuse_ops.fsyncdir = Some(rs_fsyncdir);
+        fuse_ops.fsyncdir = Some(rs_fsyncdir::<T>);
     }
     if ops.can_statfs() {
-        fuse_ops.statfs = Some(rs_statfs);
+        fuse_ops.statfs = Some(rs_statfs::<T>);
     }
     if ops.can_setxattr() {
-        fuse_ops.setxattr = Some(rs_setxattr);
+        fuse_ops.setxattr = Some(rs_setxattr::<T>);
     }
     if ops.can_getxattr() {
-        fuse_ops.getxattr = Some(rs_getxattr);
+        fuse_ops.getxattr = Some(rs_getxattr::<T>);
     }
     if ops.can_listxattr() {
-        fuse_ops.listxattr = Some(rs_listxattr);
+        fuse_ops.listxattr = Some(rs_listxattr::<T>);
     }
     if ops.can_removexattr() {
-        fuse_ops.removexattr = Some(rs_removexattr);
+        fuse_ops.removexattr = Some(rs_removexattr::<T>);
     }
     if ops.can_access() {
-        fuse_ops.access = Some(rs_access);
+        fuse_ops.access = Some(rs_access::<T>);
     }
     if ops.can_create() {
-        fuse_ops.create = Some(rs_create);
+        fuse_ops.create = Some(rs_create::<T>);
     }
     if ops.can_getlk() {
-        fuse_ops.getlk = Some(rs_getlk);
+        fuse_ops.getlk = Some(rs_getlk::<T>);
     }
     if ops.can_setlk() {
-        fuse_ops.setlk = Some(rs_setlk);
+        fuse_ops.setlk = Some(rs_setlk::<T>);
     }
     if ops.can_bmap() {
-        fuse_ops.bmap = Some(rs_bmap);
+        fuse_ops.bmap = Some(rs_bmap::<T>);
     }
     if ops.can_ioctl() {
-        fuse_ops.ioctl = Some(rs_ioctl);
+        fuse_ops.ioctl = Some(rs_ioctl::<T>);
     }
     if ops.can_forget_multi() {
-        fuse_ops.forget_multi = Some(rs_forget_multi);
+        fuse_ops.forget_multi = Some(rs_forget_multi::<T>);
     }
     if ops.can_flock() {
-        fuse_ops.flock = Some(rs_flock);
+        fuse_ops.flock = Some(rs_flock::<T>);
     }
     fuse_ops
 }
