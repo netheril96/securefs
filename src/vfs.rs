@@ -198,36 +198,6 @@ pub mod unix {
     #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
     pub struct Generation(pub u64);
 
-    /// File attributes
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub struct INodeMetadata {
-        /// Inode number
-        pub ino: INodeNumber,
-        /// Size in bytes
-        pub size: u64,
-        /// Size in blocks
-        pub blocks: u64,
-        /// Time of last access
-        pub atime: Timespec,
-        /// Time of last modification
-        pub mtime: Timespec,
-        /// Time of last change
-        pub ctime: Timespec,
-        /// Time of creation (macOS and FreeBSD)
-        pub crtime: Timespec,
-        /// Mode bits
-        pub mode: u32,
-        /// Number of hard links
-        pub nlink: u32,
-        /// User id
-        pub uid: u32,
-        /// Group id
-        pub gid: u32,
-        /// Rdev
-        pub rdev: u32,
-        /// Block size
-        pub blksize: u32,
-    }
     pub trait INodeCore<StatType> {
         fn get_ino(&self) -> INodeNumber;
         fn get_generation(&self) -> Generation;
@@ -280,7 +250,6 @@ pub mod unix {
         fn write(&self, data: &[u8], offset: u64) -> anyhow::Result<()>;
         fn append(&self, data: &[u8]) -> anyhow::Result<()>;
         fn size(&self) -> anyhow::Result<u64>;
-        fn upgrade_to_writable(&self) -> anyhow::Result<()>;
     }
 
     pub trait SymlinkINodeExt {

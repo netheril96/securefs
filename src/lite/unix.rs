@@ -126,6 +126,17 @@ impl LiteFileINode {
         st.st_blksize = inner.stream.optimal_block_size().try_into()?;
         Ok(())
     }
+
+    fn upgrade_to_writable(inner: &mut LiteFileNodeInner) -> anyhow::Result<()> {
+        if inner.writable {
+            return Ok(());
+        }
+        inner
+            .stream
+            .replace_fd(reopen_as_writable(inner.stream.as_fd())?);
+        inner.writable = true;
+        Ok(())
+    }
 }
 
 impl INodeCore<rustix::fs::Stat> for LiteFileINode {
@@ -186,28 +197,20 @@ impl FileINodeExt for LiteFileINode {
     }
 
     fn write(&self, data: &[u8], offset: u64) -> anyhow::Result<()> {
-        self.inner.lock().stream.write(data, offset)
+        let mut guard = self.inner.lock();
+        LiteFileINode::upgrade_to_writable(&mut *guard)?;
+        guard.stream.write(data, offset)
     }
 
     fn size(&self) -> anyhow::Result<u64> {
         self.inner.lock().stream.size()
     }
 
-    fn upgrade_to_writable(&self) -> anyhow::Result<()> {
-        let mut guard = self.inner.lock();
-        if guard.writable {
-            return Ok(());
-        }
-        let newfd = reopen_as_writable(guard.stream.as_fd())?;
-        guard.stream.replace_fd(newfd);
-        guard.writable = true;
-        Ok(())
-    }
-
     fn append(&self, data: &[u8]) -> anyhow::Result<()> {
-        let mut g = self.inner.lock();
-        let size = g.stream.size()?;
-        g.stream.write(data, size)?;
+        let mut guard = self.inner.lock();
+        LiteFileINode::upgrade_to_writable(&mut *guard)?;
+        let size = guard.stream.size()?;
+        guard.stream.write(data, size)?;
         Ok(())
     }
 }

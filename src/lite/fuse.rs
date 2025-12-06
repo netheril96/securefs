@@ -375,8 +375,6 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
             return Err(Errno::PERM)?;
         }
 
-        file.upgrade_to_writable()?;
-
         if appending {
             file.append(buf)?;
         } else {
