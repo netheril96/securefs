@@ -5,9 +5,11 @@ use scopeguard::defer;
 
 use crate::fuse_wrappers::{
     bindings::{
-        self, fuse_args, fuse_cmdline_opts, fuse_lowlevel_ops, fuse_opt_free_args,
-        fuse_parse_cmdline, fuse_remove_signal_handlers, fuse_session, fuse_session_destroy,
-        fuse_session_loop_mt, fuse_session_mount, fuse_session_unmount, fuse_set_signal_handlers,
+        self, fuse_args, fuse_cmdline_opts, fuse_loop_cfg_create, fuse_loop_cfg_destroy,
+        fuse_loop_cfg_set_clone_fd, fuse_loop_cfg_set_max_threads,
+        fuse_lowlevel_ops, fuse_opt_free_args, fuse_parse_cmdline, fuse_remove_signal_handlers,
+        fuse_session, fuse_session_destroy, fuse_session_loop_mt, fuse_session_mount,
+        fuse_session_unmount, fuse_set_signal_handlers,
     },
     fuse_low_level_ops::{FuseLowLevelOps, generate_libfuse_low_level_ops},
 };
@@ -92,7 +94,15 @@ pub fn run_fuse_main<T: FuseLowLevelOps>(
     }
     defer!(unsafe { fuse_session_unmount(*session) });
 
-    let ret = unsafe { fuse_session_loop_mt(*session, std::ptr::null_mut()) };
+    let config = scopeguard::guard(unsafe { fuse_loop_cfg_create() }, |v| unsafe {
+        fuse_loop_cfg_destroy(v);
+    });
+    unsafe {
+        fuse_loop_cfg_set_clone_fd(*config, 1);
+        fuse_loop_cfg_set_max_threads(*config, 16);
+    }
+
+    let ret = unsafe { fuse_session_loop_mt(*session, *config) };
     if ret != 0 {
         return Err(FuseLoopError).with_context(|| format!("fuse_session_loop_mt returns {ret}"));
     }
