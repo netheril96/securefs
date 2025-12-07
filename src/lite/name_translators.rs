@@ -1,4 +1,4 @@
-use std::{cell::RefCell, ops::DerefMut};
+use std::{cell::RefCell, ops::DerefMut, sync::Arc};
 
 use aes_gcm::KeyInit;
 use aes_siv::siv::Aes128Siv;
@@ -7,7 +7,7 @@ use blake2::{Blake2bMac, digest::Mac};
 use ctr::cipher::consts::U32;
 use thiserror::Error;
 
-use crate::MasterKeyType;
+use crate::{MasterKeyType, protos::params::decrypted_securefs_params::LiteFormatParams};
 
 const ENC_DUDE: &[u8; 32] = b"ABCDEFGHIJKMNPQRSTUVWXYZ23456789";
 fast32::make_base32_alpha!(
@@ -278,6 +278,27 @@ impl NameTranslator for NewStyleNameTranslator {
 
     fn decrypt_name(&self, name: &[u8]) -> Option<Vec<u8>> {
         decrypt_filename_component(name, self.get_aes_siv().borrow_mut().deref_mut())
+    }
+}
+
+pub fn create_name_translator(
+    params: &LiteFormatParams,
+) -> anyhow::Result<Arc<dyn NameTranslator>> {
+    if params.long_name_threshold.unwrap_or(0) > 0 {
+        Ok(Arc::new(NewStyleNameTranslator::new(
+            params.name_key.as_slice().try_into()?,
+            params.long_name_threshold.unwrap().try_into()?,
+            if params.long_name_suffix.is_empty() {
+                "...".into()
+            } else {
+                params.long_name_suffix.clone()
+            },
+            !params.disable_legacy_additional_encryption_after_hashing_long_name,
+        )))
+    } else {
+        Ok(Arc::new(LegacyNameTranslator::new(
+            params.name_key.as_slice().try_into()?,
+        )))
     }
 }
 

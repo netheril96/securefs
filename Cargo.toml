@@ -17,6 +17,7 @@ ghash = { version = "0.5.1", default-features = false, features = ["std"] }
 libc = "0.2.177"
 log = "0.4.28"
 lru = "0.16.2"
+num-bigint = "0.4.6"
 once_cell = { version = "1.21.3", features = ["parking_lot"] }
 parking_lot = "0.12.5"
 protobuf = "3.7.2"

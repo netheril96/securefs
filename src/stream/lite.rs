@@ -51,7 +51,7 @@ pub enum LiteAesGcmCryptError {
 impl<S: Stream> LiteAesGcmCryptStream<S> {
     pub fn new(
         mut inner: S,
-        lite_param_calc: &dyn LiteParamCalculator,
+        lite_param_calc: &impl LiteParamCalculator,
         iv_size: LengthType,
         block_size: LengthType,
         verify_mac: bool,

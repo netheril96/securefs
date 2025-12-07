@@ -15,6 +15,9 @@ use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use rustix::fs::{AtFlags, OFlags, Timespec};
 
+use crate::lite::name_translators::{NewStyleNameTranslator, create_name_translator};
+use crate::protos::params::decrypted_securefs_params::{Format_specific_params, LiteFormatParams};
+use crate::protos::params::{DecryptedSecurefsParams, MountOptions};
 use crate::vfs::GenericINodeTable;
 use crate::{
     lite::{
@@ -674,8 +677,23 @@ pub struct LiteVfs<Table: GenericINodeTable<LiteINode>> {
     pub(super) readonly: bool,
 }
 
-pub trait LiteVfsGenerator {
-    fn generate<Table: GenericINodeTable<LiteINode>>(&self) -> anyhow::Result<LiteVfs<Table>>;
+pub fn create_vfs<
+    Table: GenericINodeTable<LiteINode>,
+    F: FnOnce(INodeNumber, LiteINode) -> Table,
+>(
+    data_params: &DecryptedSecurefsParams,
+    mount_options: &MountOptions,
+    f: F,
+) -> anyhow::Result<LiteVfs<Table>> {
+    let Some(Format_specific_params::LiteFormatParams(ref lite_format_params)) =
+        data_params.format_specific_params
+    else {
+        anyhow::bail!("Trying to create lite vfs without lite params");
+    };
+
+    let name_translator = create_name_translator(lite_format_params);
+
+    todo!()
 }
 
 #[cfg(test)]

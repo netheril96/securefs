@@ -1,4 +1,5 @@
 fn main() {
+    println!("cargo:rerun-if-changed=protos");
     protobuf_codegen::Codegen::new()
         // All inputs and imports from the inputs must reside in `includes` directories.
         .includes(&["protos"])
@@ -7,7 +8,7 @@ fn main() {
         // Specify output directory relative to Cargo output directory.
         .cargo_out_dir("protos")
         .run_from_script();
-        // Only run bindgen if the "fuse" feature is enabled.
+    // Only run bindgen if the "fuse" feature is enabled.
     #[cfg(feature = "fuse")]
     {
         // Tell Cargo to re-run this build script if src/fuse_wrappers/all.h changes.
