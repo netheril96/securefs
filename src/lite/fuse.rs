@@ -548,16 +548,6 @@ pub mod testing {
 
     use super::*;
 
-    impl IoWrapperStream for LiteAesGcmCryptStream<StdIoStream> {
-        fn as_fd(&self) -> std::os::unix::prelude::BorrowedFd<'_> {
-            unsafe { self.get_inner().as_ref().as_fd() }
-        }
-
-        fn replace_fd(&mut self, fd: std::os::unix::prelude::OwnedFd) {
-            unsafe { self.replace_inner(StdIoStream::new(fd.into())) };
-        }
-    }
-
     struct ParamCalc {
         padding_size: LengthType,
     }

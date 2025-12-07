@@ -9,6 +9,8 @@ use anyhow::bail;
 use ctr::cipher::BlockEncrypt;
 use num_bigint::BigUint;
 
+#[cfg(unix)]
+use crate::stream::{StdIoStream, lite::LiteAesGcmCryptStream};
 use crate::{
     MasterKeyType,
     protos::params::decrypted_securefs_params::Format_specific_params,
@@ -29,6 +31,19 @@ pub trait IoWrapperStream: Stream {
 pub trait IoWrapperFactory {
     fn compute_virtual_size(&self, underlying_size: u64) -> Option<u64>;
     fn wrap(&self, fd: OwnedFd) -> anyhow::Result<Box<dyn IoWrapperStream>>;
+}
+
+#[cfg(unix)]
+impl IoWrapperStream for LiteAesGcmCryptStream<StdIoStream> {
+    fn as_fd(&self) -> std::os::unix::prelude::BorrowedFd<'_> {
+        use std::os::fd::AsFd;
+
+        unsafe { self.get_inner().as_ref().as_fd() }
+    }
+
+    fn replace_fd(&mut self, fd: std::os::unix::prelude::OwnedFd) {
+        unsafe { self.replace_inner(StdIoStream::new(fd.into())) };
+    }
 }
 
 pub struct LiteParamCalculator {
