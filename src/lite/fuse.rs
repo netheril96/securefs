@@ -123,6 +123,18 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
             &encoded_cname,
             rustix::fs::AtFlags::SYMLINK_NOFOLLOW,
         )?;
+        if st.st_dev != self.device_serial {
+            return Err(Errno::PERM).with_context(|| {
+                format!(
+                    concat!(
+                        "securefs lite format expects that the underlying repostiory is ",
+                        "on the same filesystem and have stable inode numbers, ",
+                        "but the root dir has device {} while child has {}"
+                    ),
+                    self.device_serial, st.st_dev
+                )
+            });
+        }
         let child = self
             .inode_table
             .get_or_insert_default(INodeNumber(st.st_ino));
@@ -613,7 +625,7 @@ pub mod testing {
             name_translator: name_translator,
             wrapper_factory: Box::new(Factory {}),
             generation: AtomicU64::new(100),
-            device_serial: Default::default(),
+            device_serial: root_stat.st_dev.try_into()?,
             attr_cache_duration: Duration::from_secs(30),
             readonly: false,
         });

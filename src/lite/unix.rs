@@ -669,9 +669,13 @@ pub struct LiteVfs<Table: GenericINodeTable<LiteINode>> {
     pub(super) name_translator: Arc<dyn NameTranslator>,
     pub(super) wrapper_factory: Box<dyn IoWrapperFactory>,
     pub(super) generation: AtomicU64,
-    pub(super) device_serial: OnceCell<u64>,
+    pub(super) device_serial: u64,
     pub(super) attr_cache_duration: Duration,
     pub(super) readonly: bool,
+}
+
+pub trait LiteVfsGenerator {
+    fn generate<Table: GenericINodeTable<LiteINode>>(&self) -> anyhow::Result<LiteVfs<Table>>;
 }
 
 #[cfg(test)]
