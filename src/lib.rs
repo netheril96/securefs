@@ -5,6 +5,7 @@ pub mod aesgcm;
 pub mod error;
 pub mod fuse_wrappers;
 pub mod lite;
+pub mod protos;
 pub mod stream;
 pub mod vfs;
 
