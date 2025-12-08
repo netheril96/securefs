@@ -190,6 +190,7 @@ impl<T> GenericINodeTable<T> for ShardedLruINodeTable<T> {
 #[cfg(unix)]
 pub mod unix {
 
+    use ambassador::delegatable_trait;
     use rustix::fs::Timespec;
     use std::sync::atomic::AtomicI64;
 
@@ -198,6 +199,7 @@ pub mod unix {
     #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
     pub struct Generation(pub u64);
 
+    #[delegatable_trait]
     pub trait INodeCore<StatType> {
         fn get_ino(&self) -> INodeNumber;
         fn get_generation(&self) -> Generation;

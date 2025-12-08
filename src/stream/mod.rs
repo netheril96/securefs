@@ -15,6 +15,7 @@ use std::os::windows::fs::FileExt;
 
 use anyhow::Ok;
 
+#[allow(unused)]
 use crate::OwnedFileDescriptor;
 
 pub type OffsetType = u64;

@@ -10,13 +10,14 @@ use std::{
     sync::{Arc, atomic::AtomicI64},
 };
 
+use ambassador::{Delegate, delegatable_trait};
 use anyhow::Context;
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use rustix::fs::{AtFlags, OFlags, Timespec};
 
-use crate::lite::name_translators::{NewStyleNameTranslator, create_name_translator};
-use crate::protos::params::decrypted_securefs_params::{Format_specific_params, LiteFormatParams};
+use crate::lite::name_translators::create_name_translator;
+use crate::protos::params::decrypted_securefs_params::Format_specific_params;
 use crate::protos::params::{DecryptedSecurefsParams, MountOptions};
 use crate::vfs::GenericINodeTable;
 use crate::{
@@ -123,13 +124,6 @@ impl LiteFileINode {
         })
     }
 
-    fn readjust_stat(&self, st: &mut rustix::fs::Stat) -> anyhow::Result<()> {
-        let inner = self.inner.lock();
-        st.st_size = inner.stream.size()?.try_into()?;
-        st.st_blksize = inner.stream.optimal_block_size().try_into()?;
-        Ok(())
-    }
-
     fn upgrade_to_writable(inner: &mut LiteFileNodeInner) -> anyhow::Result<()> {
         if inner.writable {
             return Ok(());
@@ -138,6 +132,15 @@ impl LiteFileINode {
             .stream
             .replace_fd(reopen_as_writable(inner.stream.as_fd())?);
         inner.writable = true;
+        Ok(())
+    }
+}
+
+impl ReadjustStatExt for LiteFileINode {
+    fn readjust_stat(&self, st: &mut rustix::fs::Stat) -> anyhow::Result<()> {
+        let inner = self.inner.lock();
+        st.st_size = inner.stream.size()?.try_into()?;
+        st.st_blksize = inner.stream.optimal_block_size().try_into()?;
         Ok(())
     }
 }
@@ -255,15 +258,17 @@ impl LiteDirINode {
             db: OnceCell::new(),
         })
     }
-
-    fn readjust_stat(&self, st: &mut rustix::fs::Stat) -> anyhow::Result<()> {
-        Ok(())
-    }
 }
 
 impl AsFd for LiteDirINode {
     fn as_fd(&self) -> std::os::unix::prelude::BorrowedFd<'_> {
         self.fd.as_fd()
+    }
+}
+
+impl ReadjustStatExt for LiteDirINode {
+    fn readjust_stat(&self, st: &mut rustix::fs::Stat) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 
@@ -425,11 +430,6 @@ impl LiteSymlinkINode {
             path: Default::default(),
         })
     }
-
-    fn readjust_stat(&self, st: &mut rustix::fs::Stat) -> anyhow::Result<()> {
-        st.st_size = self.readlink()?.len().try_into()?;
-        Ok(())
-    }
 }
 
 impl INodeCore<rustix::fs::Stat> for LiteSymlinkINode {
@@ -493,20 +493,27 @@ impl SymlinkINodeExt for LiteSymlinkINode {
     }
 }
 
+impl ReadjustStatExt for LiteSymlinkINode {
+    fn readjust_stat(&self, st: &mut rustix::fs::Stat) -> anyhow::Result<()> {
+        st.st_size = self.readlink()?.len().try_into()?;
+        Ok(())
+    }
+}
+
+use crate::vfs::unix::ambassador_impl_INodeCore;
+
+#[delegatable_trait]
+pub(super) trait ReadjustStatExt {
+    fn readjust_stat(&self, st: &mut rustix::fs::Stat) -> anyhow::Result<()>;
+}
+
+#[derive(Delegate)]
+#[delegate(INodeCore<rustix::fs::Stat>)]
+#[delegate(ReadjustStatExt)]
 pub enum LiteINode {
     LiteDirINode(LiteDirINode),
     LiteFileINode(LiteFileINode),
     LiteSymlinkINode(LiteSymlinkINode),
-}
-
-impl LiteINode {
-    pub(super) fn readjust_stat(&self, st: &mut rustix::fs::Stat) -> anyhow::Result<()> {
-        match self {
-            LiteINode::LiteDirINode(inode) => inode.readjust_stat(st),
-            LiteINode::LiteFileINode(inode) => inode.readjust_stat(st),
-            LiteINode::LiteSymlinkINode(inode) => inode.readjust_stat(st),
-        }
-    }
 }
 
 impl From<LiteDirINode> for LiteINode {
@@ -524,96 +531,6 @@ impl From<LiteFileINode> for LiteINode {
 impl From<LiteSymlinkINode> for LiteINode {
     fn from(value: LiteSymlinkINode) -> Self {
         Self::LiteSymlinkINode(value)
-    }
-}
-
-impl INodeCore<rustix::fs::Stat> for LiteINode {
-    fn get_ino(&self) -> INodeNumber {
-        match self {
-            LiteINode::LiteDirINode(inode) => inode.get_ino(),
-            LiteINode::LiteFileINode(inode) => inode.get_ino(),
-            LiteINode::LiteSymlinkINode(inode) => inode.get_ino(),
-        }
-    }
-
-    fn get_generation(&self) -> Generation {
-        match self {
-            LiteINode::LiteDirINode(inode) => inode.get_generation(),
-            LiteINode::LiteFileINode(inode) => inode.get_generation(),
-            LiteINode::LiteSymlinkINode(inode) => inode.get_generation(),
-        }
-    }
-
-    fn get_lookup_count(&self) -> &AtomicI64 {
-        match self {
-            LiteINode::LiteDirINode(inode) => inode.get_lookup_count(),
-            LiteINode::LiteFileINode(inode) => inode.get_lookup_count(),
-            LiteINode::LiteSymlinkINode(inode) => inode.get_lookup_count(),
-        }
-    }
-
-    fn get_metadata(&self) -> anyhow::Result<rustix::fs::Stat> {
-        match self {
-            LiteINode::LiteDirINode(inode) => inode.get_metadata(),
-            LiteINode::LiteFileINode(inode) => inode.get_metadata(),
-            LiteINode::LiteSymlinkINode(inode) => inode.get_metadata(),
-        }
-    }
-
-    fn set_metadata(
-        &self,
-        mode: Option<u32>,
-        uid: Option<u32>,
-        gid: Option<u32>,
-        size: Option<u64>,
-        atime: Option<Timespec>,
-        mtime: Option<Timespec>,
-        ctime: Option<Timespec>,
-        crtime: Option<Timespec>,
-    ) -> anyhow::Result<()> {
-        match self {
-            LiteINode::LiteDirINode(inode) => {
-                inode.set_metadata(mode, uid, gid, size, atime, mtime, ctime, crtime)
-            }
-            LiteINode::LiteFileINode(inode) => {
-                inode.set_metadata(mode, uid, gid, size, atime, mtime, ctime, crtime)
-            }
-            LiteINode::LiteSymlinkINode(inode) => {
-                inode.set_metadata(mode, uid, gid, size, atime, mtime, ctime, crtime)
-            }
-        }
-    }
-
-    fn get_extended_attr(&self, name: &[u8]) -> anyhow::Result<Vec<u8>> {
-        match self {
-            LiteINode::LiteDirINode(inode) => inode.get_extended_attr(name),
-            LiteINode::LiteFileINode(inode) => inode.get_extended_attr(name),
-            LiteINode::LiteSymlinkINode(inode) => inode.get_extended_attr(name),
-        }
-    }
-
-    fn set_extended_attr(&self, name: &[u8], value: &[u8]) -> anyhow::Result<()> {
-        match self {
-            LiteINode::LiteDirINode(inode) => inode.set_extended_attr(name, value),
-            LiteINode::LiteFileINode(inode) => inode.set_extended_attr(name, value),
-            LiteINode::LiteSymlinkINode(inode) => inode.set_extended_attr(name, value),
-        }
-    }
-
-    fn remove_extended_attr(&self, name: &[u8]) -> anyhow::Result<()> {
-        match self {
-            LiteINode::LiteDirINode(inode) => inode.remove_extended_attr(name),
-            LiteINode::LiteFileINode(inode) => inode.remove_extended_attr(name),
-            LiteINode::LiteSymlinkINode(inode) => inode.remove_extended_attr(name),
-        }
-    }
-
-    fn list_extended_attrs(&self) -> anyhow::Result<Vec<Vec<u8>>> {
-        match self {
-            LiteINode::LiteDirINode(inode) => inode.list_extended_attrs(),
-            LiteINode::LiteFileINode(inode) => inode.list_extended_attrs(),
-            LiteINode::LiteSymlinkINode(inode) => inode.list_extended_attrs(),
-        }
     }
 }
 

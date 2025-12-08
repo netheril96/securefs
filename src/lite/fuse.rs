@@ -31,7 +31,7 @@ use crate::{
         name_translators::LegacyNameTranslator,
         unix::{
             LiteDirINode, LiteDirReader, LiteFileINode, LiteINode, LiteINodeHeader,
-            LiteSymlinkINode, LiteVfs,
+            LiteSymlinkINode, LiteVfs, ReadjustStatExt,
         },
     },
     stream::{StdIoStream, lite::LiteAesGcmCryptStream},
