@@ -20,7 +20,6 @@ use rustix::fs::{AtFlags, Mode, OFlags, Timespec};
 use crate::lite::LiteAesGcmCryptStreamFactory;
 use crate::lite::name_translators::create_name_translator;
 use crate::protos::params::decrypted_securefs_params::Format_specific_params;
-use crate::protos::params::mount_options::MountByKernelExt;
 use crate::protos::params::{DecryptedSecurefsParams, MountOptions};
 use crate::vfs::{GenericINodeTable, ShardedMapINodeTable};
 use crate::{

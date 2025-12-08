@@ -7,16 +7,13 @@ use std::{
     os::fd::AsFd,
     sync::{
         Arc,
-        atomic::{AtomicI64, AtomicU64, Ordering},
+        atomic::{AtomicI64, Ordering},
     },
     time::{Duration, SystemTime},
 };
 
 use once_cell::sync::OnceCell;
-use rustix::{
-    fs::{Mode, OFlags},
-    io::Errno,
-};
+use rustix::io::Errno;
 
 use crate::{
     fuse_wrappers::{
@@ -26,17 +23,12 @@ use crate::{
         },
         fuse_low_level_ops::{FuseLowLevelOps, FuseReq},
     },
-    lite::{
-        IoWrapperStream,
-        name_translators::LegacyNameTranslator,
-        unix::{
+    lite::unix::{
             LiteDirINode, LiteDirReader, LiteFileINode, LiteINode, LiteINodeHeader,
             LiteSymlinkINode, LiteVfs, ReadjustStatExt,
         },
-    },
-    stream::{StdIoStream, lite::LiteAesGcmCryptStream},
     vfs::{
-        GenericINodeTable, INodeNotFoundError, ShardedMapINodeTable,
+        GenericINodeTable, INodeNotFoundError,
         unix::{DirINodeExt, DirReader, FileINodeExt, Generation, INodeCore, INodeNumber},
     },
 };
@@ -541,19 +533,15 @@ fn timespec_to_systemtime(tv_sec: i64, tv_nsec: u32) -> SystemTime {
 }
 
 pub mod testing {
-    use anyhow::Ok;
+    
     use protobuf::MessageField;
 
     use crate::{
         fuse_wrappers::fuse_main::run_fuse_main,
-        lite::{IoWrapperFactory, unix::create_vfs_for_fuse},
+        lite::unix::create_vfs_for_fuse,
         protos::params::{
             DecryptedSecurefsParams, MountOptions,
             decrypted_securefs_params::{LiteFormatParams, SizeParams},
-        },
-        stream::{
-            LengthType,
-            lite::{ID_SIZE, LiteParamCalculator},
         },
     };
 

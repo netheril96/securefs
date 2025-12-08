@@ -13,7 +13,7 @@ use num_bigint::BigUint;
 #[cfg(unix)]
 use crate::stream::{StdIoStream, lite::LiteAesGcmCryptStream};
 use crate::{
-    BorrowedFileDescriptor, MasterKeyType, OwnedFileDescriptor, WriteUpgradable,
+    MasterKeyType, OwnedFileDescriptor, WriteUpgradable,
     protos::params::decrypted_securefs_params::Format_specific_params,
     stream::{MemoryStream, Stream, lite::ID_SIZE},
 };
@@ -25,6 +25,7 @@ pub mod unix;
 #[cfg(unix)]
 pub trait IoWrapperStream: Stream + WriteUpgradable + AsFd {}
 
+#[cfg(unix)]
 impl<T: Stream + WriteUpgradable + AsFd> IoWrapperStream for T {}
 
 #[cfg(unix)]
