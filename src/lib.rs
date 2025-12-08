@@ -10,3 +10,13 @@ pub mod stream;
 pub mod vfs;
 
 pub type MasterKeyType = [u8; 32];
+
+#[cfg(unix)]
+pub type OwnedFileDescriptor = std::os::fd::OwnedFd;
+#[cfg(unix)]
+pub type BorrowedFileDescriptor<'a> = std::os::fd::BorrowedFd<'a>;
+
+#[cfg(windows)]
+pub type OwnedFileDescriptor = std::os::windows::io::OwnedHandle;
+#[cfg(windows)]
+pub type BorrowedFileDescriptor<'a> = std::os::windows::io::BorrowedHandle<'a>;

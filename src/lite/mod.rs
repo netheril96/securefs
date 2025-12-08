@@ -1,6 +1,3 @@
-#[cfg(unix)]
-use std::os::fd::{BorrowedFd, OwnedFd};
-
 use aes_gcm::{
     KeyInit,
     aes::{Aes256, Block},
@@ -12,7 +9,7 @@ use num_bigint::BigUint;
 #[cfg(unix)]
 use crate::stream::{StdIoStream, lite::LiteAesGcmCryptStream};
 use crate::{
-    MasterKeyType,
+    BorrowedFileDescriptor, MasterKeyType, OwnedFileDescriptor,
     protos::params::decrypted_securefs_params::Format_specific_params,
     stream::{Stream, lite::ID_SIZE},
 };
@@ -21,27 +18,25 @@ pub mod fuse;
 pub mod name_translators;
 pub mod unix;
 
-#[cfg(unix)]
 pub trait IoWrapperStream: Stream {
-    fn as_fd(&self) -> BorrowedFd<'_>;
-    fn replace_fd(&mut self, fd: OwnedFd);
+    fn as_fd(&self) -> BorrowedFileDescriptor<'_>;
+    fn replace_fd(&mut self, fd: OwnedFileDescriptor);
 }
 
-#[cfg(unix)]
 pub trait IoWrapperFactory {
     fn compute_virtual_size(&self, underlying_size: u64) -> Option<u64>;
-    fn wrap(&self, fd: OwnedFd) -> anyhow::Result<Box<dyn IoWrapperStream>>;
+    fn wrap(&self, fd: OwnedFileDescriptor) -> anyhow::Result<Box<dyn IoWrapperStream>>;
 }
 
 #[cfg(unix)]
 impl IoWrapperStream for LiteAesGcmCryptStream<StdIoStream> {
-    fn as_fd(&self) -> std::os::unix::prelude::BorrowedFd<'_> {
+    fn as_fd(&self) -> BorrowedFileDescriptor<'_> {
         use std::os::fd::AsFd;
 
         unsafe { self.get_inner().as_ref().as_fd() }
     }
 
-    fn replace_fd(&mut self, fd: std::os::unix::prelude::OwnedFd) {
+    fn replace_fd(&mut self, fd: OwnedFileDescriptor) {
         unsafe { self.replace_inner(StdIoStream::new(fd.into())) };
     }
 }

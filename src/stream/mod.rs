@@ -15,6 +15,8 @@ use std::os::windows::fs::FileExt;
 
 use anyhow::Ok;
 
+use crate::OwnedFileDescriptor;
+
 pub type OffsetType = u64;
 pub type LengthType = u64;
 
@@ -146,6 +148,162 @@ impl Stream for StdIoStream {
     }
 }
 
+#[cfg(windows)]
+pub struct NtFileStream {
+    fd: OwnedFileDescriptor,
+}
+
+#[cfg(windows)]
+impl Stream for NtFileStream {
+    fn read(&mut self, buffer: &mut [u8], offset: OffsetType) -> anyhow::Result<LengthType> {
+        use ntapi::ntioapi::IO_STATUS_BLOCK;
+        use ntapi::winapi::shared::ntstatus::STATUS_END_OF_FILE;
+
+        let mut byte_offset: i64 = offset as _;
+        let mut io_status_block: IO_STATUS_BLOCK = unsafe { std::mem::zeroed() };
+
+        let rc = unsafe {
+            use std::os::windows::io::AsRawHandle;
+
+            use ntapi::ntioapi::NtReadFile;
+
+            NtReadFile(
+                self.fd.as_raw_handle() as _,
+                std::ptr::null_mut(),
+                None,
+                std::ptr::null_mut(),
+                &raw mut io_status_block,
+                buffer.as_mut_ptr() as _,
+                buffer.len().try_into()?,
+                &raw mut byte_offset as _,
+                std::ptr::null_mut(),
+            )
+        };
+
+        if rc == STATUS_END_OF_FILE {
+            return Ok(0);
+        }
+
+        if rc < 0 {
+            use crate::error::NtError;
+
+            return Err(NtError { status: rc })?;
+        }
+
+        Ok(io_status_block.Information.try_into()?)
+    }
+
+    fn write(&mut self, buffer: &[u8], offset: OffsetType) -> anyhow::Result<()> {
+        use ntapi::ntioapi::IO_STATUS_BLOCK;
+
+        let mut byte_offset: i64 = offset as _;
+        let mut io_status_block: IO_STATUS_BLOCK = unsafe { std::mem::zeroed() };
+
+        let rc = unsafe {
+            use std::os::windows::io::AsRawHandle;
+
+            use ntapi::ntioapi::NtWriteFile;
+
+            NtWriteFile(
+                self.fd.as_raw_handle() as _,
+                std::ptr::null_mut(),
+                None,
+                std::ptr::null_mut(),
+                &raw mut io_status_block,
+                buffer.as_ptr().cast_mut() as _,
+                buffer.len().try_into()?,
+                &raw mut byte_offset as _,
+                std::ptr::null_mut(),
+            )
+        };
+
+        if rc < 0 {
+            use crate::error::NtError;
+
+            return Err(NtError { status: rc })?;
+        }
+        if io_status_block.Information != buffer.len() {
+            use anyhow::bail;
+            bail!("insufficient write");
+        }
+        Ok(())
+    }
+
+    fn size(&self) -> anyhow::Result<LengthType> {
+        use crate::error::NtError;
+        use ntapi::ntioapi::{
+            FILE_STANDARD_INFORMATION, FileStandardInformation, IO_STATUS_BLOCK,
+            NtQueryInformationFile,
+        };
+        use std::mem;
+        use std::os::windows::io::AsRawHandle;
+
+        let mut io_status_block: IO_STATUS_BLOCK = unsafe { mem::zeroed() };
+        let mut file_info: FILE_STANDARD_INFORMATION = unsafe { mem::zeroed() };
+
+        let status = unsafe {
+            NtQueryInformationFile(
+                self.fd.as_raw_handle() as _,
+                &mut io_status_block,
+                &raw mut file_info as _,
+                mem::size_of::<FILE_STANDARD_INFORMATION>() as u32,
+                FileStandardInformation,
+            )
+        };
+
+        if status < 0 {
+            return Err(NtError { status })?;
+        }
+
+        Ok(unsafe { *file_info.EndOfFile.QuadPart() } as LengthType)
+    }
+
+    fn flush(&mut self) -> anyhow::Result<()> {
+        use crate::error::NtError;
+        use ntapi::ntioapi::{IO_STATUS_BLOCK, NtFlushBuffersFile};
+        use std::mem;
+        use std::os::windows::io::AsRawHandle;
+
+        let mut io_status_block: IO_STATUS_BLOCK = unsafe { mem::zeroed() };
+        let status =
+            unsafe { NtFlushBuffersFile(self.fd.as_raw_handle() as _, &mut io_status_block) };
+        if status < 0 {
+            return Err(NtError { status })?;
+        }
+        Ok(())
+    }
+
+    fn resize(&mut self, size: LengthType) -> anyhow::Result<()> {
+        use crate::error::NtError;
+        use ntapi::ntioapi::{
+            FILE_END_OF_FILE_INFORMATION, FileEndOfFileInformation, IO_STATUS_BLOCK,
+            NtSetInformationFile,
+        };
+        use std::mem;
+        use std::os::windows::io::AsRawHandle;
+
+        let mut io_status_block: IO_STATUS_BLOCK = unsafe { mem::zeroed() };
+        let mut file_info: FILE_END_OF_FILE_INFORMATION = unsafe { mem::zeroed() };
+        unsafe {
+            *file_info.EndOfFile.QuadPart_mut() = size.try_into()?;
+        }
+
+        let status = unsafe {
+            NtSetInformationFile(
+                self.fd.as_raw_handle() as _,
+                &mut io_status_block,
+                &raw mut file_info as _,
+                mem::size_of::<FILE_END_OF_FILE_INFORMATION>() as u32,
+                FileEndOfFileInformation,
+            )
+        };
+        if status < 0 {
+            return Err(NtError { status })?;
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 pub mod test {
     use super::*;
@@ -220,6 +378,20 @@ pub mod test {
         let mut stdio_stream = StdIoStream::new(file.into_file());
         let mut memory_stream = MemoryStream { buffer: Vec::new() };
         compare_with_reference(&mut stdio_stream, &mut memory_stream, 500)?;
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_nt_file_stream() -> anyhow::Result<()> {
+        use std::os::windows::io::AsHandle;
+
+        let file = tempfile::NamedTempFile::new()?;
+        let mut nt_stream = NtFileStream {
+            fd: file.as_file().as_handle().try_clone_to_owned()?,
+        };
+        let mut memory_stream = MemoryStream { buffer: Vec::new() };
+        compare_with_reference(&mut nt_stream, &mut memory_stream, 500)?;
         Ok(())
     }
 }
