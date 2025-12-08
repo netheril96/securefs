@@ -1,7 +1,11 @@
+#[cfg(unix)]
+use std::os::fd::AsFd;
+
 use aes_gcm::{
     KeyInit,
     aes::{Aes256, Block},
 };
+
 use anyhow::bail;
 use ctr::cipher::BlockEncrypt;
 use num_bigint::BigUint;
@@ -9,35 +13,105 @@ use num_bigint::BigUint;
 #[cfg(unix)]
 use crate::stream::{StdIoStream, lite::LiteAesGcmCryptStream};
 use crate::{
-    BorrowedFileDescriptor, MasterKeyType, OwnedFileDescriptor,
+    BorrowedFileDescriptor, MasterKeyType, OwnedFileDescriptor, WriteUpgradable,
     protos::params::decrypted_securefs_params::Format_specific_params,
-    stream::{Stream, lite::ID_SIZE},
+    stream::{MemoryStream, Stream, lite::ID_SIZE},
 };
 
 pub mod fuse;
 pub mod name_translators;
 pub mod unix;
 
-pub trait IoWrapperStream: Stream {
-    fn as_fd(&self) -> BorrowedFileDescriptor<'_>;
-    fn replace_fd(&mut self, fd: OwnedFileDescriptor);
-}
+#[cfg(unix)]
+pub trait IoWrapperStream: Stream + WriteUpgradable + AsFd {}
 
+impl<T: Stream + WriteUpgradable + AsFd> IoWrapperStream for T {}
+
+#[cfg(unix)]
 pub trait IoWrapperFactory {
     fn compute_virtual_size(&self, underlying_size: u64) -> Option<u64>;
     fn wrap(&self, fd: OwnedFileDescriptor) -> anyhow::Result<Box<dyn IoWrapperStream>>;
 }
 
-#[cfg(unix)]
-impl IoWrapperStream for LiteAesGcmCryptStream<StdIoStream> {
-    fn as_fd(&self) -> BorrowedFileDescriptor<'_> {
-        use std::os::fd::AsFd;
+pub struct LiteAesGcmCryptStreamFactory {
+    size_params: crate::protos::params::decrypted_securefs_params::SizeParams,
+    lite_param_calc: LiteParamCalculator,
+    verify_mac: bool,
+}
 
-        unsafe { self.get_inner().as_ref().as_fd() }
+impl LiteAesGcmCryptStreamFactory {
+    pub fn new(
+        size_params: crate::protos::params::decrypted_securefs_params::SizeParams,
+        lite_param_calc: LiteParamCalculator,
+        verify_mac: bool,
+    ) -> Self {
+        Self {
+            size_params,
+            lite_param_calc,
+            verify_mac,
+        }
     }
 
-    fn replace_fd(&mut self, fd: OwnedFileDescriptor) {
-        unsafe { self.replace_inner(StdIoStream::new(fd.into())) };
+    pub fn new_from_params(
+        params: &crate::protos::params::DecryptedSecurefsParams,
+        verify_mac: bool,
+    ) -> anyhow::Result<Self> {
+        Ok(Self::new(
+            params
+                .size_params
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("no size params available"))?
+                .clone(),
+            LiteParamCalculator::new_from_params(params)?,
+            verify_mac,
+        ))
+    }
+
+    fn generic_wrap<Inner>(
+        &self,
+        fd: OwnedFileDescriptor,
+    ) -> anyhow::Result<LiteAesGcmCryptStream<Inner>>
+    where
+        Inner: From<OwnedFileDescriptor> + Stream,
+    {
+        LiteAesGcmCryptStream::new(
+            Inner::from(fd),
+            &self.lite_param_calc,
+            self.size_params.iv_size.into(),
+            self.size_params.block_size.into(),
+            true,
+        )
+    }
+
+    fn compute_virtual_size(&self, underlying_size: u64) -> Option<u64> {
+        if self.size_params.max_padding_size > 0 {
+            None
+        } else {
+            Some(
+                // This method is the same for all inner streams.
+                LiteAesGcmCryptStream::<MemoryStream>::virtual_size_without_padding(
+                    underlying_size,
+                    self.size_params.block_size.into(),
+                    self.size_params.iv_size.into(),
+                ),
+            )
+        }
+    }
+}
+
+#[cfg(unix)]
+impl IoWrapperFactory for LiteAesGcmCryptStreamFactory {
+    fn compute_virtual_size(&self, underlying_size: u64) -> Option<u64> {
+        self.compute_virtual_size(underlying_size)
+    }
+
+    fn wrap(&self, fd: OwnedFileDescriptor) -> anyhow::Result<Box<dyn IoWrapperStream>> {
+        self.generic_wrap::<StdIoStream>(fd).map(|x| {
+            use crate::stream::lite::unix::LiteAesGcmOverFileStream;
+
+            let y: Box<dyn IoWrapperStream> = Box::new(LiteAesGcmOverFileStream::new(x));
+            y
+        })
     }
 }
 

@@ -3,6 +3,7 @@
 use std::ffi::{CStr, CString};
 use std::os::fd::AsRawFd;
 
+use std::path::Path;
 use std::sync::atomic::AtomicU64;
 use std::time::Duration;
 use std::{
@@ -11,15 +12,17 @@ use std::{
 };
 
 use ambassador::{Delegate, delegatable_trait};
-use anyhow::Context;
+use anyhow::{Context, bail};
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
-use rustix::fs::{AtFlags, OFlags, Timespec};
+use rustix::fs::{AtFlags, Mode, OFlags, Timespec};
 
+use crate::lite::LiteAesGcmCryptStreamFactory;
 use crate::lite::name_translators::create_name_translator;
 use crate::protos::params::decrypted_securefs_params::Format_specific_params;
+use crate::protos::params::mount_options::MountByKernelExt;
 use crate::protos::params::{DecryptedSecurefsParams, MountOptions};
-use crate::vfs::GenericINodeTable;
+use crate::vfs::{GenericINodeTable, ShardedMapINodeTable};
 use crate::{
     lite::{
         IoWrapperFactory, IoWrapperStream,
@@ -128,9 +131,7 @@ impl LiteFileINode {
         if inner.writable {
             return Ok(());
         }
-        inner
-            .stream
-            .replace_fd(reopen_as_writable(inner.stream.as_fd())?);
+        inner.stream.upgrade_to_writable()?;
         inner.writable = true;
         Ok(())
     }
@@ -534,56 +535,6 @@ impl From<LiteSymlinkINode> for LiteINode {
     }
 }
 
-#[cfg(target_os = "linux")]
-fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
-    use rustix::fs::Mode;
-    Ok(rustix::fs::open(
-        format!("/proc/self/fd/{}", fd.as_raw_fd()),
-        OFlags::RDWR,
-        Mode::empty(),
-    )?)
-}
-
-#[cfg(target_os = "macos")]
-fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
-    use anyhow::Context;
-    use rustix::fs::{Mode, OFlags};
-    use std::ffi::CStr;
-
-    let mut path_buffer = vec![0u8; (libc::PATH_MAX + 1) as usize];
-    let ret = unsafe {
-        libc::fcntl(
-            fd.as_raw_fd(),
-            libc::F_GETPATH,
-            path_buffer.as_mut_ptr() as *mut libc::c_void,
-        )
-    };
-
-    if ret < 0 {
-        return Err(std::io::Error::last_os_error())
-            .with_context(|| format!("fcntl(F_GETPATH) failed for fd {}", fd.as_raw_fd()));
-    }
-
-    let path = unsafe { CStr::from_ptr(path_buffer.as_ptr() as *const libc::c_char) };
-    Ok(rustix::fs::open(path, OFlags::RDWR, Mode::empty())?)
-}
-
-#[cfg(target_os = "freebsd")]
-fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
-    let opath_fd = rustix::fs::openat(
-        fd,
-        c"",
-        OFlags::from_bits_retain((libc::O_PATH | libc::O_EMPTY_PATH) as libc::c_uint),
-        rustix::fs::Mode::empty(),
-    )?;
-    Ok(rustix::fs::openat(
-        opath_fd,
-        c"",
-        OFlags::from_bits_retain((libc::O_RDWR | libc::O_EMPTY_PATH) as libc::c_uint),
-        rustix::fs::Mode::empty(),
-    )?)
-}
-
 pub struct LiteVfs<Table: GenericINodeTable<LiteINode>> {
     pub(super) inode_table: Table,
     pub(super) name_translator: Arc<dyn NameTranslator>,
@@ -594,12 +545,10 @@ pub struct LiteVfs<Table: GenericINodeTable<LiteINode>> {
     pub(super) readonly: bool,
 }
 
-pub fn create_vfs<
-    Table: GenericINodeTable<LiteINode>,
-    F: FnOnce(INodeNumber, LiteINode) -> Table,
->(
+fn create_vfs<Table: GenericINodeTable<LiteINode>, F: FnOnce(INodeNumber, LiteINode) -> Table>(
     data_params: &DecryptedSecurefsParams,
     mount_options: &MountOptions,
+    data_dir: &Path,
     f: F,
 ) -> anyhow::Result<LiteVfs<Table>> {
     let Some(Format_specific_params::LiteFormatParams(ref lite_format_params)) =
@@ -608,36 +557,54 @@ pub fn create_vfs<
         anyhow::bail!("Trying to create lite vfs without lite params");
     };
 
-    let name_translator = create_name_translator(lite_format_params);
+    let name_translator = create_name_translator(lite_format_params)?;
+    let factory = Box::new(LiteAesGcmCryptStreamFactory::new_from_params(
+        data_params,
+        !mount_options.disable_verification,
+    )?);
 
-    todo!()
+    let dir_fd = rustix::fs::open(data_dir, OFlags::RDONLY, Mode::empty())?;
+    let st = rustix::fs::fstat(dir_fd.as_fd())?;
+    let dir = LiteDirINode::new(
+        LiteINodeHeader {
+            ino: INodeNumber(st.st_ino),
+            generation: Generation(0),
+            lookup_count: AtomicI64::new(1),
+            name_translator: name_translator.clone(),
+        },
+        dir_fd,
+    );
+    let inode_table = f(dir.header.ino, dir.into());
+    Ok(LiteVfs::<Table> {
+        inode_table,
+        name_translator,
+        wrapper_factory: factory,
+        generation: AtomicU64::new(128),
+        device_serial: st.st_dev,
+        attr_cache_duration: Duration::from_secs(mount_options.attr_cache_seconds.unwrap_or(30)),
+        readonly: mount_options.read_only,
+    })
 }
 
-#[cfg(test)]
-mod test {
-    use std::{
-        fs::File,
-        io::{Read, Write},
+pub fn create_vfs_for_fuse(
+    data_params: &DecryptedSecurefsParams,
+    mount_options: &MountOptions,
+    data_dir: &Path,
+) -> anyhow::Result<LiteVfs<ShardedMapINodeTable<LiteINode>>> {
+    let Some(crate::protos::params::mount_options::Mount_type_specific::MountByKernelExt(..)) =
+        mount_options.mount_type_specific
+    else {
+        bail!("create_vfs_for_fuse called but the mount options are in the contrary")
     };
-
-    use super::*;
-
-    #[test]
-    fn reopen() -> anyhow::Result<()> {
-        let file = tempfile::NamedTempFile::new()?;
-        file.as_file().write_all("Hello".as_bytes())?;
-
-        let mut rofile = File::open(file.path())?;
-        assert!(rofile.write_all("World".as_bytes()).is_err());
-
-        let new_fd = reopen_as_writable(rofile.as_fd())?;
-        let mut wfile = File::from(new_fd);
-
-        let mut string = String::new();
-        wfile.read_to_string(&mut string)?;
-        assert_eq!(string, "Hello");
-
-        wfile.write_all("World".as_bytes())?;
-        Ok(())
-    }
+    create_vfs(data_params, mount_options, data_dir, |number, node| {
+        let shard_count = if mount_options.inode_table_shard_count > 0 {
+            mount_options
+                .inode_table_shard_count
+                .try_into()
+                .expect("shard count too large")
+        } else {
+            256
+        };
+        ShardedMapINodeTable::new(number, node, shard_count)
+    })
 }

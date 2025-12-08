@@ -21,3 +21,7 @@ pub type BorrowedFileDescriptor<'a> = std::os::fd::BorrowedFd<'a>;
 pub type OwnedFileDescriptor = std::os::windows::io::OwnedHandle;
 #[cfg(windows)]
 pub type BorrowedFileDescriptor<'a> = std::os::windows::io::BorrowedHandle<'a>;
+
+pub trait WriteUpgradable {
+    fn upgrade_to_writable(&mut self) -> anyhow::Result<()>;
+}

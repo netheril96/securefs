@@ -13,6 +13,7 @@ use std::os::unix::fs::FileExt;
 #[cfg(windows)]
 use std::os::windows::fs::FileExt;
 
+use ambassador::delegatable_trait;
 use anyhow::Ok;
 
 #[allow(unused)]
@@ -22,6 +23,7 @@ pub type OffsetType = u64;
 pub type LengthType = u64;
 
 #[allow(unused)]
+#[delegatable_trait]
 pub trait Stream {
     fn read(&mut self, buffer: &mut [u8], offset: OffsetType) -> anyhow::Result<LengthType>;
     fn write(&mut self, buffer: &[u8], offset: OffsetType) -> anyhow::Result<()>;
@@ -92,6 +94,12 @@ impl StdIoStream {
 impl From<File> for StdIoStream {
     fn from(value: File) -> Self {
         Self { file: value }
+    }
+}
+
+impl From<OwnedFileDescriptor> for StdIoStream {
+    fn from(value: OwnedFileDescriptor) -> Self {
+        Self::from(File::from(value))
     }
 }
 

@@ -22,9 +22,9 @@ pub(in crate::stream) trait MultipleBlockReaderWriter {
         end_residue: OffsetType,
     ) -> anyhow::Result<()>;
     fn adjust_logical_size(&mut self, length: LengthType) -> anyhow::Result<()>;
-    fn size(&self) -> anyhow::Result<LengthType>;
-    fn flush(&mut self) -> anyhow::Result<()>;
-    fn is_sparse(&self) -> bool {
+    fn size_mbrw(&self) -> anyhow::Result<LengthType>;
+    fn flush_mbrw(&mut self) -> anyhow::Result<()>;
+    fn is_sparse_mbrw(&self) -> bool {
         false
     }
 }
@@ -76,7 +76,7 @@ impl<T: MultipleBlockReaderWriter> Stream for T {
         if buffer.is_empty() {
             return Ok(());
         }
-        let current_size = self.size()?;
+        let current_size = self.size_mbrw()?;
         if offset > current_size {
             self.resize(offset)?;
         }
@@ -84,15 +84,15 @@ impl<T: MultipleBlockReaderWriter> Stream for T {
     }
 
     fn size(&self) -> anyhow::Result<LengthType> {
-        self.size()
+        self.size_mbrw()
     }
 
     fn flush(&mut self) -> anyhow::Result<()> {
-        self.flush()
+        self.flush_mbrw()
     }
 
     fn resize(&mut self, size: LengthType) -> anyhow::Result<()> {
-        let current_size = self.size()?;
+        let current_size = self.size_mbrw()?;
         if size == current_size {
             return Ok(());
         } else if size < current_size {
@@ -105,7 +105,7 @@ impl<T: MultipleBlockReaderWriter> Stream for T {
         } else {
             let old_block_num = current_size / self.block_size();
             let new_block_num = size / self.block_size();
-            if !self.is_sparse() || old_block_num == new_block_num {
+            if !self.is_sparse_mbrw() || old_block_num == new_block_num {
                 self.zero_fill(current_size, size)?;
             } else {
                 self.zero_fill(
@@ -118,7 +118,7 @@ impl<T: MultipleBlockReaderWriter> Stream for T {
     }
 
     fn is_sparse(&self) -> bool {
-        self.is_sparse()
+        self.is_sparse_mbrw()
     }
 }
 
@@ -296,14 +296,14 @@ mod test {
             Ok(())
         }
 
-        fn size(&self) -> anyhow::Result<LengthType> {
+        fn size_mbrw(&self) -> anyhow::Result<LengthType> {
             self.data
                 .iter()
                 .map(|it| LengthType::try_from(it.len()))
                 .try_fold(0, |acc, item| Ok(acc + item?))
         }
 
-        fn flush(&mut self) -> anyhow::Result<()> {
+        fn flush_mbrw(&mut self) -> anyhow::Result<()> {
             Ok(())
         }
     }

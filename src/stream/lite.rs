@@ -1,13 +1,18 @@
 use std::mem::{replace, size_of};
 
 use aes_gcm::{Aes128Gcm, Key};
+#[cfg(unix)]
+use ambassador::Delegate;
 use anyhow::{Context, Ok};
 use thiserror::Error;
 
+#[cfg(unix)]
+use crate::stream::StdIoStream;
 use crate::{
+    WriteUpgradable,
     aesgcm::DynamicIvAes128Gcm,
     rng::fill_with_random,
-    stream::{LengthType, Stream, block::MultipleBlockReaderWriter},
+    stream::{LengthType, OffsetType, Stream, block::MultipleBlockReaderWriter},
 };
 
 pub const ID_SIZE: usize = 16;
@@ -287,7 +292,7 @@ impl<S: Stream> MultipleBlockReaderWriter for LiteAesGcmCryptStream<S> {
         self.inner.resize(new_size)
     }
 
-    fn size(&self) -> anyhow::Result<LengthType> {
+    fn size_mbrw(&self) -> anyhow::Result<LengthType> {
         let underlying_size = self.inner.size()?;
         if underlying_size <= self.header_size() {
             return Ok(0);
@@ -299,8 +304,122 @@ impl<S: Stream> MultipleBlockReaderWriter for LiteAesGcmCryptStream<S> {
             + residue.saturating_sub(self.iv_size() + self.tag_size()))
     }
 
-    fn flush(&mut self) -> anyhow::Result<()> {
+    fn flush_mbrw(&mut self) -> anyhow::Result<()> {
         self.inner.flush()
+    }
+}
+
+#[cfg(unix)]
+pub mod unix {
+    use std::os::fd::AsFd;
+    use std::os::fd::AsRawFd;
+    use std::os::fd::BorrowedFd;
+    use std::os::fd::OwnedFd;
+
+    use super::*;
+    use crate::stream::ambassador_impl_Stream;
+
+    #[derive(Delegate)]
+    #[delegate(Stream, target = "inner")]
+    pub struct LiteAesGcmOverFileStream {
+        inner: LiteAesGcmCryptStream<StdIoStream>,
+    }
+
+    impl LiteAesGcmOverFileStream {
+        pub fn new(inner: LiteAesGcmCryptStream<StdIoStream>) -> Self {
+            Self { inner }
+        }
+    }
+
+    impl WriteUpgradable for LiteAesGcmOverFileStream {
+        fn upgrade_to_writable(&mut self) -> anyhow::Result<()> {
+            todo!()
+        }
+    }
+
+    impl AsFd for LiteAesGcmOverFileStream {
+        fn as_fd(&self) -> BorrowedFd<'_> {
+            self.inner.inner.file.as_fd()
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
+        use rustix::fs::{Mode, OFlags};
+        Ok(rustix::fs::open(
+            format!("/proc/self/fd/{}", fd.as_raw_fd()),
+            OFlags::RDWR,
+            Mode::empty(),
+        )?)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
+        use anyhow::Context;
+        use rustix::fs::{Mode, OFlags};
+        use std::ffi::CStr;
+
+        let mut path_buffer = vec![0u8; (libc::PATH_MAX + 1) as usize];
+        let ret = unsafe {
+            libc::fcntl(
+                fd.as_raw_fd(),
+                libc::F_GETPATH,
+                path_buffer.as_mut_ptr() as *mut libc::c_void,
+            )
+        };
+
+        if ret < 0 {
+            return Err(std::io::Error::last_os_error())
+                .with_context(|| format!("fcntl(F_GETPATH) failed for fd {}", fd.as_raw_fd()));
+        }
+
+        let path = unsafe { CStr::from_ptr(path_buffer.as_ptr() as *const libc::c_char) };
+        Ok(rustix::fs::open(path, OFlags::RDWR, Mode::empty())?)
+    }
+
+    #[cfg(target_os = "freebsd")]
+    fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
+        let opath_fd = rustix::fs::openat(
+            fd,
+            c"",
+            OFlags::from_bits_retain((libc::O_PATH | libc::O_EMPTY_PATH) as libc::c_uint),
+            rustix::fs::Mode::empty(),
+        )?;
+        Ok(rustix::fs::openat(
+            opath_fd,
+            c"",
+            OFlags::from_bits_retain((libc::O_RDWR | libc::O_EMPTY_PATH) as libc::c_uint),
+            rustix::fs::Mode::empty(),
+        )?)
+    }
+
+    #[cfg(test)]
+    mod test {
+        use std::{
+            fs::File,
+            io::{Read, Write},
+        };
+
+        use super::*;
+
+        #[test]
+        fn reopen() -> anyhow::Result<()> {
+            let file = tempfile::NamedTempFile::new()?;
+            file.as_file().write_all("Hello".as_bytes())?;
+
+            let mut rofile = File::open(file.path())?;
+            assert!(rofile.write_all("World".as_bytes()).is_err());
+
+            let new_fd = reopen_as_writable(rofile.as_fd())?;
+            let mut wfile = File::from(new_fd);
+
+            let mut string = String::new();
+            wfile.read_to_string(&mut string)?;
+            assert_eq!(string, "Hello");
+
+            wfile.write_all("World".as_bytes())?;
+            Ok(())
+        }
     }
 }
 

@@ -542,89 +542,57 @@ fn timespec_to_systemtime(tv_sec: i64, tv_nsec: u32) -> SystemTime {
 
 pub mod testing {
     use anyhow::Ok;
+    use protobuf::MessageField;
 
     use crate::{
         fuse_wrappers::fuse_main::run_fuse_main,
-        lite::IoWrapperFactory,
+        lite::{IoWrapperFactory, unix::create_vfs_for_fuse},
+        protos::params::{
+            DecryptedSecurefsParams, MountOptions,
+            decrypted_securefs_params::{LiteFormatParams, SizeParams},
+        },
         stream::{
             LengthType,
             lite::{ID_SIZE, LiteParamCalculator},
         },
     };
 
-    use super::*;
-
-    struct ParamCalc {
-        padding_size: LengthType,
-    }
-
-    impl LiteParamCalculator for ParamCalc {
-        fn compute_session_key(&self, salt: &[u8; ID_SIZE]) -> anyhow::Result<[u8; ID_SIZE]> {
-            let mut key = [0u8; ID_SIZE];
-            for i in 0..ID_SIZE {
-                key[i] = salt[i] ^ 0xff;
-            }
-            Ok(key)
-        }
-
-        fn compute_padding(&self, _: &[u8; ID_SIZE]) -> anyhow::Result<LengthType> {
-            Ok(self.padding_size)
-        }
-
-        fn always_zero_padding(&self) -> bool {
-            self.padding_size == 0
-        }
-    }
-
-    struct Factory {}
-
-    impl IoWrapperFactory for Factory {
-        fn compute_virtual_size(&self, underlying_size: u64) -> Option<u64> {
-            None
-        }
-
-        fn wrap(
-            &self,
-            fd: std::os::unix::prelude::OwnedFd,
-        ) -> anyhow::Result<Box<dyn IoWrapperStream>> {
-            Ok(Box::new(LiteAesGcmCryptStream::new(
-                StdIoStream::new(fd.into()),
-                &ParamCalc { padding_size: 32 },
-                12,
-                256,
-                true,
-            )?))
-        }
-    }
-
     pub fn simple_test_fuse_main() -> anyhow::Result<()> {
-        let name_translator = Arc::new(LegacyNameTranslator::new([42u8; 32]));
-
+        let dec_params = DecryptedSecurefsParams {
+            size_params: MessageField::some(SizeParams {
+                block_size: 333,
+                iv_size: 12,
+                max_padding_size: 17,
+                special_fields: Default::default(),
+            }),
+            format_specific_params: Some(crate::protos::params::decrypted_securefs_params::Format_specific_params::LiteFormatParams(LiteFormatParams {
+                name_key: vec![7u8;32],
+                content_key: vec![8u8;32],
+                xattr_key: vec![9u8;32],
+                padding_key:vec![10u8;32],
+                long_name_threshold: None,
+                long_name_suffix: "".into(),
+                disable_legacy_additional_encryption_after_hashing_long_name: true,
+                special_fields: Default::default(),
+            })),
+            special_fields: Default::default(),
+        };
+        let mount_options = MountOptions {
+            mount_type_specific: Some(
+                crate::protos::params::mount_options::Mount_type_specific::MountByKernelExt(
+                    Default::default(),
+                ),
+            ),
+            ..Default::default()
+        };
         let mut root_tmp_dir = tempfile::TempDir::new()?;
         root_tmp_dir.disable_cleanup(true);
         log::info!("Root tmp dir: {:?}", root_tmp_dir.path());
-        let root_stat = rustix::fs::stat(root_tmp_dir.path())?;
-
-        let root_ino = INodeNumber(root_stat.st_ino);
-        let root_node = LiteDirINode::new(
-            LiteINodeHeader {
-                ino: root_ino,
-                generation: Generation(0),
-                lookup_count: AtomicI64::new(0),
-                name_translator: name_translator.clone(),
-            },
-            rustix::fs::open(root_tmp_dir.path(), OFlags::RDONLY, Mode::empty())?,
-        );
-
-        let mut vfs = Box::new(LiteVfs {
-            inode_table: ShardedMapINodeTable::new(root_ino, root_node.into(), 32),
-            name_translator: name_translator,
-            wrapper_factory: Box::new(Factory {}),
-            generation: AtomicU64::new(100),
-            device_serial: root_stat.st_dev.try_into()?,
-            attr_cache_duration: Duration::from_secs(30),
-            readonly: false,
-        });
+        let mut vfs = Box::new(create_vfs_for_fuse(
+            &dec_params,
+            &mount_options,
+            root_tmp_dir.path(),
+        )?);
 
         run_fuse_main(
             &[
