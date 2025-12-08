@@ -81,6 +81,16 @@ impl<Table: GenericINodeTable<LiteINode>> LiteVfs<Table> {
     fn readjust_stat(&self, st: &mut rustix::fs::Stat) {
         st.st_ino = self.ino_to_fuse(INodeNumber(st.st_ino));
     }
+
+    fn release_common(
+        fi: Option<&crate::fuse_wrappers::bindings::fuse_file_info>,
+    ) -> anyhow::Result<()> {
+        let fi = fi.ok_or(Errno::BADF)?;
+        if fi.fh != 0 {
+            drop(unsafe { Box::from_raw(fi.fh as *mut OpenedDescriptor) });
+        }
+        Ok(())
+    }
 }
 
 trace::init_depth_var!();
@@ -88,9 +98,9 @@ trace::init_depth_var!();
 #[trace::trace]
 impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
     fn init(&mut self, conn: &mut crate::fuse_wrappers::bindings::fuse_conn_info) {
-        // conn.max_readahead = 1 << 24;
-        // conn.max_background = 32;
-        // conn.max_write = 1 << 24;
+        conn.max_readahead = 1 << 20;
+        conn.max_background = 32;
+        conn.max_write = 1 << 20;
         if conn.capable & FUSE_CAP_WRITEBACK_CACHE != 0 {
             conn.want |= FUSE_CAP_WRITEBACK_CACHE
         }
@@ -406,11 +416,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         _ino: crate::fuse_wrappers::bindings::fuse_ino_t,
         fi: Option<&crate::fuse_wrappers::bindings::fuse_file_info>,
     ) -> anyhow::Result<()> {
-        let fi = fi.ok_or(Errno::BADF)?;
-        if fi.fh != 0 {
-            drop(unsafe { Box::from_raw(fi.fh as *mut OpenedDescriptor) });
-        }
-        Ok(())
+        Self::release_common(fi)
     }
 
     fn can_opendir(&self) -> bool {
@@ -522,7 +528,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         ino: crate::fuse_wrappers::bindings::fuse_ino_t,
         fi: Option<&crate::fuse_wrappers::bindings::fuse_file_info>,
     ) -> anyhow::Result<()> {
-        return self.release(req, ino, fi);
+        Self::release_common(fi)
     }
 }
 
