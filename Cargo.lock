@@ -1130,6 +1130,7 @@ dependencies = [
  "protobuf",
  "protobuf-codegen",
  "rand",
+ "rand_chacha",
  "rstest",
  "rusqlite",
  "rustix 1.1.2",

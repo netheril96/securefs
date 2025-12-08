@@ -2,11 +2,11 @@ use std::mem::{replace, size_of};
 
 use aes_gcm::{Aes128Gcm, Key};
 use anyhow::{Context, Ok};
-use rand::{TryRngCore, rngs::OsRng};
 use thiserror::Error;
 
 use crate::{
     aesgcm::DynamicIvAes128Gcm,
+    rng::fill_with_random,
     stream::{LengthType, Stream, block::MultipleBlockReaderWriter},
 };
 
@@ -61,12 +61,12 @@ impl<S: Stream> LiteAesGcmCryptStream<S> {
         let mut aux: Vec<u8> = Vec::new();
         let padding_size: LengthType;
         if rc == 0 {
-            OsRng {}.try_fill_bytes(&mut id)?;
+            fill_with_random(&mut id);
             inner.write(&id, 0)?;
             padding_size = lite_param_calc.compute_padding(&id)?;
             if padding_size > 0 {
                 aux.resize(usize::try_from(padding_size)? + size_of::<u32>(), 0);
-                OsRng {}.try_fill_bytes(&mut aux[size_of::<u32>()..])?;
+                fill_with_random(&mut aux[size_of::<u32>()..]);
             } else {
                 aux.resize(size_of::<u32>(), 0);
             }
@@ -238,7 +238,7 @@ impl<S: Stream> MultipleBlockReaderWriter for LiteAesGcmCryptStream<S> {
                 &mut underlying_buffer[i..i + usize::try_from(this_block_underlying_size)?];
             let (iv, ciphertext) = this_underlying_buffer.split_at_mut(self.iv_size().try_into()?);
             loop {
-                OsRng {}.try_fill_bytes(iv)?;
+                fill_with_random(iv);
                 if iv.iter().any(|b| *b != 0) {
                     break;
                 }

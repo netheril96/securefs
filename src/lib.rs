@@ -6,6 +6,7 @@ pub mod error;
 pub mod fuse_wrappers;
 pub mod lite;
 pub mod protos;
+pub mod rng;
 pub mod stream;
 pub mod vfs;
 

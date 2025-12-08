@@ -24,6 +24,7 @@ once_cell = { version = "1.21.3", features = ["parking_lot"] }
 parking_lot = "0.12.5"
 protobuf = "3.7.2"
 rand = "0.9.2"
+rand_chacha = { version = "0.9.0", features = ["os_rng"] }
 rusqlite = { version = "0.37.0", features = ["bundled"] }
 rustix = { version = "1.1.2", features = ["fs", "stdio", "termios"] }
 scopeguard = "1.2.0"
