@@ -157,27 +157,49 @@ impl Stream for StdIoStream {
     }
 }
 
+pub trait FileLockable {
+    fn file_shared_lock(&mut self) -> anyhow::Result<()>;
+    fn file_exclusive_lock(&mut self) -> anyhow::Result<()>;
+    fn file_unlock(&mut self) -> anyhow::Result<()>;
+}
+
+impl FileLockable for StdIoStream {
+    fn file_exclusive_lock(&mut self) -> anyhow::Result<()> {
+        self.file.lock()?;
+        Ok(())
+    }
+
+    fn file_shared_lock(&mut self) -> anyhow::Result<()> {
+        self.file.lock_shared()?;
+        Ok(())
+    }
+
+    fn file_unlock(&mut self) -> anyhow::Result<()> {
+        self.file.unlock()?;
+        Ok(())
+    }
+}
+
 #[cfg(windows)]
 pub mod win {
     use crate::error::NtError;
     use crate::{
         OwnedFileDescriptor,
-        stream::{LengthType, OffsetType, Stream},
+        stream::{FileLockable, LengthType, OffsetType, Stream},
     };
     use anyhow::bail;
-    use ntapi::ntioapi::IO_STATUS_BLOCK;
-    use ntapi::ntioapi::NtFlushBuffersFile;
-    use ntapi::ntioapi::NtReadFile;
-    use ntapi::ntioapi::NtWriteFile;
     use ntapi::ntioapi::{
         FILE_END_OF_FILE_INFORMATION, FileEndOfFileInformation, NtSetInformationFile,
     };
     use ntapi::ntioapi::{
         FILE_STANDARD_INFORMATION, FileStandardInformation, NtQueryInformationFile,
     };
+    use ntapi::ntioapi::{
+        IO_STATUS_BLOCK, NtFlushBuffersFile, NtLockFile, NtReadFile, NtUnlockFile, NtWriteFile,
+    };
     use ntapi::winapi::shared::ntstatus::STATUS_END_OF_FILE;
-    use std::mem;
     use std::os::windows::io::AsRawHandle;
+    use std::{i64, mem};
 
     pub struct NtFileStream {
         fd: OwnedFileDescriptor,
@@ -186,6 +208,63 @@ pub mod win {
     impl From<OwnedFileDescriptor> for NtFileStream {
         fn from(value: OwnedFileDescriptor) -> Self {
             Self { fd: value }
+        }
+    }
+
+    impl NtFileStream {
+        fn file_lock_common(&mut self, exclusive: bool) -> anyhow::Result<()> {
+            let mut io_status_block: IO_STATUS_BLOCK = unsafe { mem::zeroed() };
+            let mut byte_offset: i64 = 0;
+            let mut length = i64::MAX;
+
+            let status = unsafe {
+                NtLockFile(
+                    self.fd.as_raw_handle() as _,
+                    std::ptr::null_mut(),
+                    None,
+                    std::ptr::null_mut(),
+                    &raw mut io_status_block,
+                    &raw mut byte_offset as _,
+                    &raw mut length as _,
+                    0,
+                    0,                             // FALSE, wait for lock
+                    if exclusive { 1 } else { 0 }, // TRUE for exclusive lock
+                )
+            };
+            if status < 0 {
+                return Err(NtError { status })?;
+            }
+            Ok(())
+        }
+    }
+
+    impl FileLockable for NtFileStream {
+        fn file_exclusive_lock(&mut self) -> anyhow::Result<()> {
+            self.file_lock_common(true)
+        }
+
+        fn file_shared_lock(&mut self) -> anyhow::Result<()> {
+            self.file_lock_common(false)
+        }
+
+        fn file_unlock(&mut self) -> anyhow::Result<()> {
+            let mut io_status_block: IO_STATUS_BLOCK = unsafe { mem::zeroed() };
+            let mut byte_offset: i64 = 0;
+            let mut length = i64::MAX;
+
+            let status = unsafe {
+                NtUnlockFile(
+                    self.fd.as_raw_handle() as _,
+                    &raw mut io_status_block,
+                    &raw mut byte_offset as _,
+                    &raw mut length as _,
+                    0,
+                )
+            };
+            if status < 0 {
+                return Err(NtError { status })?;
+            }
+            Ok(())
         }
     }
 
