@@ -1,4 +1,4 @@
-use std::mem::{replace, size_of};
+use std::mem::size_of;
 
 use aes_gcm::{Aes128Gcm, Key};
 #[cfg(unix)]
@@ -6,13 +6,19 @@ use ambassador::Delegate;
 use anyhow::{Context, Ok};
 use thiserror::Error;
 
+#[allow(unused)]
+use crate::WriteUpgradable;
+
+#[allow(unused)]
+use crate::stream::OffsetType;
+
 #[cfg(unix)]
 use crate::stream::StdIoStream;
+
 use crate::{
-    WriteUpgradable,
     aesgcm::DynamicIvAes128Gcm,
     rng::fill_with_random,
-    stream::{LengthType, OffsetType, Stream, block::MultipleBlockReaderWriter},
+    stream::{FileLockable, LengthType, Stream, block::MultipleBlockReaderWriter},
 };
 
 pub const ID_SIZE: usize = 16;
@@ -134,13 +140,19 @@ impl<S: Stream> LiteAesGcmCryptStream<S> {
         let residue = content_size % (block_size + iv_size + 16);
         num_blocks * block_size + residue.saturating_sub(iv_size + 16)
     }
+}
 
-    pub unsafe fn get_inner(&self) -> &S {
-        &self.inner
+impl<S: FileLockable + Stream> FileLockable for LiteAesGcmCryptStream<S> {
+    fn file_shared_lock(&mut self) -> anyhow::Result<()> {
+        self.inner.file_shared_lock()
     }
 
-    pub unsafe fn replace_inner(&mut self, inner: S) -> S {
-        replace(&mut self.inner, inner)
+    fn file_exclusive_lock(&mut self) -> anyhow::Result<()> {
+        self.inner.file_exclusive_lock()
+    }
+
+    fn file_unlock(&mut self) -> anyhow::Result<()> {
+        self.inner.file_unlock()
     }
 }
 

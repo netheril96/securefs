@@ -15,6 +15,7 @@ use std::os::windows::fs::FileExt;
 
 use ambassador::delegatable_trait;
 use anyhow::Ok;
+use thiserror::Error;
 
 #[allow(unused)]
 use crate::OwnedFileDescriptor;
@@ -157,6 +158,7 @@ impl Stream for StdIoStream {
     }
 }
 
+#[delegatable_trait]
 pub trait FileLockable {
     fn file_shared_lock(&mut self) -> anyhow::Result<()>;
     fn file_exclusive_lock(&mut self) -> anyhow::Result<()>;
@@ -177,6 +179,96 @@ impl FileLockable for StdIoStream {
     fn file_unlock(&mut self) -> anyhow::Result<()> {
         self.file.unlock()?;
         Ok(())
+    }
+}
+
+pub trait FileLockableStream: FileLockable + Stream {}
+
+impl<T: FileLockable + Stream> FileLockableStream for T {}
+
+enum LockStatus {
+    Unlocked,
+    LockedShared,
+    LockedExclusively,
+}
+
+pub struct AssertLockedStream<T: FileLockable + Stream> {
+    inner: T,
+    lock_status: LockStatus,
+}
+
+impl<T: FileLockable + Stream> FileLockable for AssertLockedStream<T> {
+    fn file_shared_lock(&mut self) -> anyhow::Result<()> {
+        self.inner.file_shared_lock()?;
+        self.lock_status = LockStatus::LockedShared;
+        Ok(())
+    }
+
+    fn file_exclusive_lock(&mut self) -> anyhow::Result<()> {
+        self.inner.file_exclusive_lock()?;
+        self.lock_status = LockStatus::LockedExclusively;
+        Ok(())
+    }
+
+    fn file_unlock(&mut self) -> anyhow::Result<()> {
+        self.inner.file_unlock()?;
+        self.lock_status = LockStatus::Unlocked;
+        Ok(())
+    }
+}
+
+impl<T: FileLockable + Stream> From<T> for AssertLockedStream<T> {
+    fn from(value: T) -> Self {
+        Self {
+            inner: value,
+            lock_status: LockStatus::Unlocked,
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum LockInapproriateError {
+    #[error("should have acquired shared lock before calling method {method}")]
+    ShouldAcquiredSharedLock { method: &'static str },
+    #[error("should have acquired exclusive lock before calling method {method}")]
+    ShouldAcquiredExclusiveLock { method: &'static str },
+}
+
+impl<T: FileLockable + Stream> Stream for AssertLockedStream<T> {
+    fn read(&mut self, buffer: &mut [u8], offset: OffsetType) -> anyhow::Result<LengthType> {
+        match self.lock_status {
+            LockStatus::Unlocked => {
+                Err(LockInapproriateError::ShouldAcquiredSharedLock { method: "read" }.into())
+            }
+            _ => self.inner.read(buffer, offset),
+        }
+    }
+
+    fn write(&mut self, buffer: &[u8], offset: OffsetType) -> anyhow::Result<()> {
+        match self.lock_status {
+            LockStatus::LockedExclusively => self.inner.write(buffer, offset),
+            _ => Err(LockInapproriateError::ShouldAcquiredExclusiveLock { method: "write" }.into()),
+        }
+    }
+
+    fn size(&self) -> anyhow::Result<LengthType> {
+        self.inner.size() // No lock needed
+    }
+
+    fn flush(&mut self) -> anyhow::Result<()> {
+        match self.lock_status {
+            LockStatus::LockedExclusively => self.inner.flush(),
+            _ => Err(LockInapproriateError::ShouldAcquiredExclusiveLock { method: "flush" }.into()),
+        }
+    }
+
+    fn resize(&mut self, size: LengthType) -> anyhow::Result<()> {
+        match self.lock_status {
+            LockStatus::LockedExclusively => self.inner.resize(size),
+            _ => {
+                Err(LockInapproriateError::ShouldAcquiredExclusiveLock { method: "resize" }.into())
+            }
+        }
     }
 }
 
@@ -468,6 +560,30 @@ pub mod test {
             win::NtFileStream::from(file.as_file().as_handle().try_clone_to_owned()?);
         let mut memory_stream = MemoryStream { buffer: Vec::new() };
         compare_with_reference(&mut nt_stream, &mut memory_stream, 500)?;
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_assert_locked_nt_file_stream() -> anyhow::Result<()> {
+        use std::os::windows::io::AsHandle;
+
+        let file = tempfile::NamedTempFile::new()?;
+        let nt_stream = win::NtFileStream::from(file.as_file().as_handle().try_clone_to_owned()?);
+        let mut nt_stream = AssertLockedStream::from(nt_stream);
+        let mut nt_stream = scopeguard::guard(
+            {
+                nt_stream.file_exclusive_lock()?;
+                nt_stream
+            },
+            |mut nt_stream| {
+                if let Err(e) = nt_stream.file_unlock() {
+                    log::error!("failed to unlock file: {}", e);
+                }
+            },
+        );
+        let mut memory_stream = MemoryStream { buffer: Vec::new() };
+        compare_with_reference(&mut *nt_stream, &mut memory_stream, 500)?;
         Ok(())
     }
 }

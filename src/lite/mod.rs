@@ -12,10 +12,17 @@ use num_bigint::BigUint;
 
 #[cfg(unix)]
 use crate::stream::{StdIoStream, lite::LiteAesGcmCryptStream};
+
+#[allow(unused)]
+use crate::WriteUpgradable;
+
 use crate::{
-    MasterKeyType, OwnedFileDescriptor, WriteUpgradable,
+    MasterKeyType, OwnedFileDescriptor,
     protos::params::decrypted_securefs_params::Format_specific_params,
-    stream::{MemoryStream, Stream, lite::ID_SIZE},
+    stream::{
+        MemoryStream, Stream,
+        lite::{ID_SIZE, LiteAesGcmCryptStream},
+    },
 };
 
 pub mod fuse;
