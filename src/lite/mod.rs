@@ -10,8 +10,8 @@ use anyhow::bail;
 use ctr::cipher::BlockEncrypt;
 use num_bigint::BigUint;
 
-#[cfg(unix)]
-use crate::stream::{StdIoStream, lite::LiteAesGcmCryptStream};
+#[allow(unused)]
+use crate::stream::StdIoStream;
 
 #[allow(unused)]
 use crate::WriteUpgradable;
