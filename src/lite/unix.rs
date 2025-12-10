@@ -18,6 +18,7 @@ use parking_lot::Mutex;
 use rustix::fs::{AtFlags, Mode, OFlags, Timespec};
 
 use crate::lite::LiteAesGcmCryptStreamFactory;
+use crate::lite::long_name_db::LongNameLookupTable;
 use crate::lite::name_translators::create_name_translator;
 use crate::protos::params::decrypted_securefs_params::Format_specific_params;
 use crate::protos::params::{DecryptedSecurefsParams, MountOptions};
@@ -223,7 +224,7 @@ impl FileINodeExt for LiteFileINode {
 
 struct LiteDirNodeLongNameDb {
     db_fd: OwnedFd,
-    db: rusqlite::Connection,
+    db: LongNameLookupTable,
 }
 pub struct LiteDirINode {
     header: LiteINodeHeader,

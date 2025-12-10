@@ -26,6 +26,8 @@ use crate::{
 };
 
 pub mod fuse;
+pub mod long_name_db;
+
 pub mod name_translators;
 pub mod unix;
 
