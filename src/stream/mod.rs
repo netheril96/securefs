@@ -15,6 +15,7 @@ use std::os::windows::fs::FileExt;
 
 use ambassador::delegatable_trait;
 use anyhow::Ok;
+use std::ops::DerefMut;
 use thiserror::Error;
 
 #[allow(unused)]
@@ -185,6 +186,64 @@ impl FileLockable for StdIoStream {
 pub trait FileLockableStream: FileLockable + Stream {}
 
 impl<T: FileLockable + Stream> FileLockableStream for T {}
+
+pub struct ReadableStreamView<'a, T: FileLockableStream + ?Sized> {
+    inner: &'a mut T,
+}
+
+impl<'a, T: FileLockableStream + ?Sized> ReadableStreamView<'a, T> {
+    pub fn new(stream: &'a mut T) -> anyhow::Result<Self> {
+        stream.file_shared_lock()?;
+        Ok(Self { inner: stream })
+    }
+
+    pub fn read(&mut self, buffer: &mut [u8], offset: OffsetType) -> anyhow::Result<LengthType> {
+        self.inner.read(buffer, offset)
+    }
+
+    pub fn size(&self) -> anyhow::Result<LengthType> {
+        self.inner.size()
+    }
+}
+
+impl<'a, T: FileLockableStream + ?Sized> Drop for ReadableStreamView<'a, T> {
+    fn drop(&mut self) {
+        if let Err(e) = self.inner.file_unlock() {
+            log::error!("failed to unlock file from readable_view: {}", e);
+        }
+    }
+}
+
+pub struct WritableStreamView<'a, T: FileLockableStream + ?Sized> {
+    inner: &'a mut T,
+}
+
+impl<'a, T: FileLockableStream + ?Sized> WritableStreamView<'a, T> {
+    pub fn new(stream: &'a mut T) -> anyhow::Result<Self> {
+        stream.file_exclusive_lock()?;
+        Ok(Self { inner: stream })
+    }
+
+    pub fn write(&mut self, buffer: &[u8], offset: OffsetType) -> anyhow::Result<()> {
+        self.inner.write(buffer, offset)
+    }
+
+    pub fn flush(&mut self) -> anyhow::Result<()> {
+        self.inner.flush()
+    }
+
+    pub fn resize(&mut self, size: LengthType) -> anyhow::Result<()> {
+        self.inner.resize(size)
+    }
+}
+
+impl<'a, T: FileLockableStream + ?Sized> Drop for WritableStreamView<'a, T> {
+    fn drop(&mut self) {
+        if let Err(e) = self.inner.file_unlock() {
+            log::error!("failed to unlock file from writable_view: {}", e);
+        }
+    }
+}
 
 enum LockStatus {
     Unlocked,
