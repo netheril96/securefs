@@ -10,6 +10,7 @@ pub mod rng;
 pub mod stream;
 pub mod tearc;
 pub mod vfs;
+pub mod win;
 
 pub type MasterKeyType = [u8; 32];
 
