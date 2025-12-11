@@ -13,12 +13,11 @@ use std::{
 
 use ambassador::{Delegate, delegatable_trait};
 use anyhow::{Context, bail};
-use once_cell::sync::OnceCell;
-use parking_lot::Mutex;
+use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use rustix::fs::{AtFlags, Mode, OFlags, Timespec};
 
 use crate::lite::LiteAesGcmCryptStreamFactory;
-use crate::lite::long_name_db::LongNameLookupTable;
+use crate::lite::long_name_db::{C_LONG_NAME_DB_FILENAME, LongNameLookupTable};
 use crate::lite::name_translators::create_name_translator;
 use crate::protos::params::decrypted_securefs_params::Format_specific_params;
 use crate::protos::params::{DecryptedSecurefsParams, MountOptions};
@@ -42,8 +41,8 @@ fn new_timespec(sec: i64, nsec: i64) -> Timespec {
 }
 
 // Safe wrapper around libc::stat.
-// We are not calling rustix here to avoid format conversion between rustix stat and libc stat,
-//  and the latter is expected by libfuse.
+// We are not calling rustix here to avoid format conversion between rustix stat
+// and libc stat,  and the latter is expected by libfuse.
 pub(super) fn fstat(fd: BorrowedFd<'_>) -> anyhow::Result<libc::stat> {
     let mut result: libc::stat = unsafe { std::mem::zeroed() };
     if (unsafe { libc::fstat(fd.as_raw_fd(), &mut result) }) != 0 {
@@ -54,8 +53,8 @@ pub(super) fn fstat(fd: BorrowedFd<'_>) -> anyhow::Result<libc::stat> {
 }
 
 // Safe wrapper around libc::stat.
-// We are not calling rustix here to avoid format conversion between rustix stat and libc stat,
-//  and the latter is expected by libfuse.
+// We are not calling rustix here to avoid format conversion between rustix stat
+// and libc stat,  and the latter is expected by libfuse.
 pub(super) fn fstatat(fd: BorrowedFd<'_>, path: &CStr) -> anyhow::Result<libc::stat> {
     let mut result: libc::stat = unsafe { std::mem::zeroed() };
     if (unsafe {
@@ -223,13 +222,17 @@ impl FileINodeExt for LiteFileINode {
 }
 
 struct LiteDirNodeLongNameDb {
-    db_fd: OwnedFd,
-    db: LongNameLookupTable,
+    // Note, since we first open the db as a file descriptor, we need to keep it alive as long as
+    // the sqlite3 handle is open. If we close the file descriptor prematurely, it will destroy the
+    // file locking internally in the sqlite3 handle.
+    table_fd: OwnedFd,
+    lookup_table: LongNameLookupTable,
+    readonly: bool,
 }
 pub struct LiteDirINode {
     header: LiteINodeHeader,
     fd: OwnedFd,
-    db: OnceCell<LiteDirNodeLongNameDb>,
+    db: Mutex<Option<LiteDirNodeLongNameDb>>,
 }
 
 impl LiteDirINode {
@@ -237,7 +240,7 @@ impl LiteDirINode {
         Self {
             header,
             fd,
-            db: OnceCell::new(),
+            db: Default::default(),
         }
     }
 
@@ -256,8 +259,68 @@ impl LiteDirINode {
         Ok(Self {
             header,
             fd,
-            db: OnceCell::new(),
+            db: Default::default(),
         })
+    }
+
+    fn init_long_name_db(
+        &self,
+        db: &mut Option<LiteDirNodeLongNameDb>,
+        readonly: bool,
+    ) -> anyhow::Result<()> {
+        let (flags, mode) = if readonly {
+            (OFlags::RDONLY, Mode::empty())
+        } else {
+            (OFlags::RDWR | OFlags::CREATE, Mode::from_raw_mode(0o600))
+        };
+        let table_fd = rustix::fs::openat(self.fd.as_fd(), C_LONG_NAME_DB_FILENAME, flags, mode)?;
+        let lookup_table = LongNameLookupTable::new(
+            format!("/dev/fd/{}", table_fd.as_raw_fd()).as_str(),
+            readonly,
+        )?;
+        *db = Some(LiteDirNodeLongNameDb {
+            table_fd,
+            lookup_table,
+            readonly,
+        });
+        Ok(())
+    }
+
+    pub(super) fn ensure_readable_long_name_db(
+        &self,
+    ) -> anyhow::Result<MappedMutexGuard<'_, LongNameLookupTable>> {
+        let guard = self.db.lock();
+        let map_result = MutexGuard::try_map_or_err(guard, |db| {
+            if db.is_none() {
+                self.init_long_name_db(db, true)?;
+            }
+            anyhow::Ok(&mut db.as_mut().unwrap().lookup_table)
+        });
+        match map_result {
+            Ok(result) => anyhow::Ok(result),
+            Err(err) => Err(err.1)?,
+        }
+    }
+
+    pub(super) fn ensure_writable_long_name_db(
+        &self,
+    ) -> anyhow::Result<MappedMutexGuard<'_, LongNameLookupTable>> {
+        let guard = self.db.lock();
+        let map_result = MutexGuard::try_map_or_err(guard, |db| {
+            if let Some(inner) = db
+                && inner.readonly
+            {
+                *db = None;
+            }
+            if db.is_none() {
+                self.init_long_name_db(db, false)?;
+            }
+            anyhow::Ok(&mut db.as_mut().unwrap().lookup_table)
+        });
+        match map_result {
+            Ok(result) => anyhow::Ok(result),
+            Err(err) => Err(err.1)?,
+        }
     }
 }
 

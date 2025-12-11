@@ -24,9 +24,9 @@ use crate::{
         fuse_low_level_ops::{FuseLowLevelOps, FuseReq},
     },
     lite::unix::{
-            LiteDirINode, LiteDirReader, LiteFileINode, LiteINode, LiteINodeHeader,
-            LiteSymlinkINode, LiteVfs, ReadjustStatExt,
-        },
+        LiteDirINode, LiteDirReader, LiteFileINode, LiteINode, LiteINodeHeader, LiteSymlinkINode,
+        LiteVfs, ReadjustStatExt,
+    },
     vfs::{
         GenericINodeTable, INodeNotFoundError,
         unix::{DirINodeExt, DirReader, FileINodeExt, Generation, INodeCore, INodeNumber},
@@ -533,7 +533,7 @@ fn timespec_to_systemtime(tv_sec: i64, tv_nsec: u32) -> SystemTime {
 }
 
 pub mod testing {
-    
+
     use protobuf::MessageField;
 
     use crate::{

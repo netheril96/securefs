@@ -1,5 +1,9 @@
+use std::ffi::CStr;
+
 use anyhow::Result;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
+
+pub const C_LONG_NAME_DB_FILENAME: &CStr = c".long_names.db";
 
 // SQL queries (translated from C++ lite_long_name_lookup_table.cpp)
 const CREATE_TABLE_SQL: &str = r#"
@@ -24,8 +28,8 @@ const LIST_HASHES_SQL: &str = r#"
     select keyed_hash from encrypted_mappings;
 "#;
 
-/// The table is needed when the file name component is so long that its encrypted version no longer
-/// fits on most filesystems.
+/// The table is needed when the file name component is so long that its
+/// encrypted version no longer fits on most filesystems.
 #[derive(Debug)]
 pub struct LongNameLookupTable {
     conn: Connection,
@@ -33,7 +37,8 @@ pub struct LongNameLookupTable {
 }
 
 impl LongNameLookupTable {
-    /// Creates a new `LongNameLookupTable` instance, opening or creating the underlying database file.
+    /// Creates a new `LongNameLookupTable` instance, opening or creating the
+    /// underlying database file.
     ///
     /// If `readonly` is true, the database file must already exist.
     pub fn new(filename: &str, readonly: bool) -> Result<Self> {
@@ -68,7 +73,8 @@ impl LongNameLookupTable {
         Ok(result)
     }
 
-    /// Updates or inserts a mapping between a keyed hash and an encrypted long name.
+    /// Updates or inserts a mapping between a keyed hash and an encrypted long
+    /// name.
     pub fn update_mapping(&self, keyed_hash: &str, encrypted_long_name: &str) -> Result<()> {
         self.conn
             .execute(UPDATE_MAPPING_SQL, params![keyed_hash, encrypted_long_name])?;

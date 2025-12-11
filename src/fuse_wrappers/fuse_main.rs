@@ -25,8 +25,8 @@ impl Display for FuseLoopError {
 impl std::error::Error for FuseLoopError {}
 
 // Redeclare this instead of relying on bindgen.
-// This is because on newer libfuse (e.g. 3.17) the symbol is not declared in the header file.
-// For compatibility we always call this function.
+// This is because on newer libfuse (e.g. 3.17) the symbol is not declared in
+// the header file. For compatibility we always call this function.
 unsafe extern "C" {
     #[doc = " Create a low level session.\n\n Returns a session structure suitable for passing to\n fuse_session_mount() and fuse_session_loop().\n\n This function accepts most file-system independent mount options\n (like context, nodev, ro - see mount(8)), as well as the general\n fuse mount options listed in mount.fuse(8) (e.g. -o allow_root and\n -o default_permissions, but not ``-o use_ino``).  Instead of `-o\n debug`, debugging may also enabled with `-d` or `--debug`.\n\n If not all options are known, an error message is written to stderr\n and the function returns NULL.\n\n Option parsing skips argv[0], which is assumed to contain the\n program name. To prevent accidentally passing an option in\n argv[0], this element must always be present (even if no options\n are specified). It may be set to the empty string ('\\0') if no\n reasonable value can be provided.\n\n @param args argument vector\n @param op the (low-level) filesystem operations\n @param op_size sizeof(struct fuse_lowlevel_ops)\n @param userdata user data\n\n @return the fuse session on success, NULL on failure"]
     pub fn fuse_session_new(
