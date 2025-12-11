@@ -6,6 +6,8 @@ use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use thiserror::Error;
 
+use crate::tearc::Tearc;
+
 #[derive(Debug, Error)]
 pub enum INodeNotFoundError {
     #[error("inode not found")]
@@ -44,25 +46,29 @@ impl<T> MaybeInitializedINode<T> {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct INodeNumber(pub u64);
-pub trait GenericINodeTable<T> {
+pub trait GenericINodeTable<T: 'static> {
     fn root_ino(&self) -> INodeNumber;
-    fn get(&self, ino: INodeNumber) -> MaybeExistingINode<T>;
-    fn get_or_insert_default(&self, ino: INodeNumber) -> MaybeInitializedINode<T>;
+    fn get(&self, ino: INodeNumber) -> Option<Tearc<T>>;
+    fn get_or_try_insert_with(
+        &self,
+        ino: INodeNumber,
+        f: impl FnOnce() -> anyhow::Result<T>,
+    ) -> anyhow::Result<Tearc<T>>;
     fn clean_up_if(&self, ino: INodeNumber, predicate: impl FnOnce(&T) -> bool);
 }
 
-pub struct ShardedMapINodeTable<T> {
+pub struct ShardedMapINodeTable<T: 'static> {
     root_ino: INodeNumber,
-    root_node: Arc<OnceCell<T>>,
-    table: Vec<Mutex<AHashMap<INodeNumber, Arc<OnceCell<T>>>>>,
+    root_node: Tearc<T>,
+    table: Vec<Mutex<AHashMap<INodeNumber, Tearc<OnceCell<T>>>>>,
     distributor: ahash::RandomState,
 }
 
-impl<T> ShardedMapINodeTable<T> {
+impl<T: 'static> ShardedMapINodeTable<T> {
     pub fn new(root_ino: INodeNumber, root_node: T, shard_count: usize) -> Self {
         Self {
             root_ino,
-            root_node: Arc::new(OnceCell::with_value(root_node)),
+            root_node: Tearc::new(root_node),
             table: (0..shard_count)
                 .map(|_| Mutex::new(AHashMap::new()))
                 .collect(),
@@ -75,31 +81,9 @@ impl<T> ShardedMapINodeTable<T> {
     }
 }
 
-impl<T> GenericINodeTable<T> for ShardedMapINodeTable<T> {
+impl<T: 'static> GenericINodeTable<T> for ShardedMapINodeTable<T> {
     fn root_ino(&self) -> INodeNumber {
         self.root_ino
-    }
-
-    fn get(&self, ino: INodeNumber) -> MaybeExistingINode<T> {
-        if ino == self.root_ino {
-            MaybeExistingINode(Some(self.root_node.clone()))
-        } else {
-            MaybeExistingINode(self.table[self.get_index(ino)].lock().get(&ino).cloned())
-        }
-    }
-
-    fn get_or_insert_default(&self, ino: INodeNumber) -> MaybeInitializedINode<T> {
-        if ino == self.root_ino {
-            MaybeInitializedINode(self.root_node.clone())
-        } else {
-            MaybeInitializedINode(
-                self.table[self.get_index(ino)]
-                    .lock()
-                    .entry(ino)
-                    .or_default()
-                    .clone(),
-            )
-        }
     }
 
     fn clean_up_if(&self, ino: INodeNumber, predicate: impl FnOnce(&T) -> bool) {
@@ -112,16 +96,42 @@ impl<T> GenericINodeTable<T> for ShardedMapINodeTable<T> {
             table.remove(&ino);
         }
     }
+
+    fn get(&self, ino: INodeNumber) -> Option<Tearc<T>> {
+        if ino == self.root_ino {
+            Some(self.root_node.clone())
+        } else {
+            let t = self.table[self.get_index(ino)].lock().get(&ino).cloned()?;
+            Tearc::try_map(t, |o| o.get())
+        }
+    }
+
+    fn get_or_try_insert_with(
+        &self,
+        ino: INodeNumber,
+        f: impl FnOnce() -> anyhow::Result<T>,
+    ) -> anyhow::Result<Tearc<T>> {
+        if ino == self.root_ino {
+            Ok(self.root_node.clone())
+        } else {
+            let row: Tearc<OnceCell<T>> = self.table[self.get_index(ino)]
+                .lock()
+                .entry(ino)
+                .or_insert_with(|| Default::default())
+                .clone();
+            Tearc::try_map_or_err(row, |o| o.get_or_try_init(f))
+        }
+    }
 }
 
-pub struct ShardedLruINodeTable<T> {
+pub struct ShardedLruINodeTable<T: 'static> {
     root_ino: INodeNumber,
-    root_node: Arc<OnceCell<T>>,
-    table: Vec<Mutex<LruCache<INodeNumber, Arc<OnceCell<T>>, ahash::RandomState>>>,
+    root_node: Tearc<T>,
+    table: Vec<Mutex<LruCache<INodeNumber, Tearc<OnceCell<T>>, ahash::RandomState>>>,
     distributor: ahash::RandomState,
 }
 
-impl<T> ShardedLruINodeTable<T> {
+impl<T: 'static> ShardedLruINodeTable<T> {
     pub fn new(
         root_ino: INodeNumber,
         root_node: T,
@@ -130,15 +140,16 @@ impl<T> ShardedLruINodeTable<T> {
     ) -> Self {
         Self {
             root_ino,
-            root_node: Arc::new(OnceCell::with_value(root_node)),
+            root_node: Tearc::new(root_node),
             table: (0..shard_count)
                 .map(|_| {
-                    Mutex::new(
-                        LruCache::<INodeNumber, Arc<OnceCell<T>>, ahash::RandomState>::with_hasher(
-                            capacity_per_shard,
-                            ahash::RandomState::new(),
-                        ),
-                    )
+                    Mutex::new(LruCache::<
+                        INodeNumber,
+                        Tearc<OnceCell<T>>,
+                        ahash::RandomState,
+                    >::with_hasher(
+                        capacity_per_shard, ahash::RandomState::new()
+                    ))
                 })
                 .collect(),
             distributor: ahash::RandomState::new(),
@@ -150,29 +161,33 @@ impl<T> ShardedLruINodeTable<T> {
     }
 }
 
-impl<T> GenericINodeTable<T> for ShardedLruINodeTable<T> {
+impl<T: 'static> GenericINodeTable<T> for ShardedLruINodeTable<T> {
     fn root_ino(&self) -> INodeNumber {
         self.root_ino
     }
 
-    fn get(&self, ino: INodeNumber) -> MaybeExistingINode<T> {
+    fn get(&self, ino: INodeNumber) -> Option<Tearc<T>> {
         if ino == self.root_ino {
-            MaybeExistingINode(Some(self.root_node.clone()))
+            Some(self.root_node.clone())
         } else {
-            MaybeExistingINode(self.table[self.get_index(ino)].lock().get(&ino).cloned())
+            let t = self.table[self.get_index(ino)].lock().get(&ino).cloned()?;
+            Tearc::try_map(t, |o| o.get())
         }
     }
 
-    fn get_or_insert_default(&self, ino: INodeNumber) -> MaybeInitializedINode<T> {
+    fn get_or_try_insert_with(
+        &self,
+        ino: INodeNumber,
+        f: impl FnOnce() -> anyhow::Result<T>,
+    ) -> anyhow::Result<Tearc<T>> {
         if ino == self.root_ino {
-            MaybeInitializedINode(self.root_node.clone())
+            Ok(self.root_node.clone())
         } else {
-            MaybeInitializedINode(
-                self.table[self.get_index(ino)]
-                    .lock()
-                    .get_or_insert(ino, Default::default)
-                    .clone(),
-            )
+            let row: Tearc<OnceCell<T>> = self.table[self.get_index(ino)]
+                .lock()
+                .get_or_insert(ino, || Default::default())
+                .clone();
+            Tearc::try_map_or_err(row, |o| o.get_or_try_init(f))
         }
     }
 

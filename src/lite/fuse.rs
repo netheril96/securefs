@@ -5,14 +5,10 @@ use parking_lot::Mutex;
 use std::{
     ffi::CString,
     os::fd::AsFd,
-    sync::{
-        Arc,
-        atomic::{AtomicI64, Ordering},
-    },
+    sync::atomic::{AtomicI64, Ordering},
     time::{Duration, SystemTime},
 };
 
-use once_cell::sync::OnceCell;
 use rustix::io::Errno;
 
 use crate::{
@@ -27,6 +23,7 @@ use crate::{
         LiteDirINode, LiteDirReader, LiteFileINode, LiteINode, LiteINodeHeader, LiteSymlinkINode,
         LiteVfs, ReadjustStatExt,
     },
+    tearc::Tearc,
     vfs::{
         GenericINodeTable, INodeNotFoundError,
         unix::{DirINodeExt, DirReader, FileINodeExt, Generation, INodeCore, INodeNumber},
@@ -45,7 +42,7 @@ enum OpenedData {
 }
 
 struct OpenedDescriptor {
-    inode: Arc<OnceCell<LiteINode>>,
+    inode: Tearc<LiteINode>,
     data: OpenedData,
 }
 
@@ -114,9 +111,11 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         parent: crate::fuse_wrappers::bindings::fuse_ino_t,
         name: &std::ffi::CStr,
     ) -> anyhow::Result<crate::fuse_wrappers::bindings::fuse_entry_param> {
-        let parent = self.inode_table.get(self.ino_from_fuse(parent));
-        let parent = parent.unwrap()?;
-        let LiteINode::LiteDirINode(parent) = parent else {
+        let parent = self
+            .inode_table
+            .get(self.ino_from_fuse(parent))
+            .ok_or(INodeNotFoundError::INodeNotInTable)?;
+        let LiteINode::LiteDirINode(parent) = &*parent else {
             return Err(Errno::NOTDIR)?;
         };
         let encoded_cname = CString::new(self.name_translator.encode_name(name.to_bytes())?)?;
@@ -129,8 +128,8 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
             return Err(Errno::PERM).with_context(|| {
                 format!(
                     concat!(
-                        "securefs lite format expects that the underlying repostiory is ",
-                        "on the same filesystem and have stable inode numbers, ",
+                        "securefs lite format expects that the underlying ",
+                        "repostiory is on the same filesystem and have stable inode numbers, ",
                         "but the root dir has device {} while child has {}"
                     ),
                     self.device_serial, st.st_dev
@@ -139,38 +138,36 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         }
         let child = self
             .inode_table
-            .get_or_insert_default(INodeNumber(st.st_ino));
-        let child = child.get_or_create(|| {
-            let header = LiteINodeHeader {
-                ino: INodeNumber(st.st_ino),
-                generation: Generation(self.generation.load(Ordering::SeqCst)),
-                lookup_count: AtomicI64::new(0),
-                name_translator: self.name_translator.clone(),
-            };
-            match st.st_mode & libc::S_IFMT {
-                libc::S_IFDIR => {
-                    Ok(
-                        LiteDirINode::open(header, parent.as_fd(), encoded_cname.as_bytes())?
-                            .into(),
-                    )
-                }
+            .get_or_try_insert_with(INodeNumber(st.st_ino), || {
+                let header = LiteINodeHeader {
+                    ino: INodeNumber(st.st_ino),
+                    generation: Generation(self.generation.load(Ordering::SeqCst)),
+                    lookup_count: AtomicI64::new(0),
+                    name_translator: self.name_translator.clone(),
+                };
+                match st.st_mode & libc::S_IFMT {
+                    libc::S_IFDIR => {
+                        Ok(
+                            LiteDirINode::open(header, parent.as_fd(), encoded_cname.as_bytes())?
+                                .into(),
+                        )
+                    }
 
-                libc::S_IFREG => Ok(LiteFileINode::open(
-                    header,
-                    parent.as_fd(),
-                    encoded_cname.as_bytes(),
-                    !self.readonly && (st.st_mode & libc::S_IWUSR) != 0,
-                    self.wrapper_factory.as_ref(),
-                )?
-                .into()),
-                libc::S_IFLNK => {
-                    Ok(LiteSymlinkINode::open(header, parent.as_fd(), encoded_cname)?.into())
+                    libc::S_IFREG => Ok(LiteFileINode::open(
+                        header,
+                        parent.as_fd(),
+                        encoded_cname.as_bytes(),
+                        !self.readonly && (st.st_mode & libc::S_IWUSR) != 0,
+                        self.wrapper_factory.as_ref(),
+                    )?
+                    .into()),
+                    libc::S_IFLNK => {
+                        Ok(LiteSymlinkINode::open(header, parent.as_fd(), encoded_cname)?.into())
+                    }
+                    _ => Err(Errno::PERM)
+                        .with_context(|| format!("Unsupported st_mode {}", st.st_mode))?,
                 }
-                _ => {
-                    Err(Errno::PERM).with_context(|| format!("Unsupported st_mode {}", st.st_mode))
-                }
-            }
-        })?;
+            })?;
         child.get_lookup_count().fetch_add(1, Ordering::SeqCst);
         child.readjust_stat(&mut st)?;
         self.readjust_stat(&mut st);
@@ -206,16 +203,14 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
 
         if let Some(fi) = fi.filter(|fi| fi.fh != 0) {
             let desc = unsafe { (fi.fh as *mut OpenedDescriptor).as_mut().unwrap() };
-            let node = desc
-                .inode
-                .get()
-                .ok_or(INodeNotFoundError::INodeNotInitialized)?;
-            common(node)
+            common(&*desc.inode)
         } else {
             let ino = self.ino_from_fuse(ino);
-            let node = self.inode_table.get(ino);
-            let node = node.unwrap()?;
-            common(node)
+            let node = self
+                .inode_table
+                .get(ino)
+                .ok_or(INodeNotFoundError::INodeNotInTable)?;
+            common(&node)
         }
     }
 
@@ -234,9 +229,11 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         crate::fuse_wrappers::bindings::fuse_entry_param,
         crate::fuse_wrappers::bindings::fuse_file_info,
     )> {
-        let parent_node = self.inode_table.get(self.ino_from_fuse(parent));
-        let parent_node = parent_node.unwrap()?;
-        let LiteINode::LiteDirINode(parent_dir) = parent_node else {
+        let parent_node = self
+            .inode_table
+            .get(self.ino_from_fuse(parent))
+            .ok_or(INodeNotFoundError::INodeNotInTable)?;
+        let LiteINode::LiteDirINode(parent_dir) = &*parent_node else {
             return Err(Errno::NOTDIR)?;
         };
 
@@ -252,8 +249,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         let ino = INodeNumber(stat.st_ino);
         let generation = Generation(self.generation.load(Ordering::SeqCst));
 
-        let child_node = self.inode_table.get_or_insert_default(ino);
-        let child_node_ref = child_node.get_or_create(|| {
+        let child_node = self.inode_table.get_or_try_insert_with(ino, || {
             let header = LiteINodeHeader {
                 ino,
                 generation,
@@ -262,10 +258,10 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
             };
             Ok(LiteFileINode::new(header, self.wrapper_factory.wrap(created_fd)?, true).into())
         })?;
-        child_node_ref.readjust_stat(&mut stat)?;
+        child_node.readjust_stat(&mut stat)?;
 
         let fh = Box::new(OpenedDescriptor {
-            inode: child_node.0.clone(),
+            inode: child_node,
             data: OpenedData::OpenedFile {
                 readable: true,
                 writable: true,
@@ -296,10 +292,12 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         ino: crate::fuse_wrappers::bindings::fuse_ino_t,
         fi: Option<&crate::fuse_wrappers::bindings::fuse_file_info>,
     ) -> anyhow::Result<crate::fuse_wrappers::bindings::fuse_file_info> {
-        let node = self.inode_table.get(self.ino_from_fuse(ino));
+        let node = self
+            .inode_table
+            .get(self.ino_from_fuse(ino))
+            .ok_or(INodeNotFoundError::INodeNotInTable)?;
         let opened_data = {
-            let n = node.unwrap()?;
-            match n {
+            match &*node {
                 LiteINode::LiteFileINode(_) => {
                     let fi = fi.ok_or(Errno::INVAL)?;
                     let flags = rustix::fs::OFlags::from_bits_retain(fi.flags as _);
@@ -320,7 +318,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         };
 
         let descriptor = Box::new(OpenedDescriptor {
-            inode: node.0.expect("already checked"),
+            inode: node,
             data: opened_data,
         });
         let mut new_fi = fi.copied().unwrap_or_else(|| unsafe { std::mem::zeroed() });
@@ -342,7 +340,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
     ) -> anyhow::Result<Vec<u8>> {
         let fi = fi.ok_or(Errno::BADF)?;
         let desc = unsafe { (fi.fh as *mut OpenedDescriptor).as_mut().unwrap() };
-        let LiteINode::LiteFileINode(file) = desc.inode.get().ok_or(Errno::BADF)? else {
+        let LiteINode::LiteFileINode(file) = &*desc.inode else {
             return Err(Errno::INVAL)?;
         };
 
@@ -373,7 +371,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
     ) -> anyhow::Result<usize> {
         let fi = fi.ok_or(Errno::BADF)?;
         let desc = unsafe { (fi.fh as *mut OpenedDescriptor).as_mut().unwrap() };
-        let LiteINode::LiteFileINode(file) = desc.inode.get().ok_or(Errno::BADF)? else {
+        let LiteINode::LiteFileINode(file) = &*desc.inode else {
             return Err(Errno::INVAL)?;
         };
 
@@ -421,10 +419,12 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         ino: crate::fuse_wrappers::bindings::fuse_ino_t,
         fi: Option<&crate::fuse_wrappers::bindings::fuse_file_info>,
     ) -> anyhow::Result<crate::fuse_wrappers::bindings::fuse_file_info> {
-        let node = self.inode_table.get(self.ino_from_fuse(ino));
+        let node = self
+            .inode_table
+            .get(self.ino_from_fuse(ino))
+            .ok_or(INodeNotFoundError::INodeNotInTable)?;
         let opened_data = {
-            let n = node.unwrap()?;
-            match n {
+            match &*node {
                 LiteINode::LiteDirINode(dir) => OpenedData::OpenedDir {
                     reader: Mutex::new(dir.create_dir_reader()?),
                 },
@@ -433,7 +433,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         };
 
         let descriptor = Box::new(OpenedDescriptor {
-            inode: node.0.expect("already checked"),
+            inode: node,
             data: opened_data,
         });
         let mut new_fi = fi.copied().unwrap_or_else(|| unsafe { std::mem::zeroed() });
@@ -516,8 +516,8 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
 
     fn releasedir(
         &self,
-        req: FuseReq,
-        ino: crate::fuse_wrappers::bindings::fuse_ino_t,
+        _req: FuseReq,
+        _ino: crate::fuse_wrappers::bindings::fuse_ino_t,
         fi: Option<&crate::fuse_wrappers::bindings::fuse_file_info>,
     ) -> anyhow::Result<()> {
         Self::release_common(fi)
