@@ -51,9 +51,7 @@ pub trait NameTranslator {
     fn decode_name(&self, name: &[u8]) -> NameDecodeOutput;
     fn encrypt_name(&self, name: &[u8]) -> anyhow::Result<Vec<u8>>;
     fn decrypt_name(&self, name: &[u8]) -> Option<Vec<u8>>;
-    fn is_long_name(&self, encoded: &[u8]) -> bool {
-        false
-    }
+    fn is_long_name(&self, encoded: &[u8]) -> bool;
     fn encode_path_for_symlink(&self, path: &[u8]) -> anyhow::Result<Vec<u8>>;
     fn decode_path_for_symlink(&self, path: &[u8]) -> anyhow::Result<Vec<u8>>;
     fn max_virtual_path_component_size(&self, physical_size: u32) -> u32;
@@ -88,6 +86,10 @@ impl NameTranslator for NoOpNameTranslator {
 
     fn decrypt_name(&self, name: &[u8]) -> Option<Vec<u8>> {
         Some(name.into())
+    }
+
+    fn is_long_name(&self, encoded: &[u8]) -> bool {
+        false
     }
 }
 
@@ -174,6 +176,10 @@ impl NameTranslator for LegacyNameTranslator {
             NameDecodeOutput::LongName => None,
             NameDecodeOutput::Decoded(items) => Some(items),
         }
+    }
+
+    fn is_long_name(&self, encoded: &[u8]) -> bool {
+        false
     }
 }
 
@@ -278,6 +284,10 @@ impl NameTranslator for NewStyleNameTranslator {
 
     fn decrypt_name(&self, name: &[u8]) -> Option<Vec<u8>> {
         decrypt_filename_component(name, self.get_aes_siv().borrow_mut().deref_mut())
+    }
+
+    fn is_long_name(&self, encoded: &[u8]) -> bool {
+        encoded.ends_with(self.long_name_suffix.as_bytes())
     }
 }
 

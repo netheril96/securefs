@@ -249,6 +249,11 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         let ino = INodeNumber(stat.st_ino);
         let generation = Generation(self.generation.load(Ordering::SeqCst));
 
+        if self.name_translator.is_long_name(&encoded_name) {
+            let encrypted_name = self.name_translator.encrypt_name(name.to_bytes())?;
+            let table = parent_dir.ensure_writable_long_name_db()?;
+            table.update_mapping(encoded_name.as_slice(), encrypted_name.as_slice())?;
+        }
         let child_node = self.inode_table.get_or_try_insert_with(ino, || {
             let header = LiteINodeHeader {
                 ino,

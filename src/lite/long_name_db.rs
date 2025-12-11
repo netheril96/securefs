@@ -8,21 +8,21 @@ pub const C_LONG_NAME_DB_FILENAME: &CStr = c".long_names.db";
 // SQL queries (translated from C++ lite_long_name_lookup_table.cpp)
 const CREATE_TABLE_SQL: &str = r#"
     create table if not exists encrypted_mappings (
-        keyed_hash text not null primary key,
-        encrypted_name text not null
+        keyed_hash blob not null primary key,
+        encrypted_name blob not null
     );
 "#;
 const UPDATE_MAPPING_SQL: &str = r#"
     insert or ignore into encrypted_mappings
         (keyed_hash, encrypted_name)
-        values (?, ?);
+        values (?1, ?2);
 "#;
 const DELETE_MAPPING_SQL: &str = r#"
     delete from encrypted_mappings
-        where keyed_hash = ?;
+        where keyed_hash = ?1;
 "#;
 const LOOKUP_MAPPING_SQL: &str = r#"
-    select encrypted_name from encrypted_mappings where keyed_hash = ?;
+    select encrypted_name from encrypted_mappings where keyed_hash = ?1;
 "#;
 const LIST_HASHES_SQL: &str = r#"
     select keyed_hash from encrypted_mappings;
@@ -65,34 +65,32 @@ impl LongNameLookupTable {
     }
 
     /// Looks up the encrypted name associated with a given keyed hash.
-    pub fn lookup(&self, keyed_hash: &str) -> Result<Option<String>> {
+    pub fn lookup(&self, keyed_hash: &[u8]) -> Result<Option<Vec<u8>>> {
         let mut stmt = self.conn.prepare_cached(LOOKUP_MAPPING_SQL)?;
-        let result = stmt
-            .query_row(params![keyed_hash], |row| row.get(0))
-            .optional()?;
+        let result = stmt.query_row([keyed_hash], |row| row.get(0)).optional()?;
         Ok(result)
     }
 
     /// Updates or inserts a mapping between a keyed hash and an encrypted long
     /// name.
-    pub fn update_mapping(&self, keyed_hash: &str, encrypted_long_name: &str) -> Result<()> {
+    pub fn update_mapping(&self, keyed_hash: &[u8], encrypted_long_name: &[u8]) -> Result<()> {
         self.conn
-            .execute(UPDATE_MAPPING_SQL, params![keyed_hash, encrypted_long_name])?;
+            .execute(UPDATE_MAPPING_SQL, [keyed_hash, encrypted_long_name])?;
         Ok(())
     }
 
     /// Removes a mapping associated with a given keyed hash.
-    pub fn remove_mapping(&self, keyed_hash: &str) -> Result<()> {
-        self.conn.execute(DELETE_MAPPING_SQL, params![keyed_hash])?;
+    pub fn remove_mapping(&self, keyed_hash: &[u8]) -> Result<()> {
+        self.conn.execute(DELETE_MAPPING_SQL, [keyed_hash])?;
         Ok(())
     }
 
     /// Lists all keyed hashes stored in the table.
-    pub fn list_hashes(&self) -> Result<Vec<String>> {
+    pub fn list_hashes(&self) -> Result<Vec<Vec<u8>>> {
         let mut stmt = self.conn.prepare(LIST_HASHES_SQL)?;
         let hashes = stmt
             .query_map([], |row| row.get(0))?
-            .collect::<Result<Vec<String>, _>>()?;
+            .collect::<Result<Vec<Vec<u8>>, _>>()?;
         Ok(hashes)
     }
 }
@@ -108,31 +106,31 @@ mod tests {
 
         // 2. Initially, it should be empty.
         assert!(table.list_hashes().unwrap().is_empty());
-        assert_eq!(table.lookup("hash1").unwrap(), None);
+        assert_eq!(table.lookup(b"hash1").unwrap(), None);
 
         // 3. Update with some mappings.
         table
-            .update_mapping("hash1", "encrypted_long_name_1")
+            .update_mapping(b"hash1", b"encrypted_long_name_1")
             .unwrap();
         table
-            .update_mapping("hash2", "encrypted_long_name_2")
+            .update_mapping(b"hash2", b"encrypted_long_name_2")
             .unwrap();
 
         // 4. Verify lookups work.
         assert_eq!(
-            table.lookup("hash1").unwrap(),
-            Some("encrypted_long_name_1".to_string())
+            table.lookup(b"hash1").unwrap(),
+            Some(b"encrypted_long_name_1".to_vec())
         );
-        assert_eq!(table.lookup("non_existent").unwrap(), None);
+        assert_eq!(table.lookup(b"non_existent").unwrap(), None);
 
         // 5. Verify listing hashes.
         let mut hashes = table.list_hashes().unwrap();
         hashes.sort();
-        assert_eq!(hashes, vec!["hash1".to_string(), "hash2".to_string()]);
+        assert_eq!(hashes, vec![b"hash1".to_vec(), b"hash2".to_vec()]);
 
         // 6. Remove a mapping and verify it's gone.
-        table.remove_mapping("hash1").unwrap();
-        assert_eq!(table.lookup("hash1").unwrap(), None);
-        assert_eq!(table.list_hashes().unwrap(), vec!["hash2".to_string()]);
+        table.remove_mapping(b"hash1").unwrap();
+        assert_eq!(table.lookup(b"hash1").unwrap(), None);
+        assert_eq!(table.list_hashes().unwrap(), vec![b"hash2".to_vec()]);
     }
 }
