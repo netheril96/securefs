@@ -391,7 +391,6 @@ impl DirINodeExt for LiteDirINode {
         Ok(LiteDirReader {
             dir: rustix::fs::Dir::read_from(this.fd.as_fd())?,
             inode: this,
-            last_offset: 0,
             last_entry: None,
         })
     }
@@ -414,7 +413,8 @@ impl DirReader for LiteDirReader {
             self.last_entry = None;
         }
         if offset != 0
-            && (self.last_entry.is_none() || self.last_entry.is_some_and(|e| e.offset != offset))
+            && (self.last_entry.is_none()
+                || self.last_entry.as_ref().is_some_and(|e| e.offset != offset))
         {
             bail!("only support pagination, not arbitary seek into directory")
         }
