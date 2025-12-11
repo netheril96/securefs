@@ -8,6 +8,7 @@ pub mod lite;
 pub mod protos;
 pub mod rng;
 pub mod stream;
+pub mod tearc;
 pub mod vfs;
 
 pub type MasterKeyType = [u8; 32];
