@@ -21,6 +21,7 @@ use crate::lite::long_name_db::{C_LONG_NAME_DB_FILENAME, LongNameLookupTable};
 use crate::lite::name_translators::create_name_translator;
 use crate::protos::params::decrypted_securefs_params::Format_specific_params;
 use crate::protos::params::{DecryptedSecurefsParams, MountOptions};
+use crate::tearc::Tearc;
 use crate::vfs::{GenericINodeTable, ShardedMapINodeTable};
 use crate::{
     lite::{
@@ -386,43 +387,41 @@ impl INodeCore<rustix::fs::Stat> for LiteDirINode {
 
 impl DirINodeExt for LiteDirINode {
     type DirReader = LiteDirReader;
-    fn create_dir_reader(&self) -> anyhow::Result<Self::DirReader> {
+    fn create_dir_reader(this: Tearc<Self>) -> anyhow::Result<Self::DirReader> {
         Ok(LiteDirReader {
-            dir: rustix::fs::Dir::read_from(self.fd.as_fd())?,
-            name_translator: self.header.name_translator.clone(),
-            current_offset: 0,
-            current_entry: None,
+            dir: rustix::fs::Dir::read_from(this.fd.as_fd())?,
+            inode: this,
+            last_offset: 0,
+            last_entry: None,
         })
     }
 }
 
 pub struct LiteDirReader {
     dir: rustix::fs::Dir,
-    name_translator: Arc<dyn NameTranslator>,
-    current_offset: i64,
-    current_entry: Option<DirEntry>,
+    inode: Tearc<LiteDirINode>,
+    last_entry: Option<OwnedDirEntry>,
 }
 
 impl DirReader for LiteDirReader {
-    fn rewind(&mut self) -> anyhow::Result<()> {
-        self.dir.rewind();
-        Ok(())
-    }
-
-    fn current_position(&self) -> i64 {
-        self.current_offset
-    }
-
-    fn current(&self) -> Option<&DirEntry> {
-        self.current_entry.as_ref()
-    }
-
-    fn move_next(&mut self) -> anyhow::Result<bool> {
+    fn iterate_from(
+        &mut self,
+        offset: i64,
+        mut f: impl FnMut(&DirEntry) -> anyhow::Result<bool>,
+    ) -> anyhow::Result<()> {
+        if self.last_entry.is_some() && offset == 0 {
+            self.dir.rewind();
+            self.last_entry = None;
+        }
+        if offset != 0
+            && (self.last_entry.is_none() || self.last_entry.is_some_and(|e| e.offset != offset))
+        {
+            bail!("only support pagination, not arbitary seek into directory")
+        }
         loop {
             match self.dir.read() {
                 None => {
-                    self.current_entry = None;
-                    return Ok(false);
+                    return Ok(());
                 }
                 Some(Ok(entry)) => {
                     let filetype = match entry.file_type() {
@@ -436,26 +435,32 @@ impl DirReader for LiteDirReader {
                     } else if entry.file_name().to_bytes().starts_with(b".") {
                         continue;
                     } else {
-                        self.name_translator
+                        self.inode
+                            .header
+                            .name_translator
                             .decode_name(entry.file_name().to_bytes())
                     };
                     match name {
                         NameDecodeOutput::Decoded(n) => {
-                            self.current_entry = Some(DirEntry {
+                            self.last_entry = Some(OwnedDirEntry {
                                 ino: INodeNumber(entry.ino()),
                                 filetype,
                                 name: n,
-                                offset: self.current_offset + 1,
+                                offset: match &self.last_entry {
+                                    Some(e) => e.offset + 1,
+                                    None => 1,
+                                },
                             });
-                            self.current_offset += 1;
-                            return Ok(true);
                         }
                         NameDecodeOutput::InvalidName => continue,
                         NameDecodeOutput::LongName => todo!(),
                     }
+                    if !f(&self.last_entry.as_ref().unwrap().to_ref())? {
+                        return Ok(());
+                    }
                 }
                 Some(Err(err)) => {
-                    self.current_entry = None;
+                    self.last_entry = None;
                     return Err(err)?;
                 }
             }
@@ -564,7 +569,7 @@ impl ReadjustStatExt for LiteSymlinkINode {
     }
 }
 
-use crate::vfs::unix::ambassador_impl_INodeCore;
+use crate::vfs::unix::{OwnedDirEntry, ambassador_impl_INodeCore};
 
 #[delegatable_trait]
 pub(super) trait ReadjustStatExt {

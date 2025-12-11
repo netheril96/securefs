@@ -423,13 +423,12 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
             .inode_table
             .get(self.ino_from_fuse(ino))
             .ok_or(INodeNotFoundError::INodeNotInTable)?;
-        let opened_data = {
-            match &*node {
-                LiteINode::LiteDirINode(dir) => OpenedData::OpenedDir {
-                    reader: Mutex::new(dir.create_dir_reader()?),
-                },
-                _ => return Err(Errno::INVAL)?,
-            }
+        let dir_node = Tearc::try_map_or_err(node.clone(), |n| match n {
+            LiteINode::LiteDirINode(dir) => Ok(dir),
+            _ => Err(Errno::NOTDIR),
+        })?;
+        let opened_data = OpenedData::OpenedDir {
+            reader: Mutex::new(LiteDirINode::create_dir_reader(dir_node)?),
         };
 
         let descriptor = Box::new(OpenedDescriptor {
@@ -466,47 +465,30 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         };
 
         let mut reader = reader.lock();
-        if off == 0 && reader.current_position() != 0 {
-            reader.rewind()?;
-        } else if off != reader.current_position() {
-            return Err(Errno::INVAL).with_context(
-                || format!("expecting a pagination request for readdir at offset {}, got arbitrary seek at offset {}",
-                     reader.current_position(), off));
-        }
-
-        if off == 0 {
-            if !reader.move_next()? {
-                return Ok(Vec::new());
-            }
-        }
-
-        if reader.current().is_none() {
-            return Ok(Vec::new());
-        }
 
         let mut written_size: usize = 0;
 
-        loop {
+        reader.iterate_from(off, |entry| {
             let mut st: crate::fuse_wrappers::bindings::stat = unsafe { std::mem::zeroed() };
 
-            if let Some(entry) = reader.current() {
-                let name = CString::new(entry.name.as_slice())?;
-                st.st_ino = self.ino_to_fuse(entry.ino);
-                st.st_mode = match entry.filetype {
-                    crate::vfs::unix::FileType::DIRECTORY => libc::S_IFDIR,
-                    crate::vfs::unix::FileType::FILE => libc::S_IFREG,
-                    crate::vfs::unix::FileType::SYMLINK => libc::S_IFLNK,
-                };
-                written_size +=
-                    req.add_dir_entry(&mut buffer[written_size..], &name, &st, entry.offset);
-                if written_size >= buffer.len() {
-                    break;
-                }
-                let _ = reader.move_next()?;
-            } else {
-                break;
+            let name = CString::new(entry.name)?;
+            st.st_ino = self.ino_to_fuse(entry.ino);
+            st.st_mode = match entry.filetype {
+                crate::vfs::unix::FileType::DIRECTORY => libc::S_IFDIR,
+                crate::vfs::unix::FileType::FILE => libc::S_IFREG,
+                crate::vfs::unix::FileType::SYMLINK => libc::S_IFLNK,
+            };
+
+            written_size = buffer.len().min(
+                written_size
+                    + req.add_dir_entry(&mut buffer[written_size..], &name, &st, entry.offset),
+            );
+            if written_size >= buffer.len() {
+                return Ok(false);
             }
-        }
+            Ok(true)
+        })?;
+        buffer.truncate(written_size);
         Ok(buffer)
     }
 

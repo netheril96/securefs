@@ -209,6 +209,8 @@ pub mod unix {
     use rustix::fs::Timespec;
     use std::sync::atomic::AtomicI64;
 
+    use crate::tearc::Tearc;
+
     pub use super::INodeNumber;
 
     #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -237,29 +239,49 @@ pub mod unix {
         fn list_extended_attrs(&self) -> anyhow::Result<Vec<Vec<u8>>>;
     }
 
+    #[derive(Copy, Clone)]
     pub enum FileType {
         DIRECTORY,
         FILE,
         SYMLINK,
     }
 
-    pub struct DirEntry {
+    pub struct DirEntry<'a> {
         pub ino: INodeNumber,
         pub filetype: FileType,
-        pub name: Vec<u8>,
         pub offset: i64,
+        pub name: &'a [u8],
+    }
+
+    pub struct OwnedDirEntry {
+        pub ino: INodeNumber,
+        pub filetype: FileType,
+        pub offset: i64,
+        pub name: Vec<u8>,
+    }
+
+    impl OwnedDirEntry {
+        pub fn to_ref(&self) -> DirEntry<'_> {
+            DirEntry {
+                ino: self.ino,
+                filetype: self.filetype,
+                offset: self.offset,
+                name: self.name.as_slice(),
+            }
+        }
     }
 
     pub trait DirReader {
-        fn rewind(&mut self) -> anyhow::Result<()>;
-        fn current_position(&self) -> i64;
-        fn current(&self) -> Option<&DirEntry>;
-        fn move_next(&mut self) -> anyhow::Result<bool>;
+        fn iterate_from(
+            &mut self,
+            offset: i64,
+            f: impl FnMut(&DirEntry) -> anyhow::Result<bool>,
+        ) -> anyhow::Result<()>;
     }
 
-    pub trait DirINodeExt {
+    pub trait DirINodeExt: Sized {
         type DirReader: DirReader;
-        fn create_dir_reader(&self) -> anyhow::Result<Self::DirReader>;
+        fn create_dir_reader(this: Tearc<Self>) -> anyhow::Result<Self::DirReader>;
     }
 
     pub trait FileINodeExt {
