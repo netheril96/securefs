@@ -2,7 +2,6 @@
 #![allow(unused_variables)]
 
 pub mod aesgcm;
-pub mod error;
 pub mod fuse_wrappers;
 pub mod lite;
 pub mod protos;
