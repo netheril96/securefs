@@ -608,7 +608,7 @@ pub struct LiteVfs<Table: GenericINodeTable<LiteINode>> {
     pub(super) name_translator: Arc<dyn NameTranslator>,
     pub(super) wrapper_factory: Box<dyn IoWrapperFactory>,
     pub(super) generation: AtomicU64,
-    pub(super) device_serial: u64,
+    pub(super) device_serial: libc::dev_t,
     pub(super) attr_cache_duration: Duration,
     pub(super) readonly: bool,
 }
