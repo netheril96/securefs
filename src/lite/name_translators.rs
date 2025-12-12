@@ -227,8 +227,9 @@ impl NameTranslator for NewStyleNameTranslator {
         blake.update(name);
         let hash = blake.finalize().into_bytes();
         if !self.additional_encryption_over_long_name {
-            let mut result: Vec<u8> = Vec::with_capacity(hash.len() + self.long_name_suffix.len());
-            result.extend_from_slice(hash.as_slice());
+            let mut result: Vec<u8> =
+                Vec::with_capacity(hash.len() * 2 + self.long_name_suffix.len());
+            DUDE.encode_into(&hash, &mut result);
             result.extend_from_slice(self.long_name_suffix.as_bytes());
             return Ok(result);
         }

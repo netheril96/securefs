@@ -238,6 +238,13 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         };
 
         let encoded_name = self.name_translator.encode_name(name.to_bytes())?;
+
+        if self.name_translator.is_long_name(&encoded_name) {
+            let encrypted_name = self.name_translator.encrypt_name(name.to_bytes())?;
+            let table = parent_dir.ensure_writable_long_name_db()?;
+            table.update_mapping(encoded_name.as_slice(), encrypted_name.as_slice())?;
+        }
+
         let created_fd = rustix::fs::openat(
             parent_dir.as_fd(),
             &encoded_name,
@@ -249,11 +256,6 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         let ino = INodeNumber(stat.st_ino);
         let generation = Generation(self.generation.load(Ordering::SeqCst));
 
-        if self.name_translator.is_long_name(&encoded_name) {
-            let encrypted_name = self.name_translator.encrypt_name(name.to_bytes())?;
-            let table = parent_dir.ensure_writable_long_name_db()?;
-            table.update_mapping(encoded_name.as_slice(), encrypted_name.as_slice())?;
-        }
         let child_node = self.inode_table.get_or_try_insert_with(ino, || {
             let header = LiteINodeHeader {
                 ino,
@@ -545,8 +547,8 @@ pub mod testing {
                 content_key: vec![8u8;32],
                 xattr_key: vec![9u8;32],
                 padding_key:vec![10u8;32],
-                long_name_threshold: None,
-                long_name_suffix: "".into(),
+                long_name_threshold: Some(12),
+                long_name_suffix: ".LONG".into(),
                 disable_legacy_additional_encryption_after_hashing_long_name: true,
                 special_fields: Default::default(),
             })),

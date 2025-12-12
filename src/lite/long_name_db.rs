@@ -1,7 +1,7 @@
 use std::ffi::CStr;
 
 use anyhow::Result;
-use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 
 pub const C_LONG_NAME_DB_FILENAME: &CStr = c".long_names.db";
 
@@ -43,11 +43,9 @@ impl LongNameLookupTable {
     /// If `readonly` is true, the database file must already exist.
     pub fn new(filename: &str, readonly: bool) -> Result<Self> {
         let flags = if readonly {
-            OpenFlags::SQLITE_OPEN_NOFOLLOW | OpenFlags::SQLITE_OPEN_READ_ONLY
+            OpenFlags::SQLITE_OPEN_READ_ONLY
         } else {
-            OpenFlags::SQLITE_OPEN_NOFOLLOW
-                | OpenFlags::SQLITE_OPEN_READ_WRITE
-                | OpenFlags::SQLITE_OPEN_CREATE
+            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE
         };
 
         let conn = Connection::open_with_flags(filename, flags)?;

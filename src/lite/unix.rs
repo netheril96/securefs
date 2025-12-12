@@ -453,7 +453,41 @@ impl DirReader for LiteDirReader {
                             });
                         }
                         NameDecodeOutput::InvalidName => continue,
-                        NameDecodeOutput::LongName => todo!(),
+                        NameDecodeOutput::LongName => {
+                            let fully_decrypted_name = self
+                                .inode
+                                .ensure_writable_long_name_db()?
+                                .lookup(entry.file_name().to_bytes())?;
+                            let Some(fully_encrypted_name) = fully_decrypted_name else {
+                                log::warn!(
+                                    "Encountered long name {:?} not recorded in the lookup table",
+                                    entry.file_name()
+                                );
+                                continue;
+                            };
+
+                            let Some(n) = self
+                                .inode
+                                .header
+                                .name_translator
+                                .decrypt_name(&fully_encrypted_name)
+                            else {
+                                log::warn!(
+                                    "Lookup table has recorded a name that cannot be correctly decrypted: {:?}",
+                                    str::from_utf8(fully_encrypted_name.as_slice())
+                                );
+                                continue;
+                            };
+                            self.last_entry = Some(OwnedDirEntry {
+                                ino: INodeNumber(entry.ino()),
+                                filetype,
+                                name: n,
+                                offset: match &self.last_entry {
+                                    Some(e) => e.offset + 1,
+                                    None => 1,
+                                },
+                            });
+                        }
                     }
                     if !f(&self.last_entry.as_ref().unwrap().to_ref())? {
                         return Ok(());

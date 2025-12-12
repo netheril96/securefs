@@ -473,6 +473,7 @@ extern "C" fn rs_lookup<T: FuseLowLevelOps>(
             fuse_reply_entry(req, &entry);
         },
         Err(e) => unsafe {
+            log::warn!("lookup({req:?}, {parent:?}, {name:?}) fails with {e:?}");
             fuse_reply_err(req, extract_errno(&e));
         },
     }
@@ -927,6 +928,7 @@ extern "C" fn rs_create<T: FuseLowLevelOps>(
             fuse_reply_create(req, &entry, &fi);
         },
         Err(e) => unsafe {
+            log::warn!("create({req:?}, {parent:?}, {name:?}, {mode:?}, {fi:?}) failed with {e:?}");
             fuse_reply_err(req, extract_errno(&e));
         },
     }
