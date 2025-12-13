@@ -17,7 +17,7 @@ use crate::stream::StdIoStream;
 use crate::{
     aesgcm::DynamicIvAes128Gcm,
     rng::fill_with_random,
-    stream::{FileLike, FileLockable, LengthType, Stream, block::MultipleBlockReaderWriter},
+    stream::{FileLike, LengthType, Stream, block::MultipleBlockReaderWriter},
 };
 
 pub const ID_SIZE: usize = 16;
@@ -32,10 +32,8 @@ pub trait LiteParamCalculator {
 }
 
 use crate::stream::ambassador_impl_FileLike;
-use crate::stream::ambassador_impl_FileLockable;
 
 #[derive(Delegate)]
-#[delegate(FileLockable, target = "inner")]
 #[delegate(FileLike, target = "inner")]
 pub struct LiteAesGcmCryptStream<S: Stream> {
     // The following are provided
@@ -334,6 +332,14 @@ impl<S: Stream> MultipleBlockReaderWriter for LiteAesGcmCryptStream<S> {
 
     fn flush_mbrw(&mut self) -> anyhow::Result<()> {
         self.inner.flush()
+    }
+
+    fn lock_source_mrbw(&mut self) -> anyhow::Result<()> {
+        self.inner.lock_source()
+    }
+
+    fn unlock_source_mrbw(&mut self) -> anyhow::Result<()> {
+        self.inner.unlock_source()
     }
 }
 

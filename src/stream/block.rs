@@ -27,6 +27,8 @@ pub(in crate::stream) trait MultipleBlockReaderWriter {
     fn is_sparse_mbrw(&self) -> bool {
         false
     }
+    fn lock_source_mrbw(&mut self) -> anyhow::Result<()>;
+    fn unlock_source_mrbw(&mut self) -> anyhow::Result<()>;
 }
 
 fn divmod<T: Div<Output = T> + Rem<Output = T> + Copy>(x: T, y: T) -> (T, T) {
@@ -119,6 +121,14 @@ impl<T: MultipleBlockReaderWriter> Stream for T {
 
     fn is_sparse(&self) -> bool {
         self.is_sparse_mbrw()
+    }
+
+    fn lock_source(&mut self) -> anyhow::Result<()> {
+        self.lock_source_mrbw()
+    }
+
+    fn unlock_source(&mut self) -> anyhow::Result<()> {
+        self.unlock_source_mrbw()
     }
 }
 
@@ -304,6 +314,14 @@ mod test {
         }
 
         fn flush_mbrw(&mut self) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn lock_source_mrbw(&mut self) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn unlock_source_mrbw(&mut self) -> anyhow::Result<()> {
             Ok(())
         }
     }

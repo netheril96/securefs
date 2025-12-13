@@ -13,8 +13,8 @@ use std::os::unix::fs::FileExt;
 #[cfg(windows)]
 use std::os::windows::fs::FileExt;
 
-use ambassador::{Delegate, delegatable_trait};
-use anyhow::Ok;
+use ambassador::delegatable_trait;
+use anyhow::{Context, Ok};
 use thiserror::Error;
 
 #[allow(unused)]
@@ -37,6 +37,8 @@ pub trait Stream {
     fn optimal_block_size(&self) -> LengthType {
         1
     }
+    fn lock_source(&mut self) -> anyhow::Result<()>;
+    fn unlock_source(&mut self) -> anyhow::Result<()>;
 }
 
 pub struct MemoryStream {
@@ -78,6 +80,14 @@ impl Stream for MemoryStream {
 
     fn resize(&mut self, size: LengthType) -> anyhow::Result<()> {
         self.buffer.resize(size.try_into()?, 0);
+        Ok(())
+    }
+
+    fn lock_source(&mut self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn unlock_source(&mut self) -> anyhow::Result<()> {
         Ok(())
     }
 }
@@ -156,126 +166,29 @@ impl Stream for StdIoStream {
         self.file.set_len(size)?;
         Ok(())
     }
-}
 
-#[delegatable_trait]
-pub trait FileLockable {
-    fn file_shared_lock(&mut self) -> anyhow::Result<()>;
-    fn file_exclusive_lock(&mut self) -> anyhow::Result<()>;
-    fn file_unlock(&mut self) -> anyhow::Result<()>;
-}
-
-impl FileLockable for StdIoStream {
-    fn file_exclusive_lock(&mut self) -> anyhow::Result<()> {
+    fn lock_source(&mut self) -> anyhow::Result<()> {
         self.file.lock()?;
         Ok(())
     }
 
-    fn file_shared_lock(&mut self) -> anyhow::Result<()> {
-        self.file.lock_shared()?;
-        Ok(())
-    }
-
-    fn file_unlock(&mut self) -> anyhow::Result<()> {
+    fn unlock_source(&mut self) -> anyhow::Result<()> {
         self.file.unlock()?;
         Ok(())
     }
 }
 
-pub trait FileLockableStream: FileLockable + Stream {}
-
-impl<T: FileLockable + Stream> FileLockableStream for T {}
-
-pub struct ReadableStreamView<'a, T: FileLockableStream + ?Sized> {
-    inner: &'a mut T,
-}
-
-impl<'a, T: FileLockableStream + ?Sized> ReadableStreamView<'a, T> {
-    pub fn new(stream: &'a mut T) -> anyhow::Result<Self> {
-        stream.file_shared_lock()?;
-        Ok(Self { inner: stream })
-    }
-
-    pub fn read(&mut self, buffer: &mut [u8], offset: OffsetType) -> anyhow::Result<LengthType> {
-        self.inner.read(buffer, offset)
-    }
-
-    pub fn size(&self) -> anyhow::Result<LengthType> {
-        self.inner.size()
-    }
-}
-
-impl<'a, T: FileLockableStream + ?Sized> Drop for ReadableStreamView<'a, T> {
-    fn drop(&mut self) {
-        if let Err(e) = self.inner.file_unlock() {
-            tracing::error!("failed to unlock file from readable_view: {}", e);
-        }
-    }
-}
-
-pub struct WritableStreamView<'a, T: FileLockableStream + ?Sized> {
-    inner: &'a mut T,
-}
-
-impl<'a, T: FileLockableStream + ?Sized> WritableStreamView<'a, T> {
-    pub fn new(stream: &'a mut T) -> anyhow::Result<Self> {
-        stream.file_exclusive_lock()?;
-        Ok(Self { inner: stream })
-    }
-
-    pub fn write(&mut self, buffer: &[u8], offset: OffsetType) -> anyhow::Result<()> {
-        self.inner.write(buffer, offset)
-    }
-
-    pub fn flush(&mut self) -> anyhow::Result<()> {
-        self.inner.flush()
-    }
-
-    pub fn resize(&mut self, size: LengthType) -> anyhow::Result<()> {
-        self.inner.resize(size)
-    }
-}
-
-impl<'a, T: FileLockableStream + ?Sized> Drop for WritableStreamView<'a, T> {
-    fn drop(&mut self) {
-        if let Err(e) = self.inner.file_unlock() {
-            tracing::error!("failed to unlock file from writable_view: {}", e);
-        }
-    }
-}
-
 enum LockStatus {
     Unlocked,
-    LockedShared,
-    LockedExclusively,
+    Locked,
 }
 
-pub struct AssertLockedStream<T: FileLockable + Stream> {
+pub struct AssertLockedStream<T: Stream> {
     inner: T,
     lock_status: LockStatus,
 }
 
-impl<T: FileLockable + Stream> FileLockable for AssertLockedStream<T> {
-    fn file_shared_lock(&mut self) -> anyhow::Result<()> {
-        self.inner.file_shared_lock()?;
-        self.lock_status = LockStatus::LockedShared;
-        Ok(())
-    }
-
-    fn file_exclusive_lock(&mut self) -> anyhow::Result<()> {
-        self.inner.file_exclusive_lock()?;
-        self.lock_status = LockStatus::LockedExclusively;
-        Ok(())
-    }
-
-    fn file_unlock(&mut self) -> anyhow::Result<()> {
-        self.inner.file_unlock()?;
-        self.lock_status = LockStatus::Unlocked;
-        Ok(())
-    }
-}
-
-impl<T: FileLockable + Stream> From<T> for AssertLockedStream<T> {
+impl<T: Stream> From<T> for AssertLockedStream<T> {
     fn from(value: T) -> Self {
         Self {
             inner: value,
@@ -285,58 +198,93 @@ impl<T: FileLockable + Stream> From<T> for AssertLockedStream<T> {
 }
 
 #[derive(Debug, Error)]
-pub enum LockInapproriateError {
-    #[error("should have acquired shared lock before calling method {method}")]
-    ShouldAcquiredSharedLock { method: &'static str },
-    #[error("should have acquired exclusive lock before calling method {method}")]
-    ShouldAcquiredExclusiveLock { method: &'static str },
+pub enum InappropriateLockingError {
+    #[error("should have acquired source (file) lock before calling the method")]
+    ShouldAcquireLockFirst,
+    #[error("should have released source (file) lock before calling the method")]
+    ShouldReleaseLockFirst,
 }
 
-impl<T: FileLockable + Stream> Stream for AssertLockedStream<T> {
+impl<T: Stream> Stream for AssertLockedStream<T> {
     fn read(&mut self, buffer: &mut [u8], offset: OffsetType) -> anyhow::Result<LengthType> {
         match self.lock_status {
             LockStatus::Unlocked => {
-                Err(LockInapproriateError::ShouldAcquiredSharedLock { method: "read" }.into())
+                Err(InappropriateLockingError::ShouldAcquireLockFirst).context("read")
             }
-            _ => self.inner.read(buffer, offset),
+            LockStatus::Locked => self.inner.read(buffer, offset),
         }
     }
 
     fn write(&mut self, buffer: &[u8], offset: OffsetType) -> anyhow::Result<()> {
         match self.lock_status {
-            LockStatus::LockedExclusively => self.inner.write(buffer, offset),
-            _ => Err(LockInapproriateError::ShouldAcquiredExclusiveLock { method: "write" }.into()),
+            LockStatus::Locked => self.inner.write(buffer, offset),
+            LockStatus::Unlocked => {
+                Err(InappropriateLockingError::ShouldAcquireLockFirst).context("write")
+            }
         }
     }
 
     fn size(&self) -> anyhow::Result<LengthType> {
-        self.inner.size() // No lock needed
+        match self.lock_status {
+            LockStatus::Unlocked => {
+                Err(InappropriateLockingError::ShouldAcquireLockFirst).context("size")
+            }
+            LockStatus::Locked => self.inner.size(),
+        }
     }
 
     fn flush(&mut self) -> anyhow::Result<()> {
         match self.lock_status {
-            LockStatus::LockedExclusively => self.inner.flush(),
-            _ => Err(LockInapproriateError::ShouldAcquiredExclusiveLock { method: "flush" }.into()),
+            LockStatus::Locked => self.inner.flush(),
+            LockStatus::Unlocked => {
+                Err(InappropriateLockingError::ShouldAcquireLockFirst).context("flush")
+            }
         }
     }
 
     fn resize(&mut self, size: LengthType) -> anyhow::Result<()> {
         match self.lock_status {
-            LockStatus::LockedExclusively => self.inner.resize(size),
-            _ => {
-                Err(LockInapproriateError::ShouldAcquiredExclusiveLock { method: "resize" }.into())
+            LockStatus::Locked => self.inner.resize(size),
+            LockStatus::Unlocked => {
+                Err(InappropriateLockingError::ShouldAcquireLockFirst).context("resize")
             }
         }
+    }
+
+    fn lock_source(&mut self) -> anyhow::Result<()> {
+        match self.lock_status {
+            LockStatus::Locked => {
+                Err(InappropriateLockingError::ShouldReleaseLockFirst).context("lock")?
+            }
+            LockStatus::Unlocked => {
+                self.inner.lock_source()?;
+                self.lock_status = LockStatus::Locked;
+            }
+        };
+        Ok(())
+    }
+
+    fn unlock_source(&mut self) -> anyhow::Result<()> {
+        match self.lock_status {
+            LockStatus::Locked => {
+                self.inner.unlock_source()?;
+                self.lock_status = LockStatus::Unlocked;
+            }
+            LockStatus::Unlocked => {
+                Err(InappropriateLockingError::ShouldAcquireLockFirst).context("unlock")?
+            }
+        }
+        Ok(())
     }
 }
 
 #[cfg(unix)]
 #[delegatable_trait]
-pub trait FileLike: FileLockable {}
+pub trait FileLike {}
 
 #[cfg(windows)]
 #[delegatable_trait]
-pub trait FileLike: FileLockable {
+pub trait FileLike {
     fn as_win_handle(&self) -> windows::Win32::Foundation::HANDLE;
 }
 
@@ -347,7 +295,7 @@ impl<T: FileLike + Stream> FileLike for AssertLockedStream<T> {
             LockStatus::Unlocked => {
                 panic!("should have acquired a file lock before calling method as_win_handle")
             }
-            _ => self.inner.as_win_handle(),
+            LockStatus::Locked => self.inner.as_win_handle(),
         }
     }
 }
@@ -362,7 +310,7 @@ pub mod win {
     use crate::win::NtError;
     use crate::{
         OwnedFileDescriptor,
-        stream::{FileLockable, LengthType, OffsetType, Stream},
+        stream::{LengthType, OffsetType, Stream},
     };
     use anyhow::bail;
     use windows::Wdk::Storage::FileSystem::{
@@ -390,63 +338,6 @@ pub mod win {
     impl From<OwnedFileDescriptor> for AssertLockedStream<NtFileStream> {
         fn from(value: OwnedFileDescriptor) -> Self {
             Self::from(NtFileStream::from(value))
-        }
-    }
-
-    impl NtFileStream {
-        fn file_lock_common(&mut self, exclusive: bool) -> anyhow::Result<()> {
-            let mut io_status_block: IO_STATUS_BLOCK = unsafe { mem::zeroed() };
-            let byte_offset: i64 = 0;
-            let length = i64::MAX;
-
-            let status = unsafe {
-                NtLockFile(
-                    HANDLE(self.fd.as_raw_handle()),
-                    None,
-                    None,
-                    None,
-                    &raw mut io_status_block,
-                    &raw const byte_offset,
-                    &raw const length,
-                    0,
-                    false,     // FALSE, wait for lock
-                    exclusive, // TRUE for exclusive lock
-                )
-            };
-            if status.0 < 0 {
-                return Err(NtError { status })?;
-            }
-            Ok(())
-        }
-    }
-
-    impl FileLockable for NtFileStream {
-        fn file_exclusive_lock(&mut self) -> anyhow::Result<()> {
-            self.file_lock_common(true)
-        }
-
-        fn file_shared_lock(&mut self) -> anyhow::Result<()> {
-            self.file_lock_common(false)
-        }
-
-        fn file_unlock(&mut self) -> anyhow::Result<()> {
-            let mut io_status_block: IO_STATUS_BLOCK = unsafe { mem::zeroed() };
-            let byte_offset: i64 = 0;
-            let length = i64::MAX;
-
-            let status = unsafe {
-                NtUnlockFile(
-                    HANDLE(self.fd.as_raw_handle()),
-                    &raw mut io_status_block,
-                    &raw const byte_offset,
-                    &raw const length,
-                    0,
-                )
-            };
-            if status.0 < 0 {
-                return Err(NtError { status })?;
-            }
-            Ok(())
         }
     }
 
@@ -552,6 +443,59 @@ pub mod win {
                     &raw const file_info as _,
                     mem::size_of::<FILE_END_OF_FILE_INFORMATION>() as u32,
                     FileEndOfFileInformation,
+                )
+            };
+            if status.0 < 0 {
+                return Err(NtError { status })?;
+            }
+            Ok(())
+        }
+
+        fn is_sparse(&self) -> bool {
+            false
+        }
+
+        fn optimal_block_size(&self) -> LengthType {
+            4096
+        }
+
+        fn lock_source(&mut self) -> anyhow::Result<()> {
+            let mut io_status_block: IO_STATUS_BLOCK = unsafe { mem::zeroed() };
+            let byte_offset: i64 = 0;
+            let length = i64::MAX;
+
+            let status = unsafe {
+                NtLockFile(
+                    HANDLE(self.fd.as_raw_handle()),
+                    None,
+                    None,
+                    None,
+                    &raw mut io_status_block,
+                    &raw const byte_offset,
+                    &raw const length,
+                    0,
+                    false, // FALSE, wait for lock
+                    true,  // TRUE for exclusive lock
+                )
+            };
+            if status.0 < 0 {
+                return Err(NtError { status })?;
+            }
+            Ok(())
+        }
+
+        fn unlock_source(&mut self) -> anyhow::Result<()> {
+            let mut io_status_block: IO_STATUS_BLOCK = unsafe { mem::zeroed() };
+            let byte_offset: i64 = 0;
+            let length = i64::MAX;
+
+            let status = unsafe {
+                NtUnlockFile(
+                    HANDLE(self.fd.as_raw_handle()),
+                    &raw mut io_status_block,
+                    &raw const byte_offset,
+                    &raw const length,
+                    0,
                 )
             };
             if status.0 < 0 {
@@ -667,11 +611,11 @@ pub mod test {
         let mut nt_stream = AssertLockedStream::from(nt_stream);
         let mut nt_stream = scopeguard::guard(
             {
-                nt_stream.file_exclusive_lock()?;
+                nt_stream.lock_source()?;
                 nt_stream
             },
             |mut nt_stream| {
-                if let Err(e) = nt_stream.file_unlock() {
+                if let Err(e) = nt_stream.unlock_source() {
                     tracing::error!("failed to unlock file: {}", e);
                 }
             },

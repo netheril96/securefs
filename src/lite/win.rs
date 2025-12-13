@@ -36,13 +36,13 @@ use windows::{
             FILE_OPEN, FILE_OPEN_REPARSE_POINT, FILE_STAT_INFORMATION,
             FILE_SYNCHRONOUS_IO_NONALERT, FileAttributeTagInformation, FileStatInformation,
             NTCREATEFILE_CREATE_DISPOSITION, NTCREATEFILE_CREATE_OPTIONS, NtCreateFile,
-            NtFlushBuffersFile, NtQueryInformationFile, NtQuerySecurityObject,
+            NtQueryInformationFile, NtQuerySecurityObject,
         },
     },
     Win32::{
         Foundation::{
-            HANDLE, OBJ_CASE_INSENSITIVE, OBJ_OPENLINK, OBJECT_ATTRIBUTE_FLAGS,
-            STATUS_BUFFER_OVERFLOW, STATUS_FILE_IS_A_DIRECTORY, STATUS_NOT_CAPABLE,
+            HANDLE, OBJ_CASE_INSENSITIVE, OBJ_OPENLINK, STATUS_BUFFER_OVERFLOW,
+            STATUS_FILE_IS_A_DIRECTORY, STATUS_NOT_CAPABLE,
         },
         Security::{
             DACL_SECURITY_INFORMATION, GROUP_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
@@ -196,28 +196,14 @@ impl Debug for LiteRegularFileContext {
 }
 
 impl LiteRegularFileContext {
-    fn with_shared_file_lock<F, R>(&self, f: F) -> anyhow::Result<R>
-    where
-        F: FnOnce(&mut dyn FileLikeStream) -> anyhow::Result<R>,
-    {
-        let mut stream = self.file_like_stream.lock();
-        stream.file_shared_lock()?;
-        let mut stream_guard = scopeguard::guard(stream, |mut s| {
-            if let Err(err) = s.file_unlock() {
-                tracing::error!(?err, "failed to unlock file from regular file context");
-            }
-        });
-        f(&mut **stream_guard)
-    }
-
     fn with_exclusive_file_lock<F, R>(&self, f: F) -> anyhow::Result<R>
     where
         F: FnOnce(&mut dyn FileLikeStream) -> anyhow::Result<R>,
     {
         let mut stream = self.file_like_stream.lock();
-        stream.file_exclusive_lock()?;
+        stream.lock_source()?;
         let mut stream_guard = scopeguard::guard(stream, |mut s| {
-            if let Err(err) = s.file_unlock() {
+            if let Err(err) = s.unlock_source() {
                 tracing::error!(?err, "failed to unlock file from regular file context");
             }
         });
@@ -227,7 +213,7 @@ impl LiteRegularFileContext {
 
 impl FileInfoExt for LiteRegularFileContext {
     fn get_file_info(&self) -> anyhow::Result<FileInfo> {
-        self.with_shared_file_lock(|stream| {
+        self.with_exclusive_file_lock(|stream| {
             let mut info = stream.as_win_handle().get_file_info()?;
             info.file_size = stream.size()?;
             Ok(info)
@@ -529,7 +515,7 @@ impl WinFspFileSystemCore for LiteWinFspCore {
                 status: STATUS_FILE_IS_A_DIRECTORY,
             })?;
         };
-        let read_len = context.with_shared_file_lock(|stream| stream.read(buffer, offset))?;
+        let read_len = context.with_exclusive_file_lock(|stream| stream.read(buffer, offset))?;
         Ok(read_len.try_into()?)
     }
 
