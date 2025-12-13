@@ -44,4 +44,6 @@ fn main() {
             .write_to_file(out_path.join("fuse_bindings.rs"))
             .expect("Couldn't write bindings!");
     }
+    #[cfg(windows)]
+    winfsp::build::winfsp_link_delayload();
 }

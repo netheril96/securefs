@@ -23,7 +23,7 @@ use crate::{
         long_name_db::{C_LONG_NAME_DB_FILENAME, LongNameLookupTable},
         name_translators::NameTranslator,
     },
-    stream::{AssertLockedStream, FileLikeStream, win::NtFileStream},
+    stream::{AssertLockedStream, FileLikeStream, win::NtFileStream, with_source_locked},
     tearc::Tearc,
     win::{NtError, OwnedUnicodeString},
     winfsp_wrappers::WinFspFileSystemCore,
@@ -196,24 +196,18 @@ impl Debug for LiteRegularFileContext {
 }
 
 impl LiteRegularFileContext {
-    fn with_exclusive_file_lock<F, R>(&self, f: F) -> anyhow::Result<R>
+    fn with_source_lock<F, R>(&self, f: F) -> anyhow::Result<R>
     where
-        F: FnOnce(&mut dyn FileLikeStream) -> anyhow::Result<R>,
+        F: FnOnce(&mut (dyn FileLikeStream + 'static)) -> anyhow::Result<R>,
     {
         let mut stream = self.file_like_stream.lock();
-        stream.lock_source()?;
-        let mut stream_guard = scopeguard::guard(stream, |mut s| {
-            if let Err(err) = s.unlock_source() {
-                tracing::error!(?err, "failed to unlock file from regular file context");
-            }
-        });
-        f(&mut **stream_guard)
+        with_source_locked(&mut *stream, f)
     }
 }
 
 impl FileInfoExt for LiteRegularFileContext {
     fn get_file_info(&self) -> anyhow::Result<FileInfo> {
-        self.with_exclusive_file_lock(|stream| {
+        self.with_source_lock(|stream| {
             let mut info = stream.as_win_handle().get_file_info()?;
             info.file_size = stream.size()?;
             Ok(info)
@@ -515,7 +509,7 @@ impl WinFspFileSystemCore for LiteWinFspCore {
                 status: STATUS_FILE_IS_A_DIRECTORY,
             })?;
         };
-        let read_len = context.with_exclusive_file_lock(|stream| stream.read(buffer, offset))?;
+        let read_len = context.with_source_lock(|stream| stream.read(buffer, offset))?;
         Ok(read_len.try_into()?)
     }
 
@@ -533,7 +527,7 @@ impl WinFspFileSystemCore for LiteWinFspCore {
                 status: STATUS_FILE_IS_A_DIRECTORY,
             })?;
         };
-        context.with_exclusive_file_lock(|stream| {
+        context.with_source_lock(|stream| {
             if constrained_io {
                 let size = stream.size()?;
                 if offset >= size {

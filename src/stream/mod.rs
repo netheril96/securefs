@@ -41,6 +41,18 @@ pub trait Stream {
     fn unlock_source(&mut self) -> anyhow::Result<()>;
 }
 
+pub fn with_source_locked<S: Stream + ?Sized, R>(
+    s: &mut S,
+    f: impl FnOnce(&mut S) -> anyhow::Result<R>,
+) -> anyhow::Result<R> {
+    s.lock_source()?;
+    let result = f(s);
+    if let Err(err) = s.unlock_source() {
+        tracing::error!("failed to unlock");
+    }
+    result
+}
+
 pub struct MemoryStream {
     buffer: Vec<u8>,
 }
