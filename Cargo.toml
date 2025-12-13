@@ -30,6 +30,7 @@ thiserror = "2.0.17"
 thread_local = "1.1.9"
 tracing = "0.1.43"
 tracing-subscriber = { version = "0.3.22", features = ["once_cell", "parking_lot", "env-filter"] }
+winfsp-sys = "0.12.1"
 
 [features]
 fuse = [ "dep:bindgen", "dep:pkg-config"]

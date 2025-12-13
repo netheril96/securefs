@@ -1012,6 +1012,7 @@ dependencies = [
  "tracing-subscriber",
  "windows 0.62.2",
  "winfsp",
+ "winfsp-sys",
 ]
 
 [[package]]

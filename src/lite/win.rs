@@ -1,7 +1,7 @@
 #![cfg(windows)]
 
 use std::{
-    ffi::{OsString, c_void},
+    ffi::c_void,
     os::windows::io::{AsRawHandle, FromRawHandle},
     path::{Path, PathBuf},
     sync::Arc,
@@ -22,7 +22,8 @@ use crate::{
     },
     stream::{FileLikeStream, win::NtFileStream},
     tearc::Tearc,
-    win::{NtError, OwnedUnicodeString, to_winfsp_error},
+    win::{NtError, OwnedUnicodeString},
+    winfsp_wrappers::to_winfsp_error,
 };
 use windows::{
     Wdk::{

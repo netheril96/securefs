@@ -44,16 +44,3 @@ impl TryFrom<&[u8]> for OwnedUnicodeString {
         Self::try_from(str::from_utf8(value)?)
     }
 }
-
-pub fn to_winfsp_error(e: &anyhow::Error) -> winfsp::FspError {
-    if let Some(e) = e.downcast_ref::<NtError>() {
-        return winfsp::FspError::NTSTATUS(e.status.0);
-    }
-    if let Some(e) = e.downcast_ref::<std::io::Error>()
-        && let Some(code) = e.raw_os_error()
-    {
-        return winfsp::FspError::WIN32(code as _);
-    }
-
-    return winfsp::FspError::NTSTATUS(STATUS_UNSUCCESSFUL.0);
-}

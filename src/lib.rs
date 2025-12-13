@@ -10,6 +10,7 @@ pub mod stream;
 pub mod tearc;
 pub mod vfs;
 pub mod win;
+pub mod winfsp_wrappers;
 
 pub type MasterKeyType = [u8; 32];
 
