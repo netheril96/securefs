@@ -35,8 +35,8 @@ use windows::{
             FILE_CREATE, FILE_DIRECTORY_FILE, FILE_NO_EA_KNOWLEDGE, FILE_NON_DIRECTORY_FILE,
             FILE_OPEN, FILE_OPEN_REPARSE_POINT, FILE_STAT_INFORMATION,
             FILE_SYNCHRONOUS_IO_NONALERT, FileAttributeTagInformation, FileStatInformation,
-            NTCREATEFILE_CREATE_OPTIONS, NtCreateFile, NtQueryInformationFile,
-            NtQuerySecurityObject,
+            NTCREATEFILE_CREATE_DISPOSITION, NTCREATEFILE_CREATE_OPTIONS, NtCreateFile,
+            NtQueryInformationFile, NtQuerySecurityObject,
         },
     },
     Win32::{
@@ -255,6 +255,76 @@ impl LiteWinFspCore {
         let un = OwnedUnicodeString::try_from(joined.as_str())?;
         Ok((joined, un))
     }
+
+    fn nt_create_file(
+        &self,
+        file_name: &U16CStr,
+        desired_access: FILE_ACCESS_RIGHTS,
+        file_attributes: FILE_FLAGS_AND_ATTRIBUTES,
+        create_disposition: NTCREATEFILE_CREATE_DISPOSITION,
+        create_options: NTCREATEFILE_CREATE_OPTIONS,
+        security_descriptor: PSECURITY_DESCRIPTOR,
+    ) -> anyhow::Result<(OwnedFileDescriptor, String)> {
+        let (encoded_name, encoded_un) = self.translate_full(file_name)?;
+
+        let obj_attr = OBJECT_ATTRIBUTES {
+            Length: std::mem::size_of::<OBJECT_ATTRIBUTES>().try_into()?,
+            RootDirectory: HANDLE(self.root_dir.dir.as_raw_handle()),
+            ObjectName: &raw const encoded_un.unicode_string,
+            Attributes: OBJECT_ATTRIBUTE_FLAGS::from(OBJ_CASE_INSENSITIVE | OBJ_OPENLINK),
+            SecurityDescriptor: security_descriptor.0 as _,
+            SecurityQualityOfService: std::ptr::null(),
+        };
+
+        let mut handle = HANDLE::default();
+        let mut io_status_block: IO_STATUS_BLOCK = unsafe { std::mem::zeroed() };
+
+        let status = unsafe {
+            NtCreateFile(
+                &raw mut handle,
+                desired_access,
+                &raw const obj_attr,
+                &raw mut io_status_block,
+                None,
+                file_attributes,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                create_disposition,
+                create_options,
+                None,
+                0,
+            )
+        };
+
+        if status.0 < 0 {
+            return Err(NtError { status }).context("calling NtCreateFile failed");
+        }
+
+        let handle = unsafe { OwnedFileDescriptor::from_raw_handle(handle.0) };
+        Ok((handle, encoded_name))
+    }
+
+    fn build_context(
+        &self,
+        handle: OwnedFileDescriptor,
+        full_path: PathBuf,
+        is_directory: bool,
+    ) -> anyhow::Result<LiteContext> {
+        if is_directory {
+            let ctx = LiteDirContext {
+                dir: handle,
+                full_path,
+                name_translator: self.root_dir.name_translator.clone(),
+                long_name_table: Mutex::new(None),
+            };
+            Ok(LiteContext::Dir(ctx))
+        } else {
+            let ctx = LiteRegularFileContext {
+                file_like_stream: Box::new(self.factory.generic_wrap::<NtFileStream>(handle)?),
+                full_path,
+            };
+            Ok(LiteContext::File(ctx))
+        }
+    }
 }
 
 impl WinFspFileSystemCore for LiteWinFspCore {
@@ -270,37 +340,16 @@ impl WinFspFileSystemCore for LiteWinFspCore {
             return Ok(security);
         }
 
-        let (_, encoded_un) = self.translate_full(file_name)?;
-        let obj_attr = OBJECT_ATTRIBUTES {
-            Length: size_of::<OBJECT_ATTRIBUTES>().try_into()?,
-            RootDirectory: HANDLE(self.root_dir.dir.as_raw_handle()),
-            ObjectName: &raw const encoded_un.unicode_string,
-            Attributes: OBJECT_ATTRIBUTE_FLAGS::from(OBJ_CASE_INSENSITIVE | OBJ_OPENLINK),
-            SecurityDescriptor: std::ptr::null(),
-            SecurityQualityOfService: std::ptr::null(),
-        };
-        let mut handle = HANDLE(std::ptr::null_mut());
-        let mut io_status_block: IO_STATUS_BLOCK = unsafe { std::mem::zeroed() };
-        let status = unsafe {
-            NtCreateFile(
-                &raw mut handle,
-                READ_CONTROL | FILE_READ_ATTRIBUTES,
-                &raw const obj_attr,
-                &raw mut io_status_block,
-                None,
-                FILE_FLAG_OPEN_REPARSE_POINT,
-                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                FILE_OPEN,
-                FILE_OPEN_REPARSE_POINT,
-                None,
-                0,
-            )
-        };
-        if status.0 < 0 {
-            return Err(NtError { status }).context("calling NtCreateFile failed");
-        }
-        let handle = unsafe { Owned::<HANDLE>::new(handle) };
-        let attributes = get_file_attributes(*handle)?;
+        let (handle, _) = self.nt_create_file(
+            file_name,
+            READ_CONTROL | FILE_READ_ATTRIBUTES,
+            FILE_FLAG_OPEN_REPARSE_POINT,
+            FILE_OPEN,
+            FILE_OPEN_REPARSE_POINT,
+            PSECURITY_DESCRIPTOR(std::ptr::null_mut()),
+        )?;
+
+        let attributes = get_file_attributes(HANDLE(handle.as_raw_handle()))?;
 
         // cache file_attributes for Open
         unsafe {
@@ -315,7 +364,7 @@ impl WinFspFileSystemCore for LiteWinFspCore {
         if let Some(ref mut security_descriptor) = security_descriptor {
             let status = unsafe {
                 NtQuerySecurityObject(
-                    *handle,
+                    HANDLE(handle.as_raw_handle()),
                     (OWNER_SECURITY_INFORMATION
                         | GROUP_SECURITY_INFORMATION
                         | DACL_SECURITY_INFORMATION)
@@ -359,57 +408,21 @@ impl WinFspFileSystemCore for LiteWinFspCore {
             create_options |= FILE_SYNCHRONOUS_IO_NONALERT
         }
 
-        let (encoded_name, encoded_un) = self.translate_full(file_name)?;
+        let (handle, encoded_name) = self.nt_create_file(
+            file_name,
+            granted_access | SYNCHRONIZE | FILE_GENERIC_READ,
+            FILE_FLAGS_AND_ATTRIBUTES(0),
+            FILE_OPEN,
+            FILE_OPEN_REPARSE_POINT,
+            PSECURITY_DESCRIPTOR(std::ptr::null_mut()),
+        )?;
 
-        let obj_attr = OBJECT_ATTRIBUTES {
-            Length: size_of::<OBJECT_ATTRIBUTES>().try_into()?,
-            RootDirectory: HANDLE(self.root_dir.dir.as_raw_handle()),
-            ObjectName: &raw const encoded_un.unicode_string,
-            Attributes: OBJECT_ATTRIBUTE_FLAGS::from(OBJ_CASE_INSENSITIVE | OBJ_OPENLINK),
-            SecurityDescriptor: std::ptr::null(),
-            SecurityQualityOfService: std::ptr::null(),
-        };
-        let mut handle = HANDLE(std::ptr::null_mut());
-        let mut io_status_block: IO_STATUS_BLOCK = unsafe { std::mem::zeroed() };
-        let status = unsafe {
-            NtCreateFile(
-                &raw mut handle,
-                granted_access | SYNCHRONIZE | FILE_GENERIC_READ,
-                &raw const obj_attr,
-                &raw mut io_status_block,
-                None,
-                FILE_FLAG_OPEN_REPARSE_POINT,
-                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                FILE_OPEN,
-                FILE_OPEN_REPARSE_POINT,
-                None,
-                0,
-            )
-        };
-        if status.0 < 0 {
-            return Err(NtError { status }).context("calling NtCreateFile failed");
-        }
-        let handle = unsafe { OwnedFileDescriptor::from_raw_handle(handle.0) };
         let full_path = self
             .root_dir
             .full_path
             .join(Path::new(encoded_name.as_str()));
 
-        let result = if is_directory {
-            let ctx = LiteDirContext {
-                dir: handle,
-                full_path,
-                name_translator: self.root_dir.name_translator.clone(),
-                long_name_table: Mutex::new(None),
-            };
-            LiteContext::Dir(ctx)
-        } else {
-            let ctx = LiteRegularFileContext {
-                file_like_stream: Box::new(self.factory.generic_wrap::<NtFileStream>(handle)?),
-                full_path,
-            };
-            LiteContext::File(ctx)
-        };
+        let result = self.build_context(handle, full_path, is_directory)?;
         *file_info.as_mut() = result.get_file_info()?;
 
         Ok(result)
@@ -450,57 +463,22 @@ impl WinFspFileSystemCore for LiteWinFspCore {
         let security_descriptor = PSECURITY_DESCRIPTOR(
             security_descriptor.map_or(std::ptr::null_mut(), |c| c.as_ptr().cast_mut()),
         );
-        let (encoded_name, encoded_un) = self.translate_full(file_name)?;
 
-        let obj_attr = OBJECT_ATTRIBUTES {
-            Length: size_of::<OBJECT_ATTRIBUTES>().try_into()?,
-            RootDirectory: HANDLE(self.root_dir.dir.as_raw_handle()),
-            ObjectName: &raw const encoded_un.unicode_string,
-            Attributes: OBJECT_ATTRIBUTE_FLAGS::from(OBJ_CASE_INSENSITIVE | OBJ_OPENLINK),
-            SecurityDescriptor: security_descriptor.0 as _,
-            SecurityQualityOfService: std::ptr::null(),
-        };
-        let mut handle = HANDLE(std::ptr::null_mut());
-        let mut io_status_block: IO_STATUS_BLOCK = unsafe { std::mem::zeroed() };
-        let status = unsafe {
-            NtCreateFile(
-                &raw mut handle,
-                FILE_ACCESS_RIGHTS(granted_access) | SYNCHRONIZE | FILE_GENERIC_READ,
-                &raw const obj_attr,
-                &raw mut io_status_block,
-                None,
-                FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAGS_AND_ATTRIBUTES(file_attributes),
-                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                FILE_CREATE,
-                FILE_OPEN_REPARSE_POINT | create_options,
-                None,
-                0,
-            )
-        };
-        if status.0 < 0 {
-            return Err(NtError { status }).context("calling NtCreateFile failed");
-        }
-        let handle = unsafe { OwnedFileDescriptor::from_raw_handle(handle.0) };
+        let (handle, encoded_name) = self.nt_create_file(
+            file_name,
+            FILE_ACCESS_RIGHTS(granted_access) | SYNCHRONIZE | FILE_GENERIC_READ,
+            FILE_FLAGS_AND_ATTRIBUTES(file_attributes),
+            FILE_CREATE,
+            FILE_OPEN_REPARSE_POINT | create_options,
+            security_descriptor,
+        )?;
+
         let full_path = self
             .root_dir
             .full_path
             .join(Path::new(encoded_name.as_str()));
 
-        let result = if is_directory {
-            let ctx = LiteDirContext {
-                dir: handle,
-                full_path,
-                name_translator: self.root_dir.name_translator.clone(),
-                long_name_table: Mutex::new(None),
-            };
-            LiteContext::Dir(ctx)
-        } else {
-            let ctx = LiteRegularFileContext {
-                file_like_stream: Box::new(self.factory.generic_wrap::<NtFileStream>(handle)?),
-                full_path,
-            };
-            LiteContext::File(ctx)
-        };
+        let result = self.build_context(handle, full_path, is_directory)?;
         *file_info.as_mut() = result.get_file_info()?;
         Ok(result)
     }
