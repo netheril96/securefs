@@ -145,6 +145,17 @@ impl<S: Stream> LiteAesGcmCryptStream<S> {
         let residue = content_size % (block_size + iv_size + 16);
         num_blocks * block_size + residue.saturating_sub(iv_size + 16)
     }
+
+    pub fn max_physical_size_for_virtual_size(
+        virtual_size: LengthType,
+        block_size: LengthType,
+        iv_size: LengthType,
+        max_padding: LengthType,
+    ) -> LengthType {
+        max_padding
+            + ID_SIZE as LengthType
+            + (virtual_size + block_size - 1) / block_size * (block_size + iv_size + 16)
+    }
 }
 
 // impl<S: FileLockable + Stream> FileLockable for LiteAesGcmCryptStream<S> {

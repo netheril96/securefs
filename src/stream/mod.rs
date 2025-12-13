@@ -336,7 +336,9 @@ pub trait FileLike: FileLockable {}
 
 #[cfg(windows)]
 #[delegatable_trait]
-pub trait FileLike: FileLockable {}
+pub trait FileLike: FileLockable {
+    fn as_win_handle(&self) -> windows::Win32::Foundation::HANDLE;
+}
 
 pub trait FileLikeStream: FileLike + Stream {}
 
@@ -541,7 +543,11 @@ pub mod win {
         }
     }
 
-    impl FileLike for NtFileStream {}
+    impl FileLike for NtFileStream {
+        fn as_win_handle(&self) -> HANDLE {
+            HANDLE(self.fd.as_raw_handle())
+        }
+    }
 }
 #[cfg(test)]
 pub mod test {

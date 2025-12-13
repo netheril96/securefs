@@ -107,6 +107,15 @@ impl LiteAesGcmCryptStreamFactory {
             )
         }
     }
+
+    fn compute_max_physical_size(&self, virtual_size: u64) -> u64 {
+        LiteAesGcmCryptStream::<MemoryStream>::max_physical_size_for_virtual_size(
+            virtual_size,
+            self.size_params.block_size.into(),
+            self.size_params.iv_size.into(),
+            self.size_params.max_padding_size.into(),
+        )
+    }
 }
 
 #[cfg(unix)]

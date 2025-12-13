@@ -8,11 +8,12 @@ use std::{
     sync::Arc,
 };
 
+use ambassador::{Delegate, delegatable_trait};
 use anyhow::Context;
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use winfsp::{
     U16CStr,
-    filesystem::{FileSecurity, OpenFileInfo},
+    filesystem::{FileInfo, FileSecurity, OpenFileInfo},
 };
 
 use crate::{
@@ -31,22 +32,26 @@ use windows::{
     Wdk::{
         Foundation::OBJECT_ATTRIBUTES,
         Storage::FileSystem::{
-            FILE_DIRECTORY_FILE, FILE_NO_EA_KNOWLEDGE, FILE_NON_DIRECTORY_FILE, FILE_OPEN,
-            FILE_OPEN_REPARSE_POINT, FILE_SYNCHRONOUS_IO_NONALERT, FileAttributeTagInformation,
+            FILE_CREATE, FILE_DIRECTORY_FILE, FILE_NO_EA_KNOWLEDGE, FILE_NON_DIRECTORY_FILE,
+            FILE_OPEN, FILE_OPEN_REPARSE_POINT, FILE_STAT_INFORMATION,
+            FILE_SYNCHRONOUS_IO_NONALERT, FileAttributeTagInformation, FileStatInformation,
             NTCREATEFILE_CREATE_OPTIONS, NtCreateFile, NtQueryInformationFile,
             NtQuerySecurityObject,
         },
     },
     Win32::{
-        Foundation::{HANDLE, OBJ_CASE_INSENSITIVE, OBJ_OPENLINK, OBJECT_ATTRIBUTE_FLAGS},
+        Foundation::{
+            HANDLE, OBJ_CASE_INSENSITIVE, OBJ_OPENLINK, OBJECT_ATTRIBUTE_FLAGS, STATUS_NOT_CAPABLE,
+        },
         Security::{
             DACL_SECURITY_INFORMATION, GROUP_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
             PSECURITY_DESCRIPTOR,
         },
         Storage::FileSystem::{
             FILE_ACCESS_RIGHTS, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_TAG_INFO,
-            FILE_FLAG_OPEN_REPARSE_POINT, FILE_GENERIC_READ, FILE_READ_ATTRIBUTES,
-            FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, READ_CONTROL, SYNCHRONIZE,
+            FILE_FLAG_OPEN_REPARSE_POINT, FILE_FLAGS_AND_ATTRIBUTES, FILE_GENERIC_READ,
+            FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+            READ_CONTROL, SYNCHRONIZE,
         },
         System::IO::IO_STATUS_BLOCK,
     },
@@ -133,6 +138,50 @@ impl LiteDirContext {
     }
 }
 
+#[delegatable_trait]
+trait FileInfoExt {
+    fn get_file_info(&self) -> anyhow::Result<FileInfo>;
+}
+
+impl FileInfoExt for HANDLE {
+    fn get_file_info(&self) -> anyhow::Result<FileInfo> {
+        let mut st: FILE_STAT_INFORMATION = unsafe { std::mem::zeroed() };
+        let mut iosb: IO_STATUS_BLOCK = unsafe { std::mem::zeroed() };
+
+        let status = unsafe {
+            NtQueryInformationFile(
+                *self,
+                &raw mut iosb,
+                &raw mut st as _,
+                size_of_val(&st) as u32,
+                FileStatInformation,
+            )
+        };
+        if status.0 < 0 {
+            return Err(NtError { status }).context("NtQueryInformationFile");
+        }
+        Ok(FileInfo {
+            file_attributes: st.FileAttributes,
+            reparse_tag: st.ReparseTag,
+            allocation_size: st.AllocationSize as _,
+            file_size: st.EndOfFile as _,
+            creation_time: st.CreationTime as _,
+            last_access_time: st.LastAccessTime as _,
+            last_write_time: st.LastWriteTime as _,
+            change_time: st.ChangeTime as _,
+            index_number: st.FileId as _,
+            hard_links: 0,
+            ea_size: 0,
+        })
+    }
+}
+
+impl FileInfoExt for LiteDirContext {
+    fn get_file_info(&self) -> anyhow::Result<FileInfo> {
+        HANDLE(self.dir.as_raw_handle()).get_file_info()
+    }
+}
+
 pub(super) struct LiteRegularFileContext {
     file_like_stream: Box<dyn FileLikeStream>,
     full_path: PathBuf,
@@ -146,7 +195,16 @@ impl Debug for LiteRegularFileContext {
     }
 }
 
-#[derive(Debug)]
+impl FileInfoExt for LiteRegularFileContext {
+    fn get_file_info(&self) -> anyhow::Result<FileInfo> {
+        let mut info = self.file_like_stream.as_win_handle().get_file_info()?;
+        info.file_size = self.file_like_stream.size()?;
+        Ok(info)
+    }
+}
+
+#[derive(Debug, Delegate)]
+#[delegate(FileInfoExt)]
 pub(super) enum LiteContext {
     Dir(LiteDirContext),
     File(LiteRegularFileContext),
@@ -352,11 +410,98 @@ impl WinFspFileSystemCore for LiteWinFspCore {
             };
             LiteContext::File(ctx)
         };
+        *file_info.as_mut() = result.get_file_info()?;
 
         Ok(result)
     }
 
     fn close(&self, context: Self::FileContext) {
         drop(context)
+    }
+
+    fn create(
+        &self,
+        file_name: &U16CStr,
+        create_options: u32,
+        granted_access: winfsp_sys::FILE_ACCESS_RIGHTS,
+        file_attributes: winfsp_sys::FILE_FLAGS_AND_ATTRIBUTES,
+        security_descriptor: Option<&[c_void]>,
+        allocation_size: u64,
+        extra_buffer: Option<&[u8]>,
+        extra_buffer_is_reparse_point: bool,
+        file_info: &mut OpenFileInfo,
+    ) -> anyhow::Result<Self::FileContext> {
+        if extra_buffer.is_some() {
+            return Err(NtError {
+                status: STATUS_NOT_CAPABLE,
+            })
+            .context("extra buffer not currently supported in securefs");
+        }
+        let is_directory = create_options & FILE_DIRECTORY_FILE.0 != 0;
+        let create_options = NTCREATEFILE_CREATE_OPTIONS(create_options)
+            & (FILE_DIRECTORY_FILE | FILE_NON_DIRECTORY_FILE | FILE_NO_EA_KNOWLEDGE);
+
+        let allocation_size = if allocation_size != 0 {
+            Some(self.factory.compute_max_physical_size(allocation_size))
+        } else {
+            None
+        };
+
+        let security_descriptor = PSECURITY_DESCRIPTOR(
+            security_descriptor.map_or(std::ptr::null_mut(), |c| c.as_ptr().cast_mut()),
+        );
+        let (encoded_name, encoded_un) = self.translate_full(file_name)?;
+
+        let obj_attr = OBJECT_ATTRIBUTES {
+            Length: size_of::<OBJECT_ATTRIBUTES>().try_into()?,
+            RootDirectory: HANDLE(self.root_dir.dir.as_raw_handle()),
+            ObjectName: &raw const encoded_un.unicode_string,
+            Attributes: OBJECT_ATTRIBUTE_FLAGS::from(OBJ_CASE_INSENSITIVE | OBJ_OPENLINK),
+            SecurityDescriptor: security_descriptor.0 as _,
+            SecurityQualityOfService: std::ptr::null(),
+        };
+        let mut handle = HANDLE(std::ptr::null_mut());
+        let mut io_status_block: IO_STATUS_BLOCK = unsafe { std::mem::zeroed() };
+        let status = unsafe {
+            NtCreateFile(
+                &raw mut handle,
+                FILE_ACCESS_RIGHTS(granted_access) | SYNCHRONIZE | FILE_GENERIC_READ,
+                &raw const obj_attr,
+                &raw mut io_status_block,
+                None,
+                FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAGS_AND_ATTRIBUTES(file_attributes),
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                FILE_CREATE,
+                FILE_OPEN_REPARSE_POINT | create_options,
+                None,
+                0,
+            )
+        };
+        if status.0 < 0 {
+            return Err(NtError { status }).context("calling NtCreateFile failed");
+        }
+        let handle = unsafe { OwnedFileDescriptor::from_raw_handle(handle.0) };
+        let full_path = self
+            .root_dir
+            .full_path
+            .join(Path::new(encoded_name.as_str()));
+
+        let result = if is_directory {
+            let ctx = LiteDirContext {
+                dir: handle,
+                full_path,
+                name_translator: self.root_dir.name_translator.clone(),
+                long_name_table: Mutex::new(None),
+            };
+            LiteContext::Dir(ctx)
+        } else {
+            let ctx = LiteRegularFileContext {
+                file_like_stream: Box::new(self.factory.generic_wrap::<NtFileStream>(handle)?),
+                full_path,
+            };
+            LiteContext::File(ctx)
+        };
+        *file_info.as_mut() = result.get_file_info()?;
+        Ok(result)
     }
 }
