@@ -154,7 +154,7 @@ impl<S: Stream> LiteAesGcmCryptStream<S> {
     ) -> LengthType {
         max_padding
             + ID_SIZE as LengthType
-            + (virtual_size + block_size - 1) / block_size * (block_size + iv_size + 16)
+            + virtual_size.div_ceil(block_size) * (block_size + iv_size + 16)
     }
 }
 

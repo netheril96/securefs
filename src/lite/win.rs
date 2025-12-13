@@ -55,7 +55,6 @@ use windows::{
         },
         System::IO::IO_STATUS_BLOCK,
     },
-    core::Owned,
 };
 
 struct LiteDirLongNameDb {
@@ -271,7 +270,7 @@ impl LiteWinFspCore {
             Length: std::mem::size_of::<OBJECT_ATTRIBUTES>().try_into()?,
             RootDirectory: HANDLE(self.root_dir.dir.as_raw_handle()),
             ObjectName: &raw const encoded_un.unicode_string,
-            Attributes: OBJECT_ATTRIBUTE_FLAGS::from(OBJ_CASE_INSENSITIVE | OBJ_OPENLINK),
+            Attributes: (OBJ_CASE_INSENSITIVE | OBJ_OPENLINK),
             SecurityDescriptor: security_descriptor.0 as _,
             SecurityQualityOfService: std::ptr::null(),
         };
@@ -382,7 +381,7 @@ impl WinFspFileSystemCore for LiteWinFspCore {
         Ok(FileSecurity {
             reparse: false,
             sz_security_descriptor: sz_security_descriptor.try_into()?,
-            attributes: attributes,
+            attributes,
         })
     }
 

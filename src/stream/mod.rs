@@ -392,7 +392,7 @@ pub mod win {
                     &raw const length,
                     0,
                     false,                                // FALSE, wait for lock
-                    if exclusive { true } else { false }, // TRUE for exclusive lock
+                    exclusive, // TRUE for exclusive lock
                 )
             };
             if status.0 < 0 {

@@ -1,5 +1,4 @@
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber;
 use tracing_subscriber::EnvFilter;
 
 fn main() {

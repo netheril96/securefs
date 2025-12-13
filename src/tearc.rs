@@ -61,7 +61,7 @@ impl<T: 'static> Clone for Tearc<T> {
     fn clone(&self) -> Self {
         Self {
             storage: self.storage.clone(),
-            pointer: self.pointer.clone(),
+            pointer: self.pointer,
         }
     }
 }

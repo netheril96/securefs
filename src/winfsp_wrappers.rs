@@ -377,11 +377,10 @@ pub trait WinFspFileSystemCore: Sized {
         F: FnOnce(&mut FSP_FSCTL_TRANSACT_RSP) -> T,
     {
         unsafe {
-            if let Some(context) = winfsp_sys::FspFileSystemGetOperationContext().as_ref() {
-                if let Some(response) = context.Response.as_mut() {
+            if let Some(context) = winfsp_sys::FspFileSystemGetOperationContext().as_ref()
+                && let Some(response) = context.Response.as_mut() {
                     return Some(f(response));
                 }
-            }
         }
         None
     }
@@ -402,11 +401,10 @@ pub trait WinFspFileSystemCore: Sized {
         F: FnOnce(&FSP_FSCTL_TRANSACT_REQ) -> T,
     {
         unsafe {
-            if let Some(context) = winfsp_sys::FspFileSystemGetOperationContext().as_ref() {
-                if let Some(request) = context.Request.as_ref() {
+            if let Some(context) = winfsp_sys::FspFileSystemGetOperationContext().as_ref()
+                && let Some(request) = context.Request.as_ref() {
                     return Some(f(request));
                 }
-            }
         }
         None
     }
@@ -1069,5 +1067,5 @@ pub fn to_winfsp_error(e: &anyhow::Error) -> winfsp::FspError {
         return winfsp::FspError::WIN32(code as _);
     }
 
-    return winfsp::FspError::NTSTATUS(STATUS_UNSUCCESSFUL.0);
+    winfsp::FspError::NTSTATUS(STATUS_UNSUCCESSFUL.0)
 }
