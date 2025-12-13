@@ -391,17 +391,19 @@ pub mod unix {
 
     #[cfg(target_os = "freebsd")]
     fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
+        use rustix::fs::{Mode, OFlags};
+
         let opath_fd = rustix::fs::openat(
             fd,
             c"",
             OFlags::from_bits_retain((libc::O_PATH | libc::O_EMPTY_PATH) as libc::c_uint),
-            rustix::fs::Mode::empty(),
+            Mode::empty(),
         )?;
         Ok(rustix::fs::openat(
             opath_fd,
             c"",
             OFlags::from_bits_retain((libc::O_RDWR | libc::O_EMPTY_PATH) as libc::c_uint),
-            rustix::fs::Mode::empty(),
+            Mode::empty(),
         )?)
     }
 

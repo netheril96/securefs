@@ -14,6 +14,7 @@ jobs:
   test:
     name: Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -50,6 +51,7 @@ jobs:
   test-freebsd:
     name: Test on FreeBSD
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout sources
         uses: actions/checkout@v5
@@ -77,4 +79,3 @@ jobs:
             cargo test --verbose
             cargo test --verbose -F fuse
             mv ~/.cargo ~/freebsd-home/.cargo || true
-
