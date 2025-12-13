@@ -36,12 +36,13 @@ use windows::{
             FILE_OPEN, FILE_OPEN_REPARSE_POINT, FILE_STAT_INFORMATION,
             FILE_SYNCHRONOUS_IO_NONALERT, FileAttributeTagInformation, FileStatInformation,
             NTCREATEFILE_CREATE_DISPOSITION, NTCREATEFILE_CREATE_OPTIONS, NtCreateFile,
-            NtQueryInformationFile, NtQuerySecurityObject,
+            NtFlushBuffersFile, NtQueryInformationFile, NtQuerySecurityObject,
         },
     },
     Win32::{
         Foundation::{
-            HANDLE, OBJ_CASE_INSENSITIVE, OBJ_OPENLINK, OBJECT_ATTRIBUTE_FLAGS, STATUS_NOT_CAPABLE,
+            HANDLE, OBJ_CASE_INSENSITIVE, OBJ_OPENLINK, OBJECT_ATTRIBUTE_FLAGS,
+            STATUS_BUFFER_OVERFLOW, STATUS_FILE_IS_A_DIRECTORY, STATUS_NOT_CAPABLE,
         },
         Security::{
             DACL_SECURITY_INFORMATION, GROUP_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
@@ -56,6 +57,44 @@ use windows::{
         System::IO::IO_STATUS_BLOCK,
     },
 };
+
+#[delegatable_trait]
+trait FileInfoExt {
+    fn get_file_info(&self) -> anyhow::Result<FileInfo>;
+}
+
+impl FileInfoExt for HANDLE {
+    fn get_file_info(&self) -> anyhow::Result<FileInfo> {
+        let mut st: FILE_STAT_INFORMATION = unsafe { std::mem::zeroed() };
+        let mut iosb: IO_STATUS_BLOCK = unsafe { std::mem::zeroed() };
+
+        let status = unsafe {
+            NtQueryInformationFile(
+                *self,
+                &raw mut iosb,
+                &raw mut st as _,
+                size_of_val(&st) as u32,
+                FileStatInformation,
+            )
+        };
+        if status.0 < 0 {
+            return Err(NtError { status }).context("NtQueryInformationFile");
+        }
+        Ok(FileInfo {
+            file_attributes: st.FileAttributes,
+            reparse_tag: st.ReparseTag,
+            allocation_size: st.AllocationSize as _,
+            file_size: st.EndOfFile as _,
+            creation_time: st.CreationTime as _,
+            last_access_time: st.LastAccessTime as _,
+            last_write_time: st.LastWriteTime as _,
+            change_time: st.ChangeTime as _,
+            index_number: st.FileId as _,
+            hard_links: 0,
+            ea_size: 0,
+        })
+    }
+}
 
 struct LiteDirLongNameDb {
     lookup_table: LongNameLookupTable,
@@ -137,44 +176,6 @@ impl LiteDirContext {
     }
 }
 
-#[delegatable_trait]
-trait FileInfoExt {
-    fn get_file_info(&self) -> anyhow::Result<FileInfo>;
-}
-
-impl FileInfoExt for HANDLE {
-    fn get_file_info(&self) -> anyhow::Result<FileInfo> {
-        let mut st: FILE_STAT_INFORMATION = unsafe { std::mem::zeroed() };
-        let mut iosb: IO_STATUS_BLOCK = unsafe { std::mem::zeroed() };
-
-        let status = unsafe {
-            NtQueryInformationFile(
-                *self,
-                &raw mut iosb,
-                &raw mut st as _,
-                size_of_val(&st) as u32,
-                FileStatInformation,
-            )
-        };
-        if status.0 < 0 {
-            return Err(NtError { status }).context("NtQueryInformationFile");
-        }
-        Ok(FileInfo {
-            file_attributes: st.FileAttributes,
-            reparse_tag: st.ReparseTag,
-            allocation_size: st.AllocationSize as _,
-            file_size: st.EndOfFile as _,
-            creation_time: st.CreationTime as _,
-            last_access_time: st.LastAccessTime as _,
-            last_write_time: st.LastWriteTime as _,
-            change_time: st.ChangeTime as _,
-            index_number: st.FileId as _,
-            hard_links: 0,
-            ea_size: 0,
-        })
-    }
-}
-
 impl FileInfoExt for LiteDirContext {
     fn get_file_info(&self) -> anyhow::Result<FileInfo> {
         HANDLE(self.dir.as_raw_handle()).get_file_info()
@@ -182,7 +183,7 @@ impl FileInfoExt for LiteDirContext {
 }
 
 pub(super) struct LiteRegularFileContext {
-    file_like_stream: Box<dyn FileLikeStream>,
+    file_like_stream: Box<Mutex<dyn FileLikeStream>>,
     full_path: PathBuf,
 }
 
@@ -196,8 +197,9 @@ impl Debug for LiteRegularFileContext {
 
 impl FileInfoExt for LiteRegularFileContext {
     fn get_file_info(&self) -> anyhow::Result<FileInfo> {
-        let mut info = self.file_like_stream.as_win_handle().get_file_info()?;
-        info.file_size = self.file_like_stream.size()?;
+        let stream = self.file_like_stream.lock();
+        let mut info = stream.as_win_handle().get_file_info()?;
+        info.file_size = stream.size()?;
         Ok(info)
     }
 }
@@ -318,7 +320,9 @@ impl LiteWinFspCore {
             Ok(LiteContext::Dir(ctx))
         } else {
             let ctx = LiteRegularFileContext {
-                file_like_stream: Box::new(self.factory.generic_wrap::<NtFileStream>(handle)?),
+                file_like_stream: Box::new(Mutex::new(
+                    self.factory.generic_wrap::<NtFileStream>(handle)?,
+                )),
                 full_path,
             };
             Ok(LiteContext::File(ctx))
@@ -480,5 +484,55 @@ impl WinFspFileSystemCore for LiteWinFspCore {
         let result = self.build_context(handle, full_path, is_directory)?;
         *file_info.as_mut() = result.get_file_info()?;
         Ok(result)
+    }
+
+    fn read(
+        &self,
+        context: &Self::FileContext,
+        buffer: &mut [u8],
+        offset: u64,
+    ) -> anyhow::Result<u32> {
+        let LiteContext::File(context) = context else {
+            return Err(NtError {
+                status: STATUS_FILE_IS_A_DIRECTORY,
+            })?;
+        };
+        Ok(context
+            .file_like_stream
+            .lock()
+            .read(buffer, offset)?
+            .try_into()?)
+    }
+
+    fn write(
+        &self,
+        context: &Self::FileContext,
+        mut buffer: &[u8],
+        offset: u64,
+        write_to_eof: bool,
+        constrained_io: bool,
+        file_info: &mut FileInfo,
+    ) -> anyhow::Result<u32> {
+        let LiteContext::File(context) = context else {
+            return Err(NtError {
+                status: STATUS_FILE_IS_A_DIRECTORY,
+            })?;
+        };
+        let mut stream = context.file_like_stream.lock();
+        if constrained_io {
+            let size = stream.size()?;
+            if offset >= size {
+                return Ok(0);
+            }
+            if offset + u64::try_from(buffer.len())? > size {
+                buffer = buffer.get(0..(size - offset).try_into()?).ok_or(NtError {
+                    status: STATUS_BUFFER_OVERFLOW,
+                })?;
+            }
+        }
+        stream.write(buffer, offset)?;
+        *file_info = stream.as_win_handle().get_file_info()?;
+        file_info.file_size = stream.size()?;
+        Ok(buffer.len().try_into()?)
     }
 }
