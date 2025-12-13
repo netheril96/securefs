@@ -11,7 +11,7 @@ use crate::fuse_wrappers::{
         fuse_session_destroy, fuse_session_loop_mt, fuse_session_mount, fuse_session_unmount,
         fuse_set_signal_handlers,
     },
-    fuse_low_level_ops::{FuseLowLevelOps, generate_libfuse_low_level_ops},
+    fuse_low_level_ops::{FuseLowLevelOps, TracedFuseOpsWrapper, generate_libfuse_low_level_ops},
 };
 
 #[derive(Debug)]
@@ -39,7 +39,7 @@ unsafe extern "C" {
 
 pub fn run_fuse_main<T: FuseLowLevelOps>(
     fuse_args: &[&CStr],
-    ops: &mut Box<T>,
+    ops: &mut Box<TracedFuseOpsWrapper<T>>,
 ) -> anyhow::Result<()> {
     let mut c_args: Vec<*mut std::os::raw::c_char> =
         fuse_args.iter().map(|s| s.as_ptr().cast_mut()).collect();
@@ -63,7 +63,7 @@ pub fn run_fuse_main<T: FuseLowLevelOps>(
         Err(FuseLoopError {})?;
     }
     let fuse_ops = generate_libfuse_low_level_ops(&mut **ops);
-    let userdata: *mut T = &raw mut **ops;
+    let userdata: *mut TracedFuseOpsWrapper<T> = &raw mut **ops;
     let session = scopeguard::guard(
         unsafe {
             fuse_session_new(

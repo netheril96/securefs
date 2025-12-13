@@ -527,7 +527,7 @@ pub mod testing {
     use protobuf::MessageField;
 
     use crate::{
-        fuse_wrappers::fuse_main::run_fuse_main,
+        fuse_wrappers::{fuse_low_level_ops::TracedFuseOpsWrapper, fuse_main::run_fuse_main},
         lite::unix::create_vfs_for_fuse,
         protos::params::{
             DecryptedSecurefsParams, MountOptions,
@@ -566,11 +566,11 @@ pub mod testing {
         let mut root_tmp_dir = tempfile::TempDir::new()?;
         root_tmp_dir.disable_cleanup(true);
         tracing::info!("Root tmp dir: {:?}", root_tmp_dir.path());
-        let mut vfs = Box::new(create_vfs_for_fuse(
+        let mut vfs = Box::new(TracedFuseOpsWrapper::from(create_vfs_for_fuse(
             &dec_params,
             &mount_options,
             root_tmp_dir.path(),
-        )?);
+        )?));
 
         run_fuse_main(
             &[

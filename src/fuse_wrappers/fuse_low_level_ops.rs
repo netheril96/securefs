@@ -4,6 +4,7 @@ use std::{
 };
 
 use rustix::io::Errno;
+use tracing::{Level, instrument};
 
 use crate::{
     fuse_wrappers::bindings::{
@@ -445,6 +446,520 @@ pub trait FuseLowLevelOps {
         op: i32,
     ) -> anyhow::Result<()> {
         unimplemented!()
+    }
+}
+
+pub struct TracedFuseOpsWrapper<T: FuseLowLevelOps> {
+    ops: T,
+}
+
+impl<T: FuseLowLevelOps> From<T> for TracedFuseOpsWrapper<T> {
+    fn from(value: T) -> Self {
+        Self { ops: value }
+    }
+}
+
+impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
+    #[instrument(skip(self), ret, level=Level::TRACE)]
+    fn init(&mut self, conn: fuse_conn_info) -> fuse_conn_info {
+        self.ops.init(conn)
+    }
+
+    fn can_lookup(&self) -> bool {
+        self.ops.can_lookup()
+    }
+
+    // Note: `lookup` errors are extremely common, so they are logged in INFO level
+    // rather than WARN level.
+    #[instrument(skip(self), ret, err(Debug, level=Level::INFO), level=Level::TRACE)]
+    fn lookup(
+        &self,
+        req: FuseReq,
+        parent: fuse_ino_t,
+        name: &CStr,
+    ) -> anyhow::Result<bindings::fuse_entry_param> {
+        self.ops.lookup(req, parent, name)
+    }
+
+    fn can_forget(&self) -> bool {
+        self.ops.can_forget()
+    }
+
+    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn forget(&self, req: FuseReq, ino: fuse_ino_t, nlookup: u64) -> anyhow::Result<()> {
+        self.ops.forget(req, ino, nlookup)
+    }
+
+    fn can_getattr(&self) -> bool {
+        self.ops.can_getattr()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn getattr(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        fi: Option<&bindings::fuse_file_info>,
+    ) -> anyhow::Result<(bindings::stat, f64)> {
+        self.ops.getattr(req, ino, fi)
+    }
+
+    fn can_setattr(&self) -> bool {
+        self.ops.can_setattr()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn setattr(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        attr: &bindings::stat,
+        to_set: i32,
+        fi: Option<&bindings::fuse_file_info>,
+    ) -> anyhow::Result<(bindings::stat, f64)> {
+        self.ops.setattr(req, ino, attr, to_set, fi)
+    }
+
+    fn can_readlink(&self) -> bool {
+        self.ops.can_readlink()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn readlink(&self, req: FuseReq, ino: fuse_ino_t) -> anyhow::Result<CString> {
+        self.ops.readlink(req, ino)
+    }
+
+    fn can_mknod(&self) -> bool {
+        self.ops.can_mknod()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn mknod(
+        &self,
+        req: FuseReq,
+        parent: fuse_ino_t,
+        name: &CStr,
+        mode: mode_t,
+        rdev: dev_t,
+    ) -> anyhow::Result<bindings::fuse_entry_param> {
+        self.ops.mknod(req, parent, name, mode, rdev)
+    }
+
+    fn can_mkdir(&self) -> bool {
+        self.ops.can_mkdir()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn mkdir(
+        &self,
+        req: FuseReq,
+        parent: fuse_ino_t,
+        name: &CStr,
+        mode: mode_t,
+    ) -> anyhow::Result<bindings::fuse_entry_param> {
+        self.ops.mkdir(req, parent, name, mode)
+    }
+
+    fn can_unlink(&self) -> bool {
+        self.ops.can_unlink()
+    }
+
+    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn unlink(&self, req: FuseReq, parent: fuse_ino_t, name: &CStr) -> anyhow::Result<()> {
+        self.ops.unlink(req, parent, name)
+    }
+
+    fn can_rmdir(&self) -> bool {
+        self.ops.can_rmdir()
+    }
+
+    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn rmdir(&self, req: FuseReq, parent: fuse_ino_t, name: &CStr) -> anyhow::Result<()> {
+        self.ops.rmdir(req, parent, name)
+    }
+
+    fn can_symlink(&self) -> bool {
+        self.ops.can_symlink()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn symlink(
+        &self,
+        req: FuseReq,
+        link: &CStr,
+        parent: fuse_ino_t,
+        name: &CStr,
+    ) -> anyhow::Result<bindings::fuse_entry_param> {
+        self.ops.symlink(req, link, parent, name)
+    }
+
+    fn can_rename(&self) -> bool {
+        self.ops.can_rename()
+    }
+
+    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn rename(
+        &self,
+        req: FuseReq,
+        parent: fuse_ino_t,
+        name: &CStr,
+        newparent: fuse_ino_t,
+        newname: &CStr,
+        flags: u32,
+    ) -> anyhow::Result<()> {
+        self.ops
+            .rename(req, parent, name, newparent, newname, flags)
+    }
+
+    fn can_link(&self) -> bool {
+        self.ops.can_link()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn link(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        newparent: fuse_ino_t,
+        newname: &CStr,
+    ) -> anyhow::Result<bindings::fuse_entry_param> {
+        self.ops.link(req, ino, newparent, newname)
+    }
+
+    fn can_open(&self) -> bool {
+        self.ops.can_open()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn open(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        fi: Option<&bindings::fuse_file_info>,
+    ) -> anyhow::Result<bindings::fuse_file_info> {
+        self.ops.open(req, ino, fi)
+    }
+
+    fn can_read(&self) -> bool {
+        self.ops.can_read()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level=Level::WARN), level=Level::TRACE)]
+    fn read(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        size: usize,
+        off: off_t,
+        fi: Option<&bindings::fuse_file_info>,
+    ) -> anyhow::Result<Vec<u8>> {
+        self.ops.read(req, ino, size, off, fi)
+    }
+
+    fn can_write(&self) -> bool {
+        self.ops.can_write()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level=Level::WARN), level=Level::TRACE, fields(len=buf.len()))]
+    fn write(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        buf: &[u8],
+        off: off_t,
+        fi: Option<&bindings::fuse_file_info>,
+    ) -> anyhow::Result<usize> {
+        self.ops.write(req, ino, buf, off, fi)
+    }
+
+    fn can_flush(&self) -> bool {
+        self.ops.can_flush()
+    }
+
+    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn flush(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        fi: Option<&bindings::fuse_file_info>,
+    ) -> anyhow::Result<()> {
+        self.ops.flush(req, ino, fi)
+    }
+
+    fn can_release(&self) -> bool {
+        self.ops.can_release()
+    }
+
+    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn release(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        fi: Option<&bindings::fuse_file_info>,
+    ) -> anyhow::Result<()> {
+        self.ops.release(req, ino, fi)
+    }
+
+    fn can_fsync(&self) -> bool {
+        self.ops.can_fsync()
+    }
+
+    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn fsync(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        datasync: i32,
+        fi: Option<&bindings::fuse_file_info>,
+    ) -> anyhow::Result<()> {
+        self.ops.fsync(req, ino, datasync, fi)
+    }
+
+    fn can_opendir(&self) -> bool {
+        self.ops.can_opendir()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn opendir(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        fi: Option<&bindings::fuse_file_info>,
+    ) -> anyhow::Result<bindings::fuse_file_info> {
+        self.ops.opendir(req, ino, fi)
+    }
+
+    fn can_readdir(&self) -> bool {
+        self.ops.can_readdir()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn readdir(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        size: usize,
+        off: off_t,
+        fi: Option<&bindings::fuse_file_info>,
+    ) -> anyhow::Result<Vec<u8>> {
+        self.ops.readdir(req, ino, size, off, fi)
+    }
+
+    fn can_releasedir(&self) -> bool {
+        self.ops.can_releasedir()
+    }
+
+    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn releasedir(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        fi: Option<&bindings::fuse_file_info>,
+    ) -> anyhow::Result<()> {
+        self.ops.releasedir(req, ino, fi)
+    }
+
+    fn can_fsyncdir(&self) -> bool {
+        self.ops.can_fsyncdir()
+    }
+
+    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn fsyncdir(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        datasync: i32,
+        fi: Option<&bindings::fuse_file_info>,
+    ) -> anyhow::Result<()> {
+        self.ops.fsyncdir(req, ino, datasync, fi)
+    }
+
+    fn can_statfs(&self) -> bool {
+        self.ops.can_statfs()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn statfs(&self, req: FuseReq, ino: fuse_ino_t) -> anyhow::Result<statvfs> {
+        self.ops.statfs(req, ino)
+    }
+
+    fn can_setxattr(&self) -> bool {
+        self.ops.can_setxattr()
+    }
+
+    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn setxattr(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        name: &CStr,
+        value: &[u8],
+        flags: i32,
+    ) -> anyhow::Result<()> {
+        self.ops.setxattr(req, ino, name, value, flags)
+    }
+
+    fn can_getxattr(&self) -> bool {
+        self.ops.can_getxattr()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn getxattr(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        name: &CStr,
+        size: usize,
+    ) -> anyhow::Result<Vec<u8>> {
+        self.ops.getxattr(req, ino, name, size)
+    }
+
+    fn can_listxattr(&self) -> bool {
+        self.ops.can_listxattr()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn listxattr(&self, req: FuseReq, ino: fuse_ino_t, size: usize) -> anyhow::Result<Vec<u8>> {
+        self.ops.listxattr(req, ino, size)
+    }
+
+    fn can_removexattr(&self) -> bool {
+        self.ops.can_removexattr()
+    }
+
+    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn removexattr(&self, req: FuseReq, ino: fuse_ino_t, name: &CStr) -> anyhow::Result<()> {
+        self.ops.removexattr(req, ino, name)
+    }
+
+    fn can_access(&self) -> bool {
+        self.ops.can_access()
+    }
+
+    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn access(&self, ino: fuse_ino_t, mask: i32) -> anyhow::Result<()> {
+        self.ops.access(ino, mask)
+    }
+
+    fn can_create(&self) -> bool {
+        self.ops.can_create()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn create(
+        &self,
+        req: FuseReq,
+        parent: fuse_ino_t,
+        name: &CStr,
+        mode: mode_t,
+        fi: Option<&bindings::fuse_file_info>,
+    ) -> anyhow::Result<(bindings::fuse_entry_param, bindings::fuse_file_info)> {
+        self.ops.create(req, parent, name, mode, fi)
+    }
+
+    fn can_getlk(&self) -> bool {
+        self.ops.can_getlk()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn getlk(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        fi: Option<&bindings::fuse_file_info>,
+        lock: &bindings::flock,
+    ) -> anyhow::Result<bindings::flock> {
+        self.ops.getlk(req, ino, fi, lock)
+    }
+
+    fn can_setlk(&self) -> bool {
+        self.ops.can_setlk()
+    }
+
+    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn setlk(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        fi: Option<&bindings::fuse_file_info>,
+        lock: &bindings::flock,
+        sleep: i32,
+    ) -> anyhow::Result<()> {
+        self.ops.setlk(req, ino, fi, lock, sleep)
+    }
+
+    fn can_bmap(&self) -> bool {
+        self.ops.can_bmap()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn bmap(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        blocksize: usize,
+        idx: u64,
+    ) -> anyhow::Result<u64> {
+        self.ops.bmap(req, ino, blocksize, idx)
+    }
+
+    fn can_ioctl(&self) -> bool {
+        self.ops.can_ioctl()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn ioctl(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        cmd: u32,
+        arg: *mut c_void,
+        fi: Option<&bindings::fuse_file_info>,
+        flags: u32,
+        in_buf: &[u8],
+        out_bufsz: usize,
+    ) -> anyhow::Result<(i32, Vec<u8>)> {
+        self.ops
+            .ioctl(req, ino, cmd, arg, fi, flags, in_buf, out_bufsz)
+    }
+
+    fn can_poll(&self) -> bool {
+        self.ops.can_poll()
+    }
+
+    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn poll(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        fi: Option<&bindings::fuse_file_info>,
+        ph: &mut bindings::fuse_pollhandle,
+    ) -> anyhow::Result<u32> {
+        self.ops.poll(req, ino, fi, ph)
+    }
+
+    fn can_forget_multi(&self) -> bool {
+        self.ops.can_forget_multi()
+    }
+
+    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn forget_multi(&self, req: FuseReq, forgets: &[fuse_forget_data]) -> anyhow::Result<()> {
+        self.ops.forget_multi(req, forgets)
+    }
+
+    fn can_flock(&self) -> bool {
+        self.ops.can_flock()
+    }
+
+    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
+    fn flock(
+        &self,
+        req: FuseReq,
+        ino: fuse_ino_t,
+        fi: Option<&bindings::fuse_file_info>,
+        op: i32,
+    ) -> anyhow::Result<()> {
+        self.ops.flock(req, ino, fi, op)
     }
 }
 
