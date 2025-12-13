@@ -330,8 +330,21 @@ impl<T: FileLockable + Stream> Stream for AssertLockedStream<T> {
     }
 }
 
+#[cfg(unix)]
+#[delegatable_trait]
+pub trait FileLike: FileLockable {}
+
+#[cfg(windows)]
+#[delegatable_trait]
+pub trait FileLike: FileLockable {}
+
+pub trait FileLikeStream: FileLike + Stream {}
+
+impl<T: FileLike + Stream> FileLikeStream for T {}
+
 #[cfg(windows)]
 pub mod win {
+    use crate::stream::FileLike;
     use crate::win::NtError;
     use crate::{
         OwnedFileDescriptor,
@@ -527,6 +540,8 @@ pub mod win {
             Ok(())
         }
     }
+
+    impl FileLike for NtFileStream {}
 }
 #[cfg(test)]
 pub mod test {

@@ -2,12 +2,13 @@
 
 use std::{
     ffi::{OsString, c_void},
-    os::windows::io::AsRawHandle,
+    os::windows::io::{AsRawHandle, FromRawHandle},
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
 use anyhow::Context;
-use parking_lot::Mutex;
+use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use winfsp::{
     U16CStr,
     filesystem::{FileSecurity, OpenFileInfo},
@@ -15,7 +16,11 @@ use winfsp::{
 
 use crate::{
     OwnedFileDescriptor,
-    lite::{long_name_db::LongNameLookupTable, name_translators::NameTranslator},
+    lite::{
+        LiteAesGcmCryptStreamFactory, long_name_db::C_LONG_NAME_DB_FILENAME,
+        long_name_db::LongNameLookupTable, name_translators::NameTranslator,
+    },
+    stream::{FileLikeStream, win::NtFileStream},
     tearc::Tearc,
     win::{NtError, OwnedUnicodeString, to_winfsp_error},
 };
@@ -23,7 +28,10 @@ use windows::{
     Wdk::{
         Foundation::OBJECT_ATTRIBUTES,
         Storage::FileSystem::{
-            FILE_OPEN, FILE_OPEN_REPARSE_POINT, FileAttributeTagInformation, NtCreateFile, NtQueryInformationFile, NtQuerySecurityObject,
+            FILE_DIRECTORY_FILE, FILE_NO_EA_KNOWLEDGE, FILE_NON_DIRECTORY_FILE, FILE_OPEN,
+            FILE_OPEN_REPARSE_POINT, FILE_SYNCHRONOUS_IO_NONALERT, FileAttributeTagInformation,
+            NTCREATEFILE_CREATE_OPTIONS, NtCreateFile, NtQueryInformationFile,
+            NtQuerySecurityObject,
         },
     },
     Win32::{
@@ -33,31 +41,93 @@ use windows::{
             PSECURITY_DESCRIPTOR,
         },
         Storage::FileSystem::{
-            FILE_ATTRIBUTE_TAG_INFO,
-            FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ,
-            FILE_SHARE_WRITE, READ_CONTROL,
+            FILE_ACCESS_RIGHTS, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_TAG_INFO,
+            FILE_FLAG_OPEN_REPARSE_POINT, FILE_GENERIC_READ, FILE_READ_ATTRIBUTES, FILE_READ_DATA,
+            FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, READ_CONTROL, SYNCHRONIZE,
         },
         System::IO::IO_STATUS_BLOCK,
     },
     core::Owned,
 };
 
-pub(super) struct LiteDirContext {
-    dir: OwnedFileDescriptor,
-    full_path: OsString,
-    name_translator: Arc<dyn NameTranslator>,
-    long_name_table: Mutex<LongNameLookupTable>,
+struct LiteDirLongNameDb {
+    lookup_table: LongNameLookupTable,
+    readonly: bool,
 }
 
-pub(super) struct LiteRegularFileContext {}
+pub(super) struct LiteDirContext {
+    dir: OwnedFileDescriptor,
+    full_path: PathBuf,
+    name_translator: Arc<dyn NameTranslator>,
+    long_name_table: Mutex<Option<LiteDirLongNameDb>>,
+}
+
+impl LiteDirContext {
+    fn init_long_name_db(
+        &self,
+        db: &mut Option<LiteDirLongNameDb>,
+        readonly: bool,
+    ) -> anyhow::Result<()> {
+        let mut db_path = self.full_path.clone();
+        db_path.push(C_LONG_NAME_DB_FILENAME.to_str()?);
+        let lookup_table = LongNameLookupTable::new(
+            db_path
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("invalid db path"))?,
+            readonly,
+        )?;
+        *db = Some(LiteDirLongNameDb {
+            lookup_table,
+            readonly,
+        });
+        Ok(())
+    }
+
+    pub(super) fn ensure_readable_long_name_db(
+        &self,
+    ) -> anyhow::Result<MappedMutexGuard<'_, LongNameLookupTable>> {
+        let guard = self.long_name_table.lock();
+        let map_result = MutexGuard::try_map_or_err(guard, |db| {
+            if db.is_none() {
+                self.init_long_name_db(db, true)?;
+            }
+            anyhow::Ok(&mut db.as_mut().unwrap().lookup_table)
+        });
+        match map_result {
+            Ok(result) => anyhow::Ok(result),
+            Err(err) => Err(err.1)?,
+        }
+    }
+
+    pub(super) fn ensure_writable_long_name_db(
+        &self,
+    ) -> anyhow::Result<MappedMutexGuard<'_, LongNameLookupTable>> {
+        let guard = self.long_name_table.lock();
+        let map_result = MutexGuard::try_map_or_err(guard, |db| {
+            if let Some(inner) = db
+                && inner.readonly
+            {
+                *db = None;
+            }
+            if db.is_none() {
+                self.init_long_name_db(db, false)?;
+            }
+            anyhow::Ok(&mut db.as_mut().unwrap().lookup_table)
+        });
+        match map_result {
+            Ok(result) => anyhow::Ok(result),
+            Err(err) => Err(err.1)?,
+        }
+    }
+}
+
+pub(super) struct LiteRegularFileContext {
+    file_like_stream: Box<dyn FileLikeStream>,
+}
 
 pub(super) enum LiteContext {
     Dir(LiteDirContext),
     File(LiteRegularFileContext),
-}
-
-pub(super) struct LiteWinFspCore {
-    root_dir: Tearc<LiteDirContext>,
 }
 
 fn get_file_attributes(handle: HANDLE) -> anyhow::Result<u32> {
@@ -78,6 +148,35 @@ fn get_file_attributes(handle: HANDLE) -> anyhow::Result<u32> {
     Ok(file_attr_info.FileAttributes)
 }
 
+pub(super) struct LiteWinFspCore {
+    root_dir: Tearc<LiteDirContext>,
+    factory: LiteAesGcmCryptStreamFactory,
+}
+
+impl LiteWinFspCore {
+    fn translate_full(&self, file_name: &U16CStr) -> anyhow::Result<(String, OwnedUnicodeString)> {
+        let file_name = String::from_utf16(file_name.as_slice())?;
+        let mut joined = String::with_capacity(file_name.len() * 2);
+        for part in file_name.split('\\') {
+            if part.trim().is_empty() {
+                continue;
+            }
+            joined.push_str(str::from_utf8(
+                self.root_dir
+                    .name_translator
+                    .encode_name(file_name.as_bytes())?
+                    .as_slice(),
+            )?);
+            joined.push('\\');
+        }
+        if joined.ends_with("\\") {
+            joined.pop();
+        }
+        let un = OwnedUnicodeString::try_from(joined.as_str())?;
+        Ok((joined, un))
+    }
+}
+
 impl winfsp::filesystem::FileSystemContext for LiteWinFspCore {
     type FileContext = LiteContext;
 
@@ -92,12 +191,7 @@ impl winfsp::filesystem::FileSystemContext for LiteWinFspCore {
         }
 
         let mut inner = || -> anyhow::Result<FileSecurity> {
-            let file_name = String::from_utf16(file_name.as_slice())?;
-            let encoded_name = self
-                .root_dir
-                .name_translator
-                .encode_name(file_name.as_bytes())?;
-            let encoded_un = OwnedUnicodeString::try_from(encoded_name.as_slice())?;
+            let (_, encoded_un) = self.translate_full(file_name)?;
             let obj_attr = OBJECT_ATTRIBUTES {
                 Length: size_of::<OBJECT_ATTRIBUTES>().try_into()?,
                 RootDirectory: HANDLE(self.root_dir.dir.as_raw_handle()),
@@ -174,10 +268,80 @@ impl winfsp::filesystem::FileSystemContext for LiteWinFspCore {
         granted_access: u32,
         file_info: &mut OpenFileInfo,
     ) -> winfsp::Result<Self::FileContext> {
-        todo!()
+        let inner = || -> anyhow::Result<Self::FileContext> {
+            let is_directory = unsafe {
+                self.with_operation_response(|ctx| {
+                    FILE_ATTRIBUTE_DIRECTORY.0 & ctx.Rsp.Create.Opened.FileInfo.FileAttributes != 0
+                })
+            }
+            .unwrap_or(false);
+            let mut create_options = NTCREATEFILE_CREATE_OPTIONS(create_options)
+                & (FILE_DIRECTORY_FILE | FILE_NON_DIRECTORY_FILE | FILE_NO_EA_KNOWLEDGE);
+
+            let mut granted_access = FILE_ACCESS_RIGHTS(granted_access);
+            if is_directory {
+                granted_access |= SYNCHRONIZE;
+                create_options |= FILE_SYNCHRONOUS_IO_NONALERT
+            }
+
+            let (encoded_name, encoded_un) = self.translate_full(file_name)?;
+
+            let obj_attr = OBJECT_ATTRIBUTES {
+                Length: size_of::<OBJECT_ATTRIBUTES>().try_into()?,
+                RootDirectory: HANDLE(self.root_dir.dir.as_raw_handle()),
+                ObjectName: &raw const encoded_un.unicode_string,
+                Attributes: OBJECT_ATTRIBUTE_FLAGS::from(OBJ_CASE_INSENSITIVE | OBJ_OPENLINK),
+                SecurityDescriptor: std::ptr::null(),
+                SecurityQualityOfService: std::ptr::null(),
+            };
+            let mut handle = HANDLE(std::ptr::null_mut());
+            let mut io_status_block: IO_STATUS_BLOCK = unsafe { std::mem::zeroed() };
+            let status = unsafe {
+                NtCreateFile(
+                    &raw mut handle,
+                    granted_access | SYNCHRONIZE | FILE_GENERIC_READ,
+                    &raw const obj_attr,
+                    &raw mut io_status_block,
+                    None,
+                    FILE_FLAG_OPEN_REPARSE_POINT,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                    FILE_OPEN,
+                    FILE_OPEN_REPARSE_POINT,
+                    None,
+                    0,
+                )
+            };
+            if status.0 < 0 {
+                return Err(NtError { status }).context("calling NtCreateFile failed");
+            }
+            let handle = unsafe { OwnedFileDescriptor::from_raw_handle(handle.0) };
+
+            let result = if is_directory {
+                let full_path = self
+                    .root_dir
+                    .full_path
+                    .join(Path::new(encoded_name.as_str()));
+                let ctx = LiteDirContext {
+                    dir: handle,
+                    full_path,
+                    name_translator: self.root_dir.name_translator.clone(),
+                    long_name_table: Mutex::new(None),
+                };
+                LiteContext::Dir(ctx)
+            } else {
+                let ctx = LiteRegularFileContext {
+                    file_like_stream: Box::new(self.factory.generic_wrap::<NtFileStream>(handle)?),
+                };
+                LiteContext::File(ctx)
+            };
+
+            Ok(result)
+        };
+
+        inner().map_err(|e| to_winfsp_error(&e))
     }
 
     fn close(&self, context: Self::FileContext) {
-        todo!()
+        drop(context)
     }
 }
