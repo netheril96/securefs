@@ -13,7 +13,7 @@ use std::os::unix::fs::FileExt;
 #[cfg(windows)]
 use std::os::windows::fs::FileExt;
 
-use ambassador::delegatable_trait;
+use ambassador::{Delegate, delegatable_trait};
 use anyhow::Ok;
 use thiserror::Error;
 
@@ -340,13 +340,25 @@ pub trait FileLike: FileLockable {
     fn as_win_handle(&self) -> windows::Win32::Foundation::HANDLE;
 }
 
+#[cfg(windows)]
+impl<T: FileLike + Stream> FileLike for AssertLockedStream<T> {
+    fn as_win_handle(&self) -> windows::Win32::Foundation::HANDLE {
+        match self.lock_status {
+            LockStatus::Unlocked => {
+                panic!("should have acquired a file lock before calling method as_win_handle")
+            }
+            _ => self.inner.as_win_handle(),
+        }
+    }
+}
+
 pub trait FileLikeStream: FileLike + Stream {}
 
 impl<T: FileLike + Stream> FileLikeStream for T {}
 
 #[cfg(windows)]
 pub mod win {
-    use crate::stream::FileLike;
+    use crate::stream::{AssertLockedStream, FileLike};
     use crate::win::NtError;
     use crate::{
         OwnedFileDescriptor,
@@ -375,6 +387,12 @@ pub mod win {
         }
     }
 
+    impl From<OwnedFileDescriptor> for AssertLockedStream<NtFileStream> {
+        fn from(value: OwnedFileDescriptor) -> Self {
+            Self::from(NtFileStream::from(value))
+        }
+    }
+
     impl NtFileStream {
         fn file_lock_common(&mut self, exclusive: bool) -> anyhow::Result<()> {
             let mut io_status_block: IO_STATUS_BLOCK = unsafe { mem::zeroed() };
@@ -391,7 +409,7 @@ pub mod win {
                     &raw const byte_offset,
                     &raw const length,
                     0,
-                    false,                                // FALSE, wait for lock
+                    false,     // FALSE, wait for lock
                     exclusive, // TRUE for exclusive lock
                 )
             };

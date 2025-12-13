@@ -23,7 +23,7 @@ use crate::{
         long_name_db::{C_LONG_NAME_DB_FILENAME, LongNameLookupTable},
         name_translators::NameTranslator,
     },
-    stream::{FileLikeStream, win::NtFileStream},
+    stream::{AssertLockedStream, FileLikeStream, win::NtFileStream},
     tearc::Tearc,
     win::{NtError, OwnedUnicodeString},
     winfsp_wrappers::WinFspFileSystemCore,
@@ -195,12 +195,43 @@ impl Debug for LiteRegularFileContext {
     }
 }
 
+impl LiteRegularFileContext {
+    fn with_shared_file_lock<F, R>(&self, f: F) -> anyhow::Result<R>
+    where
+        F: FnOnce(&mut dyn FileLikeStream) -> anyhow::Result<R>,
+    {
+        let mut stream = self.file_like_stream.lock();
+        stream.file_shared_lock()?;
+        let mut stream_guard = scopeguard::guard(stream, |mut s| {
+            if let Err(err) = s.file_unlock() {
+                tracing::error!(?err, "failed to unlock file from regular file context");
+            }
+        });
+        f(&mut **stream_guard)
+    }
+
+    fn with_exclusive_file_lock<F, R>(&self, f: F) -> anyhow::Result<R>
+    where
+        F: FnOnce(&mut dyn FileLikeStream) -> anyhow::Result<R>,
+    {
+        let mut stream = self.file_like_stream.lock();
+        stream.file_exclusive_lock()?;
+        let mut stream_guard = scopeguard::guard(stream, |mut s| {
+            if let Err(err) = s.file_unlock() {
+                tracing::error!(?err, "failed to unlock file from regular file context");
+            }
+        });
+        f(&mut **stream_guard)
+    }
+}
+
 impl FileInfoExt for LiteRegularFileContext {
     fn get_file_info(&self) -> anyhow::Result<FileInfo> {
-        let stream = self.file_like_stream.lock();
-        let mut info = stream.as_win_handle().get_file_info()?;
-        info.file_size = stream.size()?;
-        Ok(info)
+        self.with_shared_file_lock(|stream| {
+            let mut info = stream.as_win_handle().get_file_info()?;
+            info.file_size = stream.size()?;
+            Ok(info)
+        })
     }
 }
 
@@ -321,7 +352,8 @@ impl LiteWinFspCore {
         } else {
             let ctx = LiteRegularFileContext {
                 file_like_stream: Box::new(Mutex::new(
-                    self.factory.generic_wrap::<NtFileStream>(handle)?,
+                    self.factory
+                        .generic_wrap::<AssertLockedStream<NtFileStream>>(handle)?,
                 )),
                 full_path,
             };
@@ -497,11 +529,8 @@ impl WinFspFileSystemCore for LiteWinFspCore {
                 status: STATUS_FILE_IS_A_DIRECTORY,
             })?;
         };
-        Ok(context
-            .file_like_stream
-            .lock()
-            .read(buffer, offset)?
-            .try_into()?)
+        let read_len = context.with_shared_file_lock(|stream| stream.read(buffer, offset))?;
+        Ok(read_len.try_into()?)
     }
 
     fn write(
@@ -518,21 +547,22 @@ impl WinFspFileSystemCore for LiteWinFspCore {
                 status: STATUS_FILE_IS_A_DIRECTORY,
             })?;
         };
-        let mut stream = context.file_like_stream.lock();
-        if constrained_io {
-            let size = stream.size()?;
-            if offset >= size {
-                return Ok(0);
+        context.with_exclusive_file_lock(|stream| {
+            if constrained_io {
+                let size = stream.size()?;
+                if offset >= size {
+                    return Ok(0);
+                }
+                if offset + u64::try_from(buffer.len())? > size {
+                    buffer = buffer.get(0..(size - offset).try_into()?).ok_or(NtError {
+                        status: STATUS_BUFFER_OVERFLOW,
+                    })?;
+                }
             }
-            if offset + u64::try_from(buffer.len())? > size {
-                buffer = buffer.get(0..(size - offset).try_into()?).ok_or(NtError {
-                    status: STATUS_BUFFER_OVERFLOW,
-                })?;
-            }
-        }
-        stream.write(buffer, offset)?;
-        *file_info = stream.as_win_handle().get_file_info()?;
-        file_info.file_size = stream.size()?;
-        Ok(buffer.len().try_into()?)
+            stream.write(buffer, offset)?;
+            *file_info = stream.as_win_handle().get_file_info()?;
+            file_info.file_size = stream.size()?;
+            Ok(buffer.len().try_into()?)
+        })
     }
 }
