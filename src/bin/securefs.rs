@@ -1,10 +1,19 @@
-#[cfg(feature = "fuse")]
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber;
+use tracing_subscriber::EnvFilter;
+
 fn main() {
-    env_logger::init();
-    use securefs::lite::fuse::testing::simple_test_fuse_main;
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::WARN.into())
+                .from_env_lossy(),
+        )
+        .init();
+    #[cfg(feature = "fuse")]
+    {
+        use securefs::lite::fuse::testing::simple_test_fuse_main;
 
-    simple_test_fuse_main().expect("run should succeed");
+        simple_test_fuse_main().expect("run should succeed");
+    }
 }
-
-#[cfg(not(feature = "fuse"))]
-fn main() {}

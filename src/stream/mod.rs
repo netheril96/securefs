@@ -208,7 +208,7 @@ impl<'a, T: FileLockableStream + ?Sized> ReadableStreamView<'a, T> {
 impl<'a, T: FileLockableStream + ?Sized> Drop for ReadableStreamView<'a, T> {
     fn drop(&mut self) {
         if let Err(e) = self.inner.file_unlock() {
-            log::error!("failed to unlock file from readable_view: {}", e);
+            tracing::error!("failed to unlock file from readable_view: {}", e);
         }
     }
 }
@@ -239,7 +239,7 @@ impl<'a, T: FileLockableStream + ?Sized> WritableStreamView<'a, T> {
 impl<'a, T: FileLockableStream + ?Sized> Drop for WritableStreamView<'a, T> {
     fn drop(&mut self) {
         if let Err(e) = self.inner.file_unlock() {
-            log::error!("failed to unlock file from writable_view: {}", e);
+            tracing::error!("failed to unlock file from writable_view: {}", e);
         }
     }
 }
@@ -633,7 +633,7 @@ pub mod test {
             },
             |mut nt_stream| {
                 if let Err(e) = nt_stream.file_unlock() {
-                    log::error!("failed to unlock file: {}", e);
+                    tracing::error!("failed to unlock file: {}", e);
                 }
             },
         );

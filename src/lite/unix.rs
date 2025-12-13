@@ -459,7 +459,7 @@ impl DirReader for LiteDirReader {
                                 .ensure_writable_long_name_db()?
                                 .lookup(entry.file_name().to_bytes())?;
                             let Some(fully_encrypted_name) = fully_decrypted_name else {
-                                log::warn!(
+                                tracing::warn!(
                                     "Encountered long name {:?} not recorded in the lookup table",
                                     entry.file_name()
                                 );
@@ -472,7 +472,7 @@ impl DirReader for LiteDirReader {
                                 .name_translator
                                 .decrypt_name(&fully_encrypted_name)
                             else {
-                                log::warn!(
+                                tracing::warn!(
                                     "Lookup table has recorded a name that cannot be correctly decrypted: {:?}",
                                     str::from_utf8(fully_encrypted_name.as_slice())
                                 );

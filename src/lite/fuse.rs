@@ -82,9 +82,6 @@ impl<Table: GenericINodeTable<LiteINode>> LiteVfs<Table> {
     }
 }
 
-trace::init_depth_var!();
-
-#[trace::trace]
 impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
     fn init(&mut self, conn: &mut crate::fuse_wrappers::bindings::fuse_conn_info) {
         conn.max_readahead = 1 << 20;
@@ -564,7 +561,7 @@ pub mod testing {
         };
         let mut root_tmp_dir = tempfile::TempDir::new()?;
         root_tmp_dir.disable_cleanup(true);
-        log::info!("Root tmp dir: {:?}", root_tmp_dir.path());
+        tracing::info!("Root tmp dir: {:?}", root_tmp_dir.path());
         let mut vfs = Box::new(create_vfs_for_fuse(
             &dec_params,
             &mount_options,
