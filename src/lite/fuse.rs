@@ -83,7 +83,10 @@ impl<Table: GenericINodeTable<LiteINode>> LiteVfs<Table> {
 }
 
 impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
-    fn init(&mut self, conn: &mut crate::fuse_wrappers::bindings::fuse_conn_info) {
+    fn init(
+        &mut self,
+        mut conn: crate::fuse_wrappers::bindings::fuse_conn_info,
+    ) -> crate::fuse_wrappers::bindings::fuse_conn_info {
         conn.max_readahead = 1 << 20;
         conn.max_background = 32;
         conn.max_write = 1 << 20;
@@ -96,6 +99,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         if conn.capable & FUSE_CAP_PARALLEL_DIROPS != 0 {
             conn.want |= FUSE_CAP_PARALLEL_DIROPS
         }
+        conn
     }
 
     fn can_lookup(&self) -> bool {
@@ -199,7 +203,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
             };
 
         if let Some(fi) = fi.filter(|fi| fi.fh != 0) {
-            let desc = unsafe { (fi.fh as *mut OpenedDescriptor).as_mut().unwrap() };
+            let desc = unsafe { &mut *(fi.fh as *mut OpenedDescriptor) };
             common(&*desc.inode)
         } else {
             let ino = self.ino_from_fuse(ino);
@@ -343,7 +347,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         fi: Option<&crate::fuse_wrappers::bindings::fuse_file_info>,
     ) -> anyhow::Result<Vec<u8>> {
         let fi = fi.ok_or(Errno::BADF)?;
-        let desc = unsafe { (fi.fh as *mut OpenedDescriptor).as_mut().unwrap() };
+        let desc = unsafe { &mut *(fi.fh as *mut OpenedDescriptor) };
         let LiteINode::LiteFileINode(file) = &*desc.inode else {
             return Err(Errno::INVAL)?;
         };
@@ -374,7 +378,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         fi: Option<&crate::fuse_wrappers::bindings::fuse_file_info>,
     ) -> anyhow::Result<usize> {
         let fi = fi.ok_or(Errno::BADF)?;
-        let desc = unsafe { (fi.fh as *mut OpenedDescriptor).as_mut().unwrap() };
+        let desc = unsafe { &mut *(fi.fh as *mut OpenedDescriptor) };
         let LiteINode::LiteFileINode(file) = &*desc.inode else {
             return Err(Errno::INVAL)?;
         };
@@ -463,7 +467,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
 
         let mut buffer = vec![0u8; size];
 
-        let desc = unsafe { (fi.fh as *mut OpenedDescriptor).as_mut().unwrap() };
+        let desc = unsafe { &mut *(fi.fh as *mut OpenedDescriptor) };
         let OpenedData::OpenedDir { reader } = &mut desc.data else {
             return Err(Errno::NOTDIR)?;
         };

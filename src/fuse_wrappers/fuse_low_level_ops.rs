@@ -47,7 +47,7 @@ impl FuseReq {
 }
 
 pub trait FuseLowLevelOps {
-    fn init(&mut self, conn: &mut fuse_conn_info);
+    fn init(&mut self, conn: fuse_conn_info) -> fuse_conn_info;
     fn can_lookup(&self) -> bool {
         false
     }
@@ -83,7 +83,7 @@ pub trait FuseLowLevelOps {
         &self,
         req: FuseReq,
         ino: fuse_ino_t,
-        attr: &mut bindings::stat,
+        attr: &bindings::stat,
         to_set: i32,
         fi: Option<&bindings::fuse_file_info>,
     ) -> anyhow::Result<(bindings::stat, f64)> {
@@ -358,7 +358,7 @@ pub trait FuseLowLevelOps {
         req: FuseReq,
         ino: fuse_ino_t,
         fi: Option<&bindings::fuse_file_info>,
-        lock: &mut bindings::flock,
+        lock: &bindings::flock,
     ) -> anyhow::Result<bindings::flock> {
         unimplemented!()
     }
@@ -370,7 +370,7 @@ pub trait FuseLowLevelOps {
         req: FuseReq,
         ino: fuse_ino_t,
         fi: Option<&bindings::fuse_file_info>,
-        lock: &mut bindings::flock,
+        lock: &bindings::flock,
         sleep: i32,
     ) -> anyhow::Result<()> {
         unimplemented!()
@@ -395,7 +395,7 @@ pub trait FuseLowLevelOps {
         req: FuseReq,
         ino: fuse_ino_t,
         cmd: u32,
-        arg: *mut c_void,
+        arg: *mut c_void, // This is an opaque pointer that the implementation may write to
         fi: Option<&bindings::fuse_file_info>,
         flags: u32,
         in_buf: &[u8],
@@ -449,7 +449,7 @@ pub trait FuseLowLevelOps {
 }
 
 fn get_ops<T: FuseLowLevelOps>(req: &fuse_req_t) -> &T {
-    unsafe { { fuse_req_userdata(*req) as *const T }.as_ref().unwrap() }
+    unsafe { &*{ fuse_req_userdata(*req) as *const T } }
 }
 
 extern "C" fn rs_init<T: FuseLowLevelOps>(
@@ -458,7 +458,8 @@ extern "C" fn rs_init<T: FuseLowLevelOps>(
 ) {
     unsafe {
         let userdata = userdata as *mut T;
-        (*userdata).init(conn.as_mut().unwrap());
+        let new_conn = (*userdata).init(*conn);
+        *conn = new_conn;
     }
 }
 
@@ -512,13 +513,9 @@ extern "C" fn rs_setattr<T: FuseLowLevelOps>(
     to_set: c_int,
     fi: *mut fuse_file_info,
 ) {
-    match get_ops::<T>(&req).setattr(
-        FuseReq { req },
-        ino,
-        unsafe { attr.as_mut().unwrap() },
-        to_set,
-        unsafe { fi.as_ref() },
-    ) {
+    match get_ops::<T>(&req).setattr(FuseReq { req }, ino, unsafe { &*attr }, to_set, unsafe {
+        fi.as_ref()
+    }) {
         Ok((stat, timeout)) => unsafe {
             fuse_reply_attr(req, &stat, timeout);
         },
@@ -940,12 +937,9 @@ extern "C" fn rs_getlk<T: FuseLowLevelOps>(
     fi: *mut fuse_file_info,
     lock: *mut bindings::flock,
 ) {
-    match get_ops::<T>(&req).getlk(
-        FuseReq { req },
-        ino,
-        unsafe { fi.as_ref() },
-        unsafe { lock.as_mut() }.unwrap(),
-    ) {
+    match get_ops::<T>(&req).getlk(FuseReq { req }, ino, unsafe { fi.as_ref() }, unsafe {
+        &*lock
+    }) {
         Ok(lock) => unsafe {
             fuse_reply_lock(req, &lock);
         },
@@ -966,7 +960,7 @@ extern "C" fn rs_setlk<T: FuseLowLevelOps>(
         FuseReq { req },
         ino,
         unsafe { fi.as_ref() },
-        unsafe { lock.as_mut() }.unwrap(),
+        unsafe { &*lock },
         sleep,
     ) {
         Ok(()) => unsafe {
