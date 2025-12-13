@@ -1,7 +1,7 @@
 #![cfg(windows)]
 
 use anyhow::bail;
-use windows::Win32::Foundation::{NTSTATUS, STATUS_UNSUCCESSFUL};
+use windows::Win32::Foundation::NTSTATUS;
 use windows::{Win32::Foundation::UNICODE_STRING, core::PWSTR};
 
 use thiserror::Error;
