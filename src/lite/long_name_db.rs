@@ -2,6 +2,7 @@ use std::ffi::CStr;
 
 use anyhow::Result;
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
+use tracing::{Level, instrument};
 
 pub const C_LONG_NAME_DB_FILENAME: &CStr = c".long_names.db";
 
@@ -63,6 +64,7 @@ impl LongNameLookupTable {
     }
 
     /// Looks up the encrypted name associated with a given keyed hash.
+    #[instrument(skip(self), ret, err(Debug, level=Level::WARN))]
     pub fn lookup(&self, keyed_hash: &[u8]) -> Result<Option<Vec<u8>>> {
         let mut stmt = self.conn.prepare_cached(LOOKUP_MAPPING_SQL)?;
         let result = stmt.query_row([keyed_hash], |row| row.get(0)).optional()?;
@@ -71,6 +73,7 @@ impl LongNameLookupTable {
 
     /// Updates or inserts a mapping between a keyed hash and an encrypted long
     /// name.
+    #[instrument(skip(self), err(Debug, level=Level::WARN))]
     pub fn update_mapping(&self, keyed_hash: &[u8], encrypted_long_name: &[u8]) -> Result<()> {
         self.conn
             .execute(UPDATE_MAPPING_SQL, [keyed_hash, encrypted_long_name])?;
@@ -78,12 +81,14 @@ impl LongNameLookupTable {
     }
 
     /// Removes a mapping associated with a given keyed hash.
+    #[instrument(skip(self), err(Debug, level=Level::WARN))]
     pub fn remove_mapping(&self, keyed_hash: &[u8]) -> Result<()> {
         self.conn.execute(DELETE_MAPPING_SQL, [keyed_hash])?;
         Ok(())
     }
 
     /// Lists all keyed hashes stored in the table.
+    #[instrument(skip(self), err(Debug, level=Level::WARN))]
     pub fn list_hashes(&self) -> Result<Vec<Vec<u8>>> {
         let mut stmt = self.conn.prepare(LIST_HASHES_SQL)?;
         let hashes = stmt
