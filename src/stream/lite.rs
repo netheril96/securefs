@@ -348,22 +348,20 @@ pub mod unix {
 
     impl LiteAesGcmOverFileStream {
         pub fn new(mut inner: LiteAesGcmCryptStream<StdIoStream>) -> anyhow::Result<Self> {
+            // On Unix, closing a file descriptor auto unlocks, so we don't both with
+            // explicit unlocking.
             inner.lock_source()?;
             Ok(Self { inner })
         }
     }
 
-    impl Drop for LiteAesGcmOverFileStream {
-        fn drop(&mut self) {
-            if let Err(err) = self.inner.unlock_source() {
-                tracing::error!("failed to unlock file during destruction");
-            }
-        }
-    }
-
     impl WriteUpgradable for LiteAesGcmOverFileStream {
         fn upgrade_to_writable(&mut self) -> anyhow::Result<()> {
-            todo!()
+            let new_fd = reopen_as_writable(self.as_fd())?;
+            let mut new_iostream = StdIoStream::from(new_fd);
+            new_iostream.lock_source()?;
+            self.inner.inner = new_iostream;
+            Ok(())
         }
     }
 
