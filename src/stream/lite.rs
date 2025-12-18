@@ -13,7 +13,7 @@ use crate::stream::OffsetType;
 
 #[allow(unused)]
 use crate::stream::StdIoStream;
-
+#[allow(unused)]
 use crate::stream::with_source_locked;
 use crate::{
     aesgcm::DynamicIvAes128Gcm,
@@ -71,38 +71,34 @@ impl<S: Stream> LiteAesGcmCryptStream<S> {
         block_size: LengthType,
         verify_mac: bool,
     ) -> anyhow::Result<Self> {
-        let (padding_size, aesgcm, aux) = with_source_locked(&mut inner, |inner| {
-            let mut id: [u8; ID_SIZE] = [0; ID_SIZE];
-            let rc = inner.read(&mut id, 0)?;
-            let mut aux: Vec<u8> = Vec::new();
-            let padding_size: LengthType;
-            if rc == 0 {
-                fill_with_random(&mut id);
-                inner.write(&id, 0)?;
-                padding_size = lite_param_calc.compute_padding(&id)?;
-                if padding_size > 0 {
-                    aux.resize(usize::try_from(padding_size)? + size_of::<u32>(), 0);
-                    fill_with_random(&mut aux[size_of::<u32>()..]);
-                } else {
-                    aux.resize(size_of::<u32>(), 0);
-                }
-                inner.write(&aux, 0)?;
-            } else if rc == id.len().try_into()? {
-                padding_size = lite_param_calc.compute_padding(&id)?;
+        let mut id: [u8; ID_SIZE] = [0; ID_SIZE];
+        let rc = inner.read(&mut id, 0)?;
+        let mut aux: Vec<u8> = Vec::new();
+        let padding_size: LengthType;
+        if rc == 0 {
+            fill_with_random(&mut id);
+            inner.write(&id, 0)?;
+            padding_size = lite_param_calc.compute_padding(&id)?;
+            if padding_size > 0 {
                 aux.resize(usize::try_from(padding_size)? + size_of::<u32>(), 0);
-                aux[..id.len()].copy_from_slice(&id);
-                if padding_size > 0 && inner.read(&mut aux[size_of::<u32>()..], 0)? != padding_size
-                {
-                    return Err(LiteAesGcmCryptError::InvalidHeader.into());
-                }
+                fill_with_random(&mut aux[size_of::<u32>()..]);
             } else {
+                aux.resize(size_of::<u32>(), 0);
+            }
+            inner.write(&aux, 0)?;
+        } else if rc == id.len().try_into()? {
+            padding_size = lite_param_calc.compute_padding(&id)?;
+            aux.resize(usize::try_from(padding_size)? + size_of::<u32>(), 0);
+            aux[..id.len()].copy_from_slice(&id);
+            if padding_size > 0 && inner.read(&mut aux[size_of::<u32>()..], 0)? != padding_size {
                 return Err(LiteAesGcmCryptError::InvalidHeader.into());
             }
-            let session_key_as_array = lite_param_calc.compute_session_key(&id)?;
-            let key = Key::<Aes128Gcm>::from_slice(&session_key_as_array);
-            let aesgcm = DynamicIvAes128Gcm::new(key);
-            Ok((padding_size, aesgcm, aux))
-        })?;
+        } else {
+            return Err(LiteAesGcmCryptError::InvalidHeader.into());
+        }
+        let session_key_as_array = lite_param_calc.compute_session_key(&id)?;
+        let key = Key::<Aes128Gcm>::from_slice(&session_key_as_array);
+        let aesgcm = DynamicIvAes128Gcm::new(key);
 
         Ok(LiteAesGcmCryptStream {
             inner,
@@ -351,8 +347,17 @@ pub mod unix {
     }
 
     impl LiteAesGcmOverFileStream {
-        pub fn new(inner: LiteAesGcmCryptStream<StdIoStream>) -> Self {
-            Self { inner }
+        pub fn new(mut inner: LiteAesGcmCryptStream<StdIoStream>) -> anyhow::Result<Self> {
+            inner.lock_source()?;
+            Ok(Self { inner })
+        }
+    }
+
+    impl Drop for LiteAesGcmOverFileStream {
+        fn drop(&mut self) {
+            if let Err(err) = self.inner.unlock_source() {
+                tracing::error!("failed to unlock file during destruction");
+            }
         }
     }
 

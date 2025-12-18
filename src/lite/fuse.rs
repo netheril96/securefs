@@ -19,6 +19,7 @@ use crate::{
         },
         fuse_low_level_ops::{FuseLowLevelOps, FuseReq},
     },
+    lite::IoWrapperFactory,
     lite::unix::{
         LiteDirINode, LiteDirReader, LiteFileINode, LiteINode, LiteINodeHeader, LiteSymlinkINode,
         LiteVfs, ReadjustStatExt,
@@ -159,7 +160,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
                         parent.as_fd(),
                         encoded_cname.as_bytes(),
                         !self.readonly && (st.st_mode & libc::S_IWUSR) != 0,
-                        self.wrapper_factory.as_ref(),
+                        &self.wrapper_factory,
                     )?
                     .into()),
                     libc::S_IFLNK => {

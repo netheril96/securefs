@@ -16,16 +16,19 @@ use anyhow::{Context, bail};
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use rustix::fs::{AtFlags, Mode, OFlags, Timespec};
 
+use crate::WriteUpgradable;
 use crate::lite::LiteAesGcmCryptStreamFactory;
 use crate::lite::long_name_db::{C_LONG_NAME_DB_FILENAME, LongNameLookupTable};
 use crate::lite::name_translators::create_name_translator;
 use crate::protos::params::decrypted_securefs_params::Format_specific_params;
 use crate::protos::params::{DecryptedSecurefsParams, MountOptions};
+use crate::stream::Stream;
+use crate::stream::lite::unix::LiteAesGcmOverFileStream;
 use crate::tearc::Tearc;
 use crate::vfs::{GenericINodeTable, ShardedMapINodeTable};
 use crate::{
     lite::{
-        IoWrapperFactory, IoWrapperStream,
+        IoWrapperFactory,
         name_translators::{NameDecodeOutput, NameTranslator},
     },
     vfs::unix::{
@@ -81,7 +84,7 @@ pub struct LiteINodeHeader {
 }
 
 struct LiteFileNodeInner {
-    stream: Box<dyn IoWrapperStream>,
+    stream: LiteAesGcmOverFileStream,
     writable: bool,
 }
 pub struct LiteFileINode {
@@ -90,7 +93,7 @@ pub struct LiteFileINode {
 }
 
 impl LiteFileINode {
-    pub fn new(header: LiteINodeHeader, s: Box<dyn IoWrapperStream>, writable: bool) -> Self {
+    pub fn new(header: LiteINodeHeader, s: LiteAesGcmOverFileStream, writable: bool) -> Self {
         Self {
             header,
             inner: Mutex::new(LiteFileNodeInner {
@@ -105,7 +108,7 @@ impl LiteFileINode {
         parent: BorrowedFd<'_>,
         encoded_name: &[u8],
         writable: bool,
-        wrapper_factory: &dyn IoWrapperFactory,
+        wrapper_factory: &LiteAesGcmCryptStreamFactory,
     ) -> anyhow::Result<Self> {
         let fd = rustix::fs::openat(
             parent,
@@ -640,7 +643,7 @@ impl From<LiteSymlinkINode> for LiteINode {
 pub struct LiteVfs<Table: GenericINodeTable<LiteINode>> {
     pub(super) inode_table: Table,
     pub(super) name_translator: Arc<dyn NameTranslator>,
-    pub(super) wrapper_factory: Box<dyn IoWrapperFactory>,
+    pub(super) wrapper_factory: LiteAesGcmCryptStreamFactory,
     pub(super) generation: AtomicU64,
     pub(super) device_serial: libc::dev_t,
     pub(super) attr_cache_duration: Duration,
@@ -660,10 +663,10 @@ fn create_vfs<Table: GenericINodeTable<LiteINode>, F: FnOnce(INodeNumber, LiteIN
     };
 
     let name_translator = create_name_translator(lite_format_params)?;
-    let factory = Box::new(LiteAesGcmCryptStreamFactory::new_from_params(
+    let factory = LiteAesGcmCryptStreamFactory::new_from_params(
         data_params,
         !mount_options.disable_verification,
-    )?);
+    )?;
 
     let dir_fd = rustix::fs::open(data_dir, OFlags::RDONLY, Mode::empty())?;
     let st = rustix::fs::fstat(dir_fd.as_fd())?;
