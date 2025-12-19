@@ -1,6 +1,6 @@
 #![cfg(unix)]
 
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::os::fd::AsRawFd;
 
 use std::path::Path;
@@ -14,7 +14,8 @@ use std::{
 use ambassador::{Delegate, delegatable_trait};
 use anyhow::{Context, bail};
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
-use rustix::fs::{AtFlags, Mode, OFlags, Timespec};
+use rustix::fs::{AtFlags, Gid, Mode, OFlags, Timespec, Timestamps, Uid};
+use rustix::io::Errno;
 
 use crate::WriteUpgradable;
 use crate::lite::LiteAesGcmCryptStreamFactory;
@@ -42,38 +43,6 @@ fn new_timespec(sec: i64, nsec: i64) -> Timespec {
         tv_sec: sec,
         tv_nsec: nsec,
     }
-}
-
-// Safe wrapper around libc::stat.
-// We are not calling rustix here to avoid format conversion between rustix stat
-// and libc stat,  and the latter is expected by libfuse.
-pub(super) fn fstat(fd: BorrowedFd<'_>) -> anyhow::Result<libc::stat> {
-    let mut result: libc::stat = unsafe { std::mem::zeroed() };
-    if (unsafe { libc::fstat(fd.as_raw_fd(), &mut result) }) != 0 {
-        return Err(std::io::Error::last_os_error())
-            .with_context(|| format!("Calling fstat on fd {}", fd.as_raw_fd()));
-    }
-    Ok(result)
-}
-
-// Safe wrapper around libc::stat.
-// We are not calling rustix here to avoid format conversion between rustix stat
-// and libc stat,  and the latter is expected by libfuse.
-pub(super) fn fstatat(fd: BorrowedFd<'_>, path: &CStr) -> anyhow::Result<libc::stat> {
-    let mut result: libc::stat = unsafe { std::mem::zeroed() };
-    if (unsafe {
-        libc::fstatat(
-            fd.as_raw_fd(),
-            path.as_ptr(),
-            &mut result,
-            libc::AT_SYMLINK_NOFOLLOW,
-        )
-    }) != 0
-    {
-        return Err(std::io::Error::last_os_error())
-            .with_context(|| format!("Calling fstatat on fd={} path={:?}", fd.as_raw_fd(), path));
-    }
-    Ok(result)
 }
 
 pub struct LiteINodeHeader {
@@ -172,16 +141,46 @@ impl INodeCore<rustix::fs::Stat> for LiteFileINode {
 
     fn set_metadata(
         &self,
-        mode: Option<u32>,
-        uid: Option<u32>,
-        gid: Option<u32>,
+        mode: Option<libc::mode_t>,
+        uid: Option<libc::uid_t>,
+        gid: Option<libc::gid_t>,
         size: Option<u64>,
         atime: Option<Timespec>,
         mtime: Option<Timespec>,
         ctime: Option<Timespec>,
         crtime: Option<Timespec>,
     ) -> anyhow::Result<()> {
-        todo!()
+        let mut inner = self.inner.lock();
+
+        if let Some(size) = size {
+            inner.stream.resize(size)?;
+        }
+
+        let fd = inner.stream.as_fd();
+        if let Some(mode) = mode {
+            rustix::fs::fchmod(fd, Mode::from_raw_mode(mode))?;
+        }
+        if uid.is_some() || gid.is_some() {
+            rustix::fs::fchown(
+                fd,
+                uid.map(|u| Uid::from_raw(u)),
+                gid.map(|g| Gid::from_raw(g)),
+            )?;
+        }
+
+        if let Some(atime) = atime
+            && let Some(mtime) = mtime
+        {
+            rustix::fs::futimens(
+                fd,
+                &Timestamps {
+                    last_access: atime,
+                    last_modification: mtime,
+                },
+            )?;
+        }
+
+        Ok(())
     }
 
     fn get_extended_attr(&self, name: &[u8]) -> anyhow::Result<Vec<u8>> {
@@ -359,16 +358,42 @@ impl INodeCore<rustix::fs::Stat> for LiteDirINode {
 
     fn set_metadata(
         &self,
-        mode: Option<u32>,
-        uid: Option<u32>,
-        gid: Option<u32>,
+        mode: Option<libc::mode_t>,
+        uid: Option<libc::uid_t>,
+        gid: Option<libc::gid_t>,
         size: Option<u64>,
         atime: Option<Timespec>,
         mtime: Option<Timespec>,
         ctime: Option<Timespec>,
         crtime: Option<Timespec>,
     ) -> anyhow::Result<()> {
-        todo!()
+        if let Some(mode) = mode {
+            rustix::fs::fchmod(self.as_fd(), Mode::from_raw_mode(mode))?;
+        }
+        if uid.is_some() || gid.is_some() {
+            rustix::fs::fchown(
+                self.as_fd(),
+                uid.map(|u| Uid::from_raw(u)),
+                gid.map(|g| Gid::from_raw(g)),
+            )?;
+        }
+        if let Some(size) = size {
+            return Err(Errno::INVAL).context("Changing directory size directly is invalid");
+        }
+
+        if let Some(atime) = atime
+            && let Some(mtime) = mtime
+        {
+            rustix::fs::futimens(
+                self.as_fd(),
+                &Timestamps {
+                    last_access: atime,
+                    last_modification: mtime,
+                },
+            )?;
+        }
+
+        Ok(())
     }
 
     fn get_extended_attr(&self, name: &[u8]) -> anyhow::Result<Vec<u8>> {
@@ -564,16 +589,78 @@ impl INodeCore<rustix::fs::Stat> for LiteSymlinkINode {
 
     fn set_metadata(
         &self,
-        mode: Option<u32>,
-        uid: Option<u32>,
-        gid: Option<u32>,
+        mode: Option<libc::mode_t>,
+        uid: Option<libc::uid_t>,
+        gid: Option<libc::gid_t>,
         size: Option<u64>,
         atime: Option<Timespec>,
         mtime: Option<Timespec>,
         ctime: Option<Timespec>,
         crtime: Option<Timespec>,
     ) -> anyhow::Result<()> {
-        todo!()
+        if let Some(size) = size {
+            return Err(Errno::INVAL).context("Changing symlink size directly is invalid");
+        }
+
+        if let Some(path) = &self.path {
+            if let Some(mode) = mode {
+                rustix::fs::chmodat(
+                    self.fd.as_fd(),
+                    path,
+                    Mode::from_raw_mode(mode),
+                    AtFlags::SYMLINK_NOFOLLOW,
+                )?;
+            }
+            if uid.is_some() || gid.is_some() {
+                rustix::fs::chownat(
+                    self.fd.as_fd(),
+                    path,
+                    uid.map(|u| Uid::from_raw(u)),
+                    gid.map(|g| Gid::from_raw(g)),
+                    AtFlags::SYMLINK_NOFOLLOW,
+                )?;
+            }
+
+            if let Some(atime) = atime
+                && let Some(mtime) = mtime
+            {
+                rustix::fs::utimensat(
+                    self.fd.as_fd(),
+                    path,
+                    &Timestamps {
+                        last_access: atime,
+                        last_modification: mtime,
+                    },
+                    AtFlags::SYMLINK_NOFOLLOW,
+                )?;
+            }
+            Ok(())
+        } else {
+            if let Some(mode) = mode {
+                rustix::fs::fchmod(self.fd.as_fd(), Mode::from_raw_mode(mode))?;
+            }
+            if uid.is_some() || gid.is_some() {
+                rustix::fs::fchown(
+                    self.fd.as_fd(),
+                    uid.map(|u| Uid::from_raw(u)),
+                    gid.map(|g| Gid::from_raw(g)),
+                )?;
+            }
+
+            if let Some(atime) = atime
+                && let Some(mtime) = mtime
+            {
+                rustix::fs::futimens(
+                    self.fd.as_fd(),
+                    &Timestamps {
+                        last_access: atime,
+                        last_modification: mtime,
+                    },
+                )?;
+            }
+
+            Ok(())
+        }
     }
 
     fn get_extended_attr(&self, name: &[u8]) -> anyhow::Result<Vec<u8>> {

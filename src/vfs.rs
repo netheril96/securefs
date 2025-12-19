@@ -224,9 +224,9 @@ pub mod unix {
         fn get_metadata(&self) -> anyhow::Result<StatType>;
         fn set_metadata(
             &self,
-            mode: Option<u32>,
-            uid: Option<u32>,
-            gid: Option<u32>,
+            mode: Option<libc::mode_t>,
+            uid: Option<libc::uid_t>,
+            gid: Option<libc::gid_t>,
             size: Option<u64>,
             atime: Option<Timespec>,
             mtime: Option<Timespec>,
