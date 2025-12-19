@@ -4,6 +4,7 @@
 pub mod aesgcm;
 pub mod fuse_wrappers;
 pub mod lite;
+pub mod params_io;
 pub mod protos;
 pub mod rng;
 pub mod stream;
