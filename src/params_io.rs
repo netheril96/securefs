@@ -291,3 +291,90 @@ pub fn decrypt(
 
     bail!(ParamsIoError::InvalidConfigFile);
 }
+
+#[cfg(test)]
+mod test {
+    use crate::stream::StdIoStream;
+
+    use super::*;
+    use std::{fs::File, path::Path};
+    #[test]
+    fn test_decrypt_all() -> Result<()> {
+        let default_argon2id_params = Argon2idParams {
+            time_cost: 4,
+            memory_cost: 64,
+            parallelism: 2,
+            special_fields: Default::default(),
+        };
+        let root_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("test/reference");
+        let dirs = vec![
+            "1",
+            "1-padded",
+            "2",
+            "2-padded",
+            "3",
+            "3-padded",
+            "4",
+            "4-padded",
+            "new-full",
+            "new-full-padded",
+            "new-lite",
+            "new-lite-padded",
+        ];
+
+        for dir in dirs {
+            let dir_path = root_dir.join(dir);
+            assert!(dir_path.is_dir());
+
+            for entry in std::fs::read_dir(&dir_path)? {
+                let entry = entry?;
+                let path = entry.path();
+                let name = path.file_name().unwrap().to_string_lossy();
+
+                if (name.starts_with(".securefs") && name.ends_with(".json"))
+                    || (name.starts_with(".config") && name.ends_with(".pb"))
+                {
+                    let mut password = " ";
+                    if name.to_uppercase().contains("PASSWORD") {
+                        password = "abc";
+                    }
+
+                    let mut key_stream = if name.to_uppercase().contains("KEYFILE") {
+                        Some(StdIoStream::from(File::open(root_dir.join("keyfile"))?))
+                    } else {
+                        None
+                    };
+
+                    let content = std::fs::read(&path)?;
+                    let dec = decrypt(
+                        &content,
+                        password.as_bytes(),
+                        key_stream.as_mut().map(|s| s as &mut dyn Stream),
+                    )?;
+
+                    let decrypted_pb_path = dir_path.join(".decrypted.pb");
+                    let expected_bytes = std::fs::read(&decrypted_pb_path).with_context(|| {
+                        format!("Failed to read {}", decrypted_pb_path.display())
+                    })?;
+                    let expected = DecryptedSecurefsParams::parse_from_bytes(&expected_bytes)?;
+
+                    assert_eq!(dec, expected, "Mismatch in {}", path.display());
+
+                    let encrypted_again = encrypt(
+                        &dec,
+                        &default_argon2id_params,
+                        password.as_bytes(),
+                        key_stream.as_mut().map(|s| s as &mut dyn Stream),
+                    )?;
+                    let decrypted_again = decrypt(
+                        encrypted_again.write_to_bytes()?.as_slice(),
+                        password.as_bytes(),
+                        key_stream.as_mut().map(|s| s as &mut dyn Stream),
+                    )?;
+                    assert_eq!(dec, decrypted_again);
+                }
+            }
+        }
+        Ok(())
+    }
+}
