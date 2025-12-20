@@ -30,7 +30,7 @@ rand_chacha = { version = "0.9.0", features = ["os_rng"] }
 rusqlite = { version = "0.37.0", default-features = false, features = ["bundled"] }
 scopeguard = "1.2.0"
 scrypt = { version = "0.11.0", features = ["std"] }
-sha2 = { version = "0.10.9", features = ["asm", "asm-aarch64", "std"] }
+sha2 = { version = "0.10.9", features = ["std"] }
 subtle = "2.6.1"
 tempfile = "3.23.0"
 thiserror = "2.0.17"
