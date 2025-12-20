@@ -513,6 +513,40 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
     ) -> anyhow::Result<()> {
         Self::release_common(fi)
     }
+
+    fn can_forget(&self) -> bool {
+        true
+    }
+
+    fn forget(
+        &self,
+        req: FuseReq,
+        ino: crate::fuse_wrappers::bindings::fuse_ino_t,
+        nlookup: u64,
+    ) -> anyhow::Result<()> {
+        let nlookup = i64::try_from(nlookup)?;
+
+        self.inode_table.clean_up_if(self.ino_from_fuse(ino), |n| {
+            n.get_lookup_count().fetch_sub(nlookup, Ordering::SeqCst) <= nlookup
+        });
+
+        Ok(())
+    }
+
+    fn can_forget_multi(&self) -> bool {
+        true
+    }
+
+    fn forget_multi(
+        &self,
+        req: FuseReq,
+        forgets: &[crate::fuse_wrappers::bindings::fuse_forget_data],
+    ) -> anyhow::Result<()> {
+        for forget in forgets {
+            self.forget(req.clone(), forget.ino, forget.nlookup)?;
+        }
+        Ok(())
+    }
 }
 
 fn timespec_to_systemtime(tv_sec: i64, tv_nsec: u32) -> SystemTime {

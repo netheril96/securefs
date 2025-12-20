@@ -17,7 +17,7 @@ use crate::{
     vfs::INodeNotFoundError,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct FuseReq {
     req: fuse_req_t,
 }
