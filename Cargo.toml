@@ -12,6 +12,7 @@ anyhow = "1.0.100"
 argon2 = { version = "0.5.3", features = ["std"] }
 blake2 = "0.10.6"
 const-hex = "1.17.0"
+crypto-bigint = "0.6.1"
 ctr = { version = "0.9.2", default-features = false, features = ["alloc", "std"] }
 fast32 = "1.0.3"
 ghash = { version = "0.5.1", default-features = false, features = ["std"] }
@@ -19,7 +20,6 @@ hmac = { version = "0.12.1", features = ["std"] }
 libc = "0.2.177"
 log = "0.4.28"
 lru = "0.16.2"
-num-bigint = "0.4.6"
 once_cell = { version = "1.21.3", features = ["parking_lot"] }
 parking_lot = "0.12.5"
 pbkdf2 = { version = "0.12.2", features = ["sha2", "std"] }

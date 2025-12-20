@@ -7,8 +7,8 @@ use aes_gcm::{
 };
 
 use anyhow::bail;
+use crypto_bigint::U128;
 use ctr::cipher::BlockEncrypt;
-use num_bigint::BigUint;
 
 #[allow(unused)]
 use crate::stream::StdIoStream;
@@ -218,7 +218,8 @@ impl crate::stream::lite::LiteParamCalculator for LiteParamCalculator {
         };
         let mut out_block: Block = [0u8; ID_SIZE].into();
         padding_enc.encrypt_block_b2b(salt.into(), &mut out_block);
-        Ok((BigUint::from_bytes_be(&out_block) % (self.max_padding + 1)).try_into()?)
+        let rem = U128::from_be_slice(&out_block) % U128::from_u32(self.max_padding + 1);
+        Ok(rem.as_limbs()[0].0.into())
     }
 
     fn always_zero_padding(&self) -> bool {
