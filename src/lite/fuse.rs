@@ -10,7 +10,7 @@ use std::{
 };
 
 use rustix::{
-    fs::{Mode, OFlags},
+    fs::{AtFlags, Mode, OFlags},
     io::Errno,
 };
 
@@ -22,10 +22,13 @@ use crate::{
         },
         fuse_low_level_ops::{FuseLowLevelOps, FuseReq},
     },
-    lite::IoWrapperFactory,
-    lite::unix::{
-        LiteDirINode, LiteDirReader, LiteFileINode, LiteINode, LiteINodeHeader, LiteSymlinkINode,
-        LiteVfs, ReadjustStatExt,
+    lite::{
+        IoWrapperFactory,
+        long_name_db::C_LONG_NAME_DB_FILENAME,
+        unix::{
+            LiteDirINode, LiteDirReader, LiteFileINode, LiteINode, LiteINodeHeader,
+            LiteSymlinkINode, LiteVfs, ReadjustStatExt,
+        },
     },
     tearc::Tearc,
     vfs::{
@@ -610,6 +613,93 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
             entry_timeout: self.attr_cache_duration.as_secs_f64(),
         };
         Ok(entry)
+    }
+
+    fn can_unlink(&self) -> bool {
+        true
+    }
+
+    fn unlink(
+        &self,
+        req: FuseReq,
+        parent: crate::fuse_wrappers::bindings::fuse_ino_t,
+        name: &std::ffi::CStr,
+    ) -> anyhow::Result<()> {
+        let parent_node = self
+            .inode_table
+            .get(self.ino_from_fuse(parent))
+            .ok_or(INodeNotFoundError::INodeNotInTable)?;
+        let LiteINode::LiteDirINode(parent_dir) = &*parent_node else {
+            return Err(Errno::NOTDIR)?;
+        };
+        let encoded_name = self.name_translator.encode_name(name.to_bytes())?;
+        rustix::fs::unlinkat(
+            parent_dir.as_fd(),
+            encoded_name.as_slice(),
+            AtFlags::empty(),
+        )?;
+        if self.name_translator.is_long_name(&encoded_name) {
+            let table = parent_dir.ensure_writable_long_name_db()?;
+            table.remove_mapping(encoded_name.as_slice())?;
+        }
+
+        Ok(())
+    }
+
+    fn can_rmdir(&self) -> bool {
+        true
+    }
+
+    fn rmdir(
+        &self,
+        req: FuseReq,
+        parent: crate::fuse_wrappers::bindings::fuse_ino_t,
+        name: &std::ffi::CStr,
+    ) -> anyhow::Result<()> {
+        let parent_node = self
+            .inode_table
+            .get(self.ino_from_fuse(parent))
+            .ok_or(INodeNotFoundError::INodeNotInTable)?;
+        let LiteINode::LiteDirINode(parent_dir) = &*parent_node else {
+            return Err(Errno::NOTDIR)?;
+        };
+        let encoded_name = self.name_translator.encode_name(name.to_bytes())?;
+        if let Err(err) = rustix::fs::unlinkat(
+            parent_dir.as_fd(),
+            encoded_name.as_slice(),
+            AtFlags::REMOVEDIR,
+        ) {
+            tracing::trace!(
+                "First attempt of rmdir ({:?}, {:?}) failed. Probably because of the long name db file. Full cause: {:?}",
+                encoded_name,
+                parent,
+                err
+            );
+            rustix::fs::unlinkat(
+                parent_dir.as_fd(),
+                [
+                    encoded_name.as_slice(),
+                    b"/",
+                    C_LONG_NAME_DB_FILENAME.to_bytes(),
+                ]
+                .concat()
+                .as_slice(),
+                AtFlags::empty(),
+            )
+            .context("deletion of long name db")?;
+            rustix::fs::unlinkat(
+                parent_dir.as_fd(),
+                encoded_name.as_slice(),
+                AtFlags::REMOVEDIR,
+            )?;
+        }
+
+        if self.name_translator.is_long_name(&encoded_name) {
+            let table = parent_dir.ensure_writable_long_name_db()?;
+            table.remove_mapping(encoded_name.as_slice())?;
+        }
+
+        Ok(())
     }
 }
 
