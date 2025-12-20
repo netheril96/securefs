@@ -9,7 +9,10 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use rustix::io::Errno;
+use rustix::{
+    fs::{Mode, OFlags},
+    io::Errno,
+};
 
 use crate::{
     fuse_wrappers::{
@@ -546,6 +549,67 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
             self.forget(req.clone(), forget.ino, forget.nlookup)?;
         }
         Ok(())
+    }
+
+    fn can_mkdir(&self) -> bool {
+        true
+    }
+
+    fn mkdir(
+        &self,
+        req: FuseReq,
+        parent: crate::fuse_wrappers::bindings::fuse_ino_t,
+        name: &std::ffi::CStr,
+        mode: crate::fuse_wrappers::bindings::mode_t,
+    ) -> anyhow::Result<crate::fuse_wrappers::bindings::fuse_entry_param> {
+        let parent_node = self
+            .inode_table
+            .get(self.ino_from_fuse(parent))
+            .ok_or(INodeNotFoundError::INodeNotInTable)?;
+        let LiteINode::LiteDirINode(parent_dir) = &*parent_node else {
+            return Err(Errno::NOTDIR)?;
+        };
+        let encoded_name = self.name_translator.encode_name(name.to_bytes())?;
+        if self.name_translator.is_long_name(&encoded_name) {
+            let encrypted_name = self.name_translator.encrypt_name(name.to_bytes())?;
+            let table = parent_dir.ensure_writable_long_name_db()?;
+            table.update_mapping(encoded_name.as_slice(), encrypted_name.as_slice())?;
+        }
+        rustix::fs::mkdirat(
+            parent_dir.as_fd(),
+            encoded_name.as_slice(),
+            Mode::from_raw_mode(mode),
+        )?;
+        let dirfd = rustix::fs::openat(
+            parent_dir.as_fd(),
+            encoded_name,
+            OFlags::RDONLY,
+            Mode::empty(),
+        )?;
+
+        let mut stat = rustix::fs::fstat(dirfd.as_fd())?;
+        let ino = INodeNumber(stat.st_ino);
+        let generation = Generation(self.generation.load(Ordering::SeqCst));
+
+        let child_node = self.inode_table.get_or_try_insert_with(ino, || {
+            let header = LiteINodeHeader {
+                ino,
+                generation,
+                lookup_count: AtomicI64::new(1),
+                name_translator: self.name_translator.clone(),
+            };
+            Ok(LiteDirINode::new(header, dirfd).into())
+        })?;
+        child_node.readjust_stat(&mut stat)?;
+        self.readjust_stat(&mut stat);
+        let entry = fuse_entry_param {
+            ino: stat.st_ino,
+            generation: generation.0,
+            attr: unsafe { std::mem::transmute(stat) },
+            attr_timeout: self.attr_cache_duration.as_secs_f64(),
+            entry_timeout: self.attr_cache_duration.as_secs_f64(),
+        };
+        Ok(entry)
     }
 }
 
