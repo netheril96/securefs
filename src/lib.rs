@@ -1,6 +1,8 @@
 #![allow(dead_code)] // Disables the linting until everything is wired together
 #![allow(unused_variables)]
 
+use ambassador::delegatable_trait;
+
 pub mod aesgcm;
 pub mod fuse_wrappers;
 pub mod lite;
@@ -25,6 +27,7 @@ pub type OwnedFileDescriptor = std::os::windows::io::OwnedHandle;
 #[cfg(windows)]
 pub type BorrowedFileDescriptor<'a> = std::os::windows::io::BorrowedHandle<'a>;
 
+#[delegatable_trait]
 pub trait WriteUpgradable {
     fn upgrade_to_writable(&mut self) -> anyhow::Result<()>;
 }

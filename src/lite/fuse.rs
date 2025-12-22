@@ -713,6 +713,8 @@ fn timespec_to_systemtime(tv_sec: i64, tv_nsec: u32) -> SystemTime {
 
 pub mod testing {
 
+    use std::path::Path;
+
     use protobuf::MessageField;
 
     use crate::{
@@ -760,7 +762,7 @@ pub mod testing {
             &mount_options,
             root_tmp_dir.path(),
         )?));
-
+        std::fs::create_dir_all(Path::new("/tmp/nonprod_mount"))?;
         run_fuse_main(
             &[
                 c"securefs",

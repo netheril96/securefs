@@ -1,6 +1,3 @@
-#[cfg(unix)]
-use std::os::fd::AsFd;
-
 use aes_gcm::{
     KeyInit,
     aes::{Aes256, Block},
@@ -17,7 +14,7 @@ use crate::stream::StdIoStream;
 use crate::WriteUpgradable;
 
 #[cfg(unix)]
-use crate::stream::lite::unix::LiteAesGcmOverFileStream;
+use crate::stream::{FileLikeStream, lite::unix::LiteAesGcmOverFileStream};
 use crate::{
     MasterKeyType, OwnedFileDescriptor,
     protos::params::decrypted_securefs_params::Format_specific_params,
@@ -34,17 +31,10 @@ pub mod unix;
 pub mod win;
 
 #[cfg(unix)]
-pub trait IoWrapperStream: Stream + WriteUpgradable + AsFd {}
-
-#[cfg(unix)]
-impl<T: Stream + WriteUpgradable + AsFd> IoWrapperStream for T {}
-
-#[cfg(unix)]
 pub trait IoWrapperFactory {
-    type IStream: IoWrapperStream;
-
     fn compute_virtual_size(&self, underlying_size: u64) -> Option<u64>;
-    fn wrap(&self, fd: OwnedFileDescriptor) -> anyhow::Result<Self::IStream>;
+    fn compute_max_physical_size(&self, virtual_size: u64) -> u64;
+    fn wrap(&self, fd: OwnedFileDescriptor) -> anyhow::Result<Box<dyn FileLikeStream>>;
 }
 
 pub struct LiteAesGcmCryptStreamFactory {
@@ -109,7 +99,10 @@ impl LiteAesGcmCryptStreamFactory {
             true,
         )
     }
+}
 
+#[cfg(unix)]
+impl IoWrapperFactory for LiteAesGcmCryptStreamFactory {
     fn compute_virtual_size(&self, underlying_size: u64) -> Option<u64> {
         if self.size_params.max_padding_size > 0 {
             None
@@ -133,20 +126,11 @@ impl LiteAesGcmCryptStreamFactory {
             self.size_params.max_padding_size.into(),
         )
     }
-}
 
-#[cfg(unix)]
-impl IoWrapperFactory for LiteAesGcmCryptStreamFactory {
-    type IStream = LiteAesGcmOverFileStream;
-
-    fn compute_virtual_size(&self, underlying_size: u64) -> Option<u64> {
-        self.compute_virtual_size(underlying_size)
-    }
-
-    fn wrap(&self, fd: OwnedFileDescriptor) -> anyhow::Result<LiteAesGcmOverFileStream> {
+    fn wrap(&self, fd: OwnedFileDescriptor) -> anyhow::Result<Box<dyn FileLikeStream>> {
         let stdiostream = StdIoStream::from(fd);
         let stream = self.create(stdiostream)?;
-        LiteAesGcmOverFileStream::new(stream)
+        Ok(Box::new(LiteAesGcmOverFileStream::new(stream)?))
     }
 }
 

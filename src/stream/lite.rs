@@ -2,6 +2,7 @@ use std::mem::size_of;
 
 use aes_gcm::{Aes128Gcm, Key};
 use ambassador::Delegate;
+use ambassador::delegatable_trait_remote;
 use anyhow::{Context, Ok};
 use thiserror::Error;
 
@@ -32,10 +33,24 @@ pub trait LiteParamCalculator {
     }
 }
 
+use crate::ambassador_impl_WriteUpgradable;
 use crate::stream::ambassador_impl_FileLike;
+
+#[cfg(unix)]
+use std::os::fd::AsFd;
+#[cfg(unix)]
+use std::os::fd::BorrowedFd;
+
+#[cfg(unix)]
+#[delegatable_trait_remote]
+pub trait AsFd {
+    fn as_fd(&self) -> BorrowedFd<'_>;
+}
 
 #[derive(Delegate)]
 #[delegate(FileLike, target = "inner")]
+#[delegate(WriteUpgradable, target = "inner")]
+#[cfg_attr(unix, delegate(AsFd, target = "inner"))]
 pub struct LiteAesGcmCryptStream<S: Stream> {
     // The following are provided
     inner: S,
@@ -370,6 +385,8 @@ pub mod unix {
             self.inner.inner.file.as_fd()
         }
     }
+
+    impl FileLike for LiteAesGcmOverFileStream {}
 
     #[cfg(target_os = "linux")]
     fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {

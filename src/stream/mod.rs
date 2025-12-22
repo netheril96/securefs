@@ -3,6 +3,8 @@ pub mod lite;
 
 use std::fs::File;
 use std::io::Write;
+#[cfg(unix)]
+use std::os::fd::AsFd;
 use std::{cmp::min, usize};
 
 // On unix, we can use pread/pwrite
@@ -19,6 +21,8 @@ use thiserror::Error;
 
 #[allow(unused)]
 use crate::OwnedFileDescriptor;
+#[cfg(unix)]
+use crate::WriteUpgradable;
 
 pub type OffsetType = u64;
 pub type LengthType = u64;
@@ -292,7 +296,7 @@ impl<T: Stream> Stream for AssertLockedStream<T> {
 
 #[cfg(unix)]
 #[delegatable_trait]
-pub trait FileLike {}
+pub trait FileLike: AsFd + WriteUpgradable {}
 
 #[cfg(windows)]
 #[delegatable_trait]

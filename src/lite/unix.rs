@@ -23,8 +23,8 @@ use crate::lite::long_name_db::{C_LONG_NAME_DB_FILENAME, LongNameLookupTable};
 use crate::lite::name_translators::create_name_translator;
 use crate::protos::params::decrypted_securefs_params::Format_specific_params;
 use crate::protos::params::{DecryptedSecurefsParams, MountOptions};
-use crate::stream::Stream;
 use crate::stream::lite::unix::LiteAesGcmOverFileStream;
+use crate::stream::{FileLikeStream, Stream};
 use crate::tearc::Tearc;
 use crate::vfs::{GenericINodeTable, ShardedMapINodeTable};
 use crate::{
@@ -53,7 +53,7 @@ pub struct LiteINodeHeader {
 }
 
 struct LiteFileNodeInner {
-    stream: LiteAesGcmOverFileStream,
+    stream: Box<dyn FileLikeStream>,
     writable: bool,
 }
 pub struct LiteFileINode {
@@ -62,7 +62,7 @@ pub struct LiteFileINode {
 }
 
 impl LiteFileINode {
-    pub fn new(header: LiteINodeHeader, s: LiteAesGcmOverFileStream, writable: bool) -> Self {
+    pub fn new(header: LiteINodeHeader, s: Box<dyn FileLikeStream>, writable: bool) -> Self {
         Self {
             header,
             inner: Mutex::new(LiteFileNodeInner {
