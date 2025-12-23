@@ -1,5 +1,8 @@
 #![allow(dead_code)] // Disables the linting until everything is wired together
 #![allow(unused_variables)]
+#![allow(clippy::useless_conversion)]
+#![allow(clippy::unnecessary_fallible_conversions)]
+#![allow(clippy::useless_transmute)]
 
 use ambassador::delegatable_trait;
 

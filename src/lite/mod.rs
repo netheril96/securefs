@@ -13,8 +13,8 @@ use crate::stream::StdIoStream;
 #[allow(unused)]
 use crate::WriteUpgradable;
 
-#[cfg(unix)]
-use crate::stream::{FileLikeStream, lite::unix::LiteAesGcmOverFileStream};
+use crate::stream::FileLikeStream;
+
 use crate::{
     MasterKeyType, OwnedFileDescriptor,
     protos::params::decrypted_securefs_params::Format_specific_params,
@@ -30,7 +30,6 @@ pub mod name_translators;
 pub mod unix;
 pub mod win;
 
-#[cfg(unix)]
 pub trait IoWrapperFactory {
     fn compute_virtual_size(&self, underlying_size: u64) -> Option<u64>;
     fn compute_max_physical_size(&self, virtual_size: u64) -> u64;
@@ -80,28 +79,15 @@ impl LiteAesGcmCryptStreamFactory {
             &self.lite_param_calc,
             self.size_params.iv_size.into(),
             self.size_params.block_size.into(),
-            true,
-        )
-    }
-
-    fn generic_wrap<Inner>(
-        &self,
-        fd: OwnedFileDescriptor,
-    ) -> anyhow::Result<LiteAesGcmCryptStream<Inner>>
-    where
-        Inner: From<OwnedFileDescriptor> + Stream,
-    {
-        LiteAesGcmCryptStream::new(
-            Inner::from(fd),
-            &self.lite_param_calc,
-            self.size_params.iv_size.into(),
-            self.size_params.block_size.into(),
-            true,
+            if self.verify_mac {
+                crate::stream::lite::MessageAuthenticationCodeVerificationMode::Verify
+            } else {
+                crate::stream::lite::MessageAuthenticationCodeVerificationMode::InsecureNoVerify
+            },
         )
     }
 }
 
-#[cfg(unix)]
 impl IoWrapperFactory for LiteAesGcmCryptStreamFactory {
     fn compute_virtual_size(&self, underlying_size: u64) -> Option<u64> {
         if self.size_params.max_padding_size > 0 {
@@ -127,10 +113,23 @@ impl IoWrapperFactory for LiteAesGcmCryptStreamFactory {
         )
     }
 
+    #[cfg(unix)]
     fn wrap(&self, fd: OwnedFileDescriptor) -> anyhow::Result<Box<dyn FileLikeStream>> {
+        use crate::stream::AlwaysLockedStream;
+
         let stdiostream = StdIoStream::from(fd);
-        let stream = self.create(stdiostream)?;
-        Ok(Box::new(LiteAesGcmOverFileStream::new(stream)?))
+        let stream = self.create(AlwaysLockedStream::new(stdiostream)?)?;
+        Ok(Box::new(stream))
+    }
+
+    #[cfg(windows)]
+    fn wrap(&self, fd: OwnedFileDescriptor) -> anyhow::Result<Box<dyn FileLikeStream>> {
+        use crate::stream::AssertLockedStream;
+        use crate::stream::win::NtFileStream;
+
+        let asserted_file_stream = AssertLockedStream::from(NtFileStream::from(fd));
+        let stream = self.create(asserted_file_stream)?;
+        Ok(Box::new(stream))
     }
 }
 

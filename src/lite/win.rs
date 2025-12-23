@@ -8,14 +8,7 @@ use std::{
     sync::Arc,
 };
 
-use ambassador::{Delegate, delegatable_trait};
-use anyhow::Context;
-use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
-use winfsp::{
-    U16CStr,
-    filesystem::{FileInfo, FileSecurity, OpenFileInfo},
-};
-
+use crate::lite::IoWrapperFactory;
 use crate::{
     OwnedFileDescriptor,
     lite::{
@@ -23,11 +16,14 @@ use crate::{
         long_name_db::{C_LONG_NAME_DB_FILENAME, LongNameLookupTable},
         name_translators::NameTranslator,
     },
-    stream::{AssertLockedStream, FileLikeStream, win::NtFileStream, with_source_locked},
+    stream::{FileLikeStream, with_source_locked},
     tearc::Tearc,
     win::{NtError, OwnedUnicodeString},
     winfsp_wrappers::WinFspFileSystemCore,
 };
+use ambassador::{Delegate, delegatable_trait};
+use anyhow::Context;
+use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use windows::{
     Wdk::{
         Foundation::OBJECT_ATTRIBUTES,
@@ -56,6 +52,10 @@ use windows::{
         },
         System::IO::IO_STATUS_BLOCK,
     },
+};
+use winfsp::{
+    U16CStr,
+    filesystem::{FileInfo, FileSecurity, OpenFileInfo},
 };
 
 #[delegatable_trait]
@@ -183,7 +183,7 @@ impl FileInfoExt for LiteDirContext {
 }
 
 pub(super) struct LiteRegularFileContext {
-    file_like_stream: Box<Mutex<dyn FileLikeStream>>,
+    file_like_stream: Mutex<Box<dyn FileLikeStream>>,
     full_path: PathBuf,
 }
 
@@ -201,7 +201,7 @@ impl LiteRegularFileContext {
         F: FnOnce(&mut (dyn FileLikeStream + 'static)) -> anyhow::Result<R>,
     {
         let mut stream = self.file_like_stream.lock();
-        with_source_locked(&mut *stream, f)
+        with_source_locked(&mut **stream, f)
     }
 }
 
@@ -331,10 +331,7 @@ impl LiteWinFspCore {
             Ok(LiteContext::Dir(ctx))
         } else {
             let ctx = LiteRegularFileContext {
-                file_like_stream: Box::new(Mutex::new(
-                    self.factory
-                        .generic_wrap::<AssertLockedStream<NtFileStream>>(handle)?,
-                )),
+                file_like_stream: Mutex::new(self.factory.wrap(handle)?),
                 full_path,
             };
             Ok(LiteContext::File(ctx))

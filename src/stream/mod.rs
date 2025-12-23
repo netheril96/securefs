@@ -21,7 +21,7 @@ use thiserror::Error;
 
 #[allow(unused)]
 use crate::OwnedFileDescriptor;
-#[cfg(unix)]
+#[allow(unused)]
 use crate::WriteUpgradable;
 
 pub type OffsetType = u64;
@@ -194,6 +194,87 @@ impl Stream for StdIoStream {
     }
 }
 
+#[cfg(unix)]
+impl AsFd for StdIoStream {
+    fn as_fd(&self) -> std::os::unix::prelude::BorrowedFd<'_> {
+        self.file.as_fd()
+    }
+}
+
+#[cfg(unix)]
+impl WriteUpgradable for StdIoStream {
+    fn upgrade_to_writable(&mut self) -> anyhow::Result<()> {
+        let new_fd = unix::reopen_as_writable(self.as_fd())?;
+        self.file = File::from(new_fd);
+        Ok(())
+    }
+}
+
+pub struct AlwaysLockedStream<T: Stream> {
+    inner: T,
+}
+
+impl<T: Stream> AlwaysLockedStream<T> {
+    pub fn new(mut inner: T) -> anyhow::Result<AlwaysLockedStream<T>> {
+        inner.lock_source()?;
+        Ok(AlwaysLockedStream { inner })
+    }
+}
+
+impl<T: Stream> Drop for AlwaysLockedStream<T> {
+    fn drop(&mut self) {
+        if let Err(err) = self.inner.unlock_source() {
+            tracing::error!(?err, "failed to unlock during drop");
+        }
+    }
+}
+
+impl<T: Stream> Stream for AlwaysLockedStream<T> {
+    fn read(&mut self, buffer: &mut [u8], offset: OffsetType) -> anyhow::Result<LengthType> {
+        self.inner.read(buffer, offset)
+    }
+
+    fn write(&mut self, buffer: &[u8], offset: OffsetType) -> anyhow::Result<()> {
+        self.inner.write(buffer, offset)
+    }
+
+    fn size(&self) -> anyhow::Result<LengthType> {
+        self.inner.size()
+    }
+
+    fn flush(&mut self) -> anyhow::Result<()> {
+        self.inner.flush()
+    }
+
+    fn resize(&mut self, size: LengthType) -> anyhow::Result<()> {
+        self.inner.resize(size)
+    }
+
+    fn lock_source(&mut self) -> anyhow::Result<()> {
+        // no op
+        Ok(())
+    }
+
+    fn unlock_source(&mut self) -> anyhow::Result<()> {
+        // no op
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+impl<T: Stream + AsFd> AsFd for AlwaysLockedStream<T> {
+    fn as_fd(&self) -> std::os::unix::prelude::BorrowedFd<'_> {
+        self.inner.as_fd()
+    }
+}
+
+impl<T: Stream + WriteUpgradable> WriteUpgradable for AlwaysLockedStream<T> {
+    fn upgrade_to_writable(&mut self) -> anyhow::Result<()> {
+        self.inner.upgrade_to_writable()?;
+        self.inner.lock_source()
+    }
+}
+
 enum LockStatus {
     Unlocked,
     Locked,
@@ -297,6 +378,9 @@ impl<T: Stream> Stream for AssertLockedStream<T> {
 #[cfg(unix)]
 #[delegatable_trait]
 pub trait FileLike: AsFd + WriteUpgradable {}
+
+#[cfg(unix)]
+impl<T: AsFd + WriteUpgradable> FileLike for T {}
 
 #[cfg(windows)]
 #[delegatable_trait]
@@ -524,6 +608,96 @@ pub mod win {
     impl FileLike for NtFileStream {
         fn as_win_handle(&self) -> HANDLE {
             HANDLE(self.fd.as_raw_handle())
+        }
+    }
+}
+
+#[cfg(unix)]
+pub mod unix {
+    #[cfg(target_os = "linux")]
+    use std::os::fd::{BorrowedFd, OwnedFd};
+
+    #[cfg(target_os = "linux")]
+    pub(super) fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
+        use std::os::fd::AsRawFd;
+
+        use rustix::fs::{Mode, OFlags};
+        Ok(rustix::fs::open(
+            format!("/proc/self/fd/{}", fd.as_raw_fd()),
+            OFlags::RDWR,
+            Mode::empty(),
+        )?)
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(super) fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
+        use anyhow::Context;
+        use rustix::fs::{Mode, OFlags};
+        use std::ffi::CStr;
+
+        let mut path_buffer = vec![0u8; (libc::PATH_MAX + 1) as usize];
+        let ret = unsafe {
+            libc::fcntl(
+                fd.as_raw_fd(),
+                libc::F_GETPATH,
+                path_buffer.as_mut_ptr() as *mut libc::c_void,
+            )
+        };
+
+        if ret < 0 {
+            return Err(std::io::Error::last_os_error())
+                .with_context(|| format!("fcntl(F_GETPATH) failed for fd {}", fd.as_raw_fd()));
+        }
+
+        let path = unsafe { CStr::from_ptr(path_buffer.as_ptr() as *const libc::c_char) };
+        Ok(rustix::fs::open(path, OFlags::RDWR, Mode::empty())?)
+    }
+
+    #[cfg(target_os = "freebsd")]
+    pub(super) fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
+        use rustix::fs::{Mode, OFlags};
+
+        let opath_fd = rustix::fs::openat(
+            fd,
+            c"",
+            OFlags::from_bits_retain((libc::O_PATH | libc::O_EMPTY_PATH) as libc::c_uint),
+            Mode::empty(),
+        )?;
+        Ok(rustix::fs::openat(
+            opath_fd,
+            c"",
+            OFlags::from_bits_retain((libc::O_RDWR | libc::O_EMPTY_PATH) as libc::c_uint),
+            Mode::empty(),
+        )?)
+    }
+
+    #[cfg(test)]
+    mod test {
+        use std::{
+            fs::File,
+            io::{Read, Write},
+            os::fd::AsFd,
+        };
+
+        use super::*;
+
+        #[test]
+        fn reopen() -> anyhow::Result<()> {
+            let file = tempfile::NamedTempFile::new()?;
+            file.as_file().write_all("Hello".as_bytes())?;
+
+            let mut rofile = File::open(file.path())?;
+            assert!(rofile.write_all("World".as_bytes()).is_err());
+
+            let new_fd = reopen_as_writable(rofile.as_fd())?;
+            let mut wfile = File::from(new_fd);
+
+            let mut string = String::new();
+            wfile.read_to_string(&mut string)?;
+            assert_eq!(string, "Hello");
+
+            wfile.write_all("World".as_bytes())?;
+            Ok(())
         }
     }
 }

@@ -17,14 +17,12 @@ use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use rustix::fs::{AtFlags, Gid, Mode, OFlags, Timespec, Timestamps, Uid};
 use rustix::io::Errno;
 
-use crate::WriteUpgradable;
 use crate::lite::LiteAesGcmCryptStreamFactory;
 use crate::lite::long_name_db::{C_LONG_NAME_DB_FILENAME, LongNameLookupTable};
 use crate::lite::name_translators::create_name_translator;
 use crate::protos::params::decrypted_securefs_params::Format_specific_params;
 use crate::protos::params::{DecryptedSecurefsParams, MountOptions};
-use crate::stream::lite::unix::LiteAesGcmOverFileStream;
-use crate::stream::{FileLikeStream, Stream};
+use crate::stream::FileLikeStream;
 use crate::tearc::Tearc;
 use crate::vfs::{GenericINodeTable, ShardedMapINodeTable};
 use crate::{

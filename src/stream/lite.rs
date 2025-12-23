@@ -2,6 +2,7 @@ use std::mem::size_of;
 
 use aes_gcm::{Aes128Gcm, Key};
 use ambassador::Delegate;
+#[allow(unused)]
 use ambassador::delegatable_trait_remote;
 use anyhow::{Context, Ok};
 use thiserror::Error;
@@ -19,8 +20,11 @@ use crate::stream::with_source_locked;
 use crate::{
     aesgcm::DynamicIvAes128Gcm,
     rng::fill_with_random,
-    stream::{FileLike, LengthType, Stream, block::MultipleBlockReaderWriter},
+    stream::{LengthType, Stream, block::MultipleBlockReaderWriter},
 };
+
+#[allow(unused)]
+use crate::stream::FileLike;
 
 pub const ID_SIZE: usize = 16;
 pub const MAX_BLOCKS: u64 = (1u64 << 31) - 1;
@@ -34,6 +38,7 @@ pub trait LiteParamCalculator {
 }
 
 use crate::ambassador_impl_WriteUpgradable;
+#[allow(unused)]
 use crate::stream::ambassador_impl_FileLike;
 
 #[cfg(unix)]
@@ -48,7 +53,7 @@ pub trait AsFd {
 }
 
 #[derive(Delegate)]
-#[delegate(FileLike, target = "inner")]
+#[cfg_attr(windows, delegate(FileLike, target = "inner"))]
 #[delegate(WriteUpgradable, target = "inner")]
 #[cfg_attr(unix, delegate(AsFd, target = "inner"))]
 pub struct LiteAesGcmCryptStream<S: Stream> {
@@ -56,7 +61,7 @@ pub struct LiteAesGcmCryptStream<S: Stream> {
     inner: S,
     iv_size: LengthType,
     block_size: LengthType,
-    verify_mac: bool,
+    verify_mac: MessageAuthenticationCodeVerificationMode,
 
     // The following are computed
     padding_size: LengthType,
@@ -78,42 +83,54 @@ pub enum LiteAesGcmCryptError {
     PartialWrite,
 }
 
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+pub enum MessageAuthenticationCodeVerificationMode {
+    Verify,
+    InsecureNoVerify,
+}
+
 impl<S: Stream> LiteAesGcmCryptStream<S> {
     pub fn new(
         mut inner: S,
         lite_param_calc: &impl LiteParamCalculator,
         iv_size: LengthType,
         block_size: LengthType,
-        verify_mac: bool,
+        verify_mac: MessageAuthenticationCodeVerificationMode,
     ) -> anyhow::Result<Self> {
-        let mut id: [u8; ID_SIZE] = [0; ID_SIZE];
-        let rc = inner.read(&mut id, 0)?;
-        let mut aux: Vec<u8> = Vec::new();
-        let padding_size: LengthType;
-        if rc == 0 {
-            fill_with_random(&mut id);
-            inner.write(&id, 0)?;
-            padding_size = lite_param_calc.compute_padding(&id)?;
-            if padding_size > 0 {
+        let compute = |inner: &mut S| -> anyhow::Result<(DynamicIvAes128Gcm, LengthType, Vec<u8>)> {
+            let mut id: [u8; ID_SIZE] = [0; ID_SIZE];
+            let rc = inner.read(&mut id, 0)?;
+            let mut aux: Vec<u8> = Vec::new();
+            let padding_size: LengthType;
+            if rc == 0 {
+                fill_with_random(&mut id);
+                inner.write(&id, 0)?;
+                padding_size = lite_param_calc.compute_padding(&id)?;
+                if padding_size > 0 {
+                    aux.resize(usize::try_from(padding_size)? + size_of::<u32>(), 0);
+                    fill_with_random(&mut aux[size_of::<u32>()..]);
+                } else {
+                    aux.resize(size_of::<u32>(), 0);
+                }
+                inner.write(&aux, 0)?;
+            } else if rc == id.len().try_into()? {
+                padding_size = lite_param_calc.compute_padding(&id)?;
                 aux.resize(usize::try_from(padding_size)? + size_of::<u32>(), 0);
-                fill_with_random(&mut aux[size_of::<u32>()..]);
+                aux[..id.len()].copy_from_slice(&id);
+                if padding_size > 0 && inner.read(&mut aux[size_of::<u32>()..], 0)? != padding_size
+                {
+                    return Err(LiteAesGcmCryptError::InvalidHeader.into());
+                }
             } else {
-                aux.resize(size_of::<u32>(), 0);
-            }
-            inner.write(&aux, 0)?;
-        } else if rc == id.len().try_into()? {
-            padding_size = lite_param_calc.compute_padding(&id)?;
-            aux.resize(usize::try_from(padding_size)? + size_of::<u32>(), 0);
-            aux[..id.len()].copy_from_slice(&id);
-            if padding_size > 0 && inner.read(&mut aux[size_of::<u32>()..], 0)? != padding_size {
                 return Err(LiteAesGcmCryptError::InvalidHeader.into());
             }
-        } else {
-            return Err(LiteAesGcmCryptError::InvalidHeader.into());
-        }
-        let session_key_as_array = lite_param_calc.compute_session_key(&id)?;
-        let key = Key::<Aes128Gcm>::from_slice(&session_key_as_array);
-        let aesgcm = DynamicIvAes128Gcm::new(key);
+            let session_key_as_array = lite_param_calc.compute_session_key(&id)?;
+            let key = Key::<Aes128Gcm>::from_slice(&session_key_as_array);
+            let aesgcm = DynamicIvAes128Gcm::new(key);
+            Ok((aesgcm, padding_size, aux))
+        };
+
+        let (aesgcm, padding_size, aux) = with_source_locked(&mut inner, compute)?;
 
         Ok(LiteAesGcmCryptStream {
             inner,
@@ -224,7 +241,8 @@ impl<S: Stream> MultipleBlockReaderWriter for LiteAesGcmCryptStream<S> {
                     tag.try_into()?,
                     this_virtual_buffer,
                 )?;
-                if !success && self.verify_mac {
+                if !success && self.verify_mac == MessageAuthenticationCodeVerificationMode::Verify
+                {
                     return Err(LiteAesGcmCryptError::TagMismatch)
                         .context(format!("reading data at block number {}", current_block));
                 }
@@ -345,131 +363,6 @@ impl<S: Stream> MultipleBlockReaderWriter for LiteAesGcmCryptStream<S> {
     }
 }
 
-#[cfg(unix)]
-pub mod unix {
-    use std::os::fd::AsFd;
-    use std::os::fd::AsRawFd;
-    use std::os::fd::BorrowedFd;
-    use std::os::fd::OwnedFd;
-
-    use super::*;
-    use crate::stream::ambassador_impl_Stream;
-
-    #[derive(Delegate)]
-    #[delegate(Stream, target = "inner")]
-    pub struct LiteAesGcmOverFileStream {
-        inner: LiteAesGcmCryptStream<StdIoStream>,
-    }
-
-    impl LiteAesGcmOverFileStream {
-        pub fn new(mut inner: LiteAesGcmCryptStream<StdIoStream>) -> anyhow::Result<Self> {
-            // On Unix, closing a file descriptor auto unlocks, so we don't both with
-            // explicit unlocking.
-            inner.lock_source()?;
-            Ok(Self { inner })
-        }
-    }
-
-    impl WriteUpgradable for LiteAesGcmOverFileStream {
-        fn upgrade_to_writable(&mut self) -> anyhow::Result<()> {
-            let new_fd = reopen_as_writable(self.as_fd())?;
-            let mut new_iostream = StdIoStream::from(new_fd);
-            new_iostream.lock_source()?;
-            self.inner.inner = new_iostream;
-            Ok(())
-        }
-    }
-
-    impl AsFd for LiteAesGcmOverFileStream {
-        fn as_fd(&self) -> BorrowedFd<'_> {
-            self.inner.inner.file.as_fd()
-        }
-    }
-
-    impl FileLike for LiteAesGcmOverFileStream {}
-
-    #[cfg(target_os = "linux")]
-    fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
-        use rustix::fs::{Mode, OFlags};
-        Ok(rustix::fs::open(
-            format!("/proc/self/fd/{}", fd.as_raw_fd()),
-            OFlags::RDWR,
-            Mode::empty(),
-        )?)
-    }
-
-    #[cfg(target_os = "macos")]
-    fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
-        use anyhow::Context;
-        use rustix::fs::{Mode, OFlags};
-        use std::ffi::CStr;
-
-        let mut path_buffer = vec![0u8; (libc::PATH_MAX + 1) as usize];
-        let ret = unsafe {
-            libc::fcntl(
-                fd.as_raw_fd(),
-                libc::F_GETPATH,
-                path_buffer.as_mut_ptr() as *mut libc::c_void,
-            )
-        };
-
-        if ret < 0 {
-            return Err(std::io::Error::last_os_error())
-                .with_context(|| format!("fcntl(F_GETPATH) failed for fd {}", fd.as_raw_fd()));
-        }
-
-        let path = unsafe { CStr::from_ptr(path_buffer.as_ptr() as *const libc::c_char) };
-        Ok(rustix::fs::open(path, OFlags::RDWR, Mode::empty())?)
-    }
-
-    #[cfg(target_os = "freebsd")]
-    fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
-        use rustix::fs::{Mode, OFlags};
-
-        let opath_fd = rustix::fs::openat(
-            fd,
-            c"",
-            OFlags::from_bits_retain((libc::O_PATH | libc::O_EMPTY_PATH) as libc::c_uint),
-            Mode::empty(),
-        )?;
-        Ok(rustix::fs::openat(
-            opath_fd,
-            c"",
-            OFlags::from_bits_retain((libc::O_RDWR | libc::O_EMPTY_PATH) as libc::c_uint),
-            Mode::empty(),
-        )?)
-    }
-
-    #[cfg(test)]
-    mod test {
-        use std::{
-            fs::File,
-            io::{Read, Write},
-        };
-
-        use super::*;
-
-        #[test]
-        fn reopen() -> anyhow::Result<()> {
-            let file = tempfile::NamedTempFile::new()?;
-            file.as_file().write_all("Hello".as_bytes())?;
-
-            let mut rofile = File::open(file.path())?;
-            assert!(rofile.write_all("World".as_bytes()).is_err());
-
-            let new_fd = reopen_as_writable(rofile.as_fd())?;
-            let mut wfile = File::from(new_fd);
-
-            let mut string = String::new();
-            wfile.read_to_string(&mut string)?;
-            assert_eq!(string, "Hello");
-
-            wfile.write_all("World".as_bytes())?;
-            Ok(())
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
     use rstest::rstest;
@@ -513,7 +406,7 @@ mod test {
                 },
                 iv_size,
                 block_size,
-                true,
+                MessageAuthenticationCodeVerificationMode::Verify,
             )
             .unwrap(),
             &mut MemoryStream { buffer: Vec::new() },
