@@ -406,13 +406,13 @@ impl<T: FileLike + Stream> FileLikeStream for T {}
 
 #[cfg(windows)]
 pub mod win {
+    use crate::AssertOk;
     use crate::stream::{AssertLockedStream, FileLike};
-    use crate::win::NtError;
     use crate::{
         OwnedFileDescriptor,
         stream::{LengthType, OffsetType, Stream},
     };
-    use anyhow::bail;
+    use anyhow::{Context, bail};
     use windows::Wdk::Storage::FileSystem::{
         FILE_STANDARD_INFORMATION, FileEndOfFileInformation, FileStandardInformation,
         NtFlushBuffersFile, NtLockFile, NtQueryInformationFile, NtReadFile, NtSetInformationFile,
@@ -446,7 +446,7 @@ pub mod win {
             let byte_offset = offset as i64;
             let mut io_status_block: IO_STATUS_BLOCK = unsafe { std::mem::zeroed() };
 
-            let rc = unsafe {
+            match unsafe {
                 NtReadFile(
                     HANDLE(self.fd.as_raw_handle()),
                     None,
@@ -458,14 +458,9 @@ pub mod win {
                     Some(&raw const byte_offset),
                     None,
                 )
-            };
-
-            if rc == STATUS_END_OF_FILE {
-                return Ok(0);
-            }
-
-            if rc.0 < 0 {
-                return Err(NtError { status: rc })?;
+            } {
+                STATUS_END_OF_FILE => return Ok(0),
+                status => status.assert_ok().context("NtReadFile")?,
             }
 
             Ok(io_status_block.Information.try_into()?)
@@ -475,7 +470,7 @@ pub mod win {
             let byte_offset = offset as i64;
             let mut io_status_block: IO_STATUS_BLOCK = unsafe { std::mem::zeroed() };
 
-            let rc = unsafe {
+            unsafe {
                 NtWriteFile(
                     HANDLE(self.fd.as_raw_handle()),
                     None,
@@ -487,11 +482,9 @@ pub mod win {
                     Some(&raw const byte_offset),
                     None,
                 )
-            };
-
-            if rc.0 < 0 {
-                return Err(NtError { status: rc })?;
             }
+            .assert_ok()
+            .context("NtWriteFile")?;
             if io_status_block.Information != buffer.len() {
                 bail!("insufficient write");
             }
@@ -502,7 +495,7 @@ pub mod win {
             let mut io_status_block: IO_STATUS_BLOCK = unsafe { mem::zeroed() };
             let mut file_info: FILE_STANDARD_INFORMATION = unsafe { mem::zeroed() };
 
-            let status = unsafe {
+            unsafe {
                 NtQueryInformationFile(
                     HANDLE(self.fd.as_raw_handle()),
                     &mut io_status_block,
@@ -510,23 +503,20 @@ pub mod win {
                     mem::size_of::<FILE_STANDARD_INFORMATION>() as u32,
                     FileStandardInformation,
                 )
-            };
-
-            if status.0 < 0 {
-                return Err(NtError { status })?;
             }
+            .assert_ok()
+            .context("NtQueryInformationFile")?;
 
             Ok(file_info.EndOfFile.try_into()?)
         }
 
         fn flush(&mut self) -> anyhow::Result<()> {
             let mut io_status_block: IO_STATUS_BLOCK = unsafe { mem::zeroed() };
-            let status = unsafe {
+            unsafe {
                 NtFlushBuffersFile(HANDLE(self.fd.as_raw_handle()), &raw mut io_status_block)
-            };
-            if status.0 < 0 {
-                return Err(NtError { status })?;
             }
+            .assert_ok()
+            .context("NtFlushBuffersFile")?;
             Ok(())
         }
 
@@ -536,7 +526,7 @@ pub mod win {
                 EndOfFile: size.try_into()?,
             };
 
-            let status = unsafe {
+            unsafe {
                 NtSetInformationFile(
                     HANDLE(self.fd.as_raw_handle()),
                     &raw mut io_status_block,
@@ -544,10 +534,9 @@ pub mod win {
                     mem::size_of::<FILE_END_OF_FILE_INFORMATION>() as u32,
                     FileEndOfFileInformation,
                 )
-            };
-            if status.0 < 0 {
-                return Err(NtError { status })?;
             }
+            .assert_ok()
+            .context("NtSetInformationFile")?;
             Ok(())
         }
 
@@ -564,7 +553,7 @@ pub mod win {
             let byte_offset: i64 = 0;
             let length = i64::MAX;
 
-            let status = unsafe {
+            unsafe {
                 NtLockFile(
                     HANDLE(self.fd.as_raw_handle()),
                     None,
@@ -577,10 +566,9 @@ pub mod win {
                     false, // FALSE, wait for lock
                     true,  // TRUE for exclusive lock
                 )
-            };
-            if status.0 < 0 {
-                return Err(NtError { status })?;
             }
+            .assert_ok()
+            .context("NtLockFile")?;
             Ok(())
         }
 
@@ -589,7 +577,7 @@ pub mod win {
             let byte_offset: i64 = 0;
             let length = i64::MAX;
 
-            let status = unsafe {
+            unsafe {
                 NtUnlockFile(
                     HANDLE(self.fd.as_raw_handle()),
                     &raw mut io_status_block,
@@ -597,10 +585,9 @@ pub mod win {
                     &raw const length,
                     0,
                 )
-            };
-            if status.0 < 0 {
-                return Err(NtError { status })?;
             }
+            .assert_ok()
+            .context("NtUnlockFile")?;
             Ok(())
         }
     }

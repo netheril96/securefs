@@ -8,11 +8,10 @@ use std::{
     sync::Arc,
 };
 
-use crate::lite::IoWrapperFactory;
+use crate::{AssertOk, lite::IoWrapperFactory};
 use crate::{
     OwnedFileDescriptor,
     lite::{
-        LiteAesGcmCryptStreamFactory,
         long_name_db::{C_LONG_NAME_DB_FILENAME, LongNameLookupTable},
         name_translators::NameTranslator,
     },
@@ -56,6 +55,7 @@ use windows::{
 use winfsp::{
     U16CStr,
     filesystem::{FileInfo, FileSecurity, OpenFileInfo},
+    host::VolumeParams,
 };
 
 #[delegatable_trait]
@@ -68,7 +68,7 @@ impl FileInfoExt for HANDLE {
         let mut st: FILE_STAT_INFORMATION = unsafe { std::mem::zeroed() };
         let mut iosb: IO_STATUS_BLOCK = unsafe { std::mem::zeroed() };
 
-        let status = unsafe {
+        unsafe {
             NtQueryInformationFile(
                 *self,
                 &raw mut iosb,
@@ -76,10 +76,10 @@ impl FileInfoExt for HANDLE {
                 size_of_val(&st) as u32,
                 FileStatInformation,
             )
-        };
-        if status.0 < 0 {
-            return Err(NtError { status }).context("NtQueryInformationFile");
         }
+        .assert_ok()
+        .context("NtQueryInformationFile")?;
+
         Ok(FileInfo {
             file_attributes: st.FileAttributes,
             reparse_tag: st.ReparseTag,
@@ -233,16 +233,15 @@ fn get_file_attributes(handle: HANDLE) -> anyhow::Result<u32> {
             size_of_val(&file_attr_info).try_into()?,
             FileAttributeTagInformation,
         )
-    };
-    if status.0 < 0 {
-        return Err(NtError { status }).context("calling NtQueryInformationFile failed");
     }
+    .assert_ok()
+    .context("calling NtQueryInformationFile failed")?;
     Ok(file_attr_info.FileAttributes)
 }
 
 pub(super) struct LiteWinFspCore {
     root_dir: Tearc<LiteDirContext>,
-    factory: LiteAesGcmCryptStreamFactory,
+    factory: Box<dyn IoWrapperFactory>,
 }
 
 impl LiteWinFspCore {
@@ -291,7 +290,7 @@ impl LiteWinFspCore {
         let mut handle = HANDLE::default();
         let mut io_status_block: IO_STATUS_BLOCK = unsafe { std::mem::zeroed() };
 
-        let status = unsafe {
+        unsafe {
             NtCreateFile(
                 &raw mut handle,
                 desired_access,
@@ -305,11 +304,9 @@ impl LiteWinFspCore {
                 None,
                 0,
             )
-        };
-
-        if status.0 < 0 {
-            return Err(NtError { status }).context("calling NtCreateFile failed");
         }
+        .assert_ok()
+        .context("NtCreateFile")?;
 
         let handle = unsafe { OwnedFileDescriptor::from_raw_handle(handle.0) };
         Ok((handle, encoded_name))
@@ -336,6 +333,17 @@ impl LiteWinFspCore {
             };
             Ok(LiteContext::File(ctx))
         }
+    }
+}
+
+impl LiteWinFspCore {
+    pub fn fill_volume_params(params: &mut VolumeParams) {
+        params
+            .case_preserved_names(true)
+            .case_sensitive_search(true)
+            .persistent_acls(true)
+            .post_disposition_only_when_necessary(true)
+            .unicode_on_disk(true);
     }
 }
 
@@ -374,7 +382,7 @@ impl WinFspFileSystemCore for LiteWinFspCore {
         let mut sz_security_descriptor: u32 = 0;
 
         if let Some(ref mut security_descriptor) = security_descriptor {
-            let status = unsafe {
+            unsafe {
                 NtQuerySecurityObject(
                     HANDLE(handle.as_raw_handle()),
                     (OWNER_SECURITY_INFORMATION
@@ -385,10 +393,9 @@ impl WinFspFileSystemCore for LiteWinFspCore {
                     security_descriptor.len().try_into()?,
                     &raw mut sz_security_descriptor,
                 )
-            };
-            if status.0 < 0 {
-                return Err(NtError { status }).context("calling NtQuerySecurityObject failed");
             }
+            .assert_ok()
+            .context("NtQuerySecurityObject")?;
         }
 
         Ok(FileSecurity {
@@ -541,5 +548,60 @@ impl WinFspFileSystemCore for LiteWinFspCore {
             file_info.file_size = stream.size()?;
             Ok(buffer.len().try_into()?)
         })
+    }
+}
+
+mod volume {
+    use std::ffi::c_void;
+    use std::mem::MaybeUninit;
+    use windows::Wdk::Storage::FileSystem::{
+        FILE_FS_ATTRIBUTE_INFORMATION, FileFsAttributeInformation, FileFsSizeInformation,
+        NtQueryVolumeInformationFile,
+    };
+    use windows::Wdk::System::SystemServices::FILE_FS_SIZE_INFORMATION;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::IO::IO_STATUS_BLOCK;
+    use winfsp::constants::MAX_PATH;
+    use winfsp::util::VariableSizedBox;
+
+    use crate::AssertOk;
+
+    pub fn get_attr(
+        handle: HANDLE,
+    ) -> anyhow::Result<VariableSizedBox<FILE_FS_ATTRIBUTE_INFORMATION>> {
+        let mut iosb: MaybeUninit<IO_STATUS_BLOCK> = MaybeUninit::uninit();
+        let mut info = VariableSizedBox::<FILE_FS_ATTRIBUTE_INFORMATION>::new(
+            MAX_PATH * std::mem::size_of::<u16>(),
+        );
+
+        unsafe {
+            NtQueryVolumeInformationFile(
+                handle,
+                iosb.as_mut_ptr(),
+                info.as_mut_ptr() as *mut _,
+                info.len() as u32,
+                FileFsAttributeInformation,
+            )
+            .assert_ok()?;
+        }
+        Ok(info)
+    }
+
+    pub fn get_size(handle: HANDLE) -> anyhow::Result<FILE_FS_SIZE_INFORMATION> {
+        let mut iosb: MaybeUninit<IO_STATUS_BLOCK> = MaybeUninit::uninit();
+        let mut info: FILE_FS_SIZE_INFORMATION = unsafe { std::mem::zeroed() };
+
+        unsafe {
+            NtQueryVolumeInformationFile(
+                handle,
+                iosb.as_mut_ptr(),
+                (&mut info) as *mut _ as *mut c_void,
+                std::mem::size_of::<FILE_FS_SIZE_INFORMATION>() as u32,
+                FileFsSizeInformation,
+            )
+            .assert_ok()?;
+        };
+
+        Ok(info)
     }
 }

@@ -34,3 +34,7 @@ pub type BorrowedFileDescriptor<'a> = std::os::windows::io::BorrowedHandle<'a>;
 pub trait WriteUpgradable {
     fn upgrade_to_writable(&mut self) -> anyhow::Result<()>;
 }
+
+pub trait AssertOk {
+    fn assert_ok(&self) -> anyhow::Result<()>;
+}

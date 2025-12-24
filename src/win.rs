@@ -6,6 +6,8 @@ use windows::{Win32::Foundation::UNICODE_STRING, core::PWSTR};
 
 use thiserror::Error;
 
+use crate::AssertOk;
+
 #[derive(Debug, Error)]
 #[error("NTSTATUS 0x{:0x}", status.0)]
 pub struct NtError {
@@ -42,5 +44,15 @@ impl TryFrom<&[u8]> for OwnedUnicodeString {
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         Self::try_from(str::from_utf8(value)?)
+    }
+}
+
+impl AssertOk for NTSTATUS {
+    fn assert_ok(&self) -> anyhow::Result<()> {
+        if self.is_ok() {
+            Ok(())
+        } else {
+            Err(NtError { status: *self })?
+        }
     }
 }
