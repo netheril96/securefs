@@ -614,13 +614,13 @@ pub mod win {
 
 #[cfg(unix)]
 pub mod unix {
-    #[cfg(target_os = "linux")]
+    #[allow(unused)]
+    use std::os::fd::AsRawFd;
+    #[allow(unused)]
     use std::os::fd::{BorrowedFd, OwnedFd};
 
     #[cfg(target_os = "linux")]
     pub(super) fn reopen_as_writable(fd: BorrowedFd<'_>) -> anyhow::Result<OwnedFd> {
-        use std::os::fd::AsRawFd;
-
         use rustix::fs::{Mode, OFlags};
         Ok(rustix::fs::open(
             format!("/proc/self/fd/{}", fd.as_raw_fd()),
