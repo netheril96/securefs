@@ -60,6 +60,7 @@ pkg-config = { version = "0.3.32", optional = true }
 windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_LibraryLoader", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_WindowsProgramming", "Win32_System_Console", "Win32_System_IO", "Wdk_Foundation", "Wdk_Storage_FileSystem", "Wdk_System_IO", "Wdk_Storage_FileSystem_Minifilters", "Wdk_System_SystemServices", "Win32_System_Ioctl", "Win32_System_SystemServices", "Win32_System_Threading"] }
 winfsp = "0.12.4"
 winfsp-sys = "0.12.1"
+widestring = "1.2.1"
 
 [target.'cfg(windows)'.build-dependencies]
 winfsp = "0.12.4"

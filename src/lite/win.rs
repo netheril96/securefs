@@ -16,13 +16,13 @@ use crate::{
         name_translators::NameTranslator,
     },
     stream::{FileLikeStream, with_source_locked},
-    tearc::Tearc,
     win::{NtError, OwnedUnicodeString},
     winfsp_wrappers::WinFspFileSystemCore,
 };
 use ambassador::{Delegate, delegatable_trait};
 use anyhow::Context;
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
+use widestring::u16cstr;
 use windows::{
     Wdk::{
         Foundation::OBJECT_ATTRIBUTES,
@@ -240,7 +240,7 @@ fn get_file_attributes(handle: HANDLE) -> anyhow::Result<u32> {
 }
 
 pub(super) struct LiteWinFspCore {
-    root_dir: Tearc<LiteDirContext>,
+    root_dir: LiteDirContext,
     factory: Box<dyn IoWrapperFactory>,
 }
 
@@ -360,49 +360,56 @@ impl WinFspFileSystemCore for LiteWinFspCore {
             return Ok(security);
         }
 
-        let (handle, _) = self.nt_create_file(
-            file_name,
-            READ_CONTROL | FILE_READ_ATTRIBUTES,
-            FILE_FLAG_OPEN_REPARSE_POINT,
-            FILE_OPEN,
-            FILE_OPEN_REPARSE_POINT,
-            PSECURITY_DESCRIPTOR(std::ptr::null_mut()),
-        )?;
+        let mut common = |h: HANDLE| {
+            let attributes = get_file_attributes(h)?;
 
-        let attributes = get_file_attributes(HANDLE(handle.as_raw_handle()))?;
-
-        // cache file_attributes for Open
-        unsafe {
-            self.with_operation_response(|rsp| {
-                rsp.Rsp.Create.Opened.FileInfo.FileAttributes = attributes;
-            })
-            .unwrap();
-        }
-
-        let mut sz_security_descriptor: u32 = 0;
-
-        if let Some(ref mut security_descriptor) = security_descriptor {
+            // cache file_attributes for Open
             unsafe {
-                NtQuerySecurityObject(
-                    HANDLE(handle.as_raw_handle()),
-                    (OWNER_SECURITY_INFORMATION
-                        | GROUP_SECURITY_INFORMATION
-                        | DACL_SECURITY_INFORMATION)
-                        .0,
-                    Some(PSECURITY_DESCRIPTOR(security_descriptor.as_mut_ptr())),
-                    security_descriptor.len().try_into()?,
-                    &raw mut sz_security_descriptor,
-                )
+                self.with_operation_response(|rsp| {
+                    rsp.Rsp.Create.Opened.FileInfo.FileAttributes = attributes;
+                })
+                .unwrap();
             }
-            .assert_ok()
-            .context("NtQuerySecurityObject")?;
-        }
 
-        Ok(FileSecurity {
-            reparse: false,
-            sz_security_descriptor: sz_security_descriptor.try_into()?,
-            attributes,
-        })
+            let mut sz_security_descriptor: u32 = 0;
+
+            if let Some(ref mut security_descriptor) = security_descriptor {
+                unsafe {
+                    NtQuerySecurityObject(
+                        h,
+                        (OWNER_SECURITY_INFORMATION
+                            | GROUP_SECURITY_INFORMATION
+                            | DACL_SECURITY_INFORMATION)
+                            .0,
+                        Some(PSECURITY_DESCRIPTOR(security_descriptor.as_mut_ptr())),
+                        security_descriptor.len().try_into()?,
+                        &raw mut sz_security_descriptor,
+                    )
+                }
+                .assert_ok()
+                .context("NtQuerySecurityObject")?;
+            }
+
+            Ok(FileSecurity {
+                reparse: false,
+                sz_security_descriptor: sz_security_descriptor.try_into()?,
+                attributes,
+            })
+        };
+
+        if file_name.is_empty() || file_name == u16cstr!("\\") || file_name == u16cstr!("/") {
+            common(HANDLE(self.root_dir.dir.as_raw_handle()))
+        } else {
+            let (handle, _) = self.nt_create_file(
+                file_name,
+                READ_CONTROL | FILE_READ_ATTRIBUTES,
+                FILE_FLAG_OPEN_REPARSE_POINT,
+                FILE_OPEN,
+                FILE_OPEN_REPARSE_POINT,
+                PSECURITY_DESCRIPTOR(std::ptr::null_mut()),
+            )?;
+            common(HANDLE(handle.as_raw_handle()))
+        }
     }
 
     fn open(

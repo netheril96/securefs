@@ -1141,6 +1141,7 @@ dependencies = [
  "thread_local",
  "tracing",
  "tracing-subscriber",
+ "widestring",
  "windows 0.62.2",
  "winfsp",
  "winfsp-sys",
