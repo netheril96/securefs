@@ -378,9 +378,10 @@ pub trait WinFspFileSystemCore: Sized {
     {
         unsafe {
             if let Some(context) = winfsp_sys::FspFileSystemGetOperationContext().as_ref()
-                && let Some(response) = context.Response.as_mut() {
-                    return Some(f(response));
-                }
+                && let Some(response) = context.Response.as_mut()
+            {
+                return Some(f(response));
+            }
         }
         None
     }
@@ -402,9 +403,10 @@ pub trait WinFspFileSystemCore: Sized {
     {
         unsafe {
             if let Some(context) = winfsp_sys::FspFileSystemGetOperationContext().as_ref()
-                && let Some(request) = context.Request.as_ref() {
-                    return Some(f(request));
-                }
+                && let Some(request) = context.Request.as_ref()
+            {
+                return Some(f(request));
+            }
         }
         None
     }
@@ -451,7 +453,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         self.inner.close(context)
     }
 
-    #[instrument(skip(self), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
+    #[instrument(skip(self,extra_buffer), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
     fn create(
         &self,
         file_name: &U16CStr,
@@ -511,7 +513,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
             .set_security(context, security_information, modification_descriptor)
     }
 
-    #[instrument(skip(self), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
+    #[instrument(skip(self,extra_buffer), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
     fn overwrite(
         &self,
         context: &Self::FileContext,
@@ -531,7 +533,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         )
     }
 
-    #[instrument(skip(self), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
+    #[instrument(skip(self,buffer), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
     fn read_directory(
         &self,
         context: &Self::FileContext,
@@ -598,12 +600,12 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
             .set_file_size(context, new_size, set_allocation_size, file_info)
     }
 
-    #[instrument(skip(self), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
+    #[instrument(skip(self,buffer), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
     fn read(&self, context: &Self::FileContext, buffer: &mut [u8], offset: u64) -> Result<u32> {
         self.inner.read(context, buffer, offset)
     }
 
-    #[instrument(skip(self), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
+    #[instrument(skip(self,buffer), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
     fn write(
         &self,
         context: &Self::FileContext,
@@ -649,7 +651,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         self.inner.get_stream_info(context, buffer)
     }
 
-    #[instrument(skip(self), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
+    #[instrument(skip(self,buffer), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
     fn get_reparse_point_by_name(
         &self,
         file_name: &U16CStr,
@@ -660,7 +662,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
             .get_reparse_point_by_name(file_name, is_directory, buffer)
     }
 
-    #[instrument(skip(self), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
+    #[instrument(skip(self,buffer), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
     fn get_reparse_point(
         &self,
         context: &Self::FileContext,
@@ -670,7 +672,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         self.inner.get_reparse_point(context, file_name, buffer)
     }
 
-    #[instrument(skip(self), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
+    #[instrument(skip(self,buffer), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
     fn set_reparse_point(
         &self,
         context: &Self::FileContext,
@@ -680,7 +682,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         self.inner.set_reparse_point(context, file_name, buffer)
     }
 
-    #[instrument(skip(self), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
+    #[instrument(skip(self,buffer), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
     fn delete_reparse_point(
         &self,
         context: &Self::FileContext,
@@ -690,7 +692,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         self.inner.delete_reparse_point(context, file_name, buffer)
     }
 
-    #[instrument(skip(self), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
+    #[instrument(skip(self,buffer), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
     fn get_extended_attributes(
         &self,
         context: &Self::FileContext,
@@ -699,7 +701,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         self.inner.get_extended_attributes(context, buffer)
     }
 
-    #[instrument(skip(self), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
+    #[instrument(skip(self,buffer), level=Level::TRACE, ret, err(Debug, level=Level::WARN))]
     fn set_extended_attributes(
         &self,
         context: &Self::FileContext,

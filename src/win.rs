@@ -1,10 +1,11 @@
 #![cfg(windows)]
 
-use anyhow::bail;
 use windows::Win32::Foundation::NTSTATUS;
+use windows::Win32::System::WindowsProgramming::RtlInitUnicodeString;
 use windows::{Win32::Foundation::UNICODE_STRING, core::PWSTR};
 
 use thiserror::Error;
+use winfsp::U16CString;
 
 use crate::AssertOk;
 
@@ -15,7 +16,7 @@ pub struct NtError {
 }
 
 pub struct OwnedUnicodeString {
-    pub utf16str: Vec<u16>,
+    pub u16cstr: U16CString,
     pub unicode_string: UNICODE_STRING,
 }
 
@@ -23,17 +24,17 @@ impl TryFrom<&str> for OwnedUnicodeString {
     type Error = anyhow::Error;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let utf16str: Vec<u16> = value.encode_utf16().collect();
-        if utf16str.len() >= u16::MAX.into() {
-            bail!("string too long ({}) for NT API", utf16str.len());
-        }
-        let un = UNICODE_STRING {
-            Length: utf16str.len() as u16,
-            MaximumLength: utf16str.len() as u16,
-            Buffer: PWSTR(utf16str.as_ptr().cast_mut()),
+        let mut u16cstr = U16CString::from_str(value)?;
+        let mut un = UNICODE_STRING {
+            Length: 0,
+            MaximumLength: 0,
+            Buffer: PWSTR::null(),
         };
+        unsafe {
+            RtlInitUnicodeString(&raw mut un, PWSTR::from_raw(u16cstr.as_mut_ptr()));
+        }
         Ok(Self {
-            utf16str,
+            u16cstr,
             unicode_string: un,
         })
     }

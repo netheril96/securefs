@@ -246,7 +246,7 @@ pub(super) struct LiteWinFspCore {
 
 impl LiteWinFspCore {
     fn translate_full(&self, file_name: &U16CStr) -> anyhow::Result<(String, OwnedUnicodeString)> {
-        let file_name = String::from_utf16(file_name.as_slice())?;
+        let file_name = file_name.to_string()?;
         let mut joined = String::with_capacity(file_name.len() * 2);
         for part in file_name.split('\\') {
             if part.trim().is_empty() {
@@ -293,7 +293,7 @@ impl LiteWinFspCore {
         unsafe {
             NtCreateFile(
                 &raw mut handle,
-                desired_access,
+                desired_access | FILE_READ_ATTRIBUTES | READ_CONTROL,
                 &raw const obj_attr,
                 &raw mut io_status_block,
                 None,
@@ -419,9 +419,9 @@ impl WinFspFileSystemCore for LiteWinFspCore {
             let (handle, _) = self.nt_create_file(
                 file_name,
                 READ_CONTROL | FILE_READ_ATTRIBUTES,
-                FILE_FLAG_OPEN_REPARSE_POINT,
+                Default::default(),
                 FILE_OPEN,
-                FILE_OPEN_REPARSE_POINT,
+                Default::default(),
                 PSECURITY_DESCRIPTOR(std::ptr::null_mut()),
             )?;
             common(HANDLE(handle.as_raw_handle()))
@@ -561,9 +561,7 @@ impl WinFspFileSystemCore for LiteWinFspCore {
                     return Ok(0);
                 }
                 if offset + u64::try_from(buffer.len())? > size {
-                    buffer = buffer.get(0..(size - offset).try_into()?).ok_or(NtError {
-                        status: STATUS_BUFFER_OVERFLOW,
-                    })?;
+                    buffer = &buffer[0..(size - offset).try_into()?];
                 }
             }
             stream.write(buffer, offset)?;
@@ -571,6 +569,29 @@ impl WinFspFileSystemCore for LiteWinFspCore {
             file_info.file_size = stream.size()?;
             Ok(buffer.len().try_into()?)
         })
+    }
+
+    fn get_file_info(
+        &self,
+        context: &Self::FileContext,
+        file_info: &mut FileInfo,
+    ) -> anyhow::Result<()> {
+        *file_info = context.get_file_info()?;
+        Ok(())
+    }
+
+    fn get_volume_info(
+        &self,
+        out_volume_info: &mut winfsp::filesystem::VolumeInfo,
+    ) -> anyhow::Result<()> {
+        let fs_size = volume::get_size(HANDLE(self.root_dir.dir.as_raw_handle()))?;
+        out_volume_info.free_size = u64::try_from(fs_size.AvailableAllocationUnits)?
+            * u64::try_from(fs_size.BytesPerSector)?
+            * u64::try_from(fs_size.SectorsPerAllocationUnit)?;
+        out_volume_info.total_size = u64::try_from(fs_size.TotalAllocationUnits)?
+            * u64::try_from(fs_size.BytesPerSector)?
+            * u64::try_from(fs_size.SectorsPerAllocationUnit)?;
+        Ok(())
     }
 }
 
@@ -636,7 +657,11 @@ pub mod testing {
     use protobuf::MessageField;
     use windows::{
         Wdk::Storage::FileSystem::RtlDosPathNameToNtPathName_U_WithStatus,
-        Win32::{Foundation::UNICODE_STRING, System::WindowsProgramming::RtlFreeUnicodeString},
+        Win32::{
+            Foundation::UNICODE_STRING,
+            Storage::FileSystem::{FILE_LIST_DIRECTORY, FILE_TRAVERSE},
+            System::WindowsProgramming::RtlFreeUnicodeString,
+        },
         core::PWSTR,
     };
     use winfsp::FspError;
@@ -718,7 +743,7 @@ pub mod testing {
             let mut h = HANDLE::default();
             NtCreateFile(
                 &mut h,
-                FILE_GENERIC_READ,
+                FILE_READ_ATTRIBUTES | READ_CONTROL | FILE_LIST_DIRECTORY | FILE_TRAVERSE,
                 &raw const obj_attr,
                 &raw mut iosb,
                 None,
