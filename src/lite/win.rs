@@ -37,7 +37,7 @@ use windows::{
     Win32::{
         Foundation::{
             HANDLE, OBJ_CASE_INSENSITIVE, OBJ_OPENLINK, STATUS_BUFFER_OVERFLOW,
-            STATUS_FILE_IS_A_DIRECTORY, STATUS_NOT_CAPABLE,
+            STATUS_FILE_IS_A_DIRECTORY, STATUS_INVALID_PARAMETER, STATUS_NOT_CAPABLE,
         },
         Security::{
             DACL_SECURITY_INFORMATION, GROUP_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
@@ -282,7 +282,7 @@ impl LiteWinFspCore {
             Length: std::mem::size_of::<OBJECT_ATTRIBUTES>().try_into()?,
             RootDirectory: HANDLE(self.root_dir.dir.as_raw_handle()),
             ObjectName: &raw const encoded_un.unicode_string,
-            Attributes: (OBJ_CASE_INSENSITIVE | OBJ_OPENLINK),
+            Attributes: (OBJ_CASE_INSENSITIVE),
             SecurityDescriptor: security_descriptor.0 as _,
             SecurityQualityOfService: std::ptr::null(),
         };
@@ -337,13 +337,29 @@ impl LiteWinFspCore {
 }
 
 impl LiteWinFspCore {
-    pub fn fill_volume_params(params: &mut VolumeParams) {
+    pub fn fill_volume_params(&self, params: &mut VolumeParams) -> anyhow::Result<()> {
+        let fs_attr = volume::get_attr(HANDLE(self.root_dir.dir.as_raw_handle()))?;
+        let fs_size = volume::get_size(HANDLE(self.root_dir.dir.as_raw_handle()))?;
         params
+            .sector_size(fs_size.BytesPerSector as _)
+            .sectors_per_allocation_unit(fs_size.SectorsPerAllocationUnit as _)
+            .max_component_length(
+                self.root_dir
+                    .name_translator
+                    .max_virtual_path_component_size(
+                        unsafe { fs_attr.as_ref() }
+                            .MaximumComponentNameLength
+                            .try_into()?,
+                    )
+                    .try_into()?,
+            )
             .case_preserved_names(true)
             .case_sensitive_search(true)
             .persistent_acls(true)
             .post_disposition_only_when_necessary(true)
             .unicode_on_disk(true);
+
+        Ok(())
     }
 }
 
@@ -559,6 +575,7 @@ impl WinFspFileSystemCore for LiteWinFspCore {
 }
 
 mod volume {
+    use anyhow::Context;
     use std::ffi::c_void;
     use std::mem::MaybeUninit;
     use windows::Wdk::Storage::FileSystem::{
@@ -589,7 +606,8 @@ mod volume {
                 info.len() as u32,
                 FileFsAttributeInformation,
             )
-            .assert_ok()?;
+            .assert_ok()
+            .context("NtQueryVolumeInformationFile")?;
         }
         Ok(info)
     }
@@ -606,9 +624,156 @@ mod volume {
                 std::mem::size_of::<FILE_FS_SIZE_INFORMATION>() as u32,
                 FileFsSizeInformation,
             )
-            .assert_ok()?;
+            .assert_ok()
+            .context("NtQueryVolumeInformationFile")?;
         };
 
         Ok(info)
+    }
+}
+
+pub mod testing {
+    use protobuf::MessageField;
+    use windows::{
+        Wdk::Storage::FileSystem::RtlDosPathNameToNtPathName_U_WithStatus,
+        Win32::{Foundation::UNICODE_STRING, System::WindowsProgramming::RtlFreeUnicodeString},
+        core::PWSTR,
+    };
+    use winfsp::FspError;
+    use winfsp::{
+        U16CString,
+        host::{FileSystemHost, MountPoint},
+        service::FileSystemServiceBuilder,
+        winfsp_init_or_die,
+    };
+
+    use crate::{
+        lite::{LiteAesGcmCryptStreamFactory, name_translators::create_name_translator},
+        protos::params::{
+            DecryptedSecurefsParams, MountOptions,
+            decrypted_securefs_params::{LiteFormatParams, SizeParams},
+        },
+        winfsp_wrappers::TracedWinFspWrapper,
+    };
+
+    use super::*;
+
+    pub fn test_main() -> anyhow::Result<()> {
+        let dec_params = DecryptedSecurefsParams {
+            size_params: MessageField::some(SizeParams {
+                block_size: 333,
+                iv_size: 12,
+                max_padding_size: 17,
+                special_fields: Default::default(),
+            }),
+            format_specific_params: Some(crate::protos::params::decrypted_securefs_params::Format_specific_params::LiteFormatParams(LiteFormatParams {
+                name_key: vec![7u8;32],
+                content_key: vec![8u8;32],
+                xattr_key: vec![9u8;32],
+                padding_key:vec![10u8;32],
+                long_name_threshold: Some(12),
+                long_name_suffix: ".LONG".into(),
+                disable_legacy_additional_encryption_after_hashing_long_name: true,
+                special_fields: Default::default(),
+            })),
+            special_fields: Default::default(),
+        };
+        let mount_options = MountOptions {
+            mount_type_specific: Some(
+                crate::protos::params::mount_options::Mount_type_specific::MountByKernelExt(
+                    Default::default(),
+                ),
+            ),
+            ..Default::default()
+        };
+        let mut root_tmp_dir = tempfile::TempDir::new()?;
+        root_tmp_dir.disable_cleanup(true);
+        tracing::info!("Root tmp dir: {:?}", root_tmp_dir.path());
+
+        let handle = unsafe {
+            let mut ntfilename: UNICODE_STRING = std::mem::zeroed();
+            RtlDosPathNameToNtPathName_U_WithStatus(
+                PWSTR::from_raw(
+                    U16CString::from_os_str_truncate(root_tmp_dir.path().as_os_str()).as_mut_ptr(),
+                ),
+                &raw mut ntfilename,
+                None,
+                None,
+            )
+            .assert_ok()
+            .context("RtlDosPathNameToNtPathName_U_WithStatus")?;
+            let ntfilename = scopeguard::guard(ntfilename, |mut n| {
+                RtlFreeUnicodeString(&raw mut n);
+            });
+
+            let obj_attr = OBJECT_ATTRIBUTES {
+                Length: std::mem::size_of::<OBJECT_ATTRIBUTES>().try_into()?,
+                RootDirectory: HANDLE::default(),
+                ObjectName: &raw const *ntfilename,
+                Attributes: OBJ_CASE_INSENSITIVE,
+                SecurityDescriptor: std::ptr::null(),
+                SecurityQualityOfService: std::ptr::null(),
+            };
+            let mut iosb: IO_STATUS_BLOCK = std::mem::zeroed();
+            let mut h = HANDLE::default();
+            NtCreateFile(
+                &mut h,
+                FILE_GENERIC_READ,
+                &raw const obj_attr,
+                &raw mut iosb,
+                None,
+                FILE_ATTRIBUTE_DIRECTORY,
+                FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+                FILE_OPEN,
+                FILE_DIRECTORY_FILE,
+                None,
+                0,
+            )
+            .assert_ok()
+            .context("NtCreateFile")?;
+            OwnedFileDescriptor::from_raw_handle(h.0)
+        };
+
+        let root_dir = LiteDirContext {
+            dir: handle,
+            full_path: std::fs::canonicalize(root_tmp_dir.path())?,
+            name_translator: create_name_translator(dec_params.lite_format_params())?,
+            long_name_table: Default::default(),
+        };
+        let core = LiteWinFspCore {
+            root_dir,
+            factory: Box::new(LiteAesGcmCryptStreamFactory::new_from_params(
+                &dec_params,
+                true,
+            )?),
+        };
+
+        let mut volume_params = VolumeParams::new();
+        core.fill_volume_params(&mut volume_params)?;
+
+        let start_data = Arc::new(Mutex::new(Some((core, volume_params))));
+
+        let init = winfsp_init_or_die();
+        let fsp = FileSystemServiceBuilder::new()
+            .with_start(|| {
+                let (core, volume_params) = start_data
+                    .lock()
+                    .take()
+                    .ok_or(FspError::NTSTATUS(STATUS_INVALID_PARAMETER.0))?;
+                let mut host = FileSystemHost::new(volume_params, TracedWinFspWrapper::from(core))?;
+                host.mount(MountPoint::NextFreeDrive)?;
+                host.start_with_threads(32)?;
+                Ok(host)
+            })
+            .with_stop(|h| {
+                if let Some(h) = h {
+                    h.stop();
+                }
+                Ok(())
+            })
+            .build("securefs", init)?;
+
+        fsp.start().join().expect("thread join should succeed")?;
+        Ok(())
     }
 }

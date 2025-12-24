@@ -15,4 +15,11 @@ fn main() {
 
         simple_test_fuse_main().expect("run should succeed");
     }
+
+    #[cfg(windows)]
+    {
+        use securefs::lite::win::testing::test_main;
+
+        test_main().expect("run should succeed");
+    }
 }
