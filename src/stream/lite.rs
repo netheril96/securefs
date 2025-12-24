@@ -109,15 +109,16 @@ impl<S: Stream> LiteAesGcmCryptStream<S> {
                 if padding_size > 0 {
                     aux.resize(usize::try_from(padding_size)? + size_of::<u32>(), 0);
                     fill_with_random(&mut aux[size_of::<u32>()..]);
+                    inner.write(&aux[size_of::<u32>()..], ID_SIZE.try_into()?)?;
                 } else {
                     aux.resize(size_of::<u32>(), 0);
                 }
-                inner.write(&aux, 0)?;
             } else if rc == id.len().try_into()? {
                 padding_size = lite_param_calc.compute_padding(&id)?;
                 aux.resize(usize::try_from(padding_size)? + size_of::<u32>(), 0);
-                aux[..id.len()].copy_from_slice(&id);
-                if padding_size > 0 && inner.read(&mut aux[size_of::<u32>()..], 0)? != padding_size
+                if padding_size > 0
+                    && inner.read(&mut aux[size_of::<u32>()..], ID_SIZE.try_into()?)?
+                        != padding_size
                 {
                     return Err(LiteAesGcmCryptError::InvalidHeader.into());
                 }
@@ -370,6 +371,35 @@ mod test {
     use crate::stream::{MemoryStream, test::compare_with_reference};
 
     use super::*;
+    impl Stream for &mut MemoryStream {
+        fn read(&mut self, buffer: &mut [u8], offset: OffsetType) -> anyhow::Result<LengthType> {
+            (*self).read(buffer, offset)
+        }
+
+        fn write(&mut self, buffer: &[u8], offset: OffsetType) -> anyhow::Result<()> {
+            (*self).write(buffer, offset)
+        }
+
+        fn size(&self) -> anyhow::Result<LengthType> {
+            MemoryStream::size(*self)
+        }
+
+        fn flush(&mut self) -> anyhow::Result<()> {
+            (*self).flush()
+        }
+
+        fn resize(&mut self, size: LengthType) -> anyhow::Result<()> {
+            (*self).resize(size)
+        }
+
+        fn lock_source(&mut self) -> anyhow::Result<()> {
+            (*self).lock_source()
+        }
+
+        fn unlock_source(&mut self) -> anyhow::Result<()> {
+            (*self).unlock_source()
+        }
+    }
 
     #[rstest]
     fn test_aes_gcm_stream(
@@ -398,9 +428,28 @@ mod test {
                 self.padding_size == 0
             }
         }
+        let mut inner = MemoryStream { buffer: Vec::new() };
+
         compare_with_reference(
             &mut LiteAesGcmCryptStream::new(
-                MemoryStream { buffer: Vec::new() },
+                &mut inner,
+                &ParamCalc {
+                    padding_size: padding_size,
+                },
+                iv_size,
+                block_size,
+                MessageAuthenticationCodeVerificationMode::Verify,
+            )
+            .unwrap(),
+            &mut MemoryStream { buffer: Vec::new() },
+            1000,
+        )
+        .unwrap();
+
+        // Do it again, reading from an initialized LiteAesGcmCryptStream is different.
+        compare_with_reference(
+            &mut LiteAesGcmCryptStream::new(
+                &mut inner,
                 &ParamCalc {
                     padding_size: padding_size,
                 },
