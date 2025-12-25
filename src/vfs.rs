@@ -117,7 +117,7 @@ impl<T: 'static> GenericINodeTable<T> for ShardedMapINodeTable<T> {
             let row: Tearc<OnceCell<T>> = self.table[self.get_index(ino)]
                 .lock()
                 .entry(ino)
-                .or_insert_with(Default::default)
+                .or_default()
                 .clone();
             Tearc::try_map_or_err(row, |o| o.get_or_try_init(f))
         }

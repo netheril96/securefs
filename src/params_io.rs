@@ -119,7 +119,7 @@ fn try_legacy_password_derived_key(
 
 fn get_version_header(version: u32) -> Result<&'static [u8]> {
     match version {
-        1 | 2 | 3 => Ok(b"version=1"), // Legacy mistake that we have to carry on
+        1..=3 => Ok(b"version=1"), // Legacy mistake that we have to carry on
         4 => Ok(b"version=4"),
         _ => bail!("Unknown format version: {}", version),
     }

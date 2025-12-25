@@ -161,8 +161,8 @@ impl INodeCore<rustix::fs::Stat> for LiteFileINode {
         if uid.is_some() || gid.is_some() {
             rustix::fs::fchown(
                 fd,
-                uid.map(|u| Uid::from_raw(u)),
-                gid.map(|g| Gid::from_raw(g)),
+                uid.map(Uid::from_raw),
+                gid.map(Gid::from_raw),
             )?;
         }
 
@@ -205,7 +205,7 @@ impl FileINodeExt for LiteFileINode {
 
     fn write(&self, data: &[u8], offset: u64) -> anyhow::Result<()> {
         let mut guard = self.inner.lock();
-        LiteFileINode::upgrade_to_writable(&mut *guard)?;
+        LiteFileINode::upgrade_to_writable(&mut guard)?;
         guard.stream.write(data, offset)
     }
 
@@ -215,7 +215,7 @@ impl FileINodeExt for LiteFileINode {
 
     fn append(&self, data: &[u8]) -> anyhow::Result<()> {
         let mut guard = self.inner.lock();
-        LiteFileINode::upgrade_to_writable(&mut *guard)?;
+        LiteFileINode::upgrade_to_writable(&mut guard)?;
         let size = guard.stream.size()?;
         guard.stream.write(data, size)?;
         Ok(())
@@ -371,8 +371,8 @@ impl INodeCore<rustix::fs::Stat> for LiteDirINode {
         if uid.is_some() || gid.is_some() {
             rustix::fs::fchown(
                 self.as_fd(),
-                uid.map(|u| Uid::from_raw(u)),
-                gid.map(|g| Gid::from_raw(g)),
+                uid.map(Uid::from_raw),
+                gid.map(Gid::from_raw),
             )?;
         }
         if let Some(size) = size {
@@ -613,8 +613,8 @@ impl INodeCore<rustix::fs::Stat> for LiteSymlinkINode {
                 rustix::fs::chownat(
                     self.fd.as_fd(),
                     path,
-                    uid.map(|u| Uid::from_raw(u)),
-                    gid.map(|g| Gid::from_raw(g)),
+                    uid.map(Uid::from_raw),
+                    gid.map(Gid::from_raw),
                     AtFlags::SYMLINK_NOFOLLOW,
                 )?;
             }
@@ -640,8 +640,8 @@ impl INodeCore<rustix::fs::Stat> for LiteSymlinkINode {
             if uid.is_some() || gid.is_some() {
                 rustix::fs::fchown(
                     self.fd.as_fd(),
-                    uid.map(|u| Uid::from_raw(u)),
-                    gid.map(|g| Gid::from_raw(g)),
+                    uid.map(Uid::from_raw),
+                    gid.map(Gid::from_raw),
                 )?;
             }
 
