@@ -434,7 +434,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         security_descriptor: Option<&mut [c_void]>,
         reparse_point_resolver: impl FnOnce(&U16CStr) -> Option<FileSecurity>,
     ) -> Result<FileSecurity> {
-        let _span = span!(Level::DEBUG, "get_security_by_name").entered();
+        let _span = span!(Level::ERROR, "get_security_by_name").entered();
         match self.inner.get_security_by_name(
             file_name,
             security_descriptor,
@@ -466,7 +466,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         granted_access: FILE_ACCESS_RIGHTS,
         file_info: &mut OpenFileInfo,
     ) -> Result<Self::FileContext> {
-        let _span = span!(Level::DEBUG, "open").entered();
+        let _span = span!(Level::ERROR, "open").entered();
         match self
             .inner
             .open(file_name, create_options, granted_access, file_info)
@@ -489,7 +489,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
     }
 
     fn close(&self, context: Self::FileContext) {
-        let _span = span!(Level::DEBUG, "close").entered();
+        let _span = span!(Level::ERROR, "close").entered();
         self.inner.close(context);
     }
 
@@ -505,7 +505,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         extra_buffer_is_reparse_point: bool,
         file_info: &mut OpenFileInfo,
     ) -> Result<Self::FileContext> {
-        let _span = span!(Level::DEBUG, "create").entered();
+        let _span = span!(Level::ERROR, "create").entered();
         match self.inner.create(
             file_name,
             create_options,
@@ -547,13 +547,13 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         }
     }
     fn cleanup(&self, context: &Self::FileContext, file_name: Option<&U16CStr>, flags: u32) {
-        let _span = span!(Level::DEBUG, "cleanup").entered();
+        let _span = span!(Level::ERROR, "cleanup").entered();
         self.inner.cleanup(context, file_name, flags);
         tracing::debug!(?context, ?file_name, flags);
     }
 
     fn flush(&self, context: Option<&Self::FileContext>, file_info: &mut FileInfo) -> Result<()> {
-        let _span = span!(Level::DEBUG, "flush").entered();
+        let _span = span!(Level::ERROR, "flush").entered();
         match self.inner.flush(context, file_info) {
             Ok(ret) => {
                 tracing::debug!(?context, ?ret, ?file_info);
@@ -567,7 +567,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
     }
 
     fn get_file_info(&self, context: &Self::FileContext, file_info: &mut FileInfo) -> Result<()> {
-        let _span = span!(Level::DEBUG, "get_file_info").entered();
+        let _span = span!(Level::ERROR, "get_file_info").entered();
         match self.inner.get_file_info(context, file_info) {
             Ok(ret) => {
                 tracing::debug!(?context, ?ret, ?file_info);
@@ -585,7 +585,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         context: &Self::FileContext,
         security_descriptor: Option<&mut [c_void]>,
     ) -> Result<u64> {
-        let _span = span!(Level::DEBUG, "get_security").entered();
+        let _span = span!(Level::ERROR, "get_security").entered();
         match self.inner.get_security(context, security_descriptor) {
             Ok(ret) => {
                 tracing::debug!(?context, ?ret);
@@ -604,7 +604,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         security_information: u32,
         modification_descriptor: ModificationDescriptor,
     ) -> Result<()> {
-        let _span = span!(Level::DEBUG, "set_security").entered();
+        let _span = span!(Level::ERROR, "set_security").entered();
         match self
             .inner
             .set_security(context, security_information, modification_descriptor)
@@ -629,7 +629,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         extra_buffer: Option<&[u8]>,
         file_info: &mut FileInfo,
     ) -> Result<()> {
-        let _span = span!(Level::DEBUG, "overwrite").entered();
+        let _span = span!(Level::ERROR, "overwrite").entered();
         match self.inner.overwrite(
             context,
             file_attributes,
@@ -671,7 +671,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         marker: DirMarker,
         buffer: &mut [u8],
     ) -> Result<u32> {
-        let _span = span!(Level::DEBUG, "read_directory").entered();
+        let _span = span!(Level::ERROR, "read_directory").entered();
         match self.inner.read_directory(context, pattern, marker, buffer) {
             Ok(ret) => {
                 tracing::debug!(?context, ?pattern, buffer.len = buffer.len(), ?ret);
@@ -691,7 +691,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         new_file_name: &U16CStr,
         replace_if_exists: bool,
     ) -> Result<()> {
-        let _span = span!(Level::DEBUG, "rename").entered();
+        let _span = span!(Level::ERROR, "rename").entered();
         match self
             .inner
             .rename(context, file_name, new_file_name, replace_if_exists)
@@ -729,7 +729,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         last_change_time: u64,
         file_info: &mut FileInfo,
     ) -> Result<()> {
-        let _span = span!(Level::DEBUG, "set_basic_info").entered();
+        let _span = span!(Level::ERROR, "set_basic_info").entered();
         match self.inner.set_basic_info(
             context,
             file_attributes,
@@ -773,7 +773,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         file_name: &U16CStr,
         delete_file: bool,
     ) -> Result<()> {
-        let _span = span!(Level::DEBUG, "set_delete").entered();
+        let _span = span!(Level::ERROR, "set_delete").entered();
         match self.inner.set_delete(context, file_name, delete_file) {
             Ok(ret) => {
                 tracing::debug!(?context, ?file_name, delete_file, ?ret);
@@ -793,7 +793,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         set_allocation_size: bool,
         file_info: &mut FileInfo,
     ) -> Result<()> {
-        let _span = span!(Level::DEBUG, "set_file_size").entered();
+        let _span = span!(Level::ERROR, "set_file_size").entered();
         match self
             .inner
             .set_file_size(context, new_size, set_allocation_size, file_info)
@@ -810,7 +810,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
     }
 
     fn read(&self, context: &Self::FileContext, buffer: &mut [u8], offset: u64) -> Result<u32> {
-        let _span = span!(Level::DEBUG, "read").entered();
+        let _span = span!(Level::ERROR, "read").entered();
         match self.inner.read(context, buffer, offset) {
             Ok(ret) => {
                 tracing::debug!(?context, offset, buffer.len = buffer.len(), ?ret);
@@ -832,7 +832,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         constrained_io: bool,
         file_info: &mut FileInfo,
     ) -> Result<u32> {
-        let _span = span!(Level::DEBUG, "write").entered();
+        let _span = span!(Level::ERROR, "write").entered();
         match self.inner.write(
             context,
             buffer,
@@ -873,7 +873,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         file_name: &U16CStr,
         out_dir_info: &mut DirInfo,
     ) -> Result<()> {
-        let _span = span!(Level::DEBUG, "get_dir_info_by_name").entered();
+        let _span = span!(Level::ERROR, "get_dir_info_by_name").entered();
         match self
             .inner
             .get_dir_info_by_name(context, file_name, out_dir_info)
@@ -890,7 +890,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
     }
 
     fn get_volume_info(&self, out_volume_info: &mut VolumeInfo) -> Result<()> {
-        let _span = span!(Level::DEBUG, "get_volume_info").entered();
+        let _span = span!(Level::ERROR, "get_volume_info").entered();
         match self.inner.get_volume_info(out_volume_info) {
             Ok(ret) => {
                 tracing::debug!(?ret);
@@ -904,7 +904,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
     }
 
     fn set_volume_label(&self, volume_label: &U16CStr, volume_info: &mut VolumeInfo) -> Result<()> {
-        let _span = span!(Level::DEBUG, "set_volume_label").entered();
+        let _span = span!(Level::ERROR, "set_volume_label").entered();
         match self.inner.set_volume_label(volume_label, volume_info) {
             Ok(ret) => {
                 tracing::debug!(?volume_label, ?ret);
@@ -918,7 +918,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
     }
 
     fn get_stream_info(&self, context: &Self::FileContext, buffer: &mut [u8]) -> Result<u32> {
-        let _span = span!(Level::DEBUG, "get_stream_info").entered();
+        let _span = span!(Level::ERROR, "get_stream_info").entered();
         match self.inner.get_stream_info(context, buffer) {
             Ok(ret) => {
                 tracing::debug!(?context, buffer.len = buffer.len(), ?ret);
@@ -937,7 +937,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         is_directory: bool,
         buffer: &mut [u8],
     ) -> Result<u64> {
-        let _span = span!(Level::DEBUG, "get_reparse_point_by_name").entered();
+        let _span = span!(Level::ERROR, "get_reparse_point_by_name").entered();
         match self
             .inner
             .get_reparse_point_by_name(file_name, is_directory, buffer)
@@ -959,7 +959,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         file_name: &U16CStr,
         buffer: &mut [u8],
     ) -> Result<u64> {
-        let _span = span!(Level::DEBUG, "get_reparse_point").entered();
+        let _span = span!(Level::ERROR, "get_reparse_point").entered();
         match self.inner.get_reparse_point(context, file_name, buffer) {
             Ok(ret) => {
                 tracing::debug!(?context, ?file_name, buffer.len = buffer.len(), ?ret);
@@ -978,7 +978,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         file_name: &U16CStr,
         buffer: &[u8],
     ) -> Result<()> {
-        let _span = span!(Level::DEBUG, "set_reparse_point").entered();
+        let _span = span!(Level::ERROR, "set_reparse_point").entered();
         match self.inner.set_reparse_point(context, file_name, buffer) {
             Ok(ret) => {
                 tracing::debug!(?context, ?file_name, buffer.len = buffer.len(), ?ret);
@@ -997,7 +997,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         file_name: &U16CStr,
         buffer: &[u8],
     ) -> Result<()> {
-        let _span = span!(Level::DEBUG, "delete_reparse_point").entered();
+        let _span = span!(Level::ERROR, "delete_reparse_point").entered();
         match self.inner.delete_reparse_point(context, file_name, buffer) {
             Ok(ret) => {
                 tracing::debug!(?context, ?file_name, buffer.len = buffer.len(), ?ret);
@@ -1015,7 +1015,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         context: &Self::FileContext,
         buffer: &mut [u8],
     ) -> Result<u32> {
-        let _span = span!(Level::DEBUG, "get_extended_attributes").entered();
+        let _span = span!(Level::ERROR, "get_extended_attributes").entered();
         match self.inner.get_extended_attributes(context, buffer) {
             Ok(ret) => {
                 tracing::debug!(?context, buffer.len = buffer.len(), ?ret);
@@ -1034,7 +1034,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         buffer: &[u8],
         file_info: &mut FileInfo,
     ) -> Result<()> {
-        let _span = span!(Level::DEBUG, "set_extended_attributes").entered();
+        let _span = span!(Level::ERROR, "set_extended_attributes").entered();
         match self
             .inner
             .set_extended_attributes(context, buffer, file_info)
@@ -1057,7 +1057,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
         input: &[u8],
         output: &mut [u8],
     ) -> Result<u32> {
-        let _span = span!(Level::DEBUG, "control").entered();
+        let _span = span!(Level::ERROR, "control").entered();
         match self.inner.control(context, control_code, input, output) {
             Ok(ret) => {
                 tracing::debug!(
@@ -1083,7 +1083,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
     }
 
     fn dispatcher_stopped(&self, normally: bool) {
-        let _span = span!(Level::DEBUG, "dispatcher_stopped").entered();
+        let _span = span!(Level::ERROR, "dispatcher_stopped").entered();
         self.inner.dispatcher_stopped(normally);
         tracing::debug!(normally);
     }

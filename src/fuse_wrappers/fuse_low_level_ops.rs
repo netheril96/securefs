@@ -4,7 +4,7 @@ use std::{
 };
 
 use rustix::io::Errno;
-use tracing::{Level, instrument};
+use tracing::{Level, span};
 
 use crate::{
     fuse_wrappers::bindings::{
@@ -460,55 +460,87 @@ impl<T: FuseLowLevelOps> From<T> for TracedFuseOpsWrapper<T> {
 }
 
 impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
-    #[instrument(skip(self), ret, level=Level::TRACE)]
     fn init(&mut self, conn: fuse_conn_info) -> fuse_conn_info {
-        self.ops.init(conn)
+        let _span = span!(Level::ERROR, "init").entered();
+        let ret = self.ops.init(conn);
+        tracing::debug!(?conn, ?ret);
+        ret
     }
 
     fn can_lookup(&self) -> bool {
         self.ops.can_lookup()
     }
 
-    // Note: `lookup` errors are extremely common, so they are logged in INFO level
-    // rather than WARN level.
-    #[instrument(skip(self), ret, err(Debug, level=Level::INFO), level=Level::TRACE)]
     fn lookup(
         &self,
         req: FuseReq,
         parent: fuse_ino_t,
         name: &CStr,
     ) -> anyhow::Result<bindings::fuse_entry_param> {
-        self.ops.lookup(req, parent, name)
+        let _span = span!(Level::ERROR, "lookup").entered();
+        match self.ops.lookup(req, parent, name) {
+            Ok(ret) => {
+                tracing::debug!(?req, parent, ?name, ?ret);
+                Ok(ret)
+            }
+            Err(err) => {
+                if let Some(e) = err.downcast_ref::<Errno>()
+                    && *e == Errno::NOENT
+                {
+                    tracing::debug!(?req, parent, ?name, err = "inode not found");
+                } else {
+                    tracing::warn!(?req, parent, ?name, ?err);
+                }
+                Err(err)
+            }
+        }
     }
 
     fn can_forget(&self) -> bool {
         self.ops.can_forget()
     }
 
-    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn forget(&self, req: FuseReq, ino: fuse_ino_t, nlookup: u64) -> anyhow::Result<()> {
-        self.ops.forget(req, ino, nlookup)
+        let _span = span!(Level::ERROR, "forget").entered();
+        match self.ops.forget(req, ino, nlookup) {
+            Ok(()) => {
+                tracing::debug!(?req, ino, nlookup);
+                Ok(())
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, nlookup, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_getattr(&self) -> bool {
         self.ops.can_getattr()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn getattr(
         &self,
         req: FuseReq,
         ino: fuse_ino_t,
         fi: Option<&bindings::fuse_file_info>,
     ) -> anyhow::Result<(bindings::stat, f64)> {
-        self.ops.getattr(req, ino, fi)
+        let _span = span!(Level::ERROR, "getattr").entered();
+        match self.ops.getattr(req, ino, fi) {
+            Ok(ret) => {
+                tracing::debug!(?req, ino, ?fi, ?ret);
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, ?fi, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_setattr(&self) -> bool {
         self.ops.can_setattr()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn setattr(
         &self,
         req: FuseReq,
@@ -517,23 +549,41 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         to_set: i32,
         fi: Option<&bindings::fuse_file_info>,
     ) -> anyhow::Result<(bindings::stat, f64)> {
-        self.ops.setattr(req, ino, attr, to_set, fi)
+        let _span = span!(Level::ERROR, "setattr").entered();
+        match self.ops.setattr(req, ino, attr, to_set, fi) {
+            Ok(ret) => {
+                tracing::debug!(?req, ino, ?attr, to_set, ?fi, ?ret);
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, ?attr, to_set, ?fi, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_readlink(&self) -> bool {
         self.ops.can_readlink()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn readlink(&self, req: FuseReq, ino: fuse_ino_t) -> anyhow::Result<CString> {
-        self.ops.readlink(req, ino)
+        let _span = span!(Level::ERROR, "readlink").entered();
+        match self.ops.readlink(req, ino) {
+            Ok(ret) => {
+                tracing::debug!(?req, ino, ?ret);
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_mknod(&self) -> bool {
         self.ops.can_mknod()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn mknod(
         &self,
         req: FuseReq,
@@ -542,14 +592,23 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         mode: mode_t,
         rdev: dev_t,
     ) -> anyhow::Result<bindings::fuse_entry_param> {
-        self.ops.mknod(req, parent, name, mode, rdev)
+        let _span = span!(Level::ERROR, "mknod").entered();
+        match self.ops.mknod(req, parent, name, mode, rdev) {
+            Ok(ret) => {
+                tracing::debug!(?req, parent, ?name, mode, rdev, ?ret);
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, parent, ?name, mode, rdev, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_mkdir(&self) -> bool {
         self.ops.can_mkdir()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn mkdir(
         &self,
         req: FuseReq,
@@ -557,32 +616,59 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         name: &CStr,
         mode: mode_t,
     ) -> anyhow::Result<bindings::fuse_entry_param> {
-        self.ops.mkdir(req, parent, name, mode)
+        let _span = span!(Level::ERROR, "mkdir").entered();
+        match self.ops.mkdir(req, parent, name, mode) {
+            Ok(ret) => {
+                tracing::debug!(?req, parent, ?name, mode, ?ret);
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, parent, ?name, mode, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_unlink(&self) -> bool {
         self.ops.can_unlink()
     }
 
-    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn unlink(&self, req: FuseReq, parent: fuse_ino_t, name: &CStr) -> anyhow::Result<()> {
-        self.ops.unlink(req, parent, name)
+        let _span = span!(Level::ERROR, "unlink").entered();
+        match self.ops.unlink(req, parent, name) {
+            Ok(()) => {
+                tracing::debug!(?req, parent, ?name);
+                Ok(())
+            }
+            Err(err) => {
+                tracing::warn!(?req, parent, ?name, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_rmdir(&self) -> bool {
         self.ops.can_rmdir()
     }
 
-    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn rmdir(&self, req: FuseReq, parent: fuse_ino_t, name: &CStr) -> anyhow::Result<()> {
-        self.ops.rmdir(req, parent, name)
+        let _span = span!(Level::ERROR, "rmdir").entered();
+        match self.ops.rmdir(req, parent, name) {
+            Ok(()) => {
+                tracing::debug!(?req, parent, ?name);
+                Ok(())
+            }
+            Err(err) => {
+                tracing::warn!(?req, parent, ?name, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_symlink(&self) -> bool {
         self.ops.can_symlink()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn symlink(
         &self,
         req: FuseReq,
@@ -590,14 +676,23 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         parent: fuse_ino_t,
         name: &CStr,
     ) -> anyhow::Result<bindings::fuse_entry_param> {
-        self.ops.symlink(req, link, parent, name)
+        let _span = span!(Level::ERROR, "symlink").entered();
+        match self.ops.symlink(req, link, parent, name) {
+            Ok(ret) => {
+                tracing::debug!(?req, ?link, parent, ?name, ?ret);
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, ?link, parent, ?name, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_rename(&self) -> bool {
         self.ops.can_rename()
     }
 
-    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn rename(
         &self,
         req: FuseReq,
@@ -607,15 +702,26 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         newname: &CStr,
         flags: u32,
     ) -> anyhow::Result<()> {
-        self.ops
+        let _span = span!(Level::ERROR, "rename").entered();
+        match self
+            .ops
             .rename(req, parent, name, newparent, newname, flags)
+        {
+            Ok(()) => {
+                tracing::debug!(?req, parent, ?name, newparent, ?newname, flags);
+                Ok(())
+            }
+            Err(err) => {
+                tracing::warn!(?req, parent, ?name, newparent, ?newname, flags, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_link(&self) -> bool {
         self.ops.can_link()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn link(
         &self,
         req: FuseReq,
@@ -623,28 +729,46 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         newparent: fuse_ino_t,
         newname: &CStr,
     ) -> anyhow::Result<bindings::fuse_entry_param> {
-        self.ops.link(req, ino, newparent, newname)
+        let _span = span!(Level::ERROR, "link").entered();
+        match self.ops.link(req, ino, newparent, newname) {
+            Ok(ret) => {
+                tracing::debug!(?req, ino, newparent, ?newname, ?ret);
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, newparent, ?newname, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_open(&self) -> bool {
         self.ops.can_open()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn open(
         &self,
         req: FuseReq,
         ino: fuse_ino_t,
         fi: Option<&bindings::fuse_file_info>,
     ) -> anyhow::Result<bindings::fuse_file_info> {
-        self.ops.open(req, ino, fi)
+        let _span = span!(Level::ERROR, "open").entered();
+        match self.ops.open(req, ino, fi) {
+            Ok(ret) => {
+                tracing::debug!(?req, ino, ?fi, ?ret);
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, ?fi, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_read(&self) -> bool {
         self.ops.can_read()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level=Level::WARN), level=Level::TRACE)]
     fn read(
         &self,
         req: FuseReq,
@@ -653,14 +777,23 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         off: off_t,
         fi: Option<&bindings::fuse_file_info>,
     ) -> anyhow::Result<Vec<u8>> {
-        self.ops.read(req, ino, size, off, fi)
+        let _span = span!(Level::ERROR, "read").entered();
+        match self.ops.read(req, ino, size, off, fi) {
+            Ok(ret) => {
+                tracing::debug!(?req, ino, size, off, ?fi, ret.len = ret.len());
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, size, off, ?fi, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_write(&self) -> bool {
         self.ops.can_write()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level=Level::WARN), level=Level::TRACE, fields(len=buf.len()))]
     fn write(
         &self,
         req: FuseReq,
@@ -669,42 +802,69 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         off: off_t,
         fi: Option<&bindings::fuse_file_info>,
     ) -> anyhow::Result<usize> {
-        self.ops.write(req, ino, buf, off, fi)
+        let _span = span!(Level::ERROR, "write").entered();
+        match self.ops.write(req, ino, buf, off, fi) {
+            Ok(ret) => {
+                tracing::debug!(?req, ino, buf.len = buf.len(), off, ?fi, ?ret);
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, buf.len = buf.len(), off, ?fi, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_flush(&self) -> bool {
         self.ops.can_flush()
     }
 
-    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn flush(
         &self,
         req: FuseReq,
         ino: fuse_ino_t,
         fi: Option<&bindings::fuse_file_info>,
     ) -> anyhow::Result<()> {
-        self.ops.flush(req, ino, fi)
+        let _span = span!(Level::ERROR, "flush").entered();
+        match self.ops.flush(req, ino, fi) {
+            Ok(()) => {
+                tracing::debug!(?req, ino, ?fi);
+                Ok(())
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, ?fi, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_release(&self) -> bool {
         self.ops.can_release()
     }
 
-    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn release(
         &self,
         req: FuseReq,
         ino: fuse_ino_t,
         fi: Option<&bindings::fuse_file_info>,
     ) -> anyhow::Result<()> {
-        self.ops.release(req, ino, fi)
+        let _span = span!(Level::ERROR, "release").entered();
+        match self.ops.release(req, ino, fi) {
+            Ok(()) => {
+                tracing::debug!(?req, ino, ?fi);
+                Ok(())
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, ?fi, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_fsync(&self) -> bool {
         self.ops.can_fsync()
     }
 
-    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn fsync(
         &self,
         req: FuseReq,
@@ -712,28 +872,46 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         datasync: i32,
         fi: Option<&bindings::fuse_file_info>,
     ) -> anyhow::Result<()> {
-        self.ops.fsync(req, ino, datasync, fi)
+        let _span = span!(Level::ERROR, "fsync").entered();
+        match self.ops.fsync(req, ino, datasync, fi) {
+            Ok(()) => {
+                tracing::debug!(?req, ino, datasync, ?fi);
+                Ok(())
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, datasync, ?fi, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_opendir(&self) -> bool {
         self.ops.can_opendir()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn opendir(
         &self,
         req: FuseReq,
         ino: fuse_ino_t,
         fi: Option<&bindings::fuse_file_info>,
     ) -> anyhow::Result<bindings::fuse_file_info> {
-        self.ops.opendir(req, ino, fi)
+        let _span = span!(Level::ERROR, "opendir").entered();
+        match self.ops.opendir(req, ino, fi) {
+            Ok(ret) => {
+                tracing::debug!(?req, ino, ?fi, ?ret);
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, ?fi, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_readdir(&self) -> bool {
         self.ops.can_readdir()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn readdir(
         &self,
         req: FuseReq,
@@ -742,28 +920,46 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         off: off_t,
         fi: Option<&bindings::fuse_file_info>,
     ) -> anyhow::Result<Vec<u8>> {
-        self.ops.readdir(req, ino, size, off, fi)
+        let _span = span!(Level::ERROR, "readdir").entered();
+        match self.ops.readdir(req, ino, size, off, fi) {
+            Ok(ret) => {
+                tracing::debug!(?req, ino, size, off, ?fi, ret.len = ret.len());
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, size, off, ?fi, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_releasedir(&self) -> bool {
         self.ops.can_releasedir()
     }
 
-    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn releasedir(
         &self,
         req: FuseReq,
         ino: fuse_ino_t,
         fi: Option<&bindings::fuse_file_info>,
     ) -> anyhow::Result<()> {
-        self.ops.releasedir(req, ino, fi)
+        let _span = span!(Level::ERROR, "releasedir").entered();
+        match self.ops.releasedir(req, ino, fi) {
+            Ok(()) => {
+                tracing::debug!(?req, ino, ?fi);
+                Ok(())
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, ?fi, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_fsyncdir(&self) -> bool {
         self.ops.can_fsyncdir()
     }
 
-    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn fsyncdir(
         &self,
         req: FuseReq,
@@ -771,23 +967,41 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         datasync: i32,
         fi: Option<&bindings::fuse_file_info>,
     ) -> anyhow::Result<()> {
-        self.ops.fsyncdir(req, ino, datasync, fi)
+        let _span = span!(Level::ERROR, "fsyncdir").entered();
+        match self.ops.fsyncdir(req, ino, datasync, fi) {
+            Ok(()) => {
+                tracing::debug!(?req, ino, datasync, ?fi);
+                Ok(())
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, datasync, ?fi, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_statfs(&self) -> bool {
         self.ops.can_statfs()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn statfs(&self, req: FuseReq, ino: fuse_ino_t) -> anyhow::Result<statvfs> {
-        self.ops.statfs(req, ino)
+        let _span = span!(Level::ERROR, "statfs").entered();
+        match self.ops.statfs(req, ino) {
+            Ok(ret) => {
+                tracing::debug!(?req, ino, ?ret);
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_setxattr(&self) -> bool {
         self.ops.can_setxattr()
     }
 
-    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn setxattr(
         &self,
         req: FuseReq,
@@ -796,14 +1010,23 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         value: &[u8],
         flags: i32,
     ) -> anyhow::Result<()> {
-        self.ops.setxattr(req, ino, name, value, flags)
+        let _span = span!(Level::ERROR, "setxattr").entered();
+        match self.ops.setxattr(req, ino, name, value, flags) {
+            Ok(()) => {
+                tracing::debug!(?req, ino, ?name, value.len = value.len(), flags);
+                Ok(())
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, ?name, value.len = value.len(), flags, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_getxattr(&self) -> bool {
         self.ops.can_getxattr()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn getxattr(
         &self,
         req: FuseReq,
@@ -811,41 +1034,77 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         name: &CStr,
         size: usize,
     ) -> anyhow::Result<Vec<u8>> {
-        self.ops.getxattr(req, ino, name, size)
+        let _span = span!(Level::ERROR, "getxattr").entered();
+        match self.ops.getxattr(req, ino, name, size) {
+            Ok(ret) => {
+                tracing::debug!(?req, ino, ?name, size, ret.len = ret.len());
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, ?name, size, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_listxattr(&self) -> bool {
         self.ops.can_listxattr()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn listxattr(&self, req: FuseReq, ino: fuse_ino_t, size: usize) -> anyhow::Result<Vec<u8>> {
-        self.ops.listxattr(req, ino, size)
+        let _span = span!(Level::ERROR, "listxattr").entered();
+        match self.ops.listxattr(req, ino, size) {
+            Ok(ret) => {
+                tracing::debug!(?req, ino, size, ret.len = ret.len());
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, size, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_removexattr(&self) -> bool {
         self.ops.can_removexattr()
     }
 
-    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn removexattr(&self, req: FuseReq, ino: fuse_ino_t, name: &CStr) -> anyhow::Result<()> {
-        self.ops.removexattr(req, ino, name)
+        let _span = span!(Level::ERROR, "removexattr").entered();
+        match self.ops.removexattr(req, ino, name) {
+            Ok(()) => {
+                tracing::debug!(?req, ino, ?name);
+                Ok(())
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, ?name, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_access(&self) -> bool {
         self.ops.can_access()
     }
 
-    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn access(&self, ino: fuse_ino_t, mask: i32) -> anyhow::Result<()> {
-        self.ops.access(ino, mask)
+        let _span = span!(Level::ERROR, "access").entered();
+        match self.ops.access(ino, mask) {
+            Ok(()) => {
+                tracing::debug!(ino, mask);
+                Ok(())
+            }
+            Err(err) => {
+                tracing::warn!(ino, mask, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_create(&self) -> bool {
         self.ops.can_create()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn create(
         &self,
         req: FuseReq,
@@ -854,14 +1113,23 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         mode: mode_t,
         fi: Option<&bindings::fuse_file_info>,
     ) -> anyhow::Result<(bindings::fuse_entry_param, bindings::fuse_file_info)> {
-        self.ops.create(req, parent, name, mode, fi)
+        let _span = span!(Level::ERROR, "create").entered();
+        match self.ops.create(req, parent, name, mode, fi) {
+            Ok(ret) => {
+                tracing::debug!(?req, parent, ?name, mode, ?fi, ?ret);
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, parent, ?name, mode, ?fi, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_getlk(&self) -> bool {
         self.ops.can_getlk()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn getlk(
         &self,
         req: FuseReq,
@@ -869,14 +1137,23 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         fi: Option<&bindings::fuse_file_info>,
         lock: &bindings::flock,
     ) -> anyhow::Result<bindings::flock> {
-        self.ops.getlk(req, ino, fi, lock)
+        let _span = span!(Level::ERROR, "getlk").entered();
+        match self.ops.getlk(req, ino, fi, lock) {
+            Ok(ret) => {
+                tracing::debug!(?req, ino, ?fi, ?lock, ?ret);
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, ?fi, ?lock, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_setlk(&self) -> bool {
         self.ops.can_setlk()
     }
 
-    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn setlk(
         &self,
         req: FuseReq,
@@ -885,14 +1162,23 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         lock: &bindings::flock,
         sleep: i32,
     ) -> anyhow::Result<()> {
-        self.ops.setlk(req, ino, fi, lock, sleep)
+        let _span = span!(Level::ERROR, "setlk").entered();
+        match self.ops.setlk(req, ino, fi, lock, sleep) {
+            Ok(()) => {
+                tracing::debug!(?req, ino, ?fi, ?lock, sleep);
+                Ok(())
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, ?fi, ?lock, sleep, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_bmap(&self) -> bool {
         self.ops.can_bmap()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn bmap(
         &self,
         req: FuseReq,
@@ -900,14 +1186,23 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         blocksize: usize,
         idx: u64,
     ) -> anyhow::Result<u64> {
-        self.ops.bmap(req, ino, blocksize, idx)
+        let _span = span!(Level::ERROR, "bmap").entered();
+        match self.ops.bmap(req, ino, blocksize, idx) {
+            Ok(ret) => {
+                tracing::debug!(?req, ino, blocksize, idx, ?ret);
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, blocksize, idx, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_ioctl(&self) -> bool {
         self.ops.can_ioctl()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn ioctl(
         &self,
         req: FuseReq,
@@ -919,15 +1214,46 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         in_buf: &[u8],
         out_bufsz: usize,
     ) -> anyhow::Result<(i32, Vec<u8>)> {
-        self.ops
+        let _span = span!(Level::ERROR, "ioctl").entered();
+        match self
+            .ops
             .ioctl(req, ino, cmd, arg, fi, flags, in_buf, out_bufsz)
+        {
+            Ok(ret) => {
+                tracing::debug!(
+                    ?req,
+                    ino,
+                    cmd,
+                    ?arg,
+                    ?fi,
+                    flags,
+                    in_buf.len = in_buf.len(),
+                    out_bufsz,
+                    ?ret
+                );
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(
+                    ?req,
+                    ino,
+                    cmd,
+                    ?arg,
+                    ?fi,
+                    flags,
+                    in_buf.len = in_buf.len(),
+                    out_bufsz,
+                    ?err
+                );
+                Err(err)
+            }
+        }
     }
 
     fn can_poll(&self) -> bool {
         self.ops.can_poll()
     }
 
-    #[instrument(skip(self), ret, err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn poll(
         &self,
         req: FuseReq,
@@ -935,23 +1261,41 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         fi: Option<&bindings::fuse_file_info>,
         ph: &mut bindings::fuse_pollhandle,
     ) -> anyhow::Result<u32> {
-        self.ops.poll(req, ino, fi, ph)
+        let _span = span!(Level::ERROR, "poll").entered();
+        match self.ops.poll(req, ino, fi, ph) {
+            Ok(ret) => {
+                tracing::debug!(?req, ino, ?fi, ?ph, ?ret);
+                Ok(ret)
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, ?fi, ?ph, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_forget_multi(&self) -> bool {
         self.ops.can_forget_multi()
     }
 
-    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn forget_multi(&self, req: FuseReq, forgets: &[fuse_forget_data]) -> anyhow::Result<()> {
-        self.ops.forget_multi(req, forgets)
+        let _span = span!(Level::ERROR, "forget_multi").entered();
+        match self.ops.forget_multi(req, forgets) {
+            Ok(()) => {
+                tracing::debug!(?req, ?forgets);
+                Ok(())
+            }
+            Err(err) => {
+                tracing::warn!(?req, ?forgets, ?err);
+                Err(err)
+            }
+        }
     }
 
     fn can_flock(&self) -> bool {
         self.ops.can_flock()
     }
 
-    #[instrument(skip(self), err(Debug, level = Level::WARN), level = Level::TRACE)]
     fn flock(
         &self,
         req: FuseReq,
@@ -959,7 +1303,17 @@ impl<T: FuseLowLevelOps> FuseLowLevelOps for TracedFuseOpsWrapper<T> {
         fi: Option<&bindings::fuse_file_info>,
         op: i32,
     ) -> anyhow::Result<()> {
-        self.ops.flock(req, ino, fi, op)
+        let _span = span!(Level::ERROR, "flock").entered();
+        match self.ops.flock(req, ino, fi, op) {
+            Ok(()) => {
+                tracing::debug!(?req, ino, ?fi, op);
+                Ok(())
+            }
+            Err(err) => {
+                tracing::warn!(?req, ino, ?fi, op, ?err);
+                Err(err)
+            }
+        }
     }
 }
 
@@ -989,7 +1343,6 @@ extern "C" fn rs_lookup<T: FuseLowLevelOps>(
             fuse_reply_entry(req, &entry);
         },
         Err(e) => unsafe {
-            log::warn!("lookup({req:?}, {parent:?}, {name:?}) fails with {e:?}");
             fuse_reply_err(req, extract_errno(&e));
         },
     }
