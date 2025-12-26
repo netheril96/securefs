@@ -8,6 +8,7 @@ use std::{
     sync::Arc,
 };
 
+use crate::protos::params::{DecryptedSecurefsParams, InternalMountData, MountOptions};
 use crate::{AssertOk, lite::IoWrapperFactory};
 use crate::{
     OwnedFileDescriptor,
@@ -650,6 +651,10 @@ mod volume {
 
         Ok(info)
     }
+}
+
+pub fn mount(data: InternalMountData) -> anyhow::Result<()> {
+    todo!()
 }
 
 pub mod testing {

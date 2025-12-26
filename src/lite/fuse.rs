@@ -5,6 +5,8 @@ use parking_lot::Mutex;
 use std::{
     ffi::CString,
     os::fd::AsFd,
+    path::Path,
+    str::FromStr,
     sync::atomic::{AtomicI64, Ordering},
     time::{Duration, SystemTime},
 };
@@ -20,16 +22,18 @@ use crate::{
             FUSE_CAP_HANDLE_KILLPRIV, FUSE_CAP_PARALLEL_DIROPS, FUSE_CAP_WRITEBACK_CACHE,
             FUSE_ROOT_ID, fuse_entry_param,
         },
-        fuse_low_level_ops::{FuseLowLevelOps, FuseReq},
+        fuse_low_level_ops::{FuseLowLevelOps, FuseReq, TracedFuseOpsWrapper},
+        fuse_main::run_fuse_main,
     },
     lite::{
         IoWrapperFactory,
         long_name_db::C_LONG_NAME_DB_FILENAME,
         unix::{
             LiteDirINode, LiteDirReader, LiteFileINode, LiteINode, LiteINodeHeader,
-            LiteSymlinkINode, LiteVfs, ReadjustStatExt,
+            LiteSymlinkINode, LiteVfs, ReadjustStatExt, create_vfs_for_fuse,
         },
     },
+    protos::params::InternalMountData,
     tearc::Tearc,
     vfs::{
         GenericINodeTable, INodeNotFoundError,
@@ -711,6 +715,24 @@ fn timespec_to_systemtime(tv_sec: i64, tv_nsec: u32) -> SystemTime {
     }
 }
 
+pub fn mount(data: InternalMountData) -> anyhow::Result<()> {
+    assert!(data.decrypted_params.has_lite_format_params());
+    assert!(data.mount_options.has_mount_by_kernel_ext());
+    let data_dir = Path::new(&data.data_dir);
+    let mut vfs = Box::new(TracedFuseOpsWrapper::from(create_vfs_for_fuse(
+        &data.decrypted_params,
+        &data.mount_options,
+        data_dir,
+    )?));
+    std::fs::create_dir_all(data_dir)?;
+    let mut fuse_args: Vec<CString> = vec![c"securefs".into()];
+    for s in &data.fuse_args {
+        fuse_args.push(CString::from_str(s.as_str())?);
+    }
+    fuse_args.push(CString::from_str(&data.mount_options.mount_point)?);
+    run_fuse_main(fuse_args.iter().map(|c| c.as_c_str()), &mut vfs)
+}
+
 pub mod testing {
 
     use std::path::Path;
@@ -765,12 +787,14 @@ pub mod testing {
         )?));
         std::fs::create_dir_all(Path::new("/tmp/nonprod_mount"))?;
         run_fuse_main(
-            &[
+            [
                 c"securefs",
                 c"-o",
                 c"default_permissions",
                 c"/tmp/nonprod_mount",
-            ],
+            ]
+            .iter()
+            .map(|c| *c),
             &mut vfs,
         )
     }

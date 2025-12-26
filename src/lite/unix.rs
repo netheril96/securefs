@@ -17,11 +17,11 @@ use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use rustix::fs::{AtFlags, Gid, Mode, OFlags, Timespec, Timestamps, Uid};
 use rustix::io::Errno;
 
-use crate::lite::LiteAesGcmCryptStreamFactory;
 use crate::lite::long_name_db::{C_LONG_NAME_DB_FILENAME, LongNameLookupTable};
 use crate::lite::name_translators::create_name_translator;
+use crate::lite::{LiteAesGcmCryptStreamFactory, fuse};
 use crate::protos::params::decrypted_securefs_params::Format_specific_params;
-use crate::protos::params::{DecryptedSecurefsParams, MountOptions};
+use crate::protos::params::{DecryptedSecurefsParams, InternalMountData, MountOptions};
 use crate::stream::FileLikeStream;
 use crate::tearc::Tearc;
 use crate::vfs::{GenericINodeTable, ShardedMapINodeTable};
@@ -159,11 +159,7 @@ impl INodeCore<rustix::fs::Stat> for LiteFileINode {
             rustix::fs::fchmod(fd, Mode::from_raw_mode(mode))?;
         }
         if uid.is_some() || gid.is_some() {
-            rustix::fs::fchown(
-                fd,
-                uid.map(Uid::from_raw),
-                gid.map(Gid::from_raw),
-            )?;
+            rustix::fs::fchown(fd, uid.map(Uid::from_raw), gid.map(Gid::from_raw))?;
         }
 
         if let Some(atime) = atime
@@ -369,11 +365,7 @@ impl INodeCore<rustix::fs::Stat> for LiteDirINode {
             rustix::fs::fchmod(self.as_fd(), Mode::from_raw_mode(mode))?;
         }
         if uid.is_some() || gid.is_some() {
-            rustix::fs::fchown(
-                self.as_fd(),
-                uid.map(Uid::from_raw),
-                gid.map(Gid::from_raw),
-            )?;
+            rustix::fs::fchown(self.as_fd(), uid.map(Uid::from_raw), gid.map(Gid::from_raw))?;
         }
         if let Some(size) = size {
             return Err(Errno::INVAL).context("Changing directory size directly is invalid");
@@ -797,4 +789,8 @@ pub fn create_vfs_for_fuse(
         };
         ShardedMapINodeTable::new(number, node, shard_count)
     })
+}
+
+pub fn mount(data: InternalMountData) -> anyhow::Result<()> {
+    fuse::mount(data)
 }

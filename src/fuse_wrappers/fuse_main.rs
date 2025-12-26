@@ -37,12 +37,12 @@ unsafe extern "C" {
     ) -> *mut fuse_session;
 }
 
-pub fn run_fuse_main<T: FuseLowLevelOps>(
-    fuse_args: &[&CStr],
+pub fn run_fuse_main<'a, T: FuseLowLevelOps, C: Iterator<Item = &'a CStr>>(
+    fuse_args: C,
     ops: &mut Box<TracedFuseOpsWrapper<T>>,
 ) -> anyhow::Result<()> {
     let mut c_args: Vec<*mut std::os::raw::c_char> =
-        fuse_args.iter().map(|s| s.as_ptr().cast_mut()).collect();
+        fuse_args.map(|s| s.as_ptr().cast_mut()).collect();
     let mut cmdline_opts = scopeguard::guard(
         unsafe { std::mem::zeroed::<fuse_cmdline_opts>() },
         |opt| unsafe {

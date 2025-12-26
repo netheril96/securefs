@@ -89,6 +89,7 @@ message EncryptedSecurefsParams
 
 message MountOptions
 {
+    string mount_point = 15;
     bool read_only = 1;
     bool disable_verification = 2;
     optional int32 uid_override = 3;

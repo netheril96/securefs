@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+};
 
 use ambassador::{Delegate, delegatable_trait};
 use anyhow::{Context, bail};
@@ -7,11 +10,12 @@ use protobuf::Message;
 use rand::{TryRngCore, rngs::OsRng};
 
 use crate::{
-    params_io::encrypt,
+    params_io::{decrypt_encrypted, encrypt},
     protos::params::{
-        DecryptedSecurefsParams,
+        DecryptedSecurefsParams, EncryptedSecurefsParams, InternalMountData, MountOptions,
         decrypted_securefs_params::{LiteFormatParams, SizeParams},
         encrypted_securefs_params::Argon2idParams,
+        mount_options::MountByKernelExt,
     },
     stream::StdIoStream,
 };
@@ -37,7 +41,9 @@ struct Cli {
 #[delegate(ConsumingRunnable)]
 enum Commands {
     Create(CreateCommand),
+    Mount(MountCommand),
     C(CreateCommand),
+    M(MountCommand),
 }
 
 #[derive(Args, Debug)]
@@ -192,7 +198,7 @@ impl From<Argon2idArgs> for Argon2idParams {
     }
 }
 
-#[derive(Args, Debug, Clone)]
+#[derive(Args, Debug, Clone, Default)]
 struct AuthArg {
     /// The password in plaintext.
     ///
@@ -279,6 +285,111 @@ impl AuthOptions {
 enum Format {
     Lite,
     Full,
+}
+
+#[derive(Args, Debug)]
+struct MountCommand {
+    /// Where the encrypted data should be stored in.
+    data_dir: PathBuf,
+
+    /// The mount point.
+    ///
+    /// On Unix, this shall be a folder path.
+    /// On Windows, this can be either a folder path or a drive letter.
+    mount_point: PathBuf,
+
+    /// The location of the configuration file
+    ///
+    /// The config file contains all of the data format options and the
+    /// encrypted keys. By default, this is ".config.pb" under the data_dir.
+    #[arg(long)]
+    config_file: Option<PathBuf>,
+
+    #[command(flatten)]
+    auth: AuthArg,
+
+    /// Mount as a readonly filesystem.
+    #[arg(long)]
+    read_only: bool,
+
+    /// Disable verification of data.
+    #[arg(long)]
+    disable_verification: bool,
+
+    /// For lite format only, do not encrypt and decrypt file names.
+    #[arg(long)]
+    plain_text_names: bool,
+}
+
+impl ConsumingRunnable for MountCommand {
+    fn run(mut self) -> anyhow::Result<()> {
+        let mount_data = {
+            let enc_params = {
+                let config_path: Cow<'_, Path> = if let Some(config_file) = &self.config_file {
+                    config_file.into()
+                } else {
+                    self.data_dir.join(".config.pb").into()
+                };
+                let mut config_file = std::fs::File::open(&config_path)
+                    .with_context(|| format!("failed to open {:?} for reading", config_path))?;
+                let enc_params = EncryptedSecurefsParams::parse_from_reader(&mut config_file)?;
+                enc_params
+            };
+
+            let (password, mut key_stream) =
+                AuthOptions::from(std::mem::take(&mut self.auth)).read(false)?;
+            let dec_params = decrypt_encrypted(
+                &enc_params,
+                password.as_bytes(),
+                key_stream.as_mut().map(|k| k as _),
+            ).context("Failed to decrypt the config file. It is likely that the password/keyfile is wrong, or that the config file is corrupted.")?;
+
+            if dec_params.compat_version > COMPAT_VERSION {
+                bail!(
+                    "The config file is created by a higher version of securefs. This old version cannot mount it or data loss may occur."
+                );
+            }
+
+            InternalMountData {
+                decrypted_params: Some(dec_params).into(),
+                mount_options: Some(MountOptions {
+                    mount_point: self.mount_point.to_string_lossy().into_owned(),
+                    read_only: self.read_only,
+                    disable_verification: self.disable_verification,
+                    uid_override: None,
+                    gid_override: None,
+                    enable_xattr: true,
+                    case_fold: false,
+                    unicode_normalize_nfc: false,
+                    plain_text_names: self.plain_text_names,
+                    allow_sensitive_logging: false,
+                    max_idle_seconds: 0,
+                    inode_table_shard_count: 64,
+                    attr_cache_seconds: Some(30),
+                    mount_type_specific: Some(
+                        crate::protos::params::mount_options::Mount_type_specific::MountByKernelExt(
+                            MountByKernelExt {
+                                special_fields: Default::default(),
+                            },
+                        ),
+                    ),
+                    special_fields: Default::default(),
+                })
+                .into(),
+                fuse_args: vec!["default_permissions".into()],
+                data_dir: self.data_dir.to_string_lossy().into_owned(),
+                background_logging: None.into(),
+                special_fields: Default::default(),
+            }
+        };
+        drop(self);
+
+        #[cfg(unix)]
+        return crate::lite::unix::mount(mount_data);
+
+        #[cfg(windows)]
+        return crate::lite::win::mount(mount_data);
+    }
 }
 
 pub fn commands_main() -> anyhow::Result<()> {
