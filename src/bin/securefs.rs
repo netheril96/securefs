@@ -4,6 +4,7 @@ use tracing_subscriber::EnvFilter;
 
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
+        .with_thread_ids(true)
         .with_env_filter(
             EnvFilter::builder()
                 .with_default_directive(LevelFilter::INFO.into())
