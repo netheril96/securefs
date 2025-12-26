@@ -17,9 +17,9 @@ use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use rustix::fs::{AtFlags, Gid, Mode, OFlags, Timespec, Timestamps, Uid};
 use rustix::io::Errno;
 
+use crate::lite::LiteAesGcmCryptStreamFactory;
 use crate::lite::long_name_db::{C_LONG_NAME_DB_FILENAME, LongNameLookupTable};
 use crate::lite::name_translators::create_name_translator;
-use crate::lite::{LiteAesGcmCryptStreamFactory, fuse};
 use crate::protos::params::decrypted_securefs_params::Format_specific_params;
 use crate::protos::params::{DecryptedSecurefsParams, InternalMountData, MountOptions};
 use crate::stream::FileLikeStream;
@@ -792,5 +792,8 @@ pub fn create_vfs_for_fuse(
 }
 
 pub fn mount(data: InternalMountData) -> anyhow::Result<()> {
-    fuse::mount(data)
+    #[cfg(feature = "fuse")]
+    return super::fuse::mount(data);
+    #[cfg(not(feature = "fuse"))]
+    bail!("No backend available for mounting");
 }

@@ -34,6 +34,10 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Install winfsp on Windows
+        if: runner.os == 'Windows'
+        run: choco install winfsp
+
       - name: Run tests
         run: cargo test --verbose
 

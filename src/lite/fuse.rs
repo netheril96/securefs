@@ -724,9 +724,10 @@ pub fn mount(data: InternalMountData) -> anyhow::Result<()> {
         &data.mount_options,
         data_dir,
     )?));
-    std::fs::create_dir_all(data_dir)?;
+    std::fs::create_dir_all(&data.mount_options.mount_point)?;
     let mut fuse_args: Vec<CString> = vec![c"securefs".into()];
     for s in &data.fuse_args {
+        fuse_args.push(c"-o".into());
         fuse_args.push(CString::from_str(s.as_str())?);
     }
     fuse_args.push(CString::from_str(&data.mount_options.mount_point)?);

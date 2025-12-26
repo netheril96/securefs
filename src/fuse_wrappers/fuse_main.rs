@@ -106,6 +106,6 @@ pub fn run_fuse_main<'a, T: FuseLowLevelOps, C: Iterator<Item = &'a CStr>>(
     if ret != 0 && ret != libc::SIGINT && ret != libc::SIGTERM && ret != libc::SIGHUP {
         return Err(FuseLoopError).with_context(|| format!("fuse_session_loop_mt returns {ret}"));
     }
-    tracing::info!("fuse_session_loop_mt returned {ret}");
+    tracing::info!("fuse_session_loop_mt finished with expected code {ret}");
     Ok(())
 }

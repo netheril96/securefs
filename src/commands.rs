@@ -8,6 +8,7 @@ use anyhow::{Context, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use protobuf::Message;
 use rand::{TryRngCore, rngs::OsRng};
+use tracing::error_span;
 
 use crate::{
     params_io::{decrypt_encrypted, encrypt},
@@ -78,6 +79,8 @@ fn generate_master_key() -> Vec<u8> {
 
 impl ConsumingRunnable for CreateCommand {
     fn run(self) -> anyhow::Result<()> {
+        let _span = error_span!("create").entered();
+
         let config_path: PathBuf = if let Some(config_file) = self.config_file {
             config_file
         } else if let Some(data_dir) = self.data_dir {
@@ -93,6 +96,7 @@ impl ConsumingRunnable for CreateCommand {
             let mut config_file = std::fs::File::create_new(&config_path)
                 .with_context(|| format!("failed to create {:?} for writing", config_path))?;
             let (password, mut key_stream) = AuthOptions::from(self.auth).read(true)?;
+            tracing::info!("Generating master keys...");
             let dec_params = DecryptedSecurefsParams {
             compat_version: COMPAT_VERSION,
             size_params: Some(SizeParams {
@@ -113,6 +117,7 @@ impl ConsumingRunnable for CreateCommand {
             })),
             special_fields:Default::default(),
         };
+            tracing::info!("Hashing and encrypting config...");
             let argon2idparams = Argon2idParams::from(self.argon2);
             let enc_params = encrypt(
                 &dec_params,
@@ -124,6 +129,7 @@ impl ConsumingRunnable for CreateCommand {
             config_file
                 .sync_all()
                 .with_context(|| format!("failed to flush {:?}", config_path))?;
+            tracing::info!("Done");
             Ok(())
         };
 
@@ -191,7 +197,7 @@ impl From<Argon2idArgs> for Argon2idParams {
     fn from(value: Argon2idArgs) -> Self {
         Self {
             time_cost: value.time_cost,
-            memory_cost: value.memory_cost,
+            memory_cost: value.memory_cost / 1024,
             parallelism: value.parallelism,
             special_fields: Default::default(),
         }
@@ -323,6 +329,7 @@ struct MountCommand {
 
 impl ConsumingRunnable for MountCommand {
     fn run(mut self) -> anyhow::Result<()> {
+        let span = error_span!("mount").entered();
         let mount_data = {
             let enc_params = {
                 let config_path: Cow<'_, Path> = if let Some(config_file) = &self.config_file {
@@ -330,6 +337,7 @@ impl ConsumingRunnable for MountCommand {
                 } else {
                     self.data_dir.join(".config.pb").into()
                 };
+                tracing::info!("Reading config file at {:?}...", config_path);
                 let mut config_file = std::fs::File::open(&config_path)
                     .with_context(|| format!("failed to open {:?} for reading", config_path))?;
                 let enc_params = EncryptedSecurefsParams::parse_from_reader(&mut config_file)?;
@@ -338,6 +346,7 @@ impl ConsumingRunnable for MountCommand {
 
             let (password, mut key_stream) =
                 AuthOptions::from(std::mem::take(&mut self.auth)).read(false)?;
+            tracing::info!("Decrypting config file ...");
             let dec_params = decrypt_encrypted(
                 &enc_params,
                 password.as_bytes(),
@@ -376,13 +385,25 @@ impl ConsumingRunnable for MountCommand {
                     special_fields: Default::default(),
                 })
                 .into(),
-                fuse_args: vec!["default_permissions".into()],
+                fuse_args: {
+                    let mut args = vec!["default_permissions".into()];
+                    if self.read_only {
+                        args.push("ro".into());
+                    }
+                    args
+                },
                 data_dir: self.data_dir.to_string_lossy().into_owned(),
                 background_logging: None.into(),
                 special_fields: Default::default(),
             }
         };
         drop(self);
+
+        tracing::info!("Mounting at {:?}...", &mount_data.mount_options.mount_point);
+
+        // The actual mounting happens multi-threaded, so for consistency, we exit the
+        // span in the current thread.
+        span.exit();
 
         #[cfg(unix)]
         return crate::lite::unix::mount(mount_data);
