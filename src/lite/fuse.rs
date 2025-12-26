@@ -211,7 +211,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
 
         if let Some(fi) = fi.filter(|fi| fi.fh != 0) {
             let desc = unsafe { &mut *(fi.fh as *mut OpenedDescriptor) };
-            common(&*desc.inode)
+            common(&desc.inode)
         } else {
             let ino = self.ino_from_fuse(ino);
             let node = self
@@ -549,7 +549,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
         forgets: &[crate::fuse_wrappers::bindings::fuse_forget_data],
     ) -> anyhow::Result<()> {
         for forget in forgets {
-            self.forget(req.clone(), forget.ino, forget.nlookup)?;
+            self.forget(req, forget.ino, forget.nlookup)?;
         }
         Ok(())
     }
@@ -728,6 +728,7 @@ pub mod testing {
 
     pub fn simple_test_fuse_main() -> anyhow::Result<()> {
         let dec_params = DecryptedSecurefsParams {
+            compat_version:5,
             size_params: MessageField::some(SizeParams {
                 block_size: 333,
                 iv_size: 12,

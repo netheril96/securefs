@@ -62,7 +62,7 @@ pub fn run_fuse_main<T: FuseLowLevelOps>(
     if unsafe { fuse_parse_cmdline(&mut *fuse_args, &mut *cmdline_opts) } < 0 {
         Err(FuseLoopError {})?;
     }
-    let fuse_ops = generate_libfuse_low_level_ops(&mut **ops);
+    let fuse_ops = generate_libfuse_low_level_ops(&**ops);
     let userdata: *mut TracedFuseOpsWrapper<T> = &raw mut **ops;
     let session = scopeguard::guard(
         unsafe {

@@ -7,6 +7,7 @@
 use ambassador::delegatable_trait;
 
 pub mod aesgcm;
+pub mod commands;
 pub mod fuse_wrappers;
 pub mod lite;
 pub mod params_io;

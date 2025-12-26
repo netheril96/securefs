@@ -30,6 +30,7 @@ message LegacySecurefsJsonParams
 
 message DecryptedSecurefsParams
 {
+    uint32 compat_version = 4;
     message SizeParams
     {
         uint32 block_size = 1;
@@ -101,13 +102,15 @@ message MountOptions
     uint32 inode_table_shard_count = 11;
     optional uint64 attr_cache_seconds = 12;
 
-    message MountByKernelExt {}
+    message MountByKernelExt { }
 
-    message MountByNfs {
+    message MountByNfs
+    {
         uint64 max_inodes_per_shard = 1;
     }
 
-    oneof mount_type_specific {
+    oneof mount_type_specific
+    {
         MountByKernelExt mount_by_kernel_ext = 13;
         MountByNfs mount_by_nfs = 14;
     }

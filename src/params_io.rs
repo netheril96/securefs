@@ -140,7 +140,7 @@ fn compute_password_derived_key(
     let argon2_params = encparams.argon2id_params();
 
     let params = argon2::Params::new(
-        argon2_params.memory_cost,
+        argon2_params.memory_cost / 1024,
         argon2_params.time_cost,
         argon2_params.parallelism,
         Some(KEY_SIZE),
