@@ -1,7 +1,4 @@
-use std::{
-    io::Write,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use ambassador::{Delegate, delegatable_trait};
 use anyhow::{Context, bail};
@@ -45,6 +42,9 @@ enum Commands {
 
 #[derive(Args, Debug)]
 struct CreateCommand {
+    #[arg(long, value_enum, short)]
+    format: Format,
+
     /// Where the encrypted data should be stored in.
     data_dir: Option<PathBuf>,
 
@@ -58,8 +58,8 @@ struct CreateCommand {
     #[command(flatten)]
     auth: AuthArg,
 
-    #[arg(long, value_enum)]
-    format: Format,
+    #[command(flatten)]
+    argon2: Argon2idArgs,
 }
 
 fn generate_master_key() -> Vec<u8> {
@@ -72,17 +72,22 @@ fn generate_master_key() -> Vec<u8> {
 
 impl ConsumingRunnable for CreateCommand {
     fn run(self) -> anyhow::Result<()> {
-        let config_file: PathBuf = if let Some(config_file) = self.config_file {
+        let config_path: PathBuf = if let Some(config_file) = self.config_file {
             config_file
         } else if let Some(data_dir) = self.data_dir {
+            std::fs::create_dir_all(&data_dir)?;
             data_dir.join(".config.pb")
         } else {
             bail!("No config file location specified.");
         };
-        let mut config_file = std::fs::File::create_new(&config_file)
-            .with_context(|| format!("failed to create {:?} for writing", config_file))?;
-        let (password, mut key_stream) = AuthOptions::from(self.auth).read(true)?;
-        let dec_params = DecryptedSecurefsParams {
+        let core = || {
+            if self.format != Format::Lite {
+                bail!("Only lite format is currently implemented");
+            }
+            let mut config_file = std::fs::File::create_new(&config_path)
+                .with_context(|| format!("failed to create {:?} for writing", config_path))?;
+            let (password, mut key_stream) = AuthOptions::from(self.auth).read(true)?;
+            let dec_params = DecryptedSecurefsParams {
             compat_version: COMPAT_VERSION,
             size_params: Some(SizeParams {
                 block_size: 4096,
@@ -102,20 +107,88 @@ impl ConsumingRunnable for CreateCommand {
             })),
             special_fields:Default::default(),
         };
-        let argon2idparams = Argon2idParams {
-            time_cost: 4,
-            memory_cost: 64 << 20,
-            parallelism: 4,
-            special_fields: Default::default(),
+            let argon2idparams = Argon2idParams::from(self.argon2);
+            let enc_params = encrypt(
+                &dec_params,
+                &argon2idparams,
+                password.as_bytes(),
+                key_stream.as_mut().map(|k| k as _),
+            )?;
+            enc_params.write_to_writer(&mut config_file)?;
+            config_file
+                .sync_all()
+                .with_context(|| format!("failed to flush {:?}", config_path))?;
+            Ok(())
         };
-        let enc_params = encrypt(
-            &dec_params,
-            &argon2idparams,
-            password.as_bytes(),
-            key_stream.as_mut().map(|k| k as _),
-        )?;
-        enc_params.write_to_writer(&mut config_file)?;
-        Ok(())
+
+        match core() {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                let _ = std::fs::remove_file(&config_path);
+                Err(e)
+            }
+        }
+    }
+}
+
+#[derive(Args, Debug, Clone)]
+struct Argon2idArgs {
+    /// Memory cost of the Argon2 algorithm.
+    ///
+    /// It can have suffices like K, KB, KiB, M, G, etc.
+    /// It must be multiples of KiB.
+    #[arg(long = "argon2-m", default_value_t = 64 << 20, value_parser = parse_memory_spec)]
+    memory_cost: u32,
+
+    /// Time cost of the Argon2 algorithm.
+    #[arg(long = "argon2-t", default_value_t = 4)]
+    time_cost: u32,
+
+    /// Parallelism of the Argon2 algorithm.
+    #[arg(long = "argon2-p", default_value_t = 4)]
+    parallelism: u32,
+}
+
+fn parse_memory_spec(m: &str) -> anyhow::Result<u32> {
+    let m = m.trim();
+    let upper = m.to_ascii_uppercase();
+
+    let (multiplier, suffix_len) = if upper.ends_with("GIB") {
+        (1024 * 1024 * 1024, 3)
+    } else if upper.ends_with("GB") {
+        (1024 * 1024 * 1024, 2)
+    } else if upper.ends_with("G") {
+        (1024 * 1024 * 1024, 1)
+    } else if upper.ends_with("MIB") {
+        (1024 * 1024, 3)
+    } else if upper.ends_with("MB") {
+        (1024 * 1024, 2)
+    } else if upper.ends_with("M") {
+        (1024 * 1024, 1)
+    } else if upper.ends_with("KIB") {
+        (1024, 3)
+    } else if upper.ends_with("KB") {
+        (1024, 2)
+    } else if upper.ends_with("K") {
+        (1024, 1)
+    } else {
+        (1, 0)
+    };
+
+    let num_part = m[..m.len() - suffix_len].trim();
+    let val: u32 = num_part.parse().context("Failed to parse number")?;
+
+    val.checked_mul(multiplier).context("Memory size overflow")
+}
+
+impl From<Argon2idArgs> for Argon2idParams {
+    fn from(value: Argon2idArgs) -> Self {
+        Self {
+            time_cost: value.time_cost,
+            memory_cost: value.memory_cost,
+            parallelism: value.parallelism,
+            special_fields: Default::default(),
+        }
     }
 }
 
