@@ -21,7 +21,6 @@ use crate::{
     stream::StdIoStream,
 };
 
-pub const COMPAT_VERSION: u32 = 5;
 pub const EMPTY_PASSWORD_FOR_KEYFILE: &str = " ";
 
 #[delegatable_trait]
@@ -98,25 +97,24 @@ impl ConsumingRunnable for CreateCommand {
             let (password, mut key_stream) = AuthOptions::from(self.auth).read(true)?;
             tracing::info!("Generating master keys...");
             let dec_params = DecryptedSecurefsParams {
-            compat_version: COMPAT_VERSION,
-            size_params: Some(SizeParams {
-                block_size: 4096,
-                iv_size: 12,
-                max_padding_size: 16,
-                special_fields: Default::default(),
-            }).into(),
-            format_specific_params: Some(crate::protos::params::decrypted_securefs_params::Format_specific_params::LiteFormatParams(LiteFormatParams {
-                name_key: generate_master_key(),
-                content_key: generate_master_key(),
-                xattr_key: generate_master_key(),
-                padding_key: generate_master_key(),
-                long_name_threshold: Some(128),
-                long_name_suffix: ".long".into(),
-                disable_legacy_additional_encryption_after_hashing_long_name: true,
-                special_fields: Default::default(),
-            })),
-            special_fields:Default::default(),
-        };
+                size_params: Some(SizeParams {
+                    block_size: 4096,
+                    iv_size: 12,
+                    max_padding_size: 16,
+                    special_fields: Default::default(),
+                }).into(),
+                format_specific_params: Some(crate::protos::params::decrypted_securefs_params::Format_specific_params::LiteFormatParams(LiteFormatParams {
+                    name_key: generate_master_key(),
+                    content_key: generate_master_key(),
+                    xattr_key: generate_master_key(),
+                    padding_key: generate_master_key(),
+                    long_name_threshold: Some(128),
+                    long_name_suffix: ".long".into(),
+                    disable_legacy_additional_encryption_after_hashing_long_name: true,
+                    special_fields: Default::default(),
+                })),
+                special_fields:Default::default(),
+            };
             tracing::info!("Hashing and encrypting config...");
             let argon2idparams = Argon2idParams::from(self.argon2);
             let enc_params = encrypt(
@@ -352,13 +350,6 @@ impl ConsumingRunnable for MountCommand {
                 password.as_bytes(),
                 key_stream.as_mut(),
             ).context("Failed to decrypt the config file. It is likely that the password/keyfile is wrong, or that the config file is corrupted.")?;
-
-            if dec_params.compat_version > COMPAT_VERSION {
-                bail!(
-                    "The config file is created by a higher version of securefs. This old version cannot mount it or data loss may occur."
-                );
-            }
-
             InternalMountData {
                 decrypted_params: Some(dec_params).into(),
                 mount_options: Some(MountOptions {

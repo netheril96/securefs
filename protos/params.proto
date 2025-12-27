@@ -30,7 +30,6 @@ message LegacySecurefsJsonParams
 
 message DecryptedSecurefsParams
 {
-    uint32 compat_version = 4;
     message SizeParams
     {
         uint32 block_size = 1;

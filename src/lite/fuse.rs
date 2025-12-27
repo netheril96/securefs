@@ -751,7 +751,6 @@ pub mod testing {
 
     pub fn simple_test_fuse_main() -> anyhow::Result<()> {
         let dec_params = DecryptedSecurefsParams {
-            compat_version:5,
             size_params: MessageField::some(SizeParams {
                 block_size: 333,
                 iv_size: 12,

@@ -40,6 +40,12 @@ pub enum ParamsIoError {
     },
     #[error("The configuration file can neither be parsed as protobuf nor as JSON")]
     InvalidConfigFile,
+    #[error(
+        "The configuration file contains fields or enums unknown to this binary.\
+         It is possible that the config file is created by a higher version of \
+         securefs incompatible with this one."
+    )]
+    UnknownFieldsOrEnum,
 }
 
 type KeyType = [u8; KEY_SIZE];
@@ -245,6 +251,19 @@ pub fn decrypt_encrypted<S: Stream + ?Sized>(
     let result = DecryptedSecurefsParams::parse_from_bytes(&plaintext)
         .map_err(|e| ParamsIoError::InvalidConfigFormat { source: e.into() })?;
 
+    // Protobuf is designed to be forward-compatible by ignoring unknown fields.
+    // However, we take a stricter approach here by rejecting configuration files
+    // that contain fields unknown to this version of the software. This prevents
+    // a potential data loss scenario where an older version of securefs mounts a
+    // data dir with unknown configuration options and writes invalid data.
+    //
+    // This strictness is contrary to Protobuf's design philosophy. A different
+    // serialization format would have been a better choice, but the benefit of
+    // switching now is not worth the effort.
+    if protoutils::has_unknowns_recursive(&result) {
+        bail!(ParamsIoError::UnknownFieldsOrEnum);
+    }
+
     Ok(result)
 }
 
@@ -292,6 +311,66 @@ pub fn decrypt<S: Stream + ?Sized>(
     bail!(ParamsIoError::InvalidConfigFile);
 }
 
+mod protoutils {
+    use protobuf::MessageDyn;
+    use protobuf::reflect::{ReflectFieldRef, ReflectValueRef};
+
+    pub(super) fn has_unknowns_recursive(msg: &dyn MessageDyn) -> bool {
+        // 1. Check for unknown fields at the current level
+        if msg.unknown_fields_dyn().iter().any(|_| true) {
+            return true;
+        }
+
+        let descriptor = msg.descriptor_dyn();
+
+        // 2. Iterate over all defined fields in the message
+        for field in descriptor.fields() {
+            let field_ref = field.get_reflect(msg);
+
+            match field_ref {
+                // Check Sub-messages (Singular)
+                ReflectFieldRef::Optional(opt) => {
+                    if let Some(value) = opt.value() {
+                        if check_value_for_unknowns(value) {
+                            return true;
+                        }
+                    }
+                }
+                // Check Repeated Fields
+                ReflectFieldRef::Repeated(rep) => {
+                    for i in 0..rep.len() {
+                        if check_value_for_unknowns(rep.get(i)) {
+                            return true;
+                        }
+                    }
+                }
+                // Check Map Fields
+                ReflectFieldRef::Map(map) => {
+                    for (_, v) in map.into_iter() {
+                        if check_value_for_unknowns(v) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    fn check_value_for_unknowns(value: ReflectValueRef) -> bool {
+        match value {
+            // Recurse into sub-messages
+            ReflectValueRef::Message(sub_msg) => has_unknowns_recursive(&*sub_msg),
+
+            // Check if Enum value is unrecognized
+            ReflectValueRef::Enum(enum_descriptor, i) => {
+                // If the descriptor doesn't recognize the integer, it's unknown
+                enum_descriptor.value_by_number(i).is_none()
+            }
+            _ => false,
+        }
+    }
+}
 #[cfg(test)]
 mod test {
     use crate::stream::StdIoStream;
