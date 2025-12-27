@@ -48,7 +48,7 @@ fn parse_hex(hex: &str) -> Result<Vec<u8>> {
     const_hex::decode(hex).context("Failed to decode hex string")
 }
 
-fn hmac_sha256(base_key: &[u8], key_stream: &mut dyn Stream) -> Result<KeyType> {
+fn hmac_sha256<S: Stream + ?Sized>(base_key: &[u8], key_stream: &mut S) -> Result<KeyType> {
     let mut mac =
         <Hmac<Sha256> as Mac>::new_from_slice(base_key).context("HMAC initialization failed")?;
     let mut buffer = vec![0u8; 4096];
@@ -93,10 +93,10 @@ fn legacy_compute_password_derived_key(
     Ok(result)
 }
 
-fn try_legacy_password_derived_key(
+fn try_legacy_password_derived_key<S: Stream + ?Sized>(
     legacy: &LegacySecurefsJsonParams,
     password: &[u8],
-    key_stream: Option<&mut dyn Stream>,
+    key_stream: Option<&mut S>,
     mut try_func: impl FnMut(&KeyType) -> Result<bool>,
 ) -> Result<bool> {
     let original_salt = parse_hex(&legacy.salt)?;
@@ -125,10 +125,10 @@ fn get_version_header(version: u32) -> Result<&'static [u8]> {
     }
 }
 
-fn compute_password_derived_key(
+fn compute_password_derived_key<S: Stream + ?Sized>(
     encparams: &EncryptedSecurefsParams,
     password: &[u8],
-    key_stream: Option<&mut dyn Stream>,
+    key_stream: Option<&mut S>,
 ) -> Result<KeyType> {
     let mut effective_salt: Cow<'_, [u8]> = encparams.salt.as_slice().into();
 
@@ -154,10 +154,10 @@ fn compute_password_derived_key(
     Ok(key)
 }
 
-pub fn decrypt_legacy(
+pub fn decrypt_legacy<S: Stream + ?Sized>(
     legacy: &LegacySecurefsJsonParams,
     password: &[u8],
-    key_stream: Option<&mut dyn Stream>,
+    key_stream: Option<&mut S>,
 ) -> Result<DecryptedSecurefsParams> {
     let mut result = DecryptedSecurefsParams::new();
     {
@@ -224,10 +224,10 @@ pub fn decrypt_legacy(
     Ok(result)
 }
 
-pub fn decrypt_encrypted(
+pub fn decrypt_encrypted<S: Stream + ?Sized>(
     encparams: &EncryptedSecurefsParams,
     password: &[u8],
-    key_stream: Option<&mut dyn Stream>,
+    key_stream: Option<&mut S>,
 ) -> Result<DecryptedSecurefsParams> {
     let wrapping_key = compute_password_derived_key(encparams, password, key_stream)?;
 
@@ -248,11 +248,11 @@ pub fn decrypt_encrypted(
     Ok(result)
 }
 
-pub fn encrypt(
+pub fn encrypt<S: Stream + ?Sized>(
     decparams: &DecryptedSecurefsParams,
     argon2id_params: &Argon2idParams,
     password: &[u8],
-    key_stream: Option<&mut dyn Stream>,
+    key_stream: Option<&mut S>,
 ) -> Result<EncryptedSecurefsParams> {
     let mut result = EncryptedSecurefsParams::new();
     result.iv.resize(IV_SIZE, 0);
@@ -273,10 +273,10 @@ pub fn encrypt(
     Ok(result)
 }
 
-pub fn decrypt(
+pub fn decrypt<S: Stream + ?Sized>(
     content: &[u8],
     password: &[u8],
-    key_stream: Option<&mut dyn Stream>,
+    key_stream: Option<&mut S>,
 ) -> Result<DecryptedSecurefsParams> {
     if let Ok(encparams) = EncryptedSecurefsParams::parse_from_bytes(content) {
         return decrypt_encrypted(&encparams, password, key_stream);

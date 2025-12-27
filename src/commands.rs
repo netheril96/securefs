@@ -123,7 +123,7 @@ impl ConsumingRunnable for CreateCommand {
                 &dec_params,
                 &argon2idparams,
                 password.as_bytes(),
-                key_stream.as_mut().map(|k| k as _),
+                key_stream.as_mut(),
             )?;
             enc_params.write_to_writer(&mut config_file)?;
             config_file
@@ -350,7 +350,7 @@ impl ConsumingRunnable for MountCommand {
             let dec_params = decrypt_encrypted(
                 &enc_params,
                 password.as_bytes(),
-                key_stream.as_mut().map(|k| k as _),
+                key_stream.as_mut(),
             ).context("Failed to decrypt the config file. It is likely that the password/keyfile is wrong, or that the config file is corrupted.")?;
 
             if dec_params.compat_version > COMPAT_VERSION {
