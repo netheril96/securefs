@@ -8,8 +8,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::protos::params::{DecryptedSecurefsParams, InternalMountData, MountOptions};
-use crate::{AssertOk, lite::IoWrapperFactory};
+use crate::{AssertOk, lite::IoWrapperFactory, winfsp_wrappers::TracedWinFspWrapper};
 use crate::{
     OwnedFileDescriptor,
     lite::{
@@ -19,6 +18,10 @@ use crate::{
     stream::{FileLikeStream, with_source_locked},
     win::{NtError, OwnedUnicodeString},
     winfsp_wrappers::WinFspFileSystemCore,
+};
+use crate::{
+    lite::{LiteAesGcmCryptStreamFactory, name_translators::create_name_translator},
+    protos::params::InternalMountData,
 };
 use ambassador::{Delegate, delegatable_trait};
 use anyhow::Context;
@@ -32,13 +35,13 @@ use windows::{
             FILE_OPEN, FILE_OPEN_REPARSE_POINT, FILE_STAT_INFORMATION,
             FILE_SYNCHRONOUS_IO_NONALERT, FileAttributeTagInformation, FileStatInformation,
             NTCREATEFILE_CREATE_DISPOSITION, NTCREATEFILE_CREATE_OPTIONS, NtCreateFile,
-            NtQueryInformationFile, NtQuerySecurityObject,
+            NtQueryInformationFile, NtQuerySecurityObject, RtlDosPathNameToNtPathName_U_WithStatus,
         },
     },
     Win32::{
         Foundation::{
             HANDLE, OBJ_CASE_INSENSITIVE, STATUS_FILE_IS_A_DIRECTORY, STATUS_INVALID_PARAMETER,
-            STATUS_NOT_CAPABLE,
+            STATUS_NOT_CAPABLE, UNICODE_STRING,
         },
         Security::{
             DACL_SECURITY_INFORMATION, GROUP_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
@@ -46,16 +49,20 @@ use windows::{
         },
         Storage::FileSystem::{
             FILE_ACCESS_RIGHTS, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_TAG_INFO,
-            FILE_FLAGS_AND_ATTRIBUTES, FILE_GENERIC_READ, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE,
-            FILE_SHARE_READ, FILE_SHARE_WRITE, READ_CONTROL, SYNCHRONIZE,
+            FILE_FLAGS_AND_ATTRIBUTES, FILE_GENERIC_READ, FILE_LIST_DIRECTORY,
+            FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+            FILE_TRAVERSE, READ_CONTROL, SYNCHRONIZE,
         },
-        System::IO::IO_STATUS_BLOCK,
+        System::{IO::IO_STATUS_BLOCK, WindowsProgramming::RtlFreeUnicodeString},
     },
+    core::PWSTR,
 };
 use winfsp::{
-    U16CStr,
+    FspError, U16CStr, U16CString,
     filesystem::{FileInfo, FileSecurity, OpenFileInfo},
-    host::VolumeParams,
+    host::{FileSystemHost, MountPoint, VolumeParams},
+    service::FileSystemServiceBuilder,
+    winfsp_init_or_die,
 };
 
 #[delegatable_trait]
@@ -595,6 +602,66 @@ impl WinFspFileSystemCore for LiteWinFspCore {
     }
 }
 
+impl LiteWinFspCore {
+    pub fn new(
+        root_dir: &str,
+        name_translator: Arc<dyn NameTranslator>,
+        factory: Box<dyn IoWrapperFactory>,
+    ) -> anyhow::Result<Self> {
+        let handle = unsafe {
+            let mut ntfilename: UNICODE_STRING = std::mem::zeroed();
+            RtlDosPathNameToNtPathName_U_WithStatus(
+                PWSTR::from_raw(U16CString::from_str(root_dir)?.as_mut_ptr()),
+                &raw mut ntfilename,
+                None,
+                None,
+            )
+            .assert_ok()
+            .context("RtlDosPathNameToNtPathName_U_WithStatus")?;
+            let ntfilename = scopeguard::guard(ntfilename, |mut n| {
+                RtlFreeUnicodeString(&raw mut n);
+            });
+
+            let obj_attr = OBJECT_ATTRIBUTES {
+                Length: std::mem::size_of::<OBJECT_ATTRIBUTES>().try_into()?,
+                RootDirectory: HANDLE::default(),
+                ObjectName: &raw const *ntfilename,
+                Attributes: OBJ_CASE_INSENSITIVE,
+                SecurityDescriptor: std::ptr::null(),
+                SecurityQualityOfService: std::ptr::null(),
+            };
+            let mut iosb: IO_STATUS_BLOCK = std::mem::zeroed();
+            let mut h = HANDLE::default();
+            NtCreateFile(
+                &mut h,
+                FILE_READ_ATTRIBUTES | READ_CONTROL | FILE_LIST_DIRECTORY | FILE_TRAVERSE,
+                &raw const obj_attr,
+                &raw mut iosb,
+                None,
+                FILE_ATTRIBUTE_DIRECTORY,
+                FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+                FILE_OPEN,
+                FILE_DIRECTORY_FILE,
+                None,
+                0,
+            )
+            .assert_ok()
+            .context("NtCreateFile")?;
+            OwnedFileDescriptor::from_raw_handle(h.0)
+        };
+
+        let root_dir = LiteDirContext {
+            dir: handle,
+            full_path: std::fs::canonicalize(Path::new(root_dir))?,
+            name_translator: name_translator,
+            long_name_table: Default::default(),
+        };
+        let core = LiteWinFspCore { root_dir, factory };
+
+        Ok(core)
+    }
+}
+
 mod volume {
     use anyhow::Context;
     use std::ffi::c_void;
@@ -654,7 +721,50 @@ mod volume {
 }
 
 pub fn mount(data: InternalMountData) -> anyhow::Result<()> {
-    todo!()
+    let core = LiteWinFspCore::new(
+        &data.data_dir,
+        create_name_translator(data.decrypted_params.lite_format_params())?,
+        Box::new(LiteAesGcmCryptStreamFactory::new_from_params(
+            &data.decrypted_params,
+            !data.mount_options.disable_verification,
+        )?),
+    )?;
+    let mut volume_params = VolumeParams::new();
+    volume_params
+        .file_info_timeout(
+            u32::try_from(data.mount_options.attr_cache_seconds.unwrap_or(30))? * 1000u32,
+        )
+        .read_only_volume(data.mount_options.read_only);
+    core.fill_volume_params(&mut volume_params)?;
+
+    let start_data = Arc::new(Mutex::new(Some((core, volume_params))));
+
+    let init = winfsp_init_or_die();
+    let fsp = FileSystemServiceBuilder::new()
+        .with_start(|| {
+            let (core, volume_params) = start_data
+                .lock()
+                .take()
+                .ok_or(FspError::NTSTATUS(STATUS_INVALID_PARAMETER.0))?;
+            let mut host = FileSystemHost::new(volume_params, TracedWinFspWrapper::from(core))?;
+            if data.mount_options.mount_point.eq_ignore_ascii_case("nul") {
+                host.mount(MountPoint::NextFreeDrive)?;
+            } else {
+                host.mount(data.mount_options.mount_point.as_str())?;
+            }
+            host.start_with_threads(32)?;
+            Ok(host)
+        })
+        .with_stop(|h| {
+            if let Some(h) = h {
+                h.stop();
+            }
+            Ok(())
+        })
+        .build("securefs", init)?;
+
+    fsp.start().join().expect("thread join should succeed")?;
+    Ok(())
 }
 
 pub mod testing {
@@ -689,7 +799,6 @@ pub mod testing {
 
     pub fn test_main() -> anyhow::Result<()> {
         let dec_params = DecryptedSecurefsParams {
-            compat_version: 5,
             size_params: MessageField::some(SizeParams {
                 block_size: 333,
                 iv_size: 12,
