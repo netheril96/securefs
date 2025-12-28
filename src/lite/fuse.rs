@@ -560,7 +560,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
     }
 
     fn can_mkdir(&self) -> bool {
-        true
+        !self.readonly
     }
 
     fn mkdir(
@@ -621,7 +621,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
     }
 
     fn can_unlink(&self) -> bool {
-        true
+        !self.readonly
     }
 
     fn unlink(
@@ -643,6 +643,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
             encoded_name.as_slice(),
             AtFlags::empty(),
         )?;
+        self.generation.fetch_add(1, Ordering::SeqCst);
         if self.name_translator.is_long_name(&encoded_name) {
             let table = parent_dir.ensure_writable_long_name_db()?;
             table.remove_mapping(encoded_name.as_slice())?;
@@ -652,7 +653,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
     }
 
     fn can_rmdir(&self) -> bool {
-        true
+        !self.readonly
     }
 
     fn rmdir(
@@ -698,6 +699,7 @@ impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
                 AtFlags::REMOVEDIR,
             )?;
         }
+        self.generation.fetch_add(1, Ordering::SeqCst);
 
         if self.name_translator.is_long_name(&encoded_name) {
             let table = parent_dir.ensure_writable_long_name_db()?;
