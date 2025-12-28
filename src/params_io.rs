@@ -41,7 +41,7 @@ pub enum ParamsIoError {
     #[error("The configuration file can neither be parsed as protobuf nor as JSON")]
     InvalidConfigFile,
     #[error(
-        "The configuration file contains fields or enums unknown to this binary.\
+        "The configuration file contains fields or enums unknown to this binary. \
          It is possible that the config file is created by a higher version of \
          securefs incompatible with this one."
     )]
@@ -316,8 +316,18 @@ mod protoutils {
     use protobuf::reflect::{ReflectFieldRef, ReflectValueRef};
 
     pub(super) fn has_unknowns_recursive(msg: &dyn MessageDyn) -> bool {
+        let _span = tracing::error_span!("has_unknowns_recursive").entered();
+
         // 1. Check for unknown fields at the current level
         if msg.unknown_fields_dyn().iter().any(|_| true) {
+            tracing::error!(
+                field_numbers = ?msg
+                    .unknown_fields_dyn()
+                    .iter()
+                    .map(|i| i.0)
+                    .collect::<Vec<u32>>(),
+                "Message has unknown fields"
+            );
             return true;
         }
 
@@ -326,7 +336,12 @@ mod protoutils {
         // 2. Iterate over all defined fields in the message
         for field in descriptor.fields() {
             let field_ref = field.get_reflect(msg);
-
+            let _span = tracing::error_span!(
+                "subfield",
+                field_name = field.name(),
+                field_number = field.number()
+            )
+            .entered();
             match field_ref {
                 // Check Sub-messages (Singular)
                 ReflectFieldRef::Optional(opt) => {
@@ -365,6 +380,7 @@ mod protoutils {
             // Check if Enum value is unrecognized
             ReflectValueRef::Enum(enum_descriptor, i) => {
                 // If the descriptor doesn't recognize the integer, it's unknown
+                tracing::error!(?enum_descriptor, value = i, "Message has unknown enum");
                 enum_descriptor.value_by_number(i).is_none()
             }
             _ => false,
