@@ -120,7 +120,6 @@ message InternalMountData
 {
     DecryptedSecurefsParams decrypted_params = 1;
     MountOptions mount_options = 2;
-    repeated string fuse_args = 3;
     string data_dir = 4;
 
     enum LogLevel {

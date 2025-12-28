@@ -3,7 +3,8 @@
 use anyhow::Context;
 use parking_lot::Mutex;
 use std::{
-    ffi::CString,
+    borrow::Cow,
+    ffi::{CStr, CString},
     os::fd::AsFd,
     path::Path,
     str::FromStr,
@@ -725,13 +726,25 @@ pub fn mount(data: InternalMountData) -> anyhow::Result<()> {
         data_dir,
     )?));
     std::fs::create_dir_all(&data.mount_options.mount_point)?;
-    let mut fuse_args: Vec<CString> = vec![c"securefs".into()];
-    for s in &data.fuse_args {
+    let mut fuse_args: Vec<Cow<'_, CStr>> = vec![
+        c"securefs".into(),
+        c"-o".into(),
+        c"default_permissions".into(),
+    ];
+    if data.mount_options.read_only {
         fuse_args.push(c"-o".into());
-        fuse_args.push(CString::from_str(s.as_str())?);
+        fuse_args.push(c"ro".into());
     }
-    fuse_args.push(CString::from_str(&data.mount_options.mount_point)?);
-    run_fuse_main(fuse_args.iter().map(|c| c.as_c_str()), &mut vfs)
+    if let Some(uid) = data.mount_options.uid_override {
+        fuse_args.push(c"-o".into());
+        fuse_args.push(CString::from_vec_with_nul(format!("uid={}", uid).into_bytes())?.into());
+    }
+    if let Some(gid) = data.mount_options.gid_override {
+        fuse_args.push(c"-o".into());
+        fuse_args.push(CString::from_vec_with_nul(format!("gid={}", gid).into_bytes())?.into());
+    }
+    fuse_args.push(CString::from_str(&data.mount_options.mount_point)?.into());
+    run_fuse_main(fuse_args.iter().map(|c| c.as_ref()), &mut vfs)
 }
 
 pub mod testing {

@@ -376,13 +376,6 @@ impl ConsumingRunnable for MountCommand {
                     special_fields: Default::default(),
                 })
                 .into(),
-                fuse_args: {
-                    let mut args = vec!["default_permissions".into()];
-                    if self.read_only {
-                        args.push("ro".into());
-                    }
-                    args
-                },
                 data_dir: self.data_dir.to_string_lossy().into_owned(),
                 background_logging: None.into(),
                 special_fields: Default::default(),
