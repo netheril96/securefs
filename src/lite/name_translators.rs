@@ -44,17 +44,38 @@ pub enum NameDecodeOutput {
 }
 
 pub trait NameTranslator {
+    /// Whether this just passes the name through.
     fn is_no_op(&self) -> bool {
         false
     }
+    /// Encode the name.
     fn encode_name(&self, name: &[u8]) -> anyhow::Result<Vec<u8>>;
+    /// Decode the name.
     fn decode_name(&self, name: &[u8]) -> NameDecodeOutput;
+    /// Encrypt the name.
+    ///
+    /// For long name, this differs from encode_name. Otherwise the two should
+    /// be the same.
     fn encrypt_name(&self, name: &[u8]) -> anyhow::Result<Vec<u8>>;
+    /// Decrypt the name.
+    ///
+    /// For long name, this differs from decode_name. Otherwise the two should
+    /// be the same.
     fn decrypt_name(&self, name: &[u8]) -> Option<Vec<u8>>;
+    /// Tell whether the encoded name is from a long name.
     fn is_long_name(&self, encoded: &[u8]) -> bool;
+    /// Encode the path stored in a symlink.
     fn encode_path_for_symlink(&self, path: &[u8]) -> anyhow::Result<Vec<u8>>;
+    /// Decode the path stored in a symlink.
     fn decode_path_for_symlink(&self, path: &[u8]) -> anyhow::Result<Vec<u8>>;
+    /// Given the encoded size, compute the decoded size.
     fn max_virtual_path_component_size(&self, physical_size: u32) -> u32;
+    /// Hint if the encoded name is decodable.
+    ///
+    /// When this method returns true, the `encoded` **may** be decodable. If
+    /// false, it **must not** be decodable. This allows certain optimizations,
+    /// e.g. skipping definitely not decodable names.
+    fn is_decodable_hint(&self, encoded: &[u8]) -> bool;
 }
 
 pub struct NoOpNameTranslator {}
@@ -90,6 +111,10 @@ impl NameTranslator for NoOpNameTranslator {
 
     fn is_long_name(&self, encoded: &[u8]) -> bool {
         false
+    }
+
+    fn is_decodable_hint(&self, encoded: &[u8]) -> bool {
+        true
     }
 }
 
@@ -180,6 +205,10 @@ impl NameTranslator for LegacyNameTranslator {
 
     fn is_long_name(&self, encoded: &[u8]) -> bool {
         false
+    }
+
+    fn is_decodable_hint(&self, encoded: &[u8]) -> bool {
+        !encoded.starts_with(b".")
     }
 }
 
@@ -289,6 +318,10 @@ impl NameTranslator for NewStyleNameTranslator {
 
     fn is_long_name(&self, encoded: &[u8]) -> bool {
         encoded.ends_with(self.long_name_suffix.as_bytes())
+    }
+
+    fn is_decodable_hint(&self, encoded: &[u8]) -> bool {
+        !encoded.starts_with(b".")
     }
 }
 

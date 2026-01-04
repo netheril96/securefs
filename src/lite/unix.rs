@@ -450,7 +450,12 @@ impl DirReader for LiteDirReader {
                     };
                     let name = if entry.file_name() == c"." || entry.file_name() == c".." {
                         NameDecodeOutput::Decoded(entry.file_name().to_bytes().to_vec())
-                    } else if entry.file_name().to_bytes().starts_with(b".") {
+                    } else if !self
+                        .inode
+                        .header
+                        .name_translator
+                        .is_decodable_hint(entry.file_name().to_bytes())
+                    {
                         continue;
                     } else {
                         self.inode
