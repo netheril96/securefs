@@ -26,22 +26,23 @@ use crate::{
 use ambassador::{Delegate, delegatable_trait};
 use anyhow::Context;
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
-use widestring::u16cstr;
+use widestring::{U16Str, u16cstr};
 use windows::{
     Wdk::{
         Foundation::OBJECT_ATTRIBUTES,
         Storage::FileSystem::{
-            FILE_CREATE, FILE_DIRECTORY_FILE, FILE_NO_EA_KNOWLEDGE, FILE_NON_DIRECTORY_FILE,
-            FILE_OPEN, FILE_OPEN_REPARSE_POINT, FILE_STAT_INFORMATION,
-            FILE_SYNCHRONOUS_IO_NONALERT, FileAttributeTagInformation, FileStatInformation,
-            NTCREATEFILE_CREATE_DISPOSITION, NTCREATEFILE_CREATE_OPTIONS, NtCreateFile,
+            FILE_CREATE, FILE_DIRECTORY_FILE, FILE_ID_BOTH_DIRECTORY_INFORMATION,
+            FILE_NO_EA_KNOWLEDGE, FILE_NON_DIRECTORY_FILE, FILE_OPEN, FILE_OPEN_REPARSE_POINT,
+            FILE_STAT_INFORMATION, FILE_SYNCHRONOUS_IO_NONALERT, FileAttributeTagInformation,
+            FileIdBothDirectoryInformation, FileStatInformation, NTCREATEFILE_CREATE_DISPOSITION,
+            NTCREATEFILE_CREATE_OPTIONS, NtCreateFile, NtQueryDirectoryFile,
             NtQueryInformationFile, NtQuerySecurityObject, RtlDosPathNameToNtPathName_U_WithStatus,
         },
     },
     Win32::{
         Foundation::{
             HANDLE, OBJ_CASE_INSENSITIVE, STATUS_FILE_IS_A_DIRECTORY, STATUS_INVALID_PARAMETER,
-            STATUS_NOT_CAPABLE, UNICODE_STRING,
+            STATUS_NO_MORE_FILES, STATUS_NOT_A_DIRECTORY, STATUS_NOT_CAPABLE, UNICODE_STRING,
         },
         Security::{
             DACL_SECURITY_INFORMATION, GROUP_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
@@ -180,6 +181,74 @@ impl LiteDirContext {
             Ok(result) => anyhow::Ok(result),
             Err(err) => Err(err.1)?,
         }
+    }
+
+    fn raw_iterate<F>(&self, mut f: F) -> anyhow::Result<()>
+    where
+        F: FnMut(&U16Str, &FileInfo) -> anyhow::Result<()>,
+    {
+        let mut buffer = vec![0u64; 8192]; // 64KB buffer, 8-byte aligned
+        let mut iosb: IO_STATUS_BLOCK = unsafe { std::mem::zeroed() };
+        let mut restart_scan = true;
+
+        loop {
+            let status = unsafe {
+                NtQueryDirectoryFile(
+                    HANDLE(self.dir.as_raw_handle()),
+                    None,
+                    None,
+                    None,
+                    &mut iosb,
+                    buffer.as_mut_ptr() as *mut _,
+                    (buffer.len() * 8) as u32,
+                    FileIdBothDirectoryInformation,
+                    false,
+                    None,
+                    restart_scan,
+                )
+            };
+
+            if status == STATUS_NO_MORE_FILES {
+                break;
+            }
+            status.assert_ok().context("NtQueryDirectoryFile")?;
+
+            restart_scan = false;
+
+            let mut offset = 0;
+            loop {
+                let info = unsafe {
+                    &*(buffer.as_ptr().cast::<u8>().add(offset)
+                        as *const FILE_ID_BOTH_DIRECTORY_INFORMATION)
+                };
+
+                let name = unsafe {
+                    U16Str::from_ptr(info.FileName.as_ptr(), (info.FileNameLength / 2) as usize)
+                };
+
+                let file_info = FileInfo {
+                    file_attributes: info.FileAttributes,
+                    reparse_tag: 0,
+                    allocation_size: info.AllocationSize as _,
+                    file_size: info.EndOfFile as _,
+                    creation_time: info.CreationTime as _,
+                    last_access_time: info.LastAccessTime as _,
+                    last_write_time: info.LastWriteTime as _,
+                    change_time: info.ChangeTime as _,
+                    index_number: info.FileId as _,
+                    hard_links: 0,
+                    ea_size: info.EaSize,
+                };
+
+                f(name, &file_info)?;
+
+                if info.NextEntryOffset == 0 {
+                    break;
+                }
+                offset += info.NextEntryOffset as usize;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -599,6 +668,21 @@ impl WinFspFileSystemCore for LiteWinFspCore {
             * u64::try_from(fs_size.BytesPerSector)?
             * u64::try_from(fs_size.SectorsPerAllocationUnit)?;
         Ok(())
+    }
+
+    fn read_directory(
+        &self,
+        context: &Self::FileContext,
+        pattern: Option<&U16CStr>,
+        marker: winfsp::filesystem::DirMarker,
+        buffer: &mut [u8],
+    ) -> anyhow::Result<u32> {
+        let LiteContext::Dir(context) = context else {
+            return Err(NtError {
+                status: STATUS_NOT_A_DIRECTORY,
+            })?;
+        };
+        todo!()
     }
 }
 
