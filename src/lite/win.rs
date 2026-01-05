@@ -26,14 +26,14 @@ use crate::{
 use ambassador::{Delegate, delegatable_trait};
 use anyhow::Context;
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
-use widestring::{U16Str, u16cstr};
+use widestring::{U16Str, u16cstr, u16str};
 use windows::{
     Wdk::{
         Foundation::OBJECT_ATTRIBUTES,
         Storage::FileSystem::{
-            FILE_CREATE, FILE_DIRECTORY_FILE, FILE_ID_BOTH_DIRECTORY_INFORMATION,
-            FILE_NO_EA_KNOWLEDGE, FILE_NON_DIRECTORY_FILE, FILE_OPEN, FILE_OPEN_REPARSE_POINT,
-            FILE_STAT_INFORMATION, FILE_SYNCHRONOUS_IO_NONALERT, FileAttributeTagInformation,
+            FILE_CREATE, FILE_DIRECTORY_FILE, FILE_ID_BOTH_DIR_INFORMATION, FILE_NO_EA_KNOWLEDGE,
+            FILE_NON_DIRECTORY_FILE, FILE_OPEN, FILE_OPEN_REPARSE_POINT, FILE_STAT_INFORMATION,
+            FILE_SYNCHRONOUS_IO_NONALERT, FileAttributeTagInformation,
             FileIdBothDirectoryInformation, FileStatInformation, NTCREATEFILE_CREATE_DISPOSITION,
             NTCREATEFILE_CREATE_OPTIONS, NtCreateFile, NtQueryDirectoryFile,
             NtQueryInformationFile, NtQuerySecurityObject, RtlDosPathNameToNtPathName_U_WithStatus,
@@ -60,7 +60,7 @@ use windows::{
 };
 use winfsp::{
     FspError, U16CStr, U16CString,
-    filesystem::{FileInfo, FileSecurity, OpenFileInfo},
+    filesystem::{DirBuffer, DirInfo, FileInfo, FileSecurity, OpenFileInfo, WideNameInfo},
     host::{FileSystemHost, MountPoint, VolumeParams},
     service::FileSystemServiceBuilder,
     winfsp_init_or_die,
@@ -113,7 +113,9 @@ pub(super) struct LiteDirContext {
     dir: OwnedFileDescriptor,
     full_path: PathBuf,
     name_translator: Arc<dyn NameTranslator>,
+    factory: Arc<dyn IoWrapperFactory>,
     long_name_table: Mutex<Option<LiteDirLongNameDb>>,
+    dir_buffer: DirBuffer,
 }
 
 impl Debug for LiteDirContext {
@@ -183,9 +185,92 @@ impl LiteDirContext {
         }
     }
 
+    pub(super) fn iterate<F>(&self, mut f: F) -> anyhow::Result<()>
+    where
+        F: FnMut(&U16Str, FileInfo) -> anyhow::Result<()>,
+    {
+        self.raw_iterate(|physical_name, physical_info| -> anyhow::Result<()> {
+            if physical_name == u16str!(".") || physical_name == u16str!("..") {
+                return f(physical_name, physical_info);
+            }
+            let Ok(physical_name_utf8) = String::from_utf16(physical_name.as_slice()) else {
+                tracing::warn!(?physical_name, "failed to decode as utf8");
+                return Ok(()); // Let iteration continue.
+            };
+            let decoded = self
+                .name_translator
+                .decode_name(physical_name_utf8.as_bytes());
+            match decoded {
+                crate::lite::name_translators::NameDecodeOutput::InvalidName => return Ok(()),
+                crate::lite::name_translators::NameDecodeOutput::LongName => todo!(),
+                crate::lite::name_translators::NameDecodeOutput::Decoded(decoded) => {
+                    let Ok(decoded_str) = str::from_utf8(&decoded) else {
+                        tracing::warn!(?decoded, "failed to decode decrypted filename as utf8. possible cause is that the filename comes from a Unix OS who does not enforce utf-8.");
+                        return Ok(()); // Let iteration continue
+                    };
+
+                    let virtual_size = self.factory.compute_virtual_size(physical_info.file_size);
+                    let virtual_size = match virtual_size {
+                        Some(virtual_size) => virtual_size,
+                        None => {
+                            let mut un: UNICODE_STRING = unsafe { std::mem::zeroed() };
+                            un.Buffer = PWSTR(physical_name.as_ptr().cast_mut());
+                            un.Length = physical_name.len().try_into()?;
+                            un.MaximumLength = physical_name.len().try_into()?;
+
+                            let obj_attr = OBJECT_ATTRIBUTES {
+                                Length: std::mem::size_of::<OBJECT_ATTRIBUTES>().try_into()?,
+                                RootDirectory: HANDLE(self.dir.as_raw_handle()),
+                                ObjectName: &raw const un,
+                                Attributes: (OBJ_CASE_INSENSITIVE),
+                                SecurityDescriptor: std::ptr::null(),
+                                SecurityQualityOfService: std::ptr::null(),
+                            };
+
+                            let mut handle = HANDLE::default();
+                            let mut io_status_block: IO_STATUS_BLOCK =
+                                unsafe { std::mem::zeroed() };
+
+                            unsafe {
+                                NtCreateFile(
+                                    &raw mut handle,
+                                    FILE_GENERIC_READ,
+                                    &raw const obj_attr,
+                                    &raw mut io_status_block,
+                                    None,
+                                    FILE_FLAGS_AND_ATTRIBUTES::default(),
+                                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                    FILE_OPEN,
+                                    FILE_OPEN_REPARSE_POINT,
+                                    None,
+                                    0,
+                                )
+                            }
+                            .assert_ok()
+                            .context("NtCreateFile")?;
+
+                            let handle = unsafe { OwnedFileDescriptor::from_raw_handle(handle.0) };
+                            let stream = self.factory.wrap(handle)?;
+                            stream.size()?
+                        }
+                    };
+
+                    let mut virtual_info = physical_info.clone();
+                    virtual_info.file_size = virtual_size;
+
+                    f(
+                        U16Str::from_slice(&decoded_str.encode_utf16().collect::<Vec<u16>>()),
+                        virtual_info,
+                    )?;
+                }
+            }
+            Ok(())
+        })
+    }
+
     fn raw_iterate<F>(&self, mut f: F) -> anyhow::Result<()>
     where
-        F: FnMut(&U16Str, &FileInfo) -> anyhow::Result<()>,
+        F: FnMut(&U16Str, FileInfo) -> anyhow::Result<()>,
     {
         let mut buffer = vec![0u64; 8192]; // 64KB buffer, 8-byte aligned
         let mut iosb: IO_STATUS_BLOCK = unsafe { std::mem::zeroed() };
@@ -219,7 +304,7 @@ impl LiteDirContext {
             loop {
                 let info = unsafe {
                     &*(buffer.as_ptr().cast::<u8>().add(offset)
-                        as *const FILE_ID_BOTH_DIRECTORY_INFORMATION)
+                        as *const FILE_ID_BOTH_DIR_INFORMATION)
                 };
 
                 let name = unsafe {
@@ -240,7 +325,7 @@ impl LiteDirContext {
                     ea_size: info.EaSize,
                 };
 
-                f(name, &file_info)?;
+                f(name, file_info)?;
 
                 if info.NextEntryOffset == 0 {
                     break;
@@ -316,8 +401,10 @@ fn get_file_attributes(handle: HANDLE) -> anyhow::Result<u32> {
 }
 
 pub(super) struct LiteWinFspCore {
-    root_dir: LiteDirContext,
-    factory: Box<dyn IoWrapperFactory>,
+    root_dir_handle: OwnedFileDescriptor,
+    name_translator: Arc<dyn NameTranslator>,
+    full_path: PathBuf,
+    factory: Arc<dyn IoWrapperFactory>,
 }
 
 impl LiteWinFspCore {
@@ -329,8 +416,7 @@ impl LiteWinFspCore {
                 continue;
             }
             joined.push_str(str::from_utf8(
-                self.root_dir
-                    .name_translator
+                self.name_translator
                     .encode_name(file_name.as_bytes())?
                     .as_slice(),
             )?);
@@ -356,7 +442,7 @@ impl LiteWinFspCore {
 
         let obj_attr = OBJECT_ATTRIBUTES {
             Length: std::mem::size_of::<OBJECT_ATTRIBUTES>().try_into()?,
-            RootDirectory: HANDLE(self.root_dir.dir.as_raw_handle()),
+            RootDirectory: HANDLE(self.root_dir_handle.as_raw_handle()),
             ObjectName: &raw const encoded_un.unicode_string,
             Attributes: (OBJ_CASE_INSENSITIVE),
             SecurityDescriptor: security_descriptor.0 as _,
@@ -398,8 +484,10 @@ impl LiteWinFspCore {
             let ctx = LiteDirContext {
                 dir: handle,
                 full_path,
-                name_translator: self.root_dir.name_translator.clone(),
+                name_translator: self.name_translator.clone(),
                 long_name_table: Mutex::new(None),
+                dir_buffer: DirBuffer::new(),
+                factory: self.factory.clone(),
             };
             Ok(LiteContext::Dir(ctx))
         } else {
@@ -414,14 +502,13 @@ impl LiteWinFspCore {
 
 impl LiteWinFspCore {
     pub fn fill_volume_params(&self, params: &mut VolumeParams) -> anyhow::Result<()> {
-        let fs_attr = volume::get_attr(HANDLE(self.root_dir.dir.as_raw_handle()))?;
-        let fs_size = volume::get_size(HANDLE(self.root_dir.dir.as_raw_handle()))?;
+        let fs_attr = volume::get_attr(HANDLE(self.root_dir_handle.as_raw_handle()))?;
+        let fs_size = volume::get_size(HANDLE(self.root_dir_handle.as_raw_handle()))?;
         params
             .sector_size(fs_size.BytesPerSector as _)
             .sectors_per_allocation_unit(fs_size.SectorsPerAllocationUnit as _)
             .max_component_length(
-                self.root_dir
-                    .name_translator
+                self.name_translator
                     .max_virtual_path_component_size(
                         unsafe { fs_attr.as_ref() }
                             .MaximumComponentNameLength
@@ -490,7 +577,7 @@ impl WinFspFileSystemCore for LiteWinFspCore {
         };
 
         if file_name.is_empty() || file_name == u16cstr!("\\") || file_name == u16cstr!("/") {
-            common(HANDLE(self.root_dir.dir.as_raw_handle()))
+            common(HANDLE(self.root_dir_handle.as_raw_handle()))
         } else {
             let (handle, _) = self.nt_create_file(
                 file_name,
@@ -535,10 +622,7 @@ impl WinFspFileSystemCore for LiteWinFspCore {
             PSECURITY_DESCRIPTOR(std::ptr::null_mut()),
         )?;
 
-        let full_path = self
-            .root_dir
-            .full_path
-            .join(Path::new(encoded_name.as_str()));
+        let full_path = self.full_path.join(Path::new(encoded_name.as_str()));
 
         let result = self.build_context(handle, full_path, is_directory)?;
         *file_info.as_mut() = result.get_file_info()?;
@@ -582,19 +666,23 @@ impl WinFspFileSystemCore for LiteWinFspCore {
             security_descriptor.map_or(std::ptr::null_mut(), |c| c.as_ptr().cast_mut()),
         );
 
+        let mut granted_access = FILE_ACCESS_RIGHTS(granted_access);
+        if is_directory {
+            granted_access |= SYNCHRONIZE | FILE_TRAVERSE;
+        } else {
+            granted_access |= FILE_GENERIC_READ;
+        }
+
         let (handle, encoded_name) = self.nt_create_file(
             file_name,
-            FILE_ACCESS_RIGHTS(granted_access) | SYNCHRONIZE | FILE_GENERIC_READ,
+            granted_access,
             FILE_FLAGS_AND_ATTRIBUTES(file_attributes),
             FILE_CREATE,
             FILE_OPEN_REPARSE_POINT | create_options,
             security_descriptor,
         )?;
 
-        let full_path = self
-            .root_dir
-            .full_path
-            .join(Path::new(encoded_name.as_str()));
+        let full_path = self.full_path.join(Path::new(encoded_name.as_str()));
 
         let result = self.build_context(handle, full_path, is_directory)?;
         *file_info.as_mut() = result.get_file_info()?;
@@ -660,7 +748,7 @@ impl WinFspFileSystemCore for LiteWinFspCore {
         &self,
         out_volume_info: &mut winfsp::filesystem::VolumeInfo,
     ) -> anyhow::Result<()> {
-        let fs_size = volume::get_size(HANDLE(self.root_dir.dir.as_raw_handle()))?;
+        let fs_size = volume::get_size(HANDLE(self.root_dir_handle.as_raw_handle()))?;
         out_volume_info.free_size = u64::try_from(fs_size.AvailableAllocationUnits)?
             * u64::try_from(fs_size.BytesPerSector)?
             * u64::try_from(fs_size.SectorsPerAllocationUnit)?;
@@ -682,7 +770,17 @@ impl WinFspFileSystemCore for LiteWinFspCore {
                 status: STATUS_NOT_A_DIRECTORY,
             })?;
         };
-        todo!()
+        if marker.is_none() {
+            let dir_buffer_lock = context.dir_buffer.acquire(true, Some(8192))?;
+            context.iterate(|name, file_info| {
+                let mut dir_info: DirInfo<255> = DirInfo::new();
+                dir_info.file_info_mut().clone_from(&file_info);
+                dir_info.set_name_raw(name)?;
+                dir_buffer_lock.write(&mut dir_info)?;
+                Ok(())
+            })?;
+        }
+        Ok(context.dir_buffer.read(marker, buffer))
     }
 }
 
@@ -690,7 +788,7 @@ impl LiteWinFspCore {
     pub fn new(
         root_dir: &str,
         name_translator: Arc<dyn NameTranslator>,
-        factory: Box<dyn IoWrapperFactory>,
+        factory: Arc<dyn IoWrapperFactory>,
     ) -> anyhow::Result<Self> {
         let handle = unsafe {
             let mut ntfilename: UNICODE_STRING = std::mem::zeroed();
@@ -734,13 +832,12 @@ impl LiteWinFspCore {
             OwnedFileDescriptor::from_raw_handle(h.0)
         };
 
-        let root_dir = LiteDirContext {
-            dir: handle,
+        let core = LiteWinFspCore {
+            root_dir_handle: handle,
             full_path: std::fs::canonicalize(Path::new(root_dir))?,
             name_translator: name_translator,
-            long_name_table: Default::default(),
+            factory,
         };
-        let core = LiteWinFspCore { root_dir, factory };
 
         Ok(core)
     }
@@ -808,7 +905,7 @@ pub fn mount(data: InternalMountData) -> anyhow::Result<()> {
     let core = LiteWinFspCore::new(
         &data.data_dir,
         create_name_translator(data.decrypted_params.lite_format_params())?,
-        Box::new(LiteAesGcmCryptStreamFactory::new_from_params(
+        Arc::new(LiteAesGcmCryptStreamFactory::new_from_params(
             &data.decrypted_params,
             !data.mount_options.disable_verification,
         )?),
