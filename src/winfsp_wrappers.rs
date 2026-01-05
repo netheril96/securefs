@@ -490,7 +490,7 @@ impl<T: WinFspFileSystemCore> WinFspFileSystemCore for TracedWinFspWrapper<T> {
 
     fn close(&self, context: Self::FileContext) {
         let _span = span!(Level::ERROR, "close").entered();
-        self.inner.close(context);
+        tracing::debug!(?context, "closed");
     }
 
     fn create(

@@ -569,6 +569,14 @@ impl WinFspFileSystemCore for LiteWinFspCore {
                 .context("NtQuerySecurityObject")?;
             }
 
+            // cache file_attributes for Open
+            unsafe {
+                self.with_operation_response(|rsp| {
+                    rsp.Rsp.Create.Opened.FileInfo.FileAttributes = attributes;
+                })
+                .unwrap();
+            }
+
             Ok(FileSecurity {
                 reparse: false,
                 sz_security_descriptor: sz_security_descriptor.try_into()?,
@@ -604,13 +612,15 @@ impl WinFspFileSystemCore for LiteWinFspCore {
             })
         }
         .unwrap_or(false);
-        let mut create_options = NTCREATEFILE_CREATE_OPTIONS(create_options)
+
+        let create_options = NTCREATEFILE_CREATE_OPTIONS(create_options)
             & (FILE_DIRECTORY_FILE | FILE_NON_DIRECTORY_FILE | FILE_NO_EA_KNOWLEDGE);
 
         let mut granted_access = FILE_ACCESS_RIGHTS(granted_access);
         if is_directory {
-            granted_access |= SYNCHRONIZE;
-            create_options |= FILE_SYNCHRONOUS_IO_NONALERT
+            granted_access |= SYNCHRONIZE | FILE_TRAVERSE | FILE_LIST_DIRECTORY;
+        } else {
+            granted_access |= FILE_GENERIC_READ;
         }
 
         let (handle, encoded_name) = self.nt_create_file(
@@ -781,6 +791,10 @@ impl WinFspFileSystemCore for LiteWinFspCore {
             })?;
         }
         Ok(context.dir_buffer.read(marker, buffer))
+    }
+
+    fn cleanup(&self, context: &Self::FileContext, file_name: Option<&U16CStr>, flags: u32) {
+        // no op
     }
 }
 
