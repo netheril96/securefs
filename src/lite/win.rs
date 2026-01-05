@@ -50,9 +50,9 @@ use windows::{
         },
         Storage::FileSystem::{
             FILE_ACCESS_RIGHTS, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_TAG_INFO,
-            FILE_FLAGS_AND_ATTRIBUTES, FILE_GENERIC_READ, FILE_LIST_DIRECTORY,
-            FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-            FILE_TRAVERSE, READ_CONTROL, SYNCHRONIZE,
+            FILE_FLAG_OPEN_REPARSE_POINT, FILE_FLAGS_AND_ATTRIBUTES, FILE_GENERIC_READ,
+            FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ,
+            FILE_SHARE_WRITE, FILE_TRAVERSE, READ_CONTROL, SYNCHRONIZE,
         },
         System::{IO::IO_STATUS_BLOCK, WindowsProgramming::RtlFreeUnicodeString},
     },
@@ -625,10 +625,10 @@ impl WinFspFileSystemCore for LiteWinFspCore {
 
         let (handle, encoded_name) = self.nt_create_file(
             file_name,
-            granted_access | SYNCHRONIZE | FILE_GENERIC_READ,
-            FILE_FLAGS_AND_ATTRIBUTES(0),
+            granted_access,
+            FILE_FLAGS_AND_ATTRIBUTES::default(),
             FILE_OPEN,
-            FILE_OPEN_REPARSE_POINT,
+            create_options,
             PSECURITY_DESCRIPTOR(std::ptr::null_mut()),
         )?;
 
