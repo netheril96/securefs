@@ -7,7 +7,7 @@ edition = "2024"
 aes-gcm = { version = "0.10.3", features = ["aes", "alloc", "std"], default-features = false }
 aes-siv = { version = "0.7.0", default-features = false, features = ["alloc", "std"] }
 ahash = "0.8.12"
-ambassador = "0.4.2"
+ambassador = "0.5.0"
 anyhow = "1.0.100"
 argon2 = { version = "0.5.3", features = ["std"] }
 blake2 = "0.10.6"
