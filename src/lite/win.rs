@@ -794,7 +794,45 @@ impl WinFspFileSystemCore for LiteWinFspCore {
     }
 
     fn cleanup(&self, context: &Self::FileContext, file_name: Option<&U16CStr>, flags: u32) {
-        // no op
+        // no op for now
+    }
+
+    fn get_security(
+        &self,
+        context: &Self::FileContext,
+        security_descriptor: Option<&mut [c_void]>,
+    ) -> anyhow::Result<u64> {
+        let needed_size = if let Some(security_descriptor) = security_descriptor {
+            let handle = match context {
+                LiteContext::Dir(lite_dir_context) => HANDLE(lite_dir_context.dir.as_raw_handle()),
+                LiteContext::File(lite_regular_file_context) => lite_regular_file_context
+                    .file_like_stream
+                    .lock()
+                    .as_win_handle(),
+            };
+            let mut length_needed = 0;
+
+            unsafe {
+                NtQuerySecurityObject(
+                    handle,
+                    (OWNER_SECURITY_INFORMATION
+                        | GROUP_SECURITY_INFORMATION
+                        | DACL_SECURITY_INFORMATION)
+                        .0,
+                    Some(PSECURITY_DESCRIPTOR(security_descriptor.as_mut_ptr())),
+                    security_descriptor.len().try_into()?,
+                    &mut length_needed,
+                )
+                .assert_ok()
+                .context("NtQuerySecurityObject")?;
+            }
+
+            length_needed
+        } else {
+            0
+        };
+
+        Ok(needed_size.try_into()?)
     }
 }
 
