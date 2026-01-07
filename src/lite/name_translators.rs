@@ -305,7 +305,7 @@ impl NameTranslator for NewStyleNameTranslator {
         if (physical_size as usize) < (self.long_name_threshold + 16) * 8 / 5 {
             return physical_size;
         }
-        65535
+        4095
     }
 
     fn encrypt_name(&self, name: &[u8]) -> anyhow::Result<Vec<u8>> {
