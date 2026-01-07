@@ -6,7 +6,7 @@ use std::{
 
 use crate::stream::{LengthType, OffsetType, Stream};
 
-pub(in crate::stream) trait MultipleBlockReaderWriter {
+pub(in crate::stream) trait MultipleBlockReaderWriter: Send + Sync {
     fn block_size(&self) -> LengthType;
     fn read_multi_blocks(
         &mut self,

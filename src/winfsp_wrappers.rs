@@ -18,8 +18,8 @@ use winfsp_sys::{
 
 use crate::win::NtError;
 
-pub trait WinFspFileSystemCore: Sized {
-    type FileContext: Sized + Debug;
+pub trait WinFspFileSystemCore: Sized + Send + Sync {
+    type FileContext: Sized + Debug + Send + Sync;
 
     /// Get security information and attributes for a file or directory by its
     /// file name.

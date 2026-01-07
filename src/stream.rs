@@ -29,7 +29,7 @@ pub type LengthType = u64;
 
 #[allow(unused)]
 #[delegatable_trait]
-pub trait Stream {
+pub trait Stream: Send + Sync {
     fn read(&mut self, buffer: &mut [u8], offset: OffsetType) -> anyhow::Result<LengthType>;
     fn write(&mut self, buffer: &[u8], offset: OffsetType) -> anyhow::Result<()>;
     fn size(&self) -> anyhow::Result<LengthType>;

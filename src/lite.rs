@@ -30,7 +30,7 @@ pub mod name_translators;
 pub mod unix;
 pub mod win;
 
-pub trait IoWrapperFactory {
+pub trait IoWrapperFactory: Send + Sync {
     fn compute_virtual_size(&self, underlying_size: u64) -> Option<u64>;
     fn compute_max_physical_size(&self, virtual_size: u64) -> u64;
     fn wrap(&self, fd: OwnedFileDescriptor) -> anyhow::Result<Box<dyn FileLikeStream>>;

@@ -43,7 +43,7 @@ pub enum NameDecodeOutput {
     Decoded(Vec<u8>),
 }
 
-pub trait NameTranslator {
+pub trait NameTranslator: Send + Sync {
     /// Whether this just passes the name through.
     fn is_no_op(&self) -> bool {
         false

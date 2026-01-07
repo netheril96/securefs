@@ -33,10 +33,10 @@ use windows::{
         Storage::FileSystem::{
             FILE_CREATE, FILE_DIRECTORY_FILE, FILE_ID_BOTH_DIR_INFORMATION, FILE_NO_EA_KNOWLEDGE,
             FILE_NON_DIRECTORY_FILE, FILE_OPEN, FILE_OPEN_REPARSE_POINT, FILE_STAT_INFORMATION,
-            FILE_SYNCHRONOUS_IO_NONALERT, FileAttributeTagInformation,
-            FileIdBothDirectoryInformation, FileStatInformation, NTCREATEFILE_CREATE_DISPOSITION,
-            NTCREATEFILE_CREATE_OPTIONS, NtCreateFile, NtQueryDirectoryFile,
-            NtQueryInformationFile, NtQuerySecurityObject, RtlDosPathNameToNtPathName_U_WithStatus,
+            FileAttributeTagInformation, FileIdBothDirectoryInformation, FileStatInformation,
+            NTCREATEFILE_CREATE_DISPOSITION, NTCREATEFILE_CREATE_OPTIONS, NtCreateFile,
+            NtQueryDirectoryFile, NtQueryInformationFile, NtQuerySecurityObject,
+            RtlDosPathNameToNtPathName_U_WithStatus,
         },
     },
     Win32::{
@@ -50,9 +50,9 @@ use windows::{
         },
         Storage::FileSystem::{
             FILE_ACCESS_RIGHTS, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_TAG_INFO,
-            FILE_FLAG_OPEN_REPARSE_POINT, FILE_FLAGS_AND_ATTRIBUTES, FILE_GENERIC_READ,
-            FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ,
-            FILE_SHARE_WRITE, FILE_TRAVERSE, READ_CONTROL, SYNCHRONIZE,
+            FILE_FLAGS_AND_ATTRIBUTES, FILE_GENERIC_READ, FILE_LIST_DIRECTORY,
+            FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+            FILE_TRAVERSE, READ_CONTROL, SYNCHRONIZE,
         },
         System::{IO::IO_STATUS_BLOCK, WindowsProgramming::RtlFreeUnicodeString},
     },
