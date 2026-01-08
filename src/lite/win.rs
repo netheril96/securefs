@@ -430,7 +430,7 @@ impl LiteWinFspCore {
             }
             joined.push_str(str::from_utf8(
                 self.name_translator
-                    .encode_name(file_name.as_bytes())?
+                    .encode_name(part.as_bytes())?
                     .as_slice(),
             )?);
             joined.push('\\');
