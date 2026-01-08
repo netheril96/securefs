@@ -8,7 +8,9 @@ use std::{
     sync::Arc,
 };
 
-use crate::{AssertOk, lite::IoWrapperFactory, winfsp_wrappers::TracedWinFspWrapper};
+use crate::{
+    AssertOk, lite::IoWrapperFactory, stream::Stream, winfsp_wrappers::TracedWinFspWrapper,
+};
 use crate::{
     OwnedFileDescriptor,
     lite::{
@@ -225,8 +227,8 @@ impl LiteDirContext {
                         None => {
                             let mut un: UNICODE_STRING = unsafe { std::mem::zeroed() };
                             un.Buffer = PWSTR(physical_name.as_ptr().cast_mut());
-                            un.Length = physical_name.len().try_into()?;
-                            un.MaximumLength = physical_name.len().try_into()?;
+                            un.Length = (physical_name.len() * 2).try_into()?;
+                            un.MaximumLength = un.Length;
 
                             let obj_attr = OBJECT_ATTRIBUTES {
                                 Length: std::mem::size_of::<OBJECT_ATTRIBUTES>().try_into()?,
@@ -262,8 +264,8 @@ impl LiteDirContext {
                             })?;
 
                             let handle = unsafe { OwnedFileDescriptor::from_raw_handle(handle.0) };
-                            let stream = self.factory.wrap(handle)?;
-                            stream.size()?
+                            let mut stream = self.factory.wrap(handle)?;
+                            with_source_locked(&mut *stream, |s| s.size())?
                         }
                     };
 
