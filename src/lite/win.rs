@@ -26,17 +26,18 @@ use crate::{
 use ambassador::{Delegate, delegatable_trait};
 use anyhow::Context;
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
-use widestring::{U16Str, u16cstr, u16str};
+use tracing::trace_span;
+use widestring::{U16Str, U16String, u16cstr, u16str};
 use windows::{
     Wdk::{
         Foundation::OBJECT_ATTRIBUTES,
         Storage::FileSystem::{
             FILE_CREATE, FILE_DIRECTORY_FILE, FILE_ID_BOTH_DIR_INFORMATION, FILE_NO_EA_KNOWLEDGE,
             FILE_NON_DIRECTORY_FILE, FILE_OPEN, FILE_OPEN_REPARSE_POINT, FILE_STAT_INFORMATION,
-            FileAttributeTagInformation, FileIdBothDirectoryInformation, FileStatInformation,
-            NTCREATEFILE_CREATE_DISPOSITION, NTCREATEFILE_CREATE_OPTIONS, NtCreateFile,
-            NtQueryDirectoryFile, NtQueryInformationFile, NtQuerySecurityObject,
-            RtlDosPathNameToNtPathName_U_WithStatus,
+            FILE_SYNCHRONOUS_IO_NONALERT, FileAttributeTagInformation,
+            FileIdBothDirectoryInformation, FileStatInformation, NTCREATEFILE_CREATE_DISPOSITION,
+            NTCREATEFILE_CREATE_OPTIONS, NtCreateFile, NtQueryDirectoryFile,
+            NtQueryInformationFile, NtQuerySecurityObject, RtlDosPathNameToNtPathName_U_WithStatus,
         },
     },
     Win32::{
@@ -190,7 +191,10 @@ impl LiteDirContext {
         F: FnMut(&U16Str, FileInfo) -> anyhow::Result<()>,
     {
         self.raw_iterate(|physical_name, physical_info| -> anyhow::Result<()> {
+            let _span = trace_span!("LiteDirContext::iterate").entered();
+
             if physical_name == u16str!(".") || physical_name == u16str!("..") {
+                tracing::trace!(?physical_name, ?physical_info, "special entries");
                 return f(physical_name, physical_info);
             }
             let Ok(physical_name_utf8) = String::from_utf16(physical_name.as_slice()) else {
@@ -205,9 +209,15 @@ impl LiteDirContext {
                 crate::lite::name_translators::NameDecodeOutput::LongName => todo!(),
                 crate::lite::name_translators::NameDecodeOutput::Decoded(decoded) => {
                     let Ok(decoded_str) = str::from_utf8(&decoded) else {
-                        tracing::warn!(?decoded, "failed to decode decrypted filename as utf8. possible cause is that the filename comes from a Unix OS who does not enforce utf-8.");
+                        tracing::warn!(?decoded, "failed to decode as utf8");
                         return Ok(()); // Let iteration continue
                     };
+                    let decoded_ustr =
+                        U16String::from_vec(decoded_str.encode_utf16().collect::<Vec<u16>>());
+                    if physical_info.file_attributes & FILE_ATTRIBUTE_DIRECTORY.0 != 0 {
+                        tracing::trace!(?decoded_ustr, ?physical_info, "directory");
+                        return f(&decoded_ustr, physical_info);
+                    }
 
                     let virtual_size = self.factory.compute_virtual_size(physical_info.file_size);
                     let virtual_size = match virtual_size {
@@ -247,7 +257,9 @@ impl LiteDirContext {
                                 )
                             }
                             .assert_ok()
-                            .context("NtCreateFile")?;
+                            .with_context(|| {
+                                format!("NtCreateFile({:?}, ...) failed", physical_name)
+                            })?;
 
                             let handle = unsafe { OwnedFileDescriptor::from_raw_handle(handle.0) };
                             let stream = self.factory.wrap(handle)?;
@@ -257,11 +269,8 @@ impl LiteDirContext {
 
                     let mut virtual_info = physical_info.clone();
                     virtual_info.file_size = virtual_size;
-
-                    f(
-                        U16Str::from_slice(&decoded_str.encode_utf16().collect::<Vec<u16>>()),
-                        virtual_info,
-                    )?;
+                    tracing::trace!(?decoded_ustr, ?physical_info, "file");
+                    f(&decoded_ustr, virtual_info)?;
                 }
             }
             Ok(())
@@ -272,6 +281,7 @@ impl LiteDirContext {
     where
         F: FnMut(&U16Str, FileInfo) -> anyhow::Result<()>,
     {
+        let _span = trace_span!("LiteDirContext::raw_iterate").entered();
         let mut buffer = vec![0u64; 8192]; // 64KB buffer, 8-byte aligned
         let mut iosb: IO_STATUS_BLOCK = unsafe { std::mem::zeroed() };
         let mut restart_scan = true;
@@ -324,6 +334,7 @@ impl LiteDirContext {
                     hard_links: 0,
                     ea_size: info.EaSize,
                 };
+                tracing::trace!(?name, ?file_info);
 
                 f(name, file_info)?;
 
@@ -613,12 +624,13 @@ impl WinFspFileSystemCore for LiteWinFspCore {
         }
         .unwrap_or(false);
 
-        let create_options = NTCREATEFILE_CREATE_OPTIONS(create_options)
+        let mut create_options = NTCREATEFILE_CREATE_OPTIONS(create_options)
             & (FILE_DIRECTORY_FILE | FILE_NON_DIRECTORY_FILE | FILE_NO_EA_KNOWLEDGE);
 
         let mut granted_access = FILE_ACCESS_RIGHTS(granted_access);
         if is_directory {
             granted_access |= SYNCHRONIZE | FILE_TRAVERSE | FILE_LIST_DIRECTORY;
+            create_options |= FILE_SYNCHRONOUS_IO_NONALERT;
         } else {
             granted_access |= FILE_GENERIC_READ;
         }
@@ -663,7 +675,7 @@ impl WinFspFileSystemCore for LiteWinFspCore {
             .context("extra buffer not currently supported in securefs");
         }
         let is_directory = create_options & FILE_DIRECTORY_FILE.0 != 0;
-        let create_options = NTCREATEFILE_CREATE_OPTIONS(create_options)
+        let mut create_options = NTCREATEFILE_CREATE_OPTIONS(create_options)
             & (FILE_DIRECTORY_FILE | FILE_NON_DIRECTORY_FILE | FILE_NO_EA_KNOWLEDGE);
 
         let allocation_size = if allocation_size != 0 {
@@ -679,6 +691,7 @@ impl WinFspFileSystemCore for LiteWinFspCore {
         let mut granted_access = FILE_ACCESS_RIGHTS(granted_access);
         if is_directory {
             granted_access |= SYNCHRONIZE | FILE_TRAVERSE;
+            create_options |= FILE_SYNCHRONOUS_IO_NONALERT;
         } else {
             granted_access |= FILE_GENERIC_READ;
         }
