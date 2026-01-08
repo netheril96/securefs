@@ -423,7 +423,7 @@ impl LiteWinFspCore {
         let file_name = file_name.to_string()?;
         let mut joined = String::with_capacity(file_name.len() * 2);
         for part in file_name.split('\\') {
-            if part.trim().is_empty() {
+            if part.is_empty() {
                 continue;
             }
             joined.push_str(str::from_utf8(
