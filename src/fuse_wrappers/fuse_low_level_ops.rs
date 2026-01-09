@@ -47,7 +47,7 @@ impl FuseReq {
     }
 }
 
-pub trait FuseLowLevelOps {
+pub trait FuseLowLevelOps: Send + Sync {
     fn init(&mut self, conn: fuse_conn_info) -> fuse_conn_info;
     fn can_lookup(&self) -> bool {
         false

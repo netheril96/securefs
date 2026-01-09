@@ -94,7 +94,7 @@ impl<Table: GenericINodeTable<LiteINode>> LiteVfs<Table> {
     }
 }
 
-impl<Table: GenericINodeTable<LiteINode>> FuseLowLevelOps for LiteVfs<Table> {
+impl<Table: GenericINodeTable<LiteINode> + Send + Sync> FuseLowLevelOps for LiteVfs<Table> {
     fn init(
         &mut self,
         mut conn: crate::fuse_wrappers::bindings::fuse_conn_info,
