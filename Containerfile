@@ -6,8 +6,7 @@ RUN apk add --no-cache \
     git \
     cmake \
     ninja-build \
-    fuse-dev \
-    fuse-static \
+    libtool \
     python3 \
     py3-pip \
     build-base \
@@ -19,6 +18,16 @@ RUN apk add --no-cache \
     sudo \
     pkgconf \
     bash
+
+# Build static libfuse 2.9.9 with LTO
+ARG LIBFUSE_VERSION=2.9.9
+RUN curl -fsSL "https://github.com/libfuse/libfuse/releases/download/fuse-${LIBFUSE_VERSION}/fuse-${LIBFUSE_VERSION}.tar.gz" -o /tmp/fuse.tar.gz && \
+    tar -xzf /tmp/fuse.tar.gz -C /tmp && \
+    cd "/tmp/fuse-${LIBFUSE_VERSION}" && \
+    ./configure --prefix=/usr --enable-static --disable-shared CFLAGS="-O3 -flto -fno-fat-lto-objects" && \
+    make -j"$(nproc)" && \
+    make install && \
+    rm -rf /tmp/fuse*
 
 # musl / mimalloc compatibility workaround
 RUN echo | tee /usr/include/linux/prctl.h
@@ -58,7 +67,7 @@ RUN python3 /src/build.py \
     --enable_unit_test \
     --vcpkg_root=/opt/vcpkg \
     --build_root=/build \
-    --cmake_defines VCPKG_MANIFEST_FEATURES=mimalloc SECUREFS_ENABLE_MIMALLOC=ON CMAKE_INSTALL_PREFIX=/usr/local CMAKE_EXE_LINKER_FLAGS=-static && \
+    --cmake_defines VCPKG_MANIFEST_FEATURES=mimalloc SECUREFS_ENABLE_MIMALLOC=ON CMAKE_INSTALL_PREFIX=/usr/local "CMAKE_EXE_LINKER_FLAGS=-static -Wl,--gc-sections" && \
     cmake --install /build
 
 # Stage 2: runtime

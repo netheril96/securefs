@@ -12,10 +12,10 @@ The build comprises three stages:
 
 1. **`builder` (`alpine:3.20`)**:
    - Contains the C++ toolchain (GCC, CMake, Ninja, autotools, Python 3).
+   - Downloads and builds static `libfuse 2.9.9` with LTO (`-O3 -flto -fno-fat-lto-objects`), replacing system non-LTO packages.
    - Clones and bootstraps Microsoft `vcpkg` pinned to the repository baseline commit (`74e6536215718009aae747d86d84b78376bf9e09`).
-   - Configures static compilation flags (`CFLAGS="-static"`, `CXXFLAGS="-static"`).
    - Pre-installs manifest dependencies (cryptopp, protobuf, doctest, abseil, sqlite3, argon2, mimalloc) into `/build/vcpkg_installed` to maximize layer caching.
-   - Compiles `securefs` with Link Time Optimization (`--lto`) and runs unit tests.
+   - Compiles `securefs` with Link Time Optimization (`--lto`), statically linking against LTO-optimized `libfuse.a` and vcpkg dependencies, and runs unit tests.
    - Installs the static executable to `/usr/local/bin/securefs`.
 
 2. **`runtime` (`alpine:3.20`)**:
