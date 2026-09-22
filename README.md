@@ -47,6 +47,23 @@ Download from the Release page.
 
 First you need to install [vcpkg](https://vcpkg.io). Then run `python3 build.py --enable_unit_test`.
 
+### Container (Podman / Docker)
+
+You can build, test, and run `securefs` or extract a fully static standalone binary using Podman or Docker without needing to install C++ toolchains or FUSE development libraries on your host. See [Container Documentation](docs/container.md) for full details.
+
+Quick start using the provided helper script:
+
+```bash
+# Build the runtime image (securefs:latest) and builder image (securefs:builder)
+./scripts/podman-build.sh build
+
+# Extract a standalone static binary to ./build/securefs
+./scripts/podman-build.sh extract
+
+# Run tests inside container
+./scripts/podman-build.sh test
+```
+
 ### Package managers
 
 #### Windows
