@@ -152,6 +152,7 @@ case "$COMMAND" in
         "$CONTAINER_TOOL" run --rm \
             --device /dev/fuse \
             --cap-add SYS_ADMIN \
+            -e SECUREFS_TEST_FORCE_XATTR="${SECUREFS_TEST_FORCE_XATTR:-1}" \
             -v "${CACHE_VOLUME}:/root/.cache/vcpkg:Z" \
             securefs:builder \
             env SECUREFS_BINARY=/usr/local/bin/securefs python3 /src/test/simple_test.py "$@"

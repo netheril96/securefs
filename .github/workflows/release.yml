@@ -80,90 +80,28 @@ jobs:
   build-alpine:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 75
-    env:
-      SECUREFS_TEST_FORCE_XATTR: 1
     strategy:
       matrix:
         include:
           - arch: amd64
             runner: ubuntu-22.04
-            qemu_arch: x86_64
-            apk_tools_url: "https://gitlab.alpinelinux.org/api/v4/projects/5/packages/generic/v2.14.7/x86_64/apk.static#!sha256!bdd044e0fd6cc388c5e571e1093efa5f35f7767cc5aa338b0a2576a429009a62"
           - arch: arm64
             runner: ubuntu-22.04-arm
-            qemu_arch: aarch64
-            apk_tools_url: "https://gitlab.alpinelinux.org/api/v4/projects/5/packages/generic/v2.14.7/aarch64/apk.static#!sha256!27a975638ddc95a411c9f17c63383e335da9edf6bb7de2281d950c291a11f878"
     steps:
       - uses: actions/checkout@v4
-      - uses: jirutka/setup-alpine@master
-        with:
-          arch: ${{ matrix.qemu_arch }}
-          apk-tools-url: ${{ matrix.apk_tools_url }}
-          packages: >
-            curl
-            git
-            cmake
-            ninja-build
-            fuse-dev
-            fuse-static
-            python3
-            build-base
-            zip
-            linux-headers
-            autoconf
-            automake
-            autoconf-archive
-            sudo
-      - name: install
-        run: sudo apt install fuse libfuse-dev python3-venv
-      - name: venv
-        run: |
-          python3 -m venv .venv;
-          .venv/bin/pip install -U xattr;
-      - name: Get latest Github release of vcpkg
-        uses: cardinalby/git-get-release-action@v1
-        id: get-latest-vcpkg-release
-        with:
-          latest: true
-          repo: microsoft/vcpkg
-          prerelease: false
-          draft: false
-      - name: checkout-vcpkg
-        uses: actions/checkout@v4
-        with:
-          path: ${{ github.workspace }}/vcpkg
-          repository: microsoft/vcpkg
-          ref: '${{ steps.get-latest-vcpkg-release.outputs.tag_name }}'
-          fetch-depth: 1
-      - name: cache-vcpkg
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/build/vcpkg_installed
-          key: release-alpine-${{ matrix.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
-          restore-keys: |
-            release-alpine-${{ matrix.arch }}-${{ steps.get-latest-vcpkg-release.outputs.tag_name }}-
-            release-alpine-${{ matrix.arch }}-
-      - name: cross-compile
-        env:
-          CFLAGS: -static
-          CXXFLAGS: -static
-          VCPKG_KEEP_ENV_VARS: "CFLAGS;CXXFLAGS"
-        shell: alpine.sh {0}
-        run: |
-          export PATH="/usr/lib/ninja-build/bin:$PATH"
-          echo | sudo tee /usr/include/linux/prctl.h # A hack to avoid a conflict with the musl headers when building mimalloc
-          python3 build.py --lto --enable_unit_test --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build --cmake_defines VCPKG_MANIFEST_FEATURES=mimalloc SECUREFS_ENABLE_MIMALLOC=ON
+      - name: Build container images
+        run: ./scripts/podman-build.sh build
+      - name: Extract static binary
+        run: ./scripts/podman-build.sh extract ./build
       - name: upload
         uses: actions/upload-artifact@v4
         with:
           path: build/securefs
           name: securefs-linux-${{ matrix.arch }}-musl-static-release
-      - name: Integration test
-        env:
-          SECUREFS_BINARY: build/securefs
-        run: |
-          source .venv/bin/activate
-          python test/simple_test.py > build/simple_test.out.log 2> build/simple_test.err.log
+      - name: Run unit tests
+        run: ./scripts/podman-build.sh test
+      - name: Run integration tests
+        run: ./scripts/podman-build.sh test-integration
       - name: Upload Logs Always
         if: always()
         uses: actions/upload-artifact@v4
@@ -173,6 +111,7 @@ jobs:
             **/*.log
             **/*.out
             **/*.err
+
 
   build-mac:
     runs-on: macos-13
