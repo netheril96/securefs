@@ -44,9 +44,13 @@ case "$CACHE_VOLUME" in
         ;;
 esac
 
+# Disable seccomp confinement (container is used for reproducible builds, not sandboxing)
+SECURITY_ARGS=(--security-opt seccomp=unconfined)
+
 build_builder() {
     echo "==> Building target 'builder' (securefs:builder)..."
     "$CONTAINER_TOOL" build \
+        "${SECURITY_ARGS[@]}" \
         --target builder \
         -t securefs:builder \
         "${BUILD_VOLUME_ARGS[@]}" \
@@ -56,6 +60,7 @@ build_builder() {
 build_runtime() {
     echo "==> Building target 'runtime' (securefs:latest)..."
     "$CONTAINER_TOOL" build \
+        "${SECURITY_ARGS[@]}" \
         --target runtime \
         -t securefs:latest \
         "${BUILD_VOLUME_ARGS[@]}" \
@@ -115,9 +120,9 @@ case "$COMMAND" in
 
         echo "==> Extracting static securefs binary to '${DEST_DIR}/securefs'..."
         # Try direct export with --output (BuildKit / modern container engines)
-        if ! "$CONTAINER_TOOL" build --target binary --output "type=local,dest=${DEST_DIR}" "${BUILD_VOLUME_ARGS[@]}" "$REPO_ROOT" 2>/dev/null; then
+        if ! "$CONTAINER_TOOL" build "${SECURITY_ARGS[@]}" --target binary --output "type=local,dest=${DEST_DIR}" "${BUILD_VOLUME_ARGS[@]}" "$REPO_ROOT" 2>/dev/null; then
             echo "Direct '--output' export not supported or failed. Falling back to container copy..."
-            "$CONTAINER_TOOL" build --target binary -t securefs:binary "${BUILD_VOLUME_ARGS[@]}" "$REPO_ROOT"
+            "$CONTAINER_TOOL" build "${SECURITY_ARGS[@]}" --target binary -t securefs:binary "${BUILD_VOLUME_ARGS[@]}" "$REPO_ROOT"
             CID="$("$CONTAINER_TOOL" create securefs:binary)"
             "$CONTAINER_TOOL" cp "${CID}:/securefs" "${DEST_DIR}/securefs"
             "$CONTAINER_TOOL" rm -f "$CID" >/dev/null
@@ -137,6 +142,7 @@ case "$COMMAND" in
         ensure_builder_image
         echo "==> Running unit tests in securefs:builder..."
         "$CONTAINER_TOOL" run --rm \
+            "${SECURITY_ARGS[@]}" \
             -v "${CACHE_VOLUME}:/root/.cache/vcpkg:Z" \
             securefs:builder \
             ctest -V -C Release "$@"
@@ -150,6 +156,7 @@ case "$COMMAND" in
         fi
         echo "==> Running integration tests in securefs:builder with FUSE enabled..."
         "$CONTAINER_TOOL" run --rm \
+            "${SECURITY_ARGS[@]}" \
             --device /dev/fuse \
             --cap-add SYS_ADMIN \
             -e SECUREFS_TEST_FORCE_XATTR="${SECUREFS_TEST_FORCE_XATTR:-1}" \
@@ -164,12 +171,14 @@ case "$COMMAND" in
         echo "==> Launching container environment (repo mounted at /src)..."
         if [ $# -gt 0 ]; then
             exec "$CONTAINER_TOOL" run -it --rm \
+                "${SECURITY_ARGS[@]}" \
                 -v "${CACHE_VOLUME}:/root/.cache/vcpkg:Z" \
                 -v "${REPO_ROOT}:/src:Z" \
                 -w /src \
                 securefs:builder "$@"
         else
             exec "$CONTAINER_TOOL" run -it --rm \
+                "${SECURITY_ARGS[@]}" \
                 -v "${CACHE_VOLUME}:/root/.cache/vcpkg:Z" \
                 -v "${REPO_ROOT}:/src:Z" \
                 -w /src \
