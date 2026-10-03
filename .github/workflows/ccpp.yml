@@ -11,22 +11,9 @@ env:
   PYTHONUTF8: 1
   GITHUB_TOKEN: ${{ github.token }}
   VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
+  VCPKG_VERSION: '2025.10.17'
 
 jobs:
-  get-latest-vcpkg-release:
-    runs-on: ubuntu-latest
-    outputs:
-      vcpkg_tag: ${{ steps.get-latest-vcpkg-release.outputs.tag_name }}
-    steps:
-      - name: Get latest Github release of vcpkg
-        id: get-latest-vcpkg-release
-        uses: cardinalby/git-get-release-action@v1
-        with:
-          latest: true
-          repo: microsoft/vcpkg
-          prerelease: false
-          draft: false
-
   format-all-sources:
     runs-on: ubuntu-latest
     steps:
@@ -48,7 +35,6 @@ jobs:
           branch: create-pull-request/auto-format
 
   build-ubuntu:
-    needs: get-latest-vcpkg-release
     runs-on: ubuntu-latest
     timeout-minutes: 75
     env:
@@ -68,15 +54,15 @@ jobs:
         with:
           path: ${{ github.workspace }}/vcpkg
           repository: microsoft/vcpkg
-          ref: '${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}'
+          ref: '${{ env.VCPKG_VERSION }}'
           fetch-depth: 1
       - name: cache-vcpkg
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
-          key: ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
+          key: ccpp-${{ runner.os }}-${{ runner.arch }}-${{ env.VCPKG_VERSION }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
           restore-keys: |
-            ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-
+            ccpp-${{ runner.os }}-${{ runner.arch }}-${{ env.VCPKG_VERSION }}-
             ccpp-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
         env:
@@ -116,7 +102,6 @@ jobs:
 
   # Compile time validation only.
   build-windows-clang-cl:
-    needs: get-latest-vcpkg-release
     runs-on: windows-latest
     timeout-minutes: 75
     steps:
@@ -135,15 +120,15 @@ jobs:
         with:
           path: ${{ github.workspace }}/vcpkg
           repository: microsoft/vcpkg
-          ref: '${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}'
+          ref: '${{ env.VCPKG_VERSION }}'
           fetch-depth: 1
       - name: cache-vcpkg
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
-          key: ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
+          key: ccpp-${{ runner.os }}-${{ runner.arch }}-${{ env.VCPKG_VERSION }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
           restore-keys: |
-            ccpp-${{ runner.os }}-${{ runner.arch }}-${{ needs.get-latest-vcpkg-release.outputs.vcpkg_tag }}-
+            ccpp-${{ runner.os }}-${{ runner.arch }}-${{ env.VCPKG_VERSION }}-
             ccpp-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
         run: python3 build.py --clang_cl --vcpkg_root=${{ github.workspace }}/vcpkg --build_root=./build --build_type Release
