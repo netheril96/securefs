@@ -107,7 +107,7 @@ jobs:
 
 
   build-mac:
-    runs-on: macos-13
+    runs-on: macos-15
     timeout-minutes: 75
     env:
       SECUREFS_TEST_FORCE_XATTR: 1
@@ -167,8 +167,8 @@ jobs:
             --build_type Release --test_timeout 1500 \
             --cmake_defines CMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_osx_arch }} \
                 ${{ matrix.is_fuse_t && 'SECUREFS_USE_FUSET=ON' || '' }} \
-            ${{ matrix.arch == 'amd64' && matrix.is_fuse_t == false && '--enable_unit_test' || '' }} \
-            ${{ matrix.arch == 'amd64' && matrix.is_fuse_t == true && '--enable_unit_test --enable_integration_test' || '' }}
+            ${{ matrix.arch == 'arm64' && matrix.is_fuse_t == false && '--enable_unit_test' || '' }} \
+            ${{ matrix.arch == 'arm64' && matrix.is_fuse_t == true && '--enable_unit_test --enable_integration_test' || '' }}
       - name: upload
         uses: actions/upload-artifact@v4
         with:
