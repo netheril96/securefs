@@ -46,7 +46,7 @@ RUN pip install --break-system-packages xattr
 # Fetch vcpkg at pinned baseline commit and bootstrap
 RUN git clone https://github.com/microsoft/vcpkg.git /opt/vcpkg && \
     cd /opt/vcpkg && \
-    git checkout 74e6536215718009aae747d86d84b78376bf9e09 && \
+    git checkout cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3 && \
     ./bootstrap-vcpkg.sh -disableMetrics
 
 # Pre-cache dependencies using vcpkg manifest

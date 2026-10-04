@@ -1,6 +1,6 @@
 {
     "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
-    "builtin-baseline": "74e6536215718009aae747d86d84b78376bf9e09",
+    "builtin-baseline": "cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3",
     "dependencies": [
         "argon2",
         "cryptopp",
