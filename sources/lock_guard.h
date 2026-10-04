@@ -1,6 +1,7 @@
 #pragma once
 #include <absl/base/thread_annotations.h>
 #include <absl/synchronization/mutex.h>
+#include <mutex>
 
 namespace securefs
 {
