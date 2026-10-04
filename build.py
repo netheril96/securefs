@@ -100,6 +100,9 @@ def main():
     parser.add_argument(
         "--test_timeout", help="Test time out in seconds", type=int, default=600
     )
+    parser.add_argument(
+        "--target", help="The CMake target to build", default=None
+    )
     args = parser.parse_args()
 
     if args.enable_test:  # For backwards compat
@@ -133,9 +136,18 @@ def main():
     configure_args.append(source_dir)
 
     check_call(*configure_args)
-    check_call(
-        "cmake", "--build", ".", "--config", args.build_type, "-j", str(os.cpu_count())
-    )
+    build_args = [
+        "cmake",
+        "--build",
+        ".",
+        "--config",
+        args.build_type,
+        "-j",
+        str(os.cpu_count()),
+    ]
+    if args.target:
+        build_args += ["--target", args.target]
+    check_call(*build_args)
     if args.enable_unit_test or args.enable_integration_test:
         check_call(
             "ctest", "-V", "-C", args.build_type, "--timeout", str(args.test_timeout)
