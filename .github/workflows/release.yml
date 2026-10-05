@@ -48,9 +48,6 @@ jobs:
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
           key: release-${{ matrix.os }}-${{ matrix.arch }}-${{ env.VCPKG_VERSION }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
-          restore-keys: |
-            release-${{ matrix.os }}-${{ matrix.arch }}-${{ env.VCPKG_VERSION }}-
-            release-${{ matrix.os }}-${{ matrix.arch }}-
       - name: build-test
         run: |
           source .venv/bin/activate
@@ -157,9 +154,6 @@ jobs:
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
           key: release-macOS-${{ matrix.arch }}-${{ env.VCPKG_VERSION }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
-          restore-keys: |
-            release-macOS-${{ matrix.arch }}-${{ env.VCPKG_VERSION }}-
-            release-macOS-${{ matrix.arch }}-
       - name: build
         run: |
           source .venv/bin/activate
@@ -208,9 +202,6 @@ jobs:
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
           key: release-${{ runner.os }}-${{ runner.arch }}-${{ env.VCPKG_VERSION }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
-          restore-keys: |
-            release-${{ runner.os }}-${{ runner.arch }}-${{ env.VCPKG_VERSION }}-
-            release-${{ runner.os }}-${{ runner.arch }}-
       - name: build-test
         run: python3 build.py --lto --enable_unit_test --enable_integration_test --test_timeout 1500 --vcpkg_root=${{ github.workspace }}/vcpkg --triplet=x64-windows-static-md --build_root=./build
       - name: upload
@@ -248,9 +239,6 @@ jobs:
         with:
           path: ${{ github.workspace }}/build/vcpkg_installed
           key: release-freebsd-${{ env.VCPKG_VERSION }}-${{ hashFiles('vcpkg.json', 'overlay_*/*') }}
-          restore-keys: |
-            release-freebsd-${{ env.VCPKG_VERSION }}-
-            release-freebsd-
       - name: Test in FreeBSD
         id: freebsd
         uses: cross-platform-actions/action@v0.27.0
