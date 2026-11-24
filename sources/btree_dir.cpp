@@ -496,7 +496,7 @@ BtreeNode* BtreeDirectory::replace_with_sub_entry(BtreeNode* n, ptrdiff_t index,
     dir_check(depth < BTREE_MAX_DEPTH);
     if (n->is_leaf())
     {
-        erase(n->mutable_entries(), index);
+        securefs::erase(n->mutable_entries(), index);
         return n;
     }
     else
@@ -573,7 +573,7 @@ void BtreeDirectory::merge(BtreeNode* left,
                            ptrdiff_t entry_index)
 {
     left->mutable_entries().push_back(std::move(parent->mutable_entries().at(entry_index)));
-    erase(parent->mutable_entries(), entry_index);
+    securefs::erase(parent->mutable_entries(), entry_index);
     parent->mutable_children().erase(std::find(parent->mutable_children().begin(),
                                                parent->mutable_children().end(),
                                                right->page_number()));
